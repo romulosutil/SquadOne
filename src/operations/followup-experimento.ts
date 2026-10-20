@@ -5,7 +5,7 @@ import { respondeuDeGente } from './resultados'
 
 export const VERSAO_DO_FOLLOWUP = 'followup-2026-10-19' as const
 /** Ativar só após o Rômulo revisar os textos. A flag não vem de um lead nem do modelo. */
-export const FOLLOWUP_NOVO_APROVADO = false
+export const FOLLOWUP_NOVO_APROVADO = true
 export const MINIMO_POR_BRACO_DO_FOLLOWUP = 30
 export interface MetadataDoFollowup { braco: 'A' | 'B'; versao: typeof VERSAO_DO_FOLLOWUP }
 export function metadataDoFollowup(produto: string, id: string, ofertaPlus?: string, aprovado = FOLLOWUP_NOVO_APROVADO): MetadataDoFollowup {

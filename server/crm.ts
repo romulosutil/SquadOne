@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, saidasDaConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
 import { pedeMaterial, textoParaATela } from "../src/operations/marcadores-da-conversa.ts";
+import { quemRespondeu } from '../src/operations/resultados.ts';
 import { achadosDoRecibo, lerPastasDosLeads, type AchadoDoRaioX, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
 import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
 import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
@@ -1700,7 +1701,7 @@ export interface EntradaDaPrioridade {
   temSite: boolean;
   temWhatsapp: boolean;
   porte?: PorteDoCnpj;
-  /** Taxa de resposta dos convites do mesmo nicho na mesma oferta (0 a 1), só com amostra mínima. */
+  /** Pedidos humanos de material / convites do mesmo nicho e oferta, só com amostra mínima. */
   taxaDoNicho?: number;
   /** Os sinais do site já lidos (server/sinais-do-site.ts): só o que tem fonte pesa, e pouco. */
   sinaisDoSite?: SinaisDoSite;
@@ -1722,15 +1723,15 @@ const TAXA_DO_TETO = 0.3;
  * mostravam "Prioridade 100", e a ordem virava a da data). Esta pesa o que diferencia, com o que o
  * retrato já tem, e cada parte é contínua para quase não empatar:
  *
- * - Reputação no Google, até 35. Nota até 15, pela média bayesiana ((nota × n + 4,3 × 10) / (n + 10)),
- *   de 3,5 (0) a 5,0 (15): um 5,0 com 2 avaliações não passa um 4,8 com 300. Volume até 20, em log
- *   (20 × log(1 + n) / log(501)): 10 avaliações dão 8, 100 dão 15, 500 ou mais dão 20.
+ * - Dor verificável no Google, até 35: nota baixa até 15 (média bayesiana com prior 4,3/10),
+ *   poucas avaliações até 20 em log invertido. Só uma contagem explícita gera pontos de volume;
+ *   dado ausente não equivale a zero avaliações. É prioridade de revisão, não diagnóstico.
  * - Contato, até 25: WhatsApp publicado pela empresa (site, link do Google) 25; "não confirmado" (o
  *   celular do Google) 8, porque é quem mais denuncia (trava de ritmo, 15/10); sem WhatsApp, 0.
  * - Site, 10: é onde a revisão confere o perfil; sem site o caçador já marca "perfil não confirmado".
  * - Sinais do segmento, 5 cada, até 15 (eram 10 cada até 50: é aqui que saturava).
  * - Porte conferido pelo CNPJ (EPP ou DEMAIS, só PRUMO), 5.
- * - Nicho, até 10: a taxa de resposta dos convites do mesmo nicho na mesma oferta, com pelo menos
+ * - Nicho, até 10: pedidos humanos de material / convites do mesmo nicho na mesma oferta, com pelo menos
  *   AMOSTRA_MINIMA_DO_NICHO convites (10 × taxa / 30%, teto 10); sem amostra, 5 (neutro: nem prêmio
  *   nem castigo por não saber).
  * - "Profissional que atende sozinho?" (marca do caçador do Iris, que é para clínica com equipe), -20.
@@ -1743,10 +1744,10 @@ const TAXA_DO_TETO = 0.3;
  */
 export function prioridadeDaTriagem(e: EntradaDaPrioridade): number {
   const { nota, avaliacoes } = notaDoGoogle(e.nota);
-  const n = avaliacoes ?? (nota !== undefined ? 1 : 0);
+  const n = avaliacoes ?? 1;
   const media = nota === undefined ? undefined : (nota * n + NOTA_A_PRIORI * PESO_DA_NOTA_A_PRIORI) / (n + PESO_DA_NOTA_A_PRIORI);
-  const pontosDaNota = media === undefined ? 0 : 15 * Math.min(1, Math.max(0, (media - 3.5) / 1.5));
-  const pontosDoVolume = 20 * Math.min(1, Math.log10(1 + n) / Math.log10(1 + AVALIACOES_DO_TETO));
+  const pontosDaNota = media === undefined ? 0 : 15 * Math.min(1, Math.max(0, (4.5 - media) / 1.5));
+  const pontosDoVolume = avaliacoes === undefined ? 0 : 20 * (1 - Math.min(1, Math.log10(1 + avaliacoes) / Math.log10(1 + AVALIACOES_DO_TETO)));
   const naoConfirmado = (e.origemWhatsapp ?? "").startsWith("não confirmado");
   const pontosDoContato = !e.temWhatsapp ? 0 : naoConfirmado ? 8 : 25;
   const itens = (e.sinais ?? "").split("·").map((s) => s.trim().toLowerCase()).filter(Boolean);
@@ -1761,23 +1762,28 @@ export function prioridadeDaTriagem(e: EntradaDaPrioridade): number {
 const chaveDoNicho = (lead: Pick<CrmLead, "produto" | "nicho">) => `${lead.produto}:${normalizarCabecalho(lead.nicho)}`;
 
 /**
- * PURA. A taxa de resposta dos convites por oferta e nicho, para a Prioridade da Triagem. Conta quem
- * recebeu o convite (marco `enviado`) e, desses, quem respondeu de gente (marco `respondeu`, ou uma
- * resposta classificada que não seja do robô). Nicho com menos de AMOSTRA_MINIMA_DO_NICHO convites fica
- * de fora: 1 de 2 não é taxa.
+ * PURA. Pedidos humanos de material por convite, separados por oferta e nicho. Respostas negativas,
+ * exclusões, robôs e um marco de resposta isolado não são interesse. Menos de 10 envios ou nenhum
+ * envio não produz taxa: amostra ausente permanece neutra na prioridade.
  */
-export function taxasDeRespostaPorNicho(leads: ReadonlyArray<Pick<CrmLead, "produto" | "nicho" | "marcos" | "resposta">>): Map<string, number> {
+export function taxasDeInteressePorNicho(leads: ReadonlyArray<Pick<CrmLead, "produto" | "nicho" | "marcos" | "resposta"> & Partial<Pick<CrmLead, 'conversa'>>>, agora = Date.now()): Map<string, number> {
   const contas = new Map<string, { enviados: number; responderam: number }>();
   for (const lead of leads) {
-    if (!(PRODUTOS_DE_PROSPECCAO as readonly string[]).includes(lead.produto) || !lead.nicho || !lead.marcos.enviado) continue;
+    const enviado = Date.parse(lead.marcos.enviado ?? '');
+    if (!(PRODUTOS_DE_PROSPECCAO as readonly string[]).includes(lead.produto) || !lead.nicho || !Number.isFinite(enviado) || enviado > agora) continue;
     const chave = chaveDoNicho(lead);
     const conta = contas.get(chave) ?? { enviados: 0, responderam: 0 };
     conta.enviados += 1;
-    if (lead.marcos.respondeu || (lead.resposta && lead.resposta.tipo !== "bot")) conta.responderam += 1;
+    const em = lead.resposta?.em ?? lead.marcos.respondeu;
+    const soRobo = lead.conversa?.ultima?.direcao === 'entrada' && lead.conversa.ultima.papel === 'robo' && !lead.conversa.ultimaEntrada;
+    if (pedeMaterial(lead.resposta) && !soRobo && quemRespondeu(lead) !== 'robo' && (!em || (Date.parse(em) >= enviado && Date.parse(em) <= agora))) conta.responderam += 1;
     contas.set(chave, conta);
   }
   return new Map([...contas].filter(([, c]) => c.enviados >= AMOSTRA_MINIMA_DO_NICHO).map(([chave, c]) => [chave, c.responderam / c.enviados]));
 }
+
+/** Compatibilidade dos consumidores existentes; agora mede interesse, nunca resposta bruta. */
+export const taxasDeRespostaPorNicho = taxasDeInteressePorNicho;
 
 /** A Prioridade de um lead de prospecção pelo que ele traz no retrato. */
 function prioridadeDoLead(lead: CrmLead, taxas: Map<string, number>): number {
@@ -2095,7 +2101,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   // A Prioridade da Triagem (17/10/2026) troca a do caçador, que saturava em 100: depende da taxa do
   // nicho, que só se sabe com todos os leads lidos. Só onde ela serve (Novo, a revisão) ou onde a
   // planilha já trazia uma, para a ficha não mostrar dois números.
-  const taxas = taxasDeRespostaPorNicho(leads);
+  const taxas = taxasDeInteressePorNicho(leads, agora);
   for (const lead of leads) {
     const confirmados = (registros.get(lead.id) ?? []).filter(r => r.tipo === 'spiced' && r.em <= agora);
     for (const r of confirmados) {

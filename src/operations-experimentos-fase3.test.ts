@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { leituraDoFollowup, metadataDoFollowup, textoDoFollowup, textoDoRegistroFollowup, lerRegistroFollowup } from './operations/followup-experimento.ts'
+import { FOLLOWUP_NOVO_APROVADO, leituraDoFollowup, metadataDoFollowup, textoDoFollowup, textoDoRegistroFollowup, lerRegistroFollowup } from './operations/followup-experimento.ts'
 import { leituraDoTestePlus, INICIO_DO_TESTE_PLUS } from './operations/plus-experimento.ts'
 import { leituraDoAbMensagem } from './operations/ab-mensagem.ts'
 import { colinhaDoLead } from './operations/colinha.ts'
@@ -16,11 +16,15 @@ function lead(id: string, produto: CrmLead['produto'] = 'site', extra: Partial<C
   return { id: `${produto}:${id}`, chave: id, produto, empresa: `Empresa ${id}`, nicho: 'teste', cidade: '', etapa: 'contato', sinal: 'enviado', subEtapa: '', estadoNaPlanilha: 'enviado', leitura: 'desconhecida', marcos: { enviado: iso(1) }, followupHoje: false, respostaNova: false, acervo: false, notas: 0, eventos: [], links: {}, divergencias: [], ...extra }
 }
 describe('follow-up: braço enviado e versão duráveis', () => {
-  it('novo texto desativado por padrão; sorteio estável só após aprovação', () => {
+  it('novo texto aprovado por padrão; rollback explícito e sorteio estável', () => {
     const sorteios = Array.from({ length: 40 }, (_, i) => metadataDoFollowup('site', `teste${i}`, undefined, true))
     assert.ok(sorteios.some(m => m.braco === 'B'))
     assert.ok(sorteios.some(m => m.braco === 'A'))
-    assert.equal(metadataDoFollowup('site', 'teste').braco, 'A')
+    assert.equal(FOLLOWUP_NOVO_APROVADO, true)
+    for (let i = 0; i < 40; i++) {
+      assert.deepEqual(metadataDoFollowup('site', `teste${i}`), sorteios[i])
+      assert.equal(metadataDoFollowup('site', `teste${i}`, undefined, false).braco, 'A')
+    }
     assert.deepEqual(metadataDoFollowup('site', 'teste', undefined, true), metadataDoFollowup('site', 'teste', undefined, true))
     assert.equal(textoDoFollowup('site', 'Empresa', 'A', undefined, 'CONTROLE'), 'CONTROLE')
   })
@@ -93,8 +97,10 @@ describe('Plus: os primeiros 20 envios confirmados e o mesmo período do Site', 
 describe('D na régua e objeções por oferta', () => {
   it('PRUMO equilibra A/D separadamente e congela só envios com metadados reais', () => {
     const entrada = Array.from({ length: 60 }, (_, i) => ({ id: `prumo-${i}`, empresa: 'Empresa', nicho: 'advocacia', enviado: false, controle: 'CONTROLE', raio_x_url: 'https://raio-x-prumo.vercel.app/teste', raio_x_achados: [{ id: 'site-fora-do-ar', dominio: 'empresa.com.br' }] }))
-    assert.ok([...alocarAberturasPrumo(entrada).values()].every(r => r.mensagem_variante === 'A'))
+    assert.ok([...alocarAberturasPrumo(entrada, false).values()].every(r => r.mensagem_variante === 'A'))
     const rodada = [...alocarAberturasPrumo(entrada, true).values()]
+    assert.deepEqual([...alocarAberturasPrumo(entrada).values()], rodada)
+    assert.ok([...alocarAberturasPrumo(entrada, false).values()].every(r => r.mensagem_variante === 'A' && r.ab_elegiveis === 'A' && r.mensagem === 'CONTROLE'))
     assert.equal(rodada.filter(r => r.mensagem_variante === 'D').length, 30)
     const antigo = { ...entrada[0], enviado: true, salva: { mensagem_variante: 'A', ab_elegiveis: 'A', mensagem: 'CONTROLE ANTIGO' } }
     assert.equal(alocarAberturasPrumo([antigo], true).get(antigo.id)?.mensagem, 'CONTROLE ANTIGO')

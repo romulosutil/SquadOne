@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import vm from 'node:vm'
 import { describe, it } from 'node:test'
-import { eventoCriticoDe, primeiraComEventoCritico, PRIMEIRA_EVENTO_CRITICO, segundaDe, followupDe } from './site-mensagem.ts'
+import { eventoCriticoDe, primeiraComEventoCritico, PRIMEIRA_EVENTO_CRITICO, EVENTO_CRITICO_APROVADO, segundaDe, followupDe } from './site-mensagem.ts'
 import { primeiraComEventoCriticoDoPrumo } from './prumo-mensagem.ts'
 
 const codigo = fs.readFileSync(new URL('../deploy/dell/claude-ops/site-mensagem.js', import.meta.url), 'utf8')
-const js = vm.runInNewContext(`${codigo}\n;({eventoCriticoDe,alocarRodada,elegiveisDe,PRIMEIRA_EVENTO_CRITICO})`) as any
+const js = vm.runInNewContext(`${codigo}\n;({eventoCriticoDe,alocarRodada,elegiveisDe,PRIMEIRA_EVENTO_CRITICO,EVENTO_CRITICO_APROVADO})`) as any
 const raio = (achado: unknown) => ({ raio_x_url: 'https://raio-x-prumo.vercel.app/teste', raio_x_achados: [achado], sem_demo: true })
 const casos = [
   { id: 'dominio-vencido', dominio: 'empresa.com.br', data: '2026-08-29' },
@@ -22,13 +22,19 @@ describe('variante D: fato verificável, aprovação e congelamento', () => {
     assert.doesNotMatch(texto, /nota|defeito|R\$|https?:|\{FATO\}/)
     assert.ok(texto.split('Reuni esse ponto')[0].includes(eventoCriticoDe(raio(achado))!))
   })
-  it('desligada por padrão, sem D na alocação nem texto pronto PRUMO', () => {
+  it('aprovação humana ativa o padrão e false explícito mantém rollback sem D', () => {
     const l = raio(casos[1])
-    assert.equal(primeiraComEventoCritico('Teste', l), '')
-    assert.equal(primeiraComEventoCriticoDoPrumo('Teste', l), '')
-    assert.equal(js.elegiveisDe(l).includes('D'), false)
+    assert.equal(EVENTO_CRITICO_APROVADO, true)
+    assert.equal(js.EVENTO_CRITICO_APROVADO, true)
+    assert.notEqual(primeiraComEventoCritico('Teste', l), '')
+    assert.equal(primeiraComEventoCritico('Teste', l, false), '')
+    assert.equal(primeiraComEventoCriticoDoPrumo('Teste', l, false), '')
+    assert.equal(js.elegiveisDe(l).includes('D'), true)
+    assert.equal(js.elegiveisDe(l, false).includes('D'), false)
     assert.equal(js.elegiveisDe(l, true).includes('D'), true)
     assert.match(primeiraComEventoCriticoDoPrumo('Teste', l, true), /do PRUMO/)
+    const rodada = js.alocarRodada([], Array.from({ length: 40 }, (_, i) => ({ placeId: `rollback${i}`, lead: l, eventoCriticoAprovado: false })))
+    assert.ok(Object.values(rodada).every((r: any) => r.letra === 'A' && r.elegiveis === 'A'))
   })
   const invalidos = [null, {}, { id: 'nota-baixa', nota: 2 }, { id: 'site-fora-do-ar', dominio: '<script>' }, { id: 'dominio-vencido', dominio: 'empresa.com.br', data: '2026-02-30' }, { id: 'posicao-na-busca', consulta: 'x', posicao: 2, lidos: 10 }, { id: 'posicao-na-busca', consulta: 'x', posicao: 11, lidos: 5 }]
   for (const achado of invalidos) it(`sem fato válido ${JSON.stringify(achado)}`, () => {

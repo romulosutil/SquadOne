@@ -15,7 +15,8 @@ import { aprendizadosDosLeads, ROTULO_DO_TESTE } from './aprendizado-comercial'
 import { MINIMO_POR_BRACO_DO_RECIBO, leituraDoTesteDoRecibo } from './ab-recibo'
 import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } from './velocidade'
 import { leituraDoTestePlus, TAMANHO_DO_TESTE_PLUS } from './plus-experimento'
-import { leituraDoFollowup, MINIMO_POR_BRACO_DO_FOLLOWUP } from './followup-experimento'
+import { FOLLOWUP_NOVO_APROVADO, leituraDoFollowup, MINIMO_POR_BRACO_DO_FOLLOWUP } from './followup-experimento'
+import { EVENTO_CRITICO_APROVADO } from '../../server/site-mensagem'
 import { leituraAarr } from './aarr'
 
 // "Resultados" (08/10/2026): quanto cada nicho, mensagem e versão do site
@@ -112,6 +113,7 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
           <div><dt>Retenção</dt><dd>{{ aarr.retencao.ativas }} mensalidades explicitamente ativas no terceiro mês / {{ aarr.retencao.elegiveis }} elegíveis</dd></div>
           <div><dt>Indicação</dt><dd>{{ aarr.indicacao.pedidas }} pedidas · {{ aarr.indicacao.recebidas }} recebidas</dd></div>
         </dl>
+        <p class="crm-nota-pequena">Aquisição: respostas humanas comprovadas após o envio registrado. O funil histórico usa a classificação da planilha e pode divergir.</p>
         <p class="crm-nota-pequena">Ativação exige um pedido de material preservado e a qualificação humana. Estar em proposta, sem essa evidência, não confirma o “quero ver” histórico.</p>
         <p class="crm-nota-pequena">Faixa da seleção atual: aquisição e ativação nos últimos 30 dias; receita, retenção e indicação com instrumentação desde 19/10/2026. Histórico anterior: não medido; zero desde essa data significa nenhum registro confirmado. Sem inferir receita ou retenção de avanço no funil. MRR considera uma mensalidade por contrato com atividade explicitamente confirmada no terceiro mês.</p>
       </section>
@@ -125,7 +127,7 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
       <PorQueNaoVende :leads="leads" :agora="agora" />
       <section class="crm-grupo" aria-labelledby="crm-prumo-abertura">
         <header class="crm-grupo__cabeca"><h2 id="crm-prumo-abertura">Serviços PRUMO · abertura A × D</h2></header>
-        <p class="crm-grupo__explicacao">A usa o convite habitual; D abre com um achado verificável do raio-x. Medição separada do Site, só com mensagem enviada e braço confirmado. O braço D aguarda revisão do Rômulo.</p>
+        <p class="crm-grupo__explicacao">A usa o convite habitual; D abre com um achado verificável do raio-x. Medição separada do Site, só com mensagem enviada e braço confirmado. {{ EVENTO_CRITICO_APROVADO ? 'Braço D: aprovado para teste controlado.' : 'O braço D aguarda revisão do Rômulo.' }}</p>
         <p v-if="!abPrumo.inicio" class="crm-nota-pequena">Nenhum envio com braço confirmado nesta oferta. O histórico sem letra continua fora da comparação.</p>
         <div v-for="par in abPrumo.pares" :key="par.par">
           <p>A: {{ par.x.enviados }} envios elegíveis · D: {{ par.y.enviados }} envios elegíveis.</p>
@@ -135,7 +137,7 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
       </section>
       <section class="crm-grupo" aria-labelledby="crm-followup-teste">
         <header class="crm-grupo__cabeca"><h2 id="crm-followup-teste">Follow-up · texto em teste</h2></header>
-        <p class="crm-grupo__explicacao">A conserva o texto anterior; B faz uma pergunta sobre a operação. O texto novo aguarda revisão do Rômulo. Só entra envio confirmado com braço e versão registrados; o histórico não recebe letra retroativa.</p>
+        <p class="crm-grupo__explicacao">A conserva o texto anterior; B faz uma pergunta sobre a operação. {{ FOLLOWUP_NOVO_APROVADO ? 'Texto novo: aprovado para teste controlado.' : 'O texto novo aguarda revisão do Rômulo.' }} Só entra envio confirmado com braço e versão registrados; o histórico não recebe letra retroativa.</p>
         <p class="crm-resultado__numeros">A: {{ testeFollowup.bracos.A.enviados }} envios · B: {{ testeFollowup.bracos.B.enviados }} envios.</p>
         <p v-if="!testeFollowup.lido" class="crm-nota-pequena">Taxas e comparação só com {{ MINIMO_POR_BRACO_DO_FOLLOWUP }} envios confirmados em cada braço.</p>
         <p v-else-if="testeFollowup.numeros" class="crm-resultado__numeros">Respondeu depois do follow-up: A {{ porcento(testeFollowup.bracos.A.responderam, testeFollowup.bracos.A.enviados) }} · B {{ porcento(testeFollowup.bracos.B.responderam, testeFollowup.bracos.B.enviados) }} · {{ textoDoP(testeFollowup.numeros.p) }}. Resultado exploratório; não autoriza envios.</p>
@@ -281,7 +283,7 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
           <p class="crm-grupo__explicacao">
             Cada letra só é comparada entre leads que podiam receber as duas (coluna ab_elegiveis), com a letra equilibrada
             dentro de cada nicho pelo Balcão. "Respondeu" é gente. Conta o teste inteiro, sem período.
-            D abre com um fato verificável do raio-x e aguarda revisão do Rômulo.
+            D abre com um fato verificável do raio-x. {{ EVENTO_CRITICO_APROVADO ? 'Aprovado para teste controlado.' : 'Aguarda revisão do Rômulo.' }}
             <template v-if="abMensagem.inicio">Só vale para envios sorteados desde {{ dataCurta(abMensagem.inicio) }}.</template>
           </p>
           <p v-if="!abMensagem.inicio" class="crm-vazio">

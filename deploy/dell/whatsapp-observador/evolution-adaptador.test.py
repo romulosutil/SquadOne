@@ -434,7 +434,7 @@ class RecibosEmLid(unittest.TestCase):
     def test_mapas_tem_teto(self):
         m = ev.Mapas(maximo=3)
         for i in range(10):
-            m.guardar(f"lid{i}", f"id{i}", f"{LEAD}@s.whatsapp.net")
+            m.guardar(f"10000{i}", f"id{i}", f"{LEAD}@s.whatsapp.net")
         self.assertEqual((len(m.lid), len(m.msg)), (3, 3))
         self.assertIn("id9", m.msg)
         self.assertNotIn("id0", m.msg)
@@ -533,7 +533,7 @@ class AchadosDaRevisao(unittest.TestCase):
         for f in fios:
             f.join()
         self.assertEqual(sum(saida), 1)
-        self.assertEqual(len((dir_ / "evolution.log").read_text().splitlines()), 1)
+        self.assertEqual(len(list((dir_ / 'capturas-adaptador').glob('*.json'))), 1)
 
 
 class GravadorEndurecido(unittest.TestCase):
@@ -746,8 +746,9 @@ class Servico(unittest.TestCase):
     def test_webhook_valido_grava(self):
         codigo, corpo = self.chamar(corpo=upsert(LEAD, "Sim, quero ver"))
         self.assertEqual((codigo, corpo), (200, {"ok": True, "linhas": 1, "respostas": 1}))
-        self.assertIn(ev.MOTIVO, (self.dir / "evolution.log").read_text())
-        self.assertIn("Sim, quero ver", (self.dir / "respostas.jsonl").read_text())
+        captura = next((self.dir/'capturas-adaptador').glob('*.json')).read_text()
+        self.assertIn(ev.MOTIVO, captura)
+        self.assertIn('Sim, quero ver', captura)
 
     def test_caminho_com_sufixo_por_evento(self):
         self.assertEqual(self.chamar(caminho="/evolution/messages-upsert", corpo=upsert(LEAD))[0], 200)
@@ -818,11 +819,11 @@ class Servico(unittest.TestCase):
         self.assertNotIn(LEAD, " ".join(saida))
         self.assertNotIn("READ", formas[0])
 
-    def test_falha_interna_responde_200_sem_derrubar(self):
+    def test_falha_interna_pede_reentrega_sem_expor_excecao(self):
         def quebra(_):
             raise RuntimeError("boom")
         self.adaptador.receber = quebra
-        self.assertEqual(self.chamar(corpo=upsert(LEAD)), (200, {"ok": False}))
+        self.assertEqual(self.chamar(corpo=upsert(LEAD)), (503, {"ok": False, 'erro': 'persistencia_indisponivel'}))
 
     def test_sem_a_lista_o_servico_responde_mas_nao_grava(self):
         (self.dir / "leads.json").unlink()
@@ -844,6 +845,7 @@ class ComOObservadorDeVerdade(unittest.TestCase):
         self.obs = ob.Observador(set(LEADS), chamar=self.n8n, avisar=lambda t: None, relogio=lambda: self.agora,
                                  pasta=self.dir, bridge_js=self.dir / "nao-existe.js",
                                  conversas=ob.Conversas(self.conversas, "prumo", relogio=lambda: self.agora))
+        self.addCleanup(self.obs.liberar_entrada)
         # leads.json foi gravado pelo próprio observador no __init__: é o que o adaptador lê.
         self.g = ev.Gravador(self.dir)
         self.adaptador = ev.Adaptador(self.g, relogio=lambda: self.agora, avisar=lambda t: None)
@@ -853,10 +855,8 @@ class ComOObservadorDeVerdade(unittest.TestCase):
         return {"ok": True, "marcados": []}
 
     def alimentar(self, webhook):
-        antes = (self.dir / "evolution.log").read_text()
         self.adaptador.receber(webhook)
-        for linha in (self.dir / "evolution.log").read_text()[len(antes):].splitlines():
-            self.obs.linha(linha)
+        self.obs.ler_capturas_adaptador()
 
     def test_lista_do_observador_e_a_que_o_adaptador_le(self):
         self.assertEqual(self.g.leads(), LEADS)
@@ -887,7 +887,7 @@ class ComOObservadorDeVerdade(unittest.TestCase):
                                                               "id": "2"}) + "\n")
         self.obs.tick()
         linhas = [json.loads(l) for l in (self.conversas / f"{CHAVE}.jsonl").read_text().splitlines()]
-        self.assertEqual(linhas, [
+        self.assertCountEqual(linhas, [
             {"em": ob.iso_utc(T0 - 5), "direcao": "entrada", "texto": "Sim, quero ver", "origem": "prumo", "id": "2"},
             {"em": ob.iso_utc(T0 - 600), "direcao": "saida", "texto": "olá, vi seu anúncio", "origem": "prumo", "id": "1"},
         ])

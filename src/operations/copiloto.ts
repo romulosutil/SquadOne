@@ -221,8 +221,14 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
   const urlRaioX = lead.links.raioX?.trim()
   const proprias = funil === 'iris' || funil === 'estampa'
   const sinaisDoSite = sinaisParaODossie(lead.sinais)
+  const textoSpiced = (texto: string) => textoParaOModelo(texto, mascarar)
+  const s = lead.spiced
+  // Só o impacto pode conter um valor literal dito pelo lead; mascara os demais trechos normalmente.
+  const impacto = s?.impacto.split(/(R\s*\$\s*-?\d[\d.,]*)/gi).map(t => /^R\s*\$/i.test(t) ? t : textoSpiced(t)).join('')
   return {
-    ...(lead.spiced ? { spiced: JSON.parse(JSON.stringify(lead.spiced)) as Spiced } : {}),
+    ...(s ? { spiced: { situacao: textoSpiced(s.situacao), dor: textoSpiced(s.dor), impacto: impacto!,
+      evento_critico: { fato: textoSpiced(s.evento_critico.fato), data: s.evento_critico.data },
+      decisao: { decisor_confirmado: s.decisao.decisor_confirmado, quem: textoSpiced(s.decisao.quem), como_paga: textoSpiced(s.decisao.como_paga) } } } : {}),
     lead: {
       id: lead.id,
       funil,

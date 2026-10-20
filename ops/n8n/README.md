@@ -6,6 +6,16 @@ anterior a 23/09/2026 (aba `Leads`, etapa `Contato aceito`, `Convite pronto`) e
 foram apagados, junto com o script que os regenerava: importá-los de volta
 desfaria o fluxo vivo.
 
+## Arquivo do 01 · Caçador da Mel — somente auditoria
+
+[`workflows/01-Cacador.sanitizado.json`](workflows/01-Cacador.sanitizado.json) foi obtido por GET da API local da Mel em **19/10/2026, 21:24:16 SP**. Fonte: workflow `oow8TkxrAf4fVvTj`, nome `01 · Caçador`. **A fonte real estava ativa; permanece nesse estado.** O arquivo e seu subfluxo embutido estão com `active: false` para importação segura. Isso não afirma que o Caçador de Site foi pausado. Os caçadores de Iris/Estamparia continuam com seus estados reais preservados.
+
+A sanitização ocorreu **na própria Mel, antes de qualquer cópia**; o export bruto ficou somente em memória. Foram preservados o grafo principal de 7 nós e o `workflowJson` embutido de 32 nós, inclusive a leitura de leads existentes e o dedupe por `place_id`. Foram retirados estado de execução, `pinData`, `staticData`, compartilhamentos, metadados de versão e IDs de webhook. As nove referências de credencial e cinco referências de planilha foram substituídas por placeholders; nenhum dado de lead, paciente ou execução foi incluído. O código fonte próprio permanece auditável.
+
+SHA-256 do JSON sanitizado: `a3a5582574e551317195411ed07e54749e4dff09767a32e56a85968236d7746a`. Esquema: [`workflows/01-Cacador.schema.json`](workflows/01-Cacador.schema.json); testes de estrutura, código e ausência de segredos em `src/operations-cacador-arquivo.test.ts`.
+
+**Não publicar automaticamente este arquivo.** Ele não integra instalados.json e não deve ser enviado a um importador/deployer automático. Para uma restauração humana autorizada, conferir os dois grafos, restabelecer manualmente as referências de credencial/planilha no destino, revisar parâmetros e manter o fluxo inativo até aprovação específica. Esta captura não republicou nem ativou qualquer Caçador.
+
 ## De onde vêm os fluxos hoje
 
 Cada fluxo é montado e publicado por um construtor em
@@ -40,9 +50,9 @@ Revisar -> Convite enviado -> Diagnóstico pronto -> Concluído | Sem interesse
   Índice (média) e Briefing na linha. O aviso para o Rômulo é o do Mapa
   (`prumo_mapa.py`), que tem o índice de 18 itens.
 
-## Arquivo que sobrou
+## Arquivo de auditoria e fixture antiga
 
-A pasta `workflows/` ficou vazia. O export do Diagnóstico mudou para
+Os exports antigos foram removidos. O único arquivo de fluxo nesta pasta agora é a captura sanitizada e inativa do Caçador descrita acima. O export do Diagnóstico mudou para
 `deploy/dell/claude-ops/testes/prumo-diagnostico.fixture.json`: é só fixture de teste,
 de onde `claude-ops/workflow_confiabilidade.test.py` lê o questionário de 16 perguntas.
 Não é importável nem representa o fluxo vivo.

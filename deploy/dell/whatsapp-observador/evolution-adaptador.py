@@ -27,8 +27,10 @@ Só leitura: este serviço NUNCA envia, marca como lido, muda presença nem cham
 só escuta (loopback) o que a Evolution já empurra.
 
 Privacidade, no mesmo espírito da bridge:
-- só entra no log e no respostas.jsonl quem está em `leads.json` (a lista que o observador grava
-  a partir das planilhas, na mesma pasta). Sem a lista, nada é gravado (falha fechada);
+- só entra no log e nas capturas quem está na fonte fresca `leads.json`. Com fonte indisponível ou
+  LID ainda sem correlação, só o evento mínimo 1:1 fica em entrada-pendente.json (600/atômico),
+  antes do ACK. Sem QR, nomes, tokens ou payload bruto; grupos/ruído nunca entram. Backpressure
+  de 2000 itens/2 MiB, 24 KiB por item: cheio/falha retorna503 e não apaga pendências;
 - o log tem o número e a hora, nunca o texto; o texto só vai para quem é lead;
 - o journal mostra DDD + 2 últimos dígitos, nunca o texto;
 - o webhook exige o segredo no header `X-Adaptador` (comparação em tempo constante, antes de
@@ -42,9 +44,13 @@ em `data` ou em `data.key`) e, para a primeira vez que ver cada FORMA de evento,
 só a estrutura (nomes de campos e tipos, nenhum valor). É por ali que o ensaio de um dia confirma o
 recibo de leitura antes de contar com ele. `GET /saude` (com o segredo) mostra os contadores.
 
-LID: se o `remoteJid` vem como `@lid`, o telefone sai de `remoteJidAlt`/`senderPn` (a Evolution os
-preenche só às vezes); sem nenhum dos dois o evento é contado em `lid_sem_telefone` e descartado.
-Nada de "adivinhar" número.
+LID: pares validados de leads persistem em lid-telefone.json (600/atômico). Um hint posterior
+resolve a pendência, preservando a hora original; a fonte fresca descarta quem não é lead.
+O loop interno drena a cada5s, sem novo serviço. _adaptador_id é só a confirmação local das
+capturas/observador, nunca segue ao n8n/modelo ou journal. Não se adivinha número.
+As entregas duráveis usam capturas-adaptador/<sha256>.json, imutáveis e publicadas com
+fsync+rename. Não fazem append nos arquivos da bridge. O observador confirma sua fila
+em disco antes de removê-las; os limites de quantidade e bytes também valem nessa passagem.
 
 Desconexão: `CONNECTION_UPDATE` com estado `close` vira UM aviso (o número deixou de
 ser acompanhado e ninguém veria), até a conexão voltar. Só depois de o número ter conectado ao
@@ -54,6 +60,7 @@ queda.
 from __future__ import annotations
 
 import hmac
+import hashlib
 import importlib.util
 import json
 import os
@@ -61,11 +68,18 @@ import re
 import signal
 import sys
 import threading
+import tempfile
 import time
 from collections import deque
+from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, NamedTuple
+
+try:
+    import fcntl
+except ImportError:  # Windows: a trava de threads permanece; produção usa flock.
+    fcntl = None
 
 HOME = Path.home()
 PASTA = Path(os.environ.get("EVOLUTION_PASTA", HOME / ".local/state/whatsapp-observador-prumo"))
@@ -92,6 +106,44 @@ LEADS_VELHOS_S = 30 * 60
 LIMITE_RESPOSTAS = 2 * 1024 * 1024  # respostas.jsonl que ninguém consome não cresce sem fim
 MAX_CONEXOES = 32
 TEMPO_DA_CONEXAO_S = 10
+SPOOL_MAX = 2 * 1024 * 1024
+PENDENTES_MAX = 2000
+ITEM_MAX = 24 * 1024
+DRENAR_MAX = 100
+_TRAVAS: dict[str, threading.RLock] = {}
+_TRAVAS_GUARDA = threading.Lock()
+
+
+def salvar_privado(arquivo: Path, valor) -> None:
+    """Sem janela de arquivo parcial; retorno só depois do fsync e rename confirmados."""
+    arquivo.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd, nome = tempfile.mkstemp(prefix='.' + arquivo.name + '-', dir=arquivo.parent)
+    try:
+        os.fchmod(fd, 0o600) if hasattr(os, 'fchmod') else os.chmod(nome, 0o600)
+        with os.fdopen(fd, 'wb') as f:
+            f.write(json.dumps(valor, ensure_ascii=True, separators=(',', ':')).encode())
+            f.flush(); os.fsync(f.fileno())
+        os.replace(nome, arquivo)
+        if os.name != 'nt':
+            pasta = os.open(arquivo.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try: os.fsync(pasta)
+            finally: os.close(pasta)
+    finally:
+        try: os.unlink(nome)
+        except FileNotFoundError: pass
+
+
+@contextmanager
+def trava_privada(arquivo: Path):
+    with _TRAVAS_GUARDA:
+        trava = _TRAVAS.setdefault(str(arquivo.resolve()), threading.RLock())
+    with trava:
+        fd = os.open(arquivo, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            if fcntl: fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            os.close(fd)
 
 
 def log(*a):
@@ -126,34 +178,61 @@ def jid_de_telefone(jid) -> str:
     usuario, _, dominio = jid.partition("@")
     if dominio not in ("s.whatsapp.net", "c.us"):
         return ""  # @lid, grupo, canal, lista de transmissão, status
-    digitos = re.sub(r"\D", "", usuario.split(":")[0])
+    if not re.fullmatch(r'\d{10,15}(?::\d{1,5})?', usuario):
+        return ""
+    digitos = usuario.split(":")[0]
     if not 10 <= len(digitos) <= 15:
         return ""
     return f"{digitos}@s.whatsapp.net"
 
 
 def _usuario_lid(jid) -> str:
-    return jid.partition("@")[0].split(":")[0] if isinstance(jid, str) and jid.endswith("@lid") else ""
+    return jid.partition("@")[0].split(":")[0] if isinstance(jid, str) and re.fullmatch(r'\d{5,30}(?::\d{1,5})?@lid', jid) else ""
+
+
+def id_valido(valor) -> bool:
+    """IDs da Evolution são opacos: nunca viram nomes de arquivo."""
+    return isinstance(valor, str) and 0 < len(valor) <= 200 and not re.search(r'[\x00-\x1f\x7f]', valor)
 
 
 class Mapas:
-    """O que um evento ensina para o seguinte, só de LEAD e só em memória (some ao reiniciar):
+    """O que um evento ensina para o seguinte, só de LEAD:
 
-    - `lid`: usuário do @lid -> jid com telefone. A Evolution manda o recibo de leitura
+    - `lid`: usuário do @lid -> jid com telefone (durável quando arquivo foi configurado). A Evolution manda o recibo de leitura
       (MESSAGES_UPDATE) só com o @lid, sem o telefone; o mesmo @lid já veio com `remoteJidAlt`
       numa mensagem antes.
-    - `msg`: id da mensagem -> jid com telefone. O recibo traz o `keyId` da mensagem que foi lida.
+    - `msg`: id da mensagem -> jid com telefone, também durável. O recibo traz o `keyId` da mensagem que foi lida.
     Teto de entradas: as mais antigas saem primeiro."""
 
-    def __init__(self, maximo: int = 5000, todos: bool = False):
+    def __init__(self, maximo: int = 5000, todos: bool = False, arquivo: Path | None = None):
         self.lid: dict[str, str] = {}
         self.msg: dict[str, str] = {}
         self.maximo = maximo
         # Modo ensaio (EVOLUTION_ENSAIO=1, só para provar a resolução com um telefone que não é lead):
         # também lembra de quem não é lead. Em memória, com o mesmo teto. Desligado por padrão.
         self.todos = todos
+        self.arquivo = arquivo
+        self.carregar()
+
+    def carregar(self):
+        if self.arquivo is None: return
+        if not self.arquivo.exists():
+            self.lid, self.msg = {}, {}
+            return
+        valor = json.loads(self.arquivo.read_text(encoding='utf-8'))
+        if not isinstance(valor, dict) or valor.get('versao') != 1 or not isinstance(valor.get('lid'), dict):
+            raise ValueError('mapa LID inválido')
+        self.lid = {k: v for k, v in valor['lid'].items() if isinstance(k, str) and re.fullmatch(r'\d{5,30}', k) and jid_de_telefone(v) == v}
+        self.lid = dict(list(self.lid.items())[-self.maximo:])
+        msgs = valor.get('msg', {})
+        if not isinstance(msgs, dict): raise ValueError('mapa de mensagens inválido')
+        self.msg = dict(list((k, v) for k, v in msgs.items() if id_valido(k) and jid_de_telefone(v) == v)[-self.maximo:])
 
     def guardar(self, lid: str, id_msg: str, jid: str) -> None:
+        if jid_de_telefone(jid) != jid: return
+        lid = lid if isinstance(lid, str) and re.fullmatch(r'\d{5,30}', lid) else ''
+        id_msg = id_msg if id_valido(id_msg) else ''
+        anterior, mensagens_antes = dict(self.lid), dict(self.msg)
         for mapa, k in ((self.lid, lid), (self.msg, id_msg)):
             if not k:
                 continue
@@ -161,6 +240,11 @@ class Mapas:
             mapa[k] = jid
             while len(mapa) > self.maximo:
                 mapa.pop(next(iter(mapa)))
+        if self.arquivo is not None and (self.lid != anterior or self.msg != mensagens_antes):
+            try: salvar_privado(self.arquivo, {'versao': 1, 'lid': self.lid, 'msg': self.msg})
+            except Exception:
+                self.lid, self.msg = anterior, mensagens_antes
+                raise
 
 
 def _id_da_mensagem(item: dict) -> str:
@@ -597,7 +681,8 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
 
         # MESSAGES_UPSERT / SEND_MESSAGE
         id_msg = chave_msg.get("id") or item.get("id") or item.get("messageId")
-        if id_msg and id_msg in vistos:
+        identidade = (jid, de_mim, id_msg)
+        if id_msg and identidade in vistos:
             pular("reentrega")
             continue
         mensagem = item.get("message")
@@ -635,7 +720,7 @@ def traduzir(corpo, leads, agora: float, vistos: Recentes | None = None, instanc
         # O id só é lembrado quando algo foi produzido: um placeholder sem conteúdo (ainda cifrado) que chega
         # antes da mensagem decifrada, com o mesmo id, não pode engolir a resposta de verdade.
         if id_msg:
-            vistos.add(id_msg)
+            vistos.add(identidade)
     return Traducao(linhas, respostas, ignorados, conexao, tuple(resumos), tuple(enviadas))
 
 
@@ -655,6 +740,7 @@ class Gravador:
         self._leads: set[str] | None = None
         self._leads_mtime: float | None = None
         self.pasta.mkdir(parents=True, exist_ok=True)
+        self.pasta.chmod(0o700)
         # O observador espera o log existir; um arquivo vazio basta.
         self._anexar(self.pasta / "evolution.log", "")
 
@@ -693,12 +779,35 @@ class Gravador:
         fd = os.open(caminho, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
         try:
             if texto:
-                os.write(fd, texto.encode("utf-8"))
+                dados = texto.encode('utf-8')
+                while dados:
+                    n = os.write(fd, dados)
+                    if n <= 0: raise OSError('escrita incompleta')
+                    dados = dados[n:]
+                os.fsync(fd)
         finally:
             os.close(fd)
 
-    def escrever(self, t: Traducao) -> None:
+    def escrever(self, t: Traducao, duravel: bool = False) -> None:
         with self.trava:
+            if duravel:
+                # Publicação imutável: o consumidor nunca renomeia um arquivo aberto pelo produtor.
+                # Separada da bridge Node, que continua dona dos arquivos legados compartilhados.
+                if not (t.linhas or t.respostas or t.enviadas): return
+                pasta = self.pasta / 'capturas-adaptador'
+                pasta.mkdir(mode=0o700, exist_ok=True)
+                ids = {i.get('_adaptador_id') for i in (*t.linhas, *t.respostas, *t.enviadas)}
+                if len(ids) != 1 or not re.fullmatch(r'[a-f0-9]{64}', str(next(iter(ids)))):
+                    raise ValueError('identidade de captura inválida')
+                arquivo = pasta / (next(iter(ids)) + '.json')
+                if arquivo.exists(): return
+                arquivos = list(pasta.glob('*.json'))
+                valor = {'ordem': time.time_ns(), 'linhas': t.linhas, 'respostas': t.respostas, 'enviadas': t.enviadas}
+                tamanho = len(json.dumps(valor, ensure_ascii=True).encode())
+                if len(arquivos) >= PENDENTES_MAX or tamanho > ITEM_MAX or tamanho + sum(p.stat().st_size for p in arquivos) > self.limite_respostas:
+                    raise OSError('captura cheia: aguardando consumidor')
+                salvar_privado(arquivo, valor)
+                return
             if t.linhas:
                 caminho = self.pasta / "evolution.log"
                 try:
@@ -768,7 +877,8 @@ class Adaptador:
                  instancia: str = INSTANCIA):
         self.gravador, self.relogio, self.avisar, self.instancia = gravador, relogio, avisar, instancia
         self.vistos = Recentes()
-        self.mapas = Mapas(todos=os.environ.get("EVOLUTION_ENSAIO") == "1")
+        self.mapas = Mapas(todos=os.environ.get("EVOLUTION_ENSAIO") == "1", arquivo=gravador.pasta / 'lid-telefone.json')
+        self.spool = gravador.pasta / 'entrada-pendente.json'
         self.formas: dict[str, int] = {}
         self.resumos_logados = 0
         self.contadores: dict = {"eventos": {}, "linhas": 0, "respostas": 0, "ignorados": {}, "recibos": {}}
@@ -778,6 +888,7 @@ class Adaptador:
         self.trava = threading.Lock()
         self.rejeitados: dict[str, int] = {}
         self._rejeicao_logada = 0.0
+        self.erro_entrada = None
 
     def rejeitar(self, codigo: int) -> None:
         """Conta um pedido recusado (401, 400, 413). Um segredo trocado só de um lado zera o pipeline sem
@@ -791,7 +902,150 @@ class Adaptador:
 
     def receber(self, corpo) -> Traducao:
         with self.trava:
-            return self._receber(corpo)
+            with trava_privada(self.gravador.pasta / '.entrada-trava'):
+                try:
+                    t = self._receber(corpo); self.erro_entrada = None
+                    return t
+                except Exception:
+                    self.erro_entrada = 'persistencia_indisponivel'
+                    raise
+
+    def _estado(self):
+        if not self.spool.exists(): return {'versao': 1, 'pendentes': {}, 'concluidos': []}
+        s = json.loads(self.spool.read_text(encoding='utf-8'))
+        if not isinstance(s, dict) or s.get('versao') != 1 or not isinstance(s.get('pendentes'), dict) or not isinstance(s.get('concluidos'), list):
+            raise ValueError('spool inválido')
+        return s
+
+    def _salvar(self, estado):
+        if len(json.dumps(estado, ensure_ascii=True).encode()) > SPOOL_MAX:
+            raise OSError('spool cheio: reentrega necessária')
+        salvar_privado(self.spool, estado)
+
+    def _minimo(self, evento, item, instancia, agora):
+        if not isinstance(instancia, str) or len(instancia) > 100 or re.search(r'[\x00-\x1f]', instancia): return None
+        key = item.get('key') if isinstance(item.get('key'), dict) else {}
+        jid = key.get('remoteJid') or item.get('remoteJid')
+        if not isinstance(jid, str) or (not jid_de_telefone(jid) and not _usuario_lid(jid)): return None
+        de_mim = key.get('fromMe', item.get('fromMe'))
+        if not isinstance(de_mim, bool): return None
+        status = estado_do_recibo(item.get('status', key.get('status')))
+        if evento == 'MESSAGES_UPDATE':
+            if status != 'lido' or not de_mim: return None
+        elif sem_conversa(item.get('message')): return None
+        id_msg = _id_da_mensagem(item)
+        if id_msg and not id_valido(id_msg): raise ValueError('id de mensagem inválido')
+        limpo = {'key': {'remoteJid': jid, 'fromMe': de_mim, 'id': id_msg},
+                 'messageTimestamp': hora_do_evento(item.get('messageTimestamp'), agora)}
+        for campo in ('remoteJidAlt', 'senderPn', 'participantAlt'):
+            valor = key.get(campo) or item.get(campo)
+            if jid_de_telefone(valor) or _usuario_lid(valor): limpo['key'][campo] = valor
+        if evento == 'MESSAGES_UPDATE': limpo['status'] = 'READ'
+        else:
+            limpo['message'] = {'conversation': texto_da_mensagem(item.get('message'))}
+            audio = audio_do_lead(item) if not de_mim else None
+            if audio is not None: limpo['_audio'] = audio
+        # IDs separam direção/recibo; UPSERT e SEND_MESSAGE da mesma saída são uma só captura.
+        identidade = [instancia, 'lido' if evento == 'MESSAGES_UPDATE' else 'saida' if de_mim else 'entrada',
+                      id_msg or hashlib.sha256(json.dumps(limpo, sort_keys=True).encode()).hexdigest()]
+        chave = hashlib.sha256(json.dumps(identidade).encode()).hexdigest()
+        return chave, {'event': evento, 'instance': instancia, 'data': limpo}
+
+    def _capturar(self, corpo, agora):
+        evento = normalizar_evento(corpo.get('event')) if isinstance(corpo, dict) else ''
+        if evento not in ('MESSAGES_UPSERT','MESSAGES_UPDATE','SEND_MESSAGE') or (self.instancia and corpo.get('instance') != self.instancia):
+            return traduzir(corpo, self.gravador.leads(), agora, self.vistos, self.instancia, self.mapas)
+        estado = self._estado(); self.mapas.carregar()
+        leads = self.gravador.leads()
+        ignorados = {}
+        for item in itens_de(corpo.get('data')):
+            minimo = self._minimo(evento, item, corpo.get('instance', ''), agora)
+            if minimo is None:
+                t = traduzir({**corpo, 'data': item}, leads, agora, Recentes(), self.instancia, self.mapas)
+                if t.linhas or t.respostas or t.enviadas:
+                    raise ValueError('evento útil sem representação durável')
+                for motivo, n in t.ignorados.items(): ignorados[motivo] = ignorados.get(motivo, 0) + n
+                continue
+            chave, compacto = minimo
+            jid, _, lid = jid_da_conversa(compacto['data'], self.mapas)
+            if leads is not None and jid and chave_do_numero(jid.split('@')[0]) not in leads:
+                ignorados['nao_e_lead'] = ignorados.get('nao_e_lead', 0) + 1
+                if chave in estado['pendentes']:
+                    del estado['pendentes'][chave]
+                    estado['concluidos'] = (estado['concluidos'] + [chave])[-20000:]
+                # O PN novo confirma que este LID pendente é de quem não está na fonte fresca.
+                if lid:
+                    for antiga, r in list(estado['pendentes'].items()):
+                        if _usuario_lid(r['corpo']['data']['key'].get('remoteJid')) == lid:
+                            del estado['pendentes'][antiga]
+                            estado['concluidos'] = (estado['concluidos'] + [antiga])[-20000:]
+                continue
+            if chave in estado['concluidos'] or chave in estado['pendentes']:
+                if chave in estado['pendentes']:
+                    antiga = estado['pendentes'][chave]['corpo']['data']['key']
+                    for campo in ('remoteJidAlt','senderPn','participantAlt'):
+                        if campo in compacto['data']['key']: antiga[campo] = compacto['data']['key'][campo]
+                    if jid_de_telefone(compacto['data']['key']['remoteJid']) and not jid_de_telefone(antiga['remoteJid']):
+                        antiga['remoteJidAlt'] = compacto['data']['key']['remoteJid']
+                ignorados['reentrega'] = ignorados.get('reentrega', 0) + 1
+                continue
+            if len(estado['pendentes']) >= PENDENTES_MAX or len(json.dumps(compacto, ensure_ascii=True).encode()) > ITEM_MAX:
+                raise OSError('limite de entrada pendente')
+            estado['pendentes'][chave] = {'recebido': agora, 'corpo': compacto}
+        # O ACK nunca precede a posse durável do evento mínimo; não guarda pushName, apikey ou corpo bruto.
+        self._salvar(estado)
+        t = self._drenar(estado, agora, ignorados)
+        return t._replace(resumos=tuple(resumo_seguro(evento, i) for i in itens_de(corpo.get('data'))))
+
+    def _drenar(self, estado, agora, ignorados=None):
+        leads = self.gravador.leads()
+        linhas, respostas, enviadas = [], [], []
+        ignorados = dict(ignorados or {})
+        if leads is None:
+            return Traducao([], [], {**ignorados, 'aguardando_lista': len(estado['pendentes'])}, '')
+        # Primeiro aprende hints de TODA a rodada. Um LID antigo não bloqueia seu hint posterior;
+        # a entrega depois respeita a hora original, não a hora da correlação.
+        for registro in estado['pendentes'].values():
+            corpo = registro['corpo']; item = corpo['data']
+            if self.instancia and corpo.get('instance') != self.instancia: continue
+            jid, _, lid = jid_da_conversa(item, self.mapas)
+            if jid and chave_do_numero(jid.split('@')[0]) in leads:
+                self.mapas.guardar(lid, _id_da_mensagem(item) if item['key']['fromMe'] else '', jid)
+        ordem = sorted(estado['pendentes'].items(), key=lambda p: (p[1]['corpo']['data']['messageTimestamp'], p[1]['recebido']))
+        entregues = 0
+        for chave, registro in ordem:
+            if entregues >= DRENAR_MAX: break
+            corpo = registro['corpo']; item = corpo['data']
+            if self.instancia and corpo.get('instance') != self.instancia: continue
+            jid, _, _ = jid_da_conversa(item, self.mapas)
+            if not jid:
+                continue  # Sem correlação confirmada, mantém mínimo privado; cheio aplica backpressure.
+            else:
+                t = traduzir(corpo, leads, agora, Recentes(), self.instancia, self.mapas)
+            t = t._replace(linhas=[{**i, '_adaptador_id': chave, **({'ts': item['messageTimestamp']} if i.get('event') == 'ignored' else {})} for i in t.linhas],
+                           respostas=[{**i, '_adaptador_id': chave, **({'audio': item['_audio']} if '_audio' in item else {})} for i in t.respostas],
+                           enviadas=tuple({**i, '_adaptador_id': chave} for i in t.enviadas))
+            self.gravador.escrever(t, duravel=True)
+            del estado['pendentes'][chave]
+            estado['concluidos'] = (estado['concluidos'] + [chave])[-20000:]
+            self._salvar(estado)
+            entregues += 1
+            linhas.extend(t.linhas); respostas.extend(t.respostas); enviadas.extend(t.enviadas)
+            for motivo, n in t.ignorados.items(): ignorados[motivo] = ignorados.get(motivo, 0) + n
+        return Traducao(linhas, respostas, ignorados, '', (), tuple(enviadas))
+
+    def drenar(self):
+        with self.trava:
+            with trava_privada(self.gravador.pasta / '.entrada-trava'):
+                try:
+                    self.mapas.carregar()
+                    t = self._drenar(self._estado(), self.relogio()); self.erro_entrada = None
+                    self.contadores['linhas'] += len(t.linhas); self.contadores['respostas'] += len(t.respostas)
+                    for motivo, n in t.ignorados.items(): self.contadores['ignorados'][motivo] = self.contadores['ignorados'].get(motivo, 0) + n
+                    return t
+                except Exception:
+                    self.erro_entrada = 'persistencia_indisponivel'
+                    raise
 
     def _receber(self, corpo) -> Traducao:
         agora = self.relogio()
@@ -799,8 +1053,7 @@ class Adaptador:
         self.contadores["eventos"][evento] = self.contadores["eventos"].get(evento, 0) + 1
         self.ultimo_evento = agora
         self._registrar_forma(corpo, evento)
-        t = traduzir(corpo, self.gravador.leads(), agora, self.vistos, self.instancia, self.mapas)
-        self.gravador.escrever(t)
+        t = self._capturar(corpo, agora)
         for resumo in t.resumos:
             # Os primeiros ficam no journal (ensaio do formato real); depois só o contador de recibos.
             if self.resumos_logados < RESUMOS_MAX:
@@ -844,10 +1097,15 @@ class Adaptador:
 
     def saude(self) -> dict:
         with self.trava:
+            try:
+                pendentes = list(self._estado()['pendentes'].values())
+                espera = {'pendentes': len(pendentes), 'idade_pendente_s': max((int(self.relogio() - p['recebido']) for p in pendentes), default=0)}
+            except Exception:
+                espera = {'pendentes': None, 'erro_entrada': 'estado_indisponivel'}
             return {"ok": True, "instancia": self.instancia or None, "ultimo_evento": self.ultimo_evento,
                     "desconectado": self.desconectado_avisado, "lista_de_leads": self.gravador.leads() is not None,
                     "rejeitados": dict(self.rejeitados), "respostas_descartadas": self.gravador.respostas_descartadas,
-                    **self.contadores}
+                    **self.contadores, 'erro_entrada': self.erro_entrada, **espera}
 
 
 def fazer_handler(adaptador: Adaptador, segredo: str):
@@ -919,9 +1177,9 @@ def fazer_handler(adaptador: Adaptador, segredo: str):
                 return self._responder(400, {"erro": "json"})
             try:
                 t = adaptador.receber(corpo)
-            except Exception as e:  # noqa: BLE001 — a Evolution não precisa reentregar o que falhou aqui
-                log("erro ao tratar o webhook:", type(e).__name__, e)
-                return self._responder(200, {"ok": False})
+            except Exception as e:  # Sem confirmação de persistência/entrega: o remetente deve reentregar.
+                log("erro ao tratar o webhook:", type(e).__name__)
+                return self._responder(503, {"ok": False, "erro": "persistencia_indisponivel"})
             self._responder(200, {"ok": True, "linhas": len(t.linhas), "respostas": len(t.respostas)})
 
     return Handler
@@ -975,9 +1233,16 @@ def main() -> int:
     servidor = criar_servidor(adaptador, segredo)
     signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=servidor.shutdown, daemon=True).start())
     log(f"ouvindo {ENDERECO}:{PORTA}; pasta {PASTA}" + (f"; instância {INSTANCIA}" if INSTANCIA else ""))
+    parar = threading.Event()
+    def drenar():
+        while not parar.wait(5):
+            try: adaptador.drenar()
+            except Exception as e: log('entrada pendente preservada:', type(e).__name__)
+    thread = threading.Thread(target=drenar, daemon=True); thread.start()
     try:
         servidor.serve_forever()
     finally:
+        parar.set(); thread.join(timeout=6)
         servidor.server_close()
     return 0
 

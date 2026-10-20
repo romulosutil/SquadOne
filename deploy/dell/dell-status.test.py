@@ -509,7 +509,7 @@ class FilaDeAvisos(unittest.TestCase):
         self.dir = Path(tempfile.mkdtemp(prefix="dell-status-fila-"))
         self.addCleanup(shutil.rmtree, self.dir)
         self.antes = {k: getattr(ds, k) for k in ("FILA", "FILA_TRAVA", "FILA_ESTADO", "FILA_RECUSADOS",
-                                                  "FRESCOR_S", "enviar")}
+                                                  "FRESCOR_S", "enviar", "enviar_telegram")}
         self.addCleanup(lambda: [setattr(ds, k, v) for k, v in self.antes.items()])
         ds.FILA = self.dir / "fila"
         ds.FILA.mkdir()
@@ -519,6 +519,8 @@ class FilaDeAvisos(unittest.TestCase):
         ds.FRESCOR_S = 0
         self.enviadas: list[str] = []
         self.hermes_no_ar = True
+        self.telegram = []
+        ds.enviar_telegram = lambda msg, silencioso=False: (self.telegram.append(msg) or True)
 
         def enviar(msg):
             if self.hermes_no_ar:
@@ -655,8 +657,9 @@ class FilaDeAvisos(unittest.TestCase):
         normal = self.gravar(aviso(titulo="Normal"))
         self.gravar(aviso(titulo="Urgente", prioridade=0))
         r = ds.drenar_fila(br("2026-10-06T23:30"))
-        self.assertEqual((r["enviados"], r["esperando"]), (1, 1))
-        self.assertTrue(self.enviadas[0].startswith("Urgente"))
+        self.assertEqual((r["enviados"], r["esperando"], r['pelo_telegram']), (0, 1, 1))
+        self.assertTrue(self.telegram[0].startswith("Urgente"))
+        self.assertEqual(self.enviadas, [])
         self.assertTrue(normal.exists())
         self.assertEqual(ds.drenar_fila(br("2026-10-07T06:59"))["enviados"], 0)
         self.assertEqual(ds.drenar_fila(br("2026-10-07T07:00"))["enviados"], 1)
@@ -667,10 +670,10 @@ class FilaDeAvisos(unittest.TestCase):
             self.gravar(aviso(titulo=f"Aviso {i:02d}"))
         self.gravar(aviso(titulo="Urgente", prioridade=0), nome="9999.json")
         r = ds.drenar_fila(br("2026-10-06T10:00"))
-        self.assertEqual((r["enviados"], r["agrupados"]), (19, 7))
+        self.assertEqual((r["enviados"], r["agrupados"], r['pelo_telegram']), (19, 6, 1))
         self.assertEqual(len(self.enviadas), 20)
-        self.assertTrue(self.enviadas[0].startswith("Urgente"))  # P0 vai primeiro, mesmo gravado por último
-        self.assertIn("7 avisos agrupados", self.enviadas[-1])
+        self.assertTrue(self.telegram[0].startswith("Urgente"))
+        self.assertIn("6 avisos agrupados", self.enviadas[-1])
         self.assertEqual(list(ds.FILA.glob("*.json")), [])
         # Teto cheio e resumo recente: o que chega espera; passada a hora, sai.
         self.gravar(aviso(titulo="Depois"))
@@ -1489,7 +1492,7 @@ class Socorro(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.enviadas = []
-        p = mock.patch.object(ds, "enviar", side_effect=lambda m: self.enviadas.append(m) or True)
+        p = mock.patch.object(ds, "enfileirar_alerta_do_dell", side_effect=lambda titulo, texto, chave, prioridade=ds.PRIORIDADE_PADRAO: self.enviadas.append(titulo + '\n' + texto) or True)
         p.start()
         self.addCleanup(p.stop)
         p = mock.patch.object(ds, "unit_ativa", lambda u: u == "socorro.path")  # o socorro.path está de pé
@@ -1592,6 +1595,12 @@ class FalhasPeloTelegram(unittest.TestCase):
         p = mock.patch.object(ds, "enviar", side_effect=lambda m: self.hermes_no_ar and (self.whatsapp.append(m) or True))
         p.start()
         self.addCleanup(p.stop)
+        self.fila()
+
+    def transicoes(self, checks, anterior, t):
+        novo = ds.avisar_transicoes(checks, anterior, t)
+        ds.drenar_fila(t)
+        return novo
 
     # --- a configuração: do operations.env, sem copiar o segredo
 
@@ -1605,8 +1614,7 @@ class FalhasPeloTelegram(unittest.TestCase):
                          f"TELEGRAM_BOT_TOKEN={TOKEN}\n",                                 # sem chat: não abre
                          f"TELEGRAM_BOT_TOKEN={TOKEN}\nTELEGRAM_CHAT_IDS=-100123\n",       # grupo
                          f"TELEGRAM_BOT_TOKEN={TOKEN}\nTELEGRAM_CHAT_IDS=111,abc\n",
-                         "TELEGRAM_BOT_TOKEN=abc\nTELEGRAM_CHAT_IDS=111\n",                 # fora do formato
-                         f"TELEGRAM_BOT_TOKEN={TOKEN}\nTELEGRAM_CHAT_IDS=111\nSQUADONE_LEMBRETES_PELO_TELEGRAM=false\n"):
+                         "TELEGRAM_BOT_TOKEN=abc\nTELEGRAM_CHAT_IDS=111\n"):
             self.env.write_text(conteudo)
             self.assertIsNone(ds.config_do_telegram(), conteudo)
         self.env.unlink()
@@ -1645,7 +1653,7 @@ class FalhasPeloTelegram(unittest.TestCase):
         return [ds.check("n8n", "servicos", "n8n", "falha", "Sem resposta", o_que_fazer="Peça ao Claude.")]
 
     def test_quebrou_vai_pelo_telegram_e_nao_pelo_whatsapp(self):
-        novo = ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T15:00"))
+        novo = self.transicoes(self.checks(), {}, br("2026-10-16T15:00"))
         self.assertEqual(len(self.pedidos), 1)
         self.assertIn("Quebrou:", self.pedidos[0]["text"])
         self.assertNotIn("disable_notification", self.pedidos[0])  # de dia, com som
@@ -1653,37 +1661,43 @@ class FalhasPeloTelegram(unittest.TestCase):
         self.assertIn("avisado", novo["n8n"])
 
     def test_de_noite_chega_sem_som(self):
-        ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T23:30"))
+        self.transicoes(self.checks(), {}, br("2026-10-16T23:30"))
         self.assertTrue(self.pedidos[0]["disable_notification"])
         self.assertEqual(self.whatsapp, [])
         self.pedidos.clear()
-        ds.avisar_transicoes([], {"n8n": {"estado": "falha"}}, br("2026-10-17T06:59"))
+        self.transicoes([], {"n8n": {"estado": "falha"}}, br("2026-10-17T06:59"))
         self.assertEqual(self.pedidos, [])  # sumiu: não avisa
-        ds.avisar_transicoes([ds.check("n8n", "servicos", "n8n", "ok", "ok")], {"n8n": {"estado": "falha"}},
+        self.transicoes([ds.check("n8n", "servicos", "n8n", "ok", "ok")], {"n8n": {"estado": "falha"}},
                              br("2026-10-17T07:00"))
         self.assertIn("Voltou ao normal", self.pedidos[0]["text"])
         self.assertNotIn("disable_notification", self.pedidos[0])
 
-    def test_bot_fora_cai_no_whatsapp(self):
+    def test_bot_fora_fica_na_outbox_sem_whatsapp(self):
         self.bot_no_ar = False
         with contextlib.redirect_stderr(io.StringIO()):
-            novo = ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T15:00"))
-        self.assertEqual(len(self.whatsapp), 1)
-        self.assertIn("Quebrou:", self.whatsapp[0])
+            novo = self.transicoes(self.checks(), {}, br("2026-10-16T15:00"))
+        self.assertEqual(self.whatsapp, [])
+        self.assertEqual(len(list(ds.FILA.glob('*.json'))), 1)
         self.assertIn("avisado", novo["n8n"])
 
-    def test_sem_bot_configurado_e_o_whatsapp_de_antes(self):
+    def test_sem_bot_configurado_continua_pendente_sem_whatsapp(self):
         self.env.write_text("SQUADONE_MODE=operations\n")
-        ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T15:00"))
+        self.transicoes(self.checks(), {}, br("2026-10-16T15:00"))
         self.assertEqual(self.pedidos, [])
-        self.assertEqual(len(self.whatsapp), 1)
+        self.assertEqual(self.whatsapp, [])
+        self.assertEqual(len(list(ds.FILA.glob('*.json'))), 1)
 
-    def test_os_dois_fora_fica_pendente_para_o_proximo_minuto(self):
+    def test_reinicio_reenvia_outbox_e_cursor_nao_duplica_aviso(self):
         self.bot_no_ar, self.hermes_no_ar = False, False
         with contextlib.redirect_stderr(io.StringIO()):
-            novo = ds.avisar_transicoes(self.checks(), {}, br("2026-10-16T15:00"))
-        self.assertTrue(novo["n8n"]["pendente"])
-        self.assertNotIn("avisado", novo["n8n"])
+            novo = self.transicoes(self.checks(), {}, br("2026-10-16T15:00"))
+        self.assertIn('avisado', novo['n8n'])  # publicado, ainda não entregue
+        ds.gravar_privado(self.dir / 'cursor.json', novo)
+        self.bot_no_ar = True
+        self.transicoes(self.checks(), json.loads((self.dir / 'cursor.json').read_text()), br('2026-10-16T15:01'))
+        self.assertEqual(len(self.pedidos), 2)  # falhou + entregou
+        self.assertEqual(list(ds.FILA.glob('*.json')), [])
+        self.assertEqual(self.whatsapp, [])
 
     # --- o aviso do socorro, pela fila
 
@@ -1694,7 +1708,7 @@ class FalhasPeloTelegram(unittest.TestCase):
             p = mock.patch.object(ds, nome, valor)
             p.start()
             self.addCleanup(p.stop)
-        ds.FILA.mkdir()
+        ds.FILA.mkdir(exist_ok=True)
 
     def gravar(self, nome: str, **extra) -> Path:
         f = ds.FILA / nome
@@ -1726,7 +1740,7 @@ class FalhasPeloTelegram(unittest.TestCase):
         self.assertTrue(self.pedidos[0]["disable_notification"])
         self.assertTrue(espera.exists())
 
-    def test_bot_fora_o_socorro_cai_no_whatsapp_com_silencio_e_teto(self):
+    def test_bot_fora_o_socorro_aguarda_sem_expirar_nem_whatsapp(self):
         self.fila()
         self.bot_no_ar = False
         s = self.gravar("a.json", titulo="🛟 Socorro A", origem="socorro", prioridade=1)
@@ -1737,8 +1751,10 @@ class FalhasPeloTelegram(unittest.TestCase):
             self.assertEqual(len(self.pedidos), 1)  # uma tentativa só por drenagem
             self.assertTrue(s.exists())
             r = ds.drenar_fila(br("2026-10-17T07:00"))
-        self.assertEqual((r["pelo_telegram"], r["enviados"]), (0, 2))
-        self.assertEqual([m.split("\n")[0] for m in self.whatsapp], ["🛟 Socorro A", "🛟 Socorro B"])
+        self.assertEqual((r["pelo_telegram"], r["enviados"], r['esperando']), (0, 0, 2))
+        self.assertEqual(self.whatsapp, [])
+        self.bot_no_ar = True
+        self.assertEqual(ds.drenar_fila(br('2026-10-18T07:00'))['pelo_telegram'], 2)
 
 
 def falso_run(saidas: dict, vistos: list):
@@ -1826,7 +1842,7 @@ class PrazosDoMonitor(unittest.TestCase):
         c = ds.check("fluxo:a", "fluxos", "01", "atencao", "Não verificado")
         c["nao_verificado"] = True
         ant = {"fluxo:a": {"estado": "falha", "desde": "2026-10-19T10:00:00Z", "avisado": "2026-10-19T10:00:00Z"}}
-        with mock.patch.object(ds, "enviar_pessoal", side_effect=lambda *a: avisos.append(a) or True):
+        with mock.patch.object(ds, "enfileirar_alerta_do_dell", side_effect=lambda *a: avisos.append(a) or True):
             novo = ds.avisar_transicoes([c], ant, br("2026-10-19T11:00"))
         self.assertEqual(novo["fluxo:a"], ant["fluxo:a"])
         self.assertEqual(avisos, [])
@@ -1876,7 +1892,7 @@ class PrazosDoMonitor(unittest.TestCase):
             return [ds.check("disco", "maquina", "Disco", "falha", "96% usado")]
         saida, estado = self.dir / "status.json", self.dir / "estado.json"
 
-        def avisa(msg, t, prioridade=2):
+        def avisa(titulo, texto, chave, prioridade=2):
             ordem.append(("aviso", saida.exists(), prioridade))
             return True
         with contextlib.ExitStack() as pilha:
@@ -1884,7 +1900,7 @@ class PrazosDoMonitor(unittest.TestCase):
                                 ("TAMANHOS", self.dir / "tam.json"), ("CENTRAL_VISTA", self.dir / "cv.json"),
                                 ("SOCORRO", self.dir / "sem-socorro"), ("VERIFICACOES", (falha,))):
                 pilha.enter_context(mock.patch.object(ds, nome, valor))
-            pilha.enter_context(mock.patch.object(ds, "enviar_pessoal", avisa))
+            pilha.enter_context(mock.patch.object(ds, "enfileirar_alerta_do_dell", avisa))
             pilha.enter_context(mock.patch.object(ds, "drenar_fila", lambda: ordem.append("drenou")))
             pilha.enter_context(mock.patch.object(ds.sys, "argv", ["dell-status"]))
             ds.main()
@@ -1902,7 +1918,7 @@ class PrazosDoMonitor(unittest.TestCase):
                                 ("TAMANHOS", self.dir / "tam.json"), ("CENTRAL_VISTA", self.dir / "cv.json"),
                                 ("SOCORRO", self.dir / "sem-socorro"), ("VERIFICACOES", (falha,))):
                 pilha.enter_context(mock.patch.object(ds, nome, valor))
-            pilha.enter_context(mock.patch.object(ds, "enviar_pessoal", side_effect=RuntimeError("travou")))
+            pilha.enter_context(mock.patch.object(ds, "enfileirar_alerta_do_dell", side_effect=RuntimeError("travou")))
             pilha.enter_context(mock.patch.object(ds, "drenar_fila", lambda: None))
             pilha.enter_context(mock.patch.object(ds.sys, "argv", ["dell-status"]))
             pilha.enter_context(contextlib.redirect_stderr(io.StringIO()))
@@ -1983,7 +1999,7 @@ class ServicosHttpEUnitsParadas(unittest.TestCase):
         self.assertIn("1ª tentativa", c["detalhe"])
         self.assertTrue(c["sozinho"])
         avisos = []
-        with mock.patch.object(ds, "enviar_pessoal", side_effect=lambda *a: avisos.append(a) or True):
+        with mock.patch.object(ds, "enfileirar_alerta_do_dell", side_effect=lambda *a: avisos.append(a) or True):
             ant = ds.avisar_transicoes([c], {"n8n": {"estado": "ok"}}, br("2026-10-19T10:00"))
             self.assertEqual(avisos, [])  # atenção não avisa
             c2 = ds.check("n8n", "servicos", "n8n", "falha", "Sem resposta: timed out")
@@ -2126,7 +2142,7 @@ class ServicosHttpEUnitsParadas(unittest.TestCase):
         avisos = []
         cs = [ds.check("container:x", "containers", "x", "falha", "Exited"),
               ds.check("containers", "containers", "Containers", "falha", "1 com problema")]
-        with mock.patch.object(ds, "enviar_pessoal", side_effect=lambda m, *a: avisos.append(m) or True):
+        with mock.patch.object(ds, "enfileirar_alerta_do_dell", side_effect=lambda titulo, texto, *a: avisos.append(titulo + "\n" + texto) or True):
             ds.avisar_transicoes(cs, {}, br("2026-10-19T10:00"))
         self.assertEqual(len(avisos), 1)
         self.assertIn("• x:", avisos[0])
@@ -2216,8 +2232,12 @@ class SocorroSoQuandoHaOQueFazer(unittest.TestCase):
         p = mock.patch.object(ds, "unit_ativa", lambda u: u == "socorro.path" and self.path_ativo)
         p.start()
         self.addCleanup(p.stop)
+        for nome, valor in (("FILA", self.dir / "fila"), ("FILA_ESTADO", self.dir / "fila-estado.json"),
+                            ("FILA_TRAVA", self.dir / "fila.lock"), ("FILA_RECUSADOS", self.dir / "recusados"), ("FRESCOR_S", 0)):
+            p = mock.patch.object(ds, nome, valor); p.start(); self.addCleanup(p.stop)
+        ds.FILA.mkdir()
         self.enviadas = []
-        p = mock.patch.object(ds, "enviar", side_effect=lambda m: self.enviadas.append(m) or True)
+        p = mock.patch.object(ds, "enviar_telegram", side_effect=lambda m, silencioso: self.enviadas.append(m) or True)
         p.start()
         self.addCleanup(p.stop)
 
@@ -2232,7 +2252,10 @@ class SocorroSoQuandoHaOQueFazer(unittest.TestCase):
         self.assertEqual(ds.pedir_socorro(cs, {}, self.T), set())
         self.assertEqual(self.pedidos(), [])
         ds.avisar_transicoes(cs, {}, self.T, {"fluxo:abc"})  # mesmo que alguém passasse o id, não há linha a dizer
+        self.assertEqual(self.enviadas, [])  # publicar ainda não entrega
+        ds.drenar_fila(self.T)
         self.assertIn("Quebrou:", self.enviadas[0])
+        ds.drenar_fila(self.T)
         self.assertNotIn("Socorro", self.enviadas[0])
 
     def test_so_leitura_diz_diagnostico_e_com_remedio_diz_religar(self):
@@ -2240,6 +2263,7 @@ class SocorroSoQuandoHaOQueFazer(unittest.TestCase):
         ids = ds.pedir_socorro(cs, {}, self.T)
         self.assertEqual(ids, {"backup:cofre", "n8n"})
         ds.avisar_transicoes(cs, {}, self.T, ids)
+        ds.drenar_fila(self.T)
         msg = self.enviadas[0]
         self.assertEqual(msg.count(ds.LINHA_DO_DIAGNOSTICO), 1)
         self.assertEqual(msg.count(ds.LINHA_DO_SOCORRO), 1)
@@ -2258,6 +2282,7 @@ class SocorroSoQuandoHaOQueFazer(unittest.TestCase):
         self.assertEqual(ds.pedir_socorro(cs, {}, self.T), set())
         self.assertEqual(self.pedidos(), [])
         ds.avisar_transicoes(cs, {}, self.T, set())
+        ds.drenar_fila(self.T)
         self.assertNotIn("Socorro", self.enviadas[0])
 
     def test_resumo_de_containers_nao_pede(self):
@@ -2342,7 +2367,10 @@ class TelegramComoCanal(unittest.TestCase):
             with self.subTest(cid):
                 self.pedidos.clear()
                 ds.avisar_transicoes([ds.check(cid, "maquina", cid, "falha", "x")], {}, noite)
+                self.assertEqual(self.pedidos, [])  # somente outbox até a drenagem
+                ds.drenar_fila(noite)
                 self.assertEqual("disable_notification" in self.pedidos[0], silencioso)
+                self.assertEqual(self.whatsapp, [])
 
     def test_origens_que_saem_pelo_telegram(self):
         for origem in ("socorro", "backup-dell", "atualizar-central", "silmer-drive-sync", "n8n:03 · Balcão"):

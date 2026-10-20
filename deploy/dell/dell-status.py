@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Retrato do Dell worker a cada minuto: grava o estado para a Central e avisa
 o Rômulo quando algo quebra e quando volta: pelo bot do Telegram desde 16/10/2026
-(OT-14), pelo Hermes (WhatsApp) só se o bot falhar. Ver "avisos" abaixo. O status.json é gravado
+(OT-14). Desde 19/10/2026, P0 e falhas usam outbox Telegram sem fallback WhatsApp. Ver "avisos" abaixo.
 ANTES de qualquer aviso (19/10/2026, HC-2): aviso lento ou travado não deixa a Central sem retrato.
 
 Uma verificação é {id, grupo, nome, estado, detalhe, link?, o_que_fazer?,
 acao?, sozinho?}. `estado` é `ok`, `atencao` ou `falha`. Só `falha` vira
-aviso: `atencao` aparece na Central e não interrompe ninguém. Vermelho quer
+Telegram: `atencao` aparece na Central e não interrompe ninguém. Vermelho quer
 dizer "você precisa agir, ou está quebrado agora"; amarelo, "vale olhar".
 `o_que_fazer` diz, em uma ou duas frases, o que aquilo significa e o que o
 Rômulo faz (ou "nada — resolve sozinho quando…", com `sozinho: true`); `acao`
@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -1628,8 +1629,8 @@ def enviar(msg: str) -> bool:
 # (Bot API oficial), como o lembrete e o alerta de finanças do SquadOne (`publicarAvisoPessoal` em
 # server/avisos.ts). O token e os chats NÃO são copiados para cá nem para a unit (regra 25): lidos do
 # ambiente ou, como o raio-x-ia já faz, do operations.env da Central a cada envio. Bot ausente, mal
-# configurado ou com falha = o WhatsApp de sempre. SQUADONE_LEMBRETES_PELO_TELEGRAM=false (no mesmo
-# arquivo) desfaz a OT-14 inteira, aqui e na Central.
+# configurado ou com falha = a outbox aguarda outra rodada, nunca o WhatsApp.
+# A flag de lembretes pessoais não desativa alertas críticos/falhas.
 
 OPERATIONS_ENV = HOME / ".config/squadone/operations.env"
 TOKEN_DO_BOT = re.compile(r"^\d+:[A-Za-z0-9_-]{30,}$")  # o formato do BotFather, o mesmo do server/telegram.ts
@@ -1638,7 +1639,7 @@ MAX_TELEGRAM = 4096  # caracteres por mensagem na Bot API
 # Avisos de falha ou pessoais que chegam pela fila e saem pelo Telegram, não pelo WhatsApp de vendas (OT-14):
 # o socorro, o backup, o atualizar-central, o sync do Drive do Silmer e todo aviso gravado por fluxo do n8n
 # (a origem é "n8n:<nome do fluxo>", ver ORIGEM_JS em claude-ops/n8n.py: por isso o prefixo).
-ORIGENS_PELO_TELEGRAM = {"socorro", "backup-dell", "atualizar-central", "silmer-drive-sync"}
+ORIGENS_PELO_TELEGRAM = {"socorro", "dell-status", "backup-dell", "atualizar-central", "silmer-drive-sync"}
 PREFIXOS_PELO_TELEGRAM = ("n8n:",)
 # O fluxo "00 · Avisar falha pelo Hermes" avisa toda falha de fluxo na hora, e o "Quebrou" do dell-status
 # (fluxo:<id>) avisa a mesma falha até 1 min depois, com a causa: o mesmo problema em duas mensagens (HC-10).
@@ -1657,8 +1658,6 @@ def config_do_telegram() -> tuple[str, list[int]] | None:
     def valor(chave: str) -> str:
         v = (os.environ.get(chave) or "").strip()
         return v or (ler_env(OPERATIONS_ENV, chave) or "").strip()
-    if valor("SQUADONE_LEMBRETES_PELO_TELEGRAM").lower() == "false":
-        return None
     token = valor("TELEGRAM_BOT_TOKEN")
     chats = [c.strip() for c in valor("TELEGRAM_CHAT_IDS").split(",") if c.strip()]
     # Lista vazia não abre o bot (como na Central), e chat de grupo (negativo) não é o dono.
@@ -1700,13 +1699,13 @@ def _enviar_telegram(cfg: tuple[str, list[int]], msg: str, silencioso: bool) -> 
             with urllib.request.urlopen(req, timeout=TEMPO_DO_TELEGRAM_S) as r:
                 ok = json.load(r).get("ok") is True
         except urllib.error.HTTPError as e:
-            log(f"telegram: a Bot API respondeu {e.code}; vai pelo WhatsApp")
+            log(f"telegram: a Bot API respondeu {e.code}; outbox aguarda outra rodada")
             return False
         except (OSError, ValueError) as e:  # URLError, timeout, JSON ilegível
-            log(f"telegram: sem resposta ({type(e).__name__}); vai pelo WhatsApp")
+            log(f"telegram: sem resposta ({type(e).__name__}); outbox aguarda outra rodada")
             return False
         if not ok:
-            log("telegram: a Bot API não confirmou o envio; vai pelo WhatsApp")
+            log("telegram: a Bot API não confirmou o envio; outbox aguarda outra rodada")
             return False
     return True
 
@@ -1735,7 +1734,7 @@ def registrar_telegram(ok: bool, t: datetime | None = None) -> None:
 
 
 def avaliar_telegram(e: dict, t: datetime) -> dict:
-    """PURA. N envios seguidos falhando = o canal dos alertas está fora e tudo cai no WhatsApp de reserva."""
+    """PURA. N envios seguidos falhando indicam o canal dos alertas indisponível."""
     nome = "Telegram (canal dos alertas)"
     falhas = int(e.get("falhas_seguidas") or 0)
     ok_em = _quando(e.get("ok_em"))
@@ -1746,8 +1745,8 @@ def avaliar_telegram(e: dict, t: datetime) -> dict:
     desde = _quando(e.get("falhando_desde"))
     return check("telegram", "servicos", nome, "falha",
                  f"{falhas} envios seguidos falharam" + (f" desde {_quando_br(desde, t)}" if desde else "") + f"; {ultimo}",
-                 o_que_fazer=("O bot do Telegram não está entregando: os alertas do Dell estão indo só pelo WhatsApp de "
-                              "reserva (ou ficando na fila). Confira TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_IDS no "
+                 o_que_fazer=("O bot do Telegram não está entregando: os alertas críticos do Dell aguardam na fila, sem "
+                              "fallback WhatsApp. Confira TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_IDS no "
                               "~/.config/squadone/operations.env e se o bot foi bloqueado no Telegram. Sai do vermelho "
                               "sozinho quando o bot voltar a responder. Se não souber, peça ao Claude: \"o Telegram do "
                               "dell-status falha\"."))
@@ -1778,14 +1777,6 @@ def _sondar_telegram(token: str) -> bool:
         return False
 
 
-def enviar_pessoal(msg: str, t: datetime, prioridade: int = 2) -> bool:
-    """Falha do Dell para o Rômulo: Telegram primeiro (sem som das 22h às 7h, salvo P0), WhatsApp só se o
-    bot falhar. True = chegou por um dos dois."""
-    if enviar_telegram(msg, silencioso=em_silencio(t) and prioridade != 0):
-        return True
-    return enviar(msg)
-
-
 # ---------------------------------------------------------------- fila de avisos
 #
 # Formato (06/10/2026): {titulo, texto, origem, chave?, prioridade?, expira_em?, link?}.
@@ -1800,9 +1791,10 @@ def enviar_pessoal(msg: str, t: datetime, prioridade: int = 2) -> bool:
 # - `chave` já enviada nas últimas 24 h é descartada (estado em FILA_ESTADO);
 # - `expira_em` (ISO 8601) vencido é descartado sem enviar;
 # - até TETO_POR_HORA envios por hora; o excedente vai junto num resumo só.
-# - (16/10/2026, OT-14) aviso de falha (`origem` em sai_pelo_telegram: socorro, backup, atualizar-central, silmer e n8n:*) tenta antes
-#   o bot do Telegram, na hora e sem som das 22h às 7h (salvo P0); não conta no teto, que protege o
-#   número do WhatsApp. Bot fora: segue o caminho do WhatsApp acima, com silêncio e teto.
+# - P0 e falhas (`origem` em ORIGENS_PELO_TELEGRAM) saem exclusivamente pelo Telegram, sem expirar.
+#   Não contam no teto do WhatsApp. Bot fora: aguardam outra rodada. O ledger confirma antes de
+#   apagar o pendente; indisponibilidade não muda o transporte.
+# - Demais origens pessoais mantêm Telegram preferencial e WhatsApp de reserva.
 # A drenagem roda sob flock: o dell-status de cada minuto e um `--drenar` avulso
 # nunca mandam o mesmo arquivo duas vezes.
 
@@ -1903,7 +1895,34 @@ def _ler_estado_fila(t: datetime) -> dict:
         e = {}
     envios = [x for x in e.get("envios", []) if (q := _instante(x)) and t - q < timedelta(hours=1)]
     chaves = {k: v for k, v in (e.get("chaves") or {}).items() if (q := _instante(v)) and t - q < JANELA_DA_CHAVE}
-    return {"envios": envios, "chaves": chaves, "resumo_em": e.get("resumo_em")}
+    telegram_chaves = {k: v for k, v in (e.get('telegram_chaves') or {}).items() if (q := _instante(v)) and t - q < JANELA_DA_CHAVE}
+    return {"envios": envios, "chaves": chaves, 'telegram_chaves': telegram_chaves, "resumo_em": e.get("resumo_em")}
+
+
+def gravar_privado(destino: Path, dados: dict, criar_pasta: bool = True) -> None:
+    """Arquivo temporário 600, fsync e rename. Usado só na outbox/ledger, nunca no retrato público."""
+    if criar_pasta:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+    tmp = destino.with_name(f".{destino.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, destino)
+        if os.name == 'posix':
+            fd_pasta = os.open(destino.parent, os.O_RDONLY)
+            try:
+                os.fsync(fd_pasta)
+            finally:
+                os.close(fd_pasta)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def telegram_exclusivo(aviso: dict) -> bool:
+    return aviso.get("prioridade") == 0 or aviso.get("origem") in ORIGENS_PELO_TELEGRAM
 
 
 def _recusar(f: Path, motivo: str, t: datetime) -> None:
@@ -1936,7 +1955,7 @@ def drenar_fila(t: datetime | None = None) -> dict:
 
 
 def _drenar(t: datetime) -> dict:
-    r = {"enviados": 0, "agrupados": 0, "descartados": 0, "recusados": 0, "esperando": 0, "pelo_telegram": 0}
+    r = {"enviados": 0, "agrupados": 0, "descartados": 0, "recusados": 0, "esperando": 0, "pelo_telegram": 0, "telegram_pendentes": 0}
     if not FILA.is_dir():
         return r
     estado = _ler_estado_fila(t)
@@ -1961,22 +1980,40 @@ def _drenar(t: datetime) -> dict:
             continue
         if not a["chave"] and a["origem"] == ORIGEM_AVISO_DE_FALHA and (m := FLUXO_QUE_FALHOU.match(a["texto"])):
             a["chave"] = f"n8n-falha:{m.group(1)}"[:MAX_CARACTERES["chave"]]
-        if a["expira_em"] and a["expira_em"] <= t:
+        exclusivo = telegram_exclusivo(a)
+        if not exclusivo and a["expira_em"] and a["expira_em"] <= t:
             _descartar(f, f"expirou em {iso(a['expira_em'])}")
             r["descartados"] += 1
             continue
-        if a["chave"] and (a["chave"] in estado["chaves"] or a["chave"] in vistas):
-            _descartar(f, f"chave '{a['chave']}' já enviada nas últimas 24 h")
+        recibos = estado['telegram_chaves'] if exclusivo else estado['chaves']
+        if a["chave"] and (a["chave"] in recibos or (not exclusivo and a["chave"] in vistas)):
+            _descartar(f, "chave já entregue nas últimas 24 h" if exclusivo else f"chave '{a['chave']}' já enviada nas últimas 24 h")
             r["descartados"] += 1
+            continue
+        if exclusivo:
+            if not telegram_fora and enviar_telegram(mensagem_do_aviso(a), silencioso=silencio and a["prioridade"] != 0):
+                if a["chave"]:
+                    estado['telegram_chaves'][a["chave"]] = iso(t)
+                # Persiste o recibo antes de apagar o pendente. Se a API confirmou mas o processo
+                # caiu antes deste fsync, pode haver repetição; não se promete exactly-once.
+                gravar_privado(FILA_ESTADO, estado)
+                f.unlink(missing_ok=True)
+                r["pelo_telegram"] += 1
+                continue
+            telegram_fora = True  # uma tentativa por drenagem: com o bot fora, cada uma custaria até 10 s
+            r["esperando"] += 1
+            r['telegram_pendentes'] += 1
+            log("fila: alerta Telegram pendente; nenhum fallback para WhatsApp")
             continue
         if sai_pelo_telegram(a["origem"]) and not telegram_fora:
             if enviar_telegram(mensagem_do_aviso(a), silencioso=silencio and a["prioridade"] != 0):
                 if a["chave"]:
                     estado["chaves"][a["chave"]] = iso(t)
+                gravar_privado(FILA_ESTADO, estado)
                 f.unlink(missing_ok=True)
                 r["pelo_telegram"] += 1
                 continue
-            telegram_fora = True  # uma tentativa por drenagem: com o bot fora, cada uma custaria até 10 s
+            telegram_fora = True
         if silencio and a["prioridade"] != 0:
             r["esperando"] += 1  # sai às 7h; a chave só conta quando sair
             continue
@@ -2017,7 +2054,7 @@ def _drenar(t: datetime) -> dict:
             estado["resumo_em"] = iso(t)
             r["agrupados"] += len(excedente)
             log(f"fila: {len(excedente)} aviso(s) agrupados num resumo (teto de {TETO_POR_HORA}/h)")
-    gravar(FILA_ESTADO, estado)
+    gravar_privado(FILA_ESTADO, estado)
     return r
 
 
@@ -2064,7 +2101,14 @@ def fila_de_avisos() -> list[dict]:
     visto (`dell-status --visto-recusados`). Visto não reacende: a pasta
     `vistos/` não entra na contagem."""
     recusados = sorted(FILA_RECUSADOS.glob("*.json")) if FILA_RECUSADOS.is_dir() else []
-    pendentes = len(list(FILA.glob("*.json"))) if FILA.is_dir() else 0
+    arquivos = list(FILA.glob('*.json')) if FILA.is_dir() else []
+    pendentes, pelo_telegram = len(arquivos), 0
+    for arquivo in arquivos:
+        try:
+            if arquivo.stat().st_size <= MAX_BYTES_AVISO and telegram_exclusivo(validar_aviso(json.loads(arquivo.read_text(encoding='utf-8')))):
+                pelo_telegram += 1
+        except (OSError, ValueError):
+            pass  # a drenagem existente registra a recusa e o motivo
     if recusados:
         nomes = ", ".join(f.name for f in recusados[:3]) + ("…" if len(recusados) > 3 else "")
         return [check("fila-avisos", "servicos", "Fila de avisos", "falha",
@@ -2076,8 +2120,9 @@ def fila_de_avisos() -> list[dict]:
                                    "dê o visto: `dell-status --visto-recusados todos` (ou o nome do arquivo); "
                                    "ele vai para vistos/ e o vermelho apaga."))]
     vistos = len(list((FILA_RECUSADOS / "vistos").glob("*.json"))) if (FILA_RECUSADOS / "vistos").is_dir() else 0
-    return [check("fila-avisos", "servicos", "Fila de avisos", "ok",
-                  f"{pendentes} esperando" + (" (silêncio até as 7h; só P0 sai)" if em_silencio(agora()) and pendentes
+    return [check("fila-avisos", "servicos", "Fila de avisos", "atencao" if pelo_telegram else "ok",
+                  f"{pendentes} esperando" + (f'; {pelo_telegram} aguardando Telegram (sem fallback WhatsApp)' if pelo_telegram else '')
+                  + (" (silêncio até as 7h para avisos normais)" if em_silencio(agora()) and pendentes > pelo_telegram
                                               else "") + (f"; {vistos} recusado(s) já visto(s)" if vistos else ""))]
 
 
@@ -2796,7 +2841,7 @@ def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime, socorro
                 if not resumo:
                     lembrar.append(c)
                 avisado = iso(t)
-        elif ant.get("estado") == "falha" and not resumo:
+        elif (ant.get("estado") == "falha" or ant.get("pendente_retorno")) and not resumo:
             voltou.append(c)
         novo[c["id"]] = {"estado": c["estado"], "desde": desde, **({"avisado": avisado} if avisado else {})}
     # Itens que sumiram (ex.: container removido) não geram aviso.
@@ -2819,13 +2864,38 @@ def avisar_transicoes(checks: list[dict], estado_ant: dict, t: datetime, socorro
         linhas += ["Voltou ao normal:"] + [f"• {c['nome']}" for c in voltou]
     if linhas:
         titulo = "⚠️ Dell worker" if (quebrou or lembrar) else "✅ Dell worker"
-        if not enviar_pessoal(titulo + "\n" + "\n".join(linhas) + f"\nNa Central: {CENTRAL}", t,
-                              prioridade_do_aviso(quebrou + lembrar)):
-            # Telegram e WhatsApp fora: nada fica marcado como avisado e o próximo minuto tenta de novo.
+        identidade = [(tipo, c['id'], novo[c['id']]['desde'], estado_ant.get(c['id'], {}).get('avisado') if tipo == 'lembrete' else None)
+                      for tipo, grupo in [('quebrou', quebrou), ('lembrete', lembrar), ('voltou', voltou)] for c in grupo]
+        chave = 'dell-status:' + hashlib.sha256(json.dumps(identidade, sort_keys=True).encode()).hexdigest()
+        if not enfileirar_alerta_do_dell(titulo, "\n".join(linhas), chave, prioridade_do_aviso(quebrou + lembrar)):
+            # Persistência falhou: nada se confirma. A próxima rodada tenta gravar novamente.
             for c in quebrou + lembrar:
                 novo[c["id"]].pop("avisado", None)
                 novo[c["id"]]["pendente"] = True
+            for c in voltou:
+                novo[c['id']]['pendente_retorno'] = True
     return novo
+
+
+def enfileirar_alerta_do_dell(titulo: str, texto: str, chave: str, prioridade: int = PRIORIDADE_PADRAO) -> bool:
+    """Publica a transição antes de avançar o cursor. Só a drenagem sob flock envia ao Telegram."""
+    if not FILA.is_dir():
+        log('alerta Telegram não persistido: fila ausente; próxima rodada tentará novamente')
+        return False
+    aviso = {'titulo': titulo, 'texto': re.sub(r'R\s*\$\s*-?[\d.,]*', '[valor]', texto, flags=re.I),
+             'origem': 'dell-status', 'chave': chave, 'prioridade': prioridade, 'link': CENTRAL}
+    # Limites determinísticos. O corte não inclui credenciais nem mensagens de exceção no journal.
+    if len(aviso['texto']) > MAX_CARACTERES['texto']:
+        aviso['texto'] = aviso['texto'][:MAX_CARACTERES['texto'] - 30].rstrip() + '\n… (veja o resto na Central)'
+    destino = FILA / f"dell-status-{hashlib.sha256(chave.encode()).hexdigest()}.json"
+    try:
+        validar_aviso(aviso)
+        if not destino.exists():
+            gravar_privado(destino, aviso, criar_pasta=False)
+        return True
+    except (OSError, ValueError) as erro:
+        log(f'alerta Telegram não persistido ({type(erro).__name__}); próxima rodada tentará novamente')
+        return False
 
 
 def gravar(path: Path, dados: dict) -> None:

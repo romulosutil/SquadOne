@@ -59,10 +59,13 @@ describe('um mapa só: os códigos do blueprint citados existem', () => {
 describe('um mapa só: o que o blueprint diz não se contradiz em Como funciona', () => {
   const texto = (id: string) => FLUXOS.find((f) => f.id === id)!.passos.map((p) => `${p.titulo} ${p.texto} ${p.quando} ${p.trabalhador?.onde ?? ''}`).join(' ')
 
-  it('os caçadores de Iris e estamparias estão ligados desde 16/10/2026', () => {
+  it('os caçadores de Iris e estamparias estão pausados desde 17/10/2026', () => {
     for (const id of ['iris', 'estampa']) {
       assert.doesNotMatch(texto(id), /nasceu desligado\)|à mão; 9h quando ligado/, id)
-      assert.match(texto(id), /ligado em 16\/10\/2026/, id)
+      assert.match(texto(id), /Pausado desde 17\/10\/2026/, id)
+      assert.doesNotMatch(texto(id), /ligado em 16\/10\/2026/, id)
+      const cacador = FLUXOS.find(f => f.id === id)!.passos.find(p => p.trabalhador?.id.startsWith('cacador'))!
+      assert.match(cacador.quando, /pausado desde 17\/10/)
     }
   })
 

@@ -61,6 +61,7 @@ from typing import NamedTuple
 # --- o formato (espelho do dell-status.py; o aviso.test.py confere) -----------
 CAMPOS_DO_AVISO = {"titulo", "texto", "origem", "chave", "prioridade", "expira_em", "link"}
 ORDEM_DOS_CAMPOS = ("titulo", "texto", "origem", "chave", "prioridade", "expira_em", "link")
+ORIGENS_TELEGRAM_EXCLUSIVO = {"socorro", "dell-status"}
 MAX_CARACTERES = {"titulo": 120, "texto": 4000, "origem": 80, "chave": 200, "link": 500}
 MAX_BYTES_AVISO = 16 * 1024
 # Qualquer "R$", com ou sem número, maiúscula ou não (o mesmo do server/avisos.ts).
@@ -220,6 +221,11 @@ def _prefixo(texto: str) -> str:
     return re.sub(r"[^a-z0-9._-]+", "-", texto.lower()).strip("-.")[:60] or "aviso"
 
 
+def exige_telegram(aviso: dict) -> bool:
+    """P0/falhas são outbox Telegram; o único consumidor é o dell-status, sem fallback."""
+    return aviso.get("prioridade") == 0 or aviso.get("origem") in ORIGENS_TELEGRAM_EXCLUSIVO
+
+
 def _registrar(r: Resultado, d) -> Resultado:
     if not r.gravado and sys.stderr is not None:
         quem = d.get("origem") if isinstance(d, dict) else None
@@ -240,6 +246,9 @@ def gravar(aviso, fila: str | Path | None = None, prefixo: str | None = None, co
     try:
         d = _cortar(aviso) if cortar and isinstance(aviso, dict) else aviso
         validar(d)
+        if exige_telegram(d):
+            # Não perde um alerta crítico por uma indisponibilidade prolongada do bot.
+            d = {k: v for k, v in d.items() if k != "expira_em"}
         pasta = Path(fila) if fila is not None else fila_padrao()
         if not pasta.is_dir():
             # A pasta é do dell-status (2770, grupo do n8n): criar aqui, com a

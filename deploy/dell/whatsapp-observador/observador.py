@@ -119,6 +119,10 @@ dígitos, nunca o texto.
 """
 from __future__ import annotations
 
+# Fase 5 (19/10): capturas com _adaptador_id usam entrada-observador.json (600/atômico).
+# A fila e os IDs locais são confirmados antes de remover .lendo; falha/timeout do n8n
+# mantém o trabalho no reinício. O marcador não integra o payload do n8n ou do modelo.
+
 import base64
 import binascii
 import importlib.util
@@ -128,7 +132,10 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
+import threading
 import time
+import weakref
 import urllib.error
 import urllib.request
 from collections import deque
@@ -143,6 +150,8 @@ except ImportError:  # pragma: no cover — Windows
     fcntl = None
 
 HOME = Path.home()
+_DONOS_ENTRADA = weakref.WeakValueDictionary()
+_TRAVA_DONOS_ENTRADA = threading.RLock()
 LOG_DA_BRIDGE = Path(os.environ.get("OBSERVADOR_LOG", HOME / ".hermes/whatsapp/bridge.log"))
 SESSAO_HERMES = Path(os.environ.get("OBSERVADOR_SESSAO", HOME / ".hermes/whatsapp/session"))
 BRIDGE_JS = Path(os.environ.get("OBSERVADOR_BRIDGE", HOME / ".hermes/hermes-agent/scripts/whatsapp-bridge/bridge.js"))
@@ -780,8 +789,8 @@ class Conversas:
         try:
             return self._anexar(chave, direcao, quando, texto, id_msg, papel)
         except Exception as e:  # noqa: BLE001 — nunca derruba o laço do observador
-            log(f"conversa não gravada ({mascarar(str(chave))}): {type(e).__name__}: {e}"[:300])
-            return False, True  # falhou ao gravar: não é a outra instância quem tem a linha, segue como antes
+            log(f"conversa não gravada ({mascarar(str(chave))}): {type(e).__name__}")
+            return False, True  # preserva o contrato de ownership da main
 
     @contextmanager
     def _trava(self):
@@ -834,6 +843,7 @@ class Conversas:
             fd = os.open(arquivo, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
             try:
                 os.write(fd, dados)  # uma escrita por linha, com O_APPEND
+                os.fsync(fd)
             finally:
                 os.close(fd)
         return True, True
@@ -874,7 +884,7 @@ class Conversas:
     @staticmethod
     def _mesma(nova: dict, velha: dict) -> bool:
         if nova.get("id") and velha.get("id"):
-            return nova["id"] == velha["id"]
+            return nova["id"] == velha["id"] and nova.get('direcao') == velha.get('direcao')
         # Um dos lados sem id (bridge antiga, ou a mesma mensagem por outro caminho): direção, hora e texto.
         return all(nova.get(k) == velha.get(k) for k in ("direcao", "em", "texto"))
 
@@ -900,6 +910,7 @@ class Conversas:
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "wb") as f:
             f.write("".join(json.dumps(e, ensure_ascii=True) + "\n" for e in linhas).encode("utf-8"))
+            f.flush(); os.fsync(f.fileno())
         os.replace(tmp, arquivo)
 
 
@@ -946,7 +957,113 @@ class Observador:
         self.hora_do_log: float | None = None
         self.proxima_conferencia = agora
         self.remendo_avisado = False
+        self.capturas: dict[str, None] = {}
+        self.entrega_duravel = False
+        self._entrada_fd = None
+        self._carregar_entrega()
         self.gravar_lista()
+
+    def _carregar_entrega(self):
+        arquivo = self.pasta / 'entrada-observador.json'
+        if not arquivo.exists(): return
+        if self._entrada_fd is None:
+            self._tomar_entrada()  # a aquisição relê a fonte, sob a guarda vitalícia
+            return
+        s = json.loads(arquivo.read_text(encoding='utf-8'))
+        if not isinstance(s, dict) or s.get('versao') != 1:
+            raise ValueError('estado de entrega inválido')
+        self.entrega_duravel = True
+        self.capturas = dict.fromkeys(s['capturas'])
+        self.pendentes = deque(p for p in s['pendentes'] if p[0].get('chave') in self.chaves)
+        self.conversas = {k: c for k, c in s['conversas'].items() if k in self.chaves}
+        self.conversas_prontas = deque(c for c in s['prontas'] if c.get('chave') in self.chaves)
+        self.respostas, self.envios, self.lidos = s['respostas'], s['envios'], s['lidos']
+
+    def _tomar_entrada(self):
+        if self._entrada_fd is not None: return
+        chave = str(self.pasta.resolve())
+        with _TRAVA_DONOS_ENTRADA:
+            if _DONOS_ENTRADA.get(chave) not in (None, self):
+                raise BlockingIOError('sessão de entrada ocupada')
+            self.pasta.mkdir(mode=0o700, parents=True, exist_ok=True)
+            fd = os.open(self.pasta / '.entrada-observador.trava', os.O_CREAT | os.O_RDWR, 0o600)
+            try:
+                if fcntl: fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except Exception:
+                os.close(fd)
+                raise
+            self._entrada_fd = fd
+            _DONOS_ENTRADA[chave] = self
+            try: self._carregar_entrega()  # nunca usa o snapshot anterior à aquisição
+            except Exception:
+                self.liberar_entrada()
+                raise
+
+    def _exigir_entrada(self):
+        if self.entrega_duravel or (self.pasta / 'entrada-observador.json').exists() or (self.pasta / 'capturas-adaptador').exists():
+            self._tomar_entrada()
+
+    def liberar_entrada(self):
+        """Encerra a sessão; o SO também libera a guarda quando o processo termina."""
+        with _TRAVA_DONOS_ENTRADA:
+            fd = getattr(self, '_entrada_fd', None)
+            if fd is None: return
+            self._entrada_fd = None
+            chave = str(self.pasta.resolve())
+            if _DONOS_ENTRADA.get(chave) is self: _DONOS_ENTRADA.pop(chave, None)
+            os.close(fd)
+
+    def __del__(self):
+        try: self.liberar_entrada()
+        except Exception: pass
+
+    def _salvar_entrega(self):
+        if not self.entrega_duravel: return
+        self._tomar_entrada()
+        while len(self.capturas) > 20000: self.capturas.pop(next(iter(self.capturas)))
+        s = {'versao': 1, 'capturas': list(self.capturas)[-20000:], 'pendentes': list(self.pendentes),
+             'conversas': self.conversas, 'prontas': list(self.conversas_prontas),
+             'respostas': self.respostas, 'envios': self.envios, 'lidos': self.lidos}
+        dados = json.dumps(s, ensure_ascii=True).encode()
+        if len(dados) > 16 * 1024 * 1024: raise OSError('fila de entrega cheia')
+        arquivo = self.pasta / 'entrada-observador.json'
+        self.pasta.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix='.entrada-observador-', dir=self.pasta)
+        try:
+            os.fchmod(fd, 0o600) if hasattr(os, 'fchmod') else os.chmod(tmp, 0o600)
+            with os.fdopen(fd, 'wb') as f:
+                f.write(dados); f.flush(); os.fsync(f.fileno())
+            os.replace(tmp, arquivo)
+            if os.name != 'nt':
+                pasta = os.open(self.pasta, os.O_RDONLY | os.O_DIRECTORY)
+                try: os.fsync(pasta)
+                finally: os.close(pasta)
+        finally:
+            try: os.unlink(tmp)
+            except FileNotFoundError: pass
+
+    def _id_captura(self, r, direcao):
+        bruto = r.get('_adaptador_id')
+        return f'{direcao}:{bruto}' if isinstance(bruto, str) and re.fullmatch(r'[a-f0-9]{64}', bruto) else ''
+
+    def _confirmar_captura(self, id_):
+        if not id_: return
+        self.entrega_duravel = True
+        self.capturas[id_] = None
+        while len(self.capturas) > 20000: self.capturas.pop(next(iter(self.capturas)))
+        try: self._salvar_entrega()
+        except Exception:
+            self.capturas.pop(id_, None)
+            raise
+
+    def _guardar_captura(self, chave, direcao, quando, msg, r):
+        gravou, minha = self.conversa.anexar_e_dono(chave, direcao, quando, msg, r.get('id'), papel_da_mensagem(msg) if direcao == 'entrada' else None)
+        if self._id_captura(r, direcao) and not gravou:
+            # False também significa duplicata: só confirme quando a prova está no arquivo do lead.
+            existente = any(e.get('direcao') == direcao and ((r.get('id') and e.get('id') == r['id']) or
+                (not r.get('id') and e.get('em') == iso_utc(quando) and e.get('texto') == msg)) for e in self.conversa.linhas_de(chave))
+            if not existente: raise OSError('conversa não confirmada em disco')
+        return minha
 
     # ------------------------------------------------------------ linhas do log
 
@@ -960,6 +1077,11 @@ class Observador:
             return
         if not isinstance(ev, dict):
             return
+        captura = self._id_captura(ev, 'log')
+        if captura: self._tomar_entrada()
+        self._exigir_entrada()
+        if captura in self.capturas: return
+        if captura: self.entrega_duravel = True
         agora = self.relogio()
         if isinstance(ev.get("time"), (int, float)) and ev.get("level") is not None:
             self._hora_vista(ev["time"] / 1000, agora)  # linha do pino (aviso/erro do Baileys)
@@ -967,7 +1089,7 @@ class Observador:
         if ev.get("reason") == MOTIVO:
             tipo = "entrada"
             # Mensagem recebida não traz hora: ao vivo é agora; atrasada, a última hora conhecida.
-            quando = agora if not atrasada else max(filter(None, (self.hora_do_log, desde)), default=agora)
+            quando = self._hora_vista(ev.get('ts'), agora) if captura else agora if not atrasada else max(filter(None, (self.hora_do_log, desde)), default=agora)
         elif ev.get("event") == "owner_sent":
             tipo, quando = "saida", self._hora_vista(ev.get("ts"), agora)
         elif ev.get("event") == "owner_receipt":
@@ -980,6 +1102,8 @@ class Observador:
         chave = chave_do_numero(self.telefone(str(ev.get("chatId") or "")))
         if not chave or chave not in self.todas:
             return
+        if self.entrega_duravel and len(self.pendentes) >= MAX_PENDENTES:
+            raise OSError('fila de entrega cheia: preservar posição e capturas')
         if tipo == "saida" and not ev.get("id"):
             # Bridge sem o remendo de 16/10 (owner_sent sem id, e nenhum enviadas.jsonl): a conversa ganha a
             # linha sem texto. Com o id, quem grava a saída é ler_enviadas(), com o texto.
@@ -992,6 +1116,7 @@ class Observador:
             if antes and quando - antes[0] < JANELA_DEDUPE_S:
                 # Mesma janela: só um segundo aviso, e só depois do tempo da saudação automática.
                 if antes[1] >= 2 or quando - antes[0] < JANELA_SAUDACAO_S:
+                    self._confirmar_captura(captura)
                     return
                 evento["seguinte"] = True
                 self.respostas[chave] = (antes[0], 2)
@@ -1000,9 +1125,11 @@ class Observador:
         else:
             vistos, janela = (self.envios, JANELA_ENVIO_S) if tipo == "saida" else (self.lidos, JANELA_LIDO_S)
             if chave in vistos and abs(quando - vistos[chave]) < janela:
+                self._confirmar_captura(captura)
                 return
             vistos[chave] = quando
         self.pendentes.append((evento, quando, origem))
+        self._confirmar_captura(captura)
         while len(self.pendentes) > MAX_PENDENTES:
             perdido = self.pendentes.popleft()[0]
             log(f"fila cheia: descartado {perdido['direcao']} de {mascarar(perdido['chave'])}")
@@ -1024,19 +1151,23 @@ class Observador:
     # ------------------------------------------------------------ n8n
 
     def esvaziar(self) -> None:
+        self._exigir_entrada()
         if self.relogio() < self.tentar_em:
             return
         while self.pendentes:
             evento, quando, _ = self.pendentes[0]
             try:
                 resposta = self.chamar("POST", "whatsapp-conversa", evento)
+                if self.entrega_duravel and (not isinstance(resposta, dict) or resposta.get('ok') is not True):
+                    raise RuntimeError('entrega sem confirmação')
             except Exception as e:  # noqa: BLE001 — fica na fila e tenta de novo
                 self.falhas_envio += 1
                 espera = espera_da_falha(e, self.falhas_envio)
                 self.tentar_em = self.relogio() + espera
-                log(f"n8n não recebeu ({len(self.pendentes)} na fila), tento de novo em {espera} s:", e)
+                log(f"n8n não recebeu ({len(self.pendentes)} na fila), tento de novo em {espera} s:", type(e).__name__)
                 return
             self.pendentes.popleft()
+            self._salvar_entrega()
             self.falhas_envio = 0
             seguinte = " (de novo)" if evento.get("seguinte") else ""
             log(f"lead {FEITO[evento['direcao']]}{seguinte}: {mascarar(evento['chave'])}")
@@ -1128,12 +1259,14 @@ class Observador:
         self._concluir(lendo)
         return linhas
 
-    def ler_enviadas(self) -> None:
+    def ler_enviadas(self, capturas=None) -> None:
         """enviadas.jsonl ({chave, ts, texto, id}: o que o Rômulo escreveu a um lead, do remendo da bridge
         ou do evolution-adaptador) vira a linha "saida" da conversa. Não vai ao n8n: o envio já foi
         marcado pela linha owner_sent do log."""
+        self._exigir_entrada()
         agora = self.relogio()
-        for texto in self._tirar_e_ler("enviadas"):
+        linhas, lendo = self._abrir('enviadas') if capturas is None else (capturas, None)
+        for texto in linhas:
             try:
                 r = json.loads(texto)
                 chave, msg = str(r["chave"]), str(r.get("texto") or "").strip()
@@ -1141,9 +1274,13 @@ class Observador:
                 continue
             if chave not in self.todas:
                 continue
-            self.conversa.anexar(chave, "saida", self._hora_vista(r.get("ts"), agora), msg, r.get("id"))
+            captura = self._id_captura(r, 'saida')
+            if captura in self.capturas: continue
+            self._guardar_captura(chave, 'saida', self._hora_vista(r.get('ts'), agora), msg, r)
+            self._confirmar_captura(captura)
+        self._concluir(lendo)
 
-    def ler_respostas(self, ouvir: bool = True) -> None:
+    def ler_respostas(self, ouvir: bool = True, capturas=None) -> None:
         """Lê o respostas.jsonl da bridge e junta as mensagens de cada lead, em três passos (revisão de 17/10/2026):
         1. a conversa em disco recebe TODAS as linhas primeiro, texto e marcador de áudio como chegaram;
         2. só então os áudios são transcritos (a linha do marcador é trocada pela transcrita, mesmo id);
@@ -1156,7 +1293,8 @@ class Observador:
         mas lote SÓ de marcadores assim não vai ao n8n (fechar_conversas). Quem responde pelo áudio é a instância
         que o recebeu da Evolution: com a transcrição, ou, se ela não sair, com o marcador, uma vez. Assim cada
         áudio dá no máximo um aviso ("ouça no WhatsApp" gastava um dos 2 avisos de 6 h antes do lote transcrito)."""
-        linhas, lendo = self._abrir("respostas")
+        self._exigir_entrada()
+        linhas, lendo = self._abrir("respostas") if capturas is None else (capturas, None)
         if not linhas:
             self._concluir(lendo)
             return
@@ -1168,15 +1306,17 @@ class Observador:
                 chave, msg = str(r["chave"]), str(r["texto"]).strip()
             except (ValueError, KeyError, TypeError):
                 continue
+            captura = self._id_captura(r, 'texto')
+            if captura in self.capturas: continue
+            if captura: self.entrega_duravel = True
             # A lista pode ter mudado entre a bridge gravar e agora; quem saiu dela fica de fora.
             if chave not in self.todas or not msg:
                 continue
             registros.append([chave, msg, r, self._hora_vista(r.get("ts"), agora), True])
         # 1. Conversa em disco primeiro: uma parada durante a transcrição não perde o que veio junto.
-        #    O 5º campo diz se o lote do n8n leva a mensagem: só a que a linha do arquivo é desta instância
-        #    (a outra instância do mesmo chip já a gravou e manda a sua; ver anexar_e_dono).
+        # Só a dona da linha manda o lote ao n8n; gravação durável exige prova em disco.
         for x in registros:
-            x[4] = self.conversa.anexar_e_dono(x[0], "entrada", x[3], x[1], x[2].get("id"), papel_da_mensagem(x[1]))[1]
+            x[4] = self._guardar_captura(x[0], "entrada", x[3], x[1], x[2])
         por_ouvir = [x for x in registros if isinstance(x[2].get("audio"), dict) and so_marcador_de_audio(x[1])]
         if por_ouvir and not ouvir:
             log(f"{len(por_ouvir)} áudio(s) por transcrever: o lote fica para o próximo início")
@@ -1205,6 +1345,10 @@ class Observador:
                 c["ids"].append(str(r["id"]))
             c["desde"], c["ate"] = min(c["desde"], quando), max(c["ate"], quando)
             c["ultima"] = agora
+            captura = self._id_captura(r, 'texto')
+            if captura: self.capturas[captura] = None
+        # A captura só sai depois de a fila de classificação estar em disco, inclusive no reinício.
+        self._salvar_entrega()
         self._concluir(lendo)
 
     def _ouvir(self, chave: str, marcador: str, audio: dict) -> str:
@@ -1220,6 +1364,7 @@ class Observador:
         return marcador
 
     def fechar_conversas(self, todas: bool = False) -> None:
+        self._exigir_entrada()
         agora = self.relogio()
         for chave in [k for k, c in self.conversas.items() if todas or agora - c["ultima"] >= ESPERA_DA_CONVERSA_S]:
             c = self.conversas.pop(chave)
@@ -1239,21 +1384,26 @@ class Observador:
             if contexto:
                 pronta["contexto"] = contexto
             self.conversas_prontas.append(pronta)
+        self._salvar_entrega()
 
     def mandar_conversas(self) -> None:
+        self._exigir_entrada()
         if self.relogio() < self.conversa_tentar_em:
             return
         while self.conversas_prontas:
             conversa = self.conversas_prontas[0]
             try:
                 resposta = self.chamar("POST", "whatsapp-resposta", conversa)
+                if self.entrega_duravel and (not isinstance(resposta, dict) or resposta.get('ok') is not True):
+                    raise RuntimeError('classificação sem confirmação')
             except Exception as e:  # noqa: BLE001 — fica na fila e tenta de novo
                 self.falhas_conversa += 1
                 espera = espera_da_falha(e, self.falhas_conversa)
                 self.conversa_tentar_em = self.relogio() + espera
-                log(f"n8n não recebeu a resposta de {mascarar(conversa['chave'])}, tento de novo em {espera} s:", e)
+                log(f"n8n não recebeu a resposta de {mascarar(conversa['chave'])}, tento de novo em {espera} s:", type(e).__name__)
                 return
             self.conversas_prontas.popleft()
+            self._salvar_entrega()
             self.falhas_conversa = 0
             marcados = (resposta.get("marcados") or []) if isinstance(resposta, dict) else []
             tipos = ", ".join(str(m.get("tipo")) for m in marcados if isinstance(m, dict)) or "nenhum lead"
@@ -1264,12 +1414,46 @@ class Observador:
 
     # ------------------------------------------------------------ rotina
 
+    def ler_capturas_adaptador(self) -> None:
+        """Arquivos privados imutáveis, publicados atomicamente; nunca partilhados com a bridge.
+
+        A trava é só entre consumidores. Nenhum produtor abre estes arquivos para append;
+        seu rename publica o conteúdo inteiro e uma repetição é deduplicada pelo estado durável.
+        """
+        pasta = self.pasta / 'capturas-adaptador'
+        if not pasta.exists(): return
+        self._tomar_entrada()
+        fd = os.open(pasta / '.consumidor', os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            if fcntl: fcntl.flock(fd, fcntl.LOCK_EX)
+            arquivos = []
+            for arquivo in pasta.glob('*.json'):
+                if not re.fullmatch(r'[a-f0-9]{64}\.json', arquivo.name): continue
+                if arquivo.stat().st_size > 24 * 1024: raise ValueError('captura excede limite')
+                v = json.loads(arquivo.read_text(encoding='utf-8'))
+                if not isinstance(v, dict) or any(not isinstance(v.get(k), list) for k in ('linhas','respostas','enviadas')):
+                    raise ValueError('captura inválida')
+                itens = v['respostas'] + v['enviadas'] + v['linhas']
+                if any(not isinstance(i, dict) or i.get('_adaptador_id') != arquivo.stem for i in itens):
+                    raise ValueError('identidade de captura inválida')
+                arquivos.append((min((float(i.get('ts', self.relogio())) for i in itens), default=self.relogio()), arquivo, v))
+            for _, arquivo, v in sorted(arquivos, key=lambda x: (x[0], x[2].get('ordem', 0), x[1].name))[:100]:
+                self.entrega_duravel = True
+                for linha in v['linhas']: self.linha(json.dumps(linha))
+                self.ler_enviadas(capturas=[json.dumps(r) for r in v['enviadas']])
+                self.ler_respostas(capturas=[json.dumps(r) for r in v['respostas']])
+                self._salvar_entrega()
+                arquivo.unlink()
+        finally:
+            os.close(fd)
+
     def tick(self) -> None:
         agora = self.relogio()
         if agora >= self.proxima_leitura:
             self.reler_numeros()
         if self.pendentes:
             self.esvaziar()
+        self.ler_capturas_adaptador()
         self.ler_respostas()
         self.ler_enviadas()
         self.fechar_conversas()

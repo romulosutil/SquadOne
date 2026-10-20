@@ -154,7 +154,7 @@ export function segundaDe(l: LeadDaMensagem) {
 }
 
 // Variante D em revisão; espelho literal dos fatos e do texto do Balcão.
-export const EVENTO_CRITICO_APROVADO = false;
+export const EVENTO_CRITICO_APROVADO = true;
 export const PRIMEIRA_EVENTO_CRITICO = 'Oi, tudo bem? Aqui é o Rômulo. {FATO} Reuni esse ponto no raio-x de como {O_A} {NOME} aparece no Google. Posso te mandar o link para dar uma olhada? É sem compromisso.';
 export function eventoCriticoDe(lead: { raio_x_url?: unknown; raio_x_achados?: unknown }): string | null {
   if (!lead || !/^https:\/\//.test(String(lead.raio_x_url || ''))) return null;

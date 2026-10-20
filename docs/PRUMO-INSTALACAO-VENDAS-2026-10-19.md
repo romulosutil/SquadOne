@@ -1,4 +1,4 @@
-# PRUMO — instalação das Fases 0 e 2 (19/10/2026)
+# PRUMO — instalação do diagnóstico de vendas (19/10/2026)
 
 **Fase 2 instalada na Mel e conferida em 19/10 às 20:48:31 de São Paulo.** Commit de código `5cce535512024cd62b971f63551383ee922b04f2`, pai `52a076fd60b2e40ccdd616586c5e698723457710`. O diagnóstico original já existia na main; os cartões do blueprint acompanharam a implementação no mesmo commit.
 
@@ -50,3 +50,13 @@ Instalação restrita: sete scripts existentes e nós autorizados dos fluxos 03,
 Conferência real às **21:17:00**: sete rotas 200, OAuth e Tasks conectados, clone da Mel limpo, sete cópias instaladas idênticas à main; dez leads preservados quanto a etapas, próximos passos e propostas, com oito preparos e duas pausas. Estados ativos dos workflows iguais ao backup. Nenhuma escrita de teste no CRM ou mensagem ao lead. Braços B e D continuam desligados, pendentes da revisão dos textos pelo Rômulo.
 
 Evidências e rollback protegidos na pasta remota da Fase 3, `~/.local/state/squadone-deploy/prumo-fase3-20261020T000228Z/`; confirmação sanitizada em `output/diagnostico-vendas/integracao/fase3/instalacao-fase3.json`. Rollback preparado e não executado. Estrela-guia ainda não medida até a Fase 4.
+
+## Fase 4 — instalada às 21:22 de 19/10
+
+Commit `46a33ef5c44991a17181b6b0b1fb42958b98ea1e`, pai `51dec32350d927cb058cfa25e3bffd21afae4ab2`. Integração somente dos 29 arquivos congelados: **3.435 testes aprovados, zero falhas, dois ignorados**, typecheck e build de teste aprovados. Rota real com `CrmStore` e n8n fictício validou deduplicação, desfazer/corrigir, referência longa e retenção sem contrato recusada; componentes Vue reais validaram confirmação, rascunho e Estrela-guia independente do filtro. Seis testes do validador passaram no Linux; fonte testada igual à instalada.
+
+Às 21:21:18, instalados somente `crm.py` e o código do nó Validar registro no 08, preservando o restante. Build real da Central às 21:21:43 e serviço no ar às 21:21:44. Conferência às **21:22:08**: sete rotas 200, OAuth e Tasks conectados, clone limpo, cópia do script igual à main, dez leads e todos os próximos passos/propostas/pausas preservados, oito preparos presentes, estados dos workflows iguais ao backup e zero escritas sintéticas. HEAD, índice e alterações anteriores do checkout no PC foram preservados; nenhum dist de teste foi instalado.
+
+Métrica canônica após GET real: semana de São Paulo iniciada em **19/10, zero recebimentos confirmados registrados e R$ 0**, nas cinco linhas. Histórico monetário anterior não medido. Aquisição em trinta dias: 281 envios e 46 respostas humanas comprovadas depois do envio registrado; o funil legado exibe 49 pela regra antiga. Auditoria sanitizada identificou sete registros sem a evidência temporal exigida e quatro respostas humanas preservadas na conversa apesar de bot posterior, sem corrigir ou inventar dados. Ativação qualificada zero, retenção zero elegíveis/ativas, indicações zero/zero.
+
+Rollback protegido e não executado em `~/.local/state/squadone-deploy/prumo-fase4-20261020T001900Z/`. Textos novos seguem desligados e preço da Estamparia pendente. Registrar ganho verbal não confirmou pagamento de ninguém.

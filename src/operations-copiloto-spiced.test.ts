@@ -8,6 +8,17 @@ const fala = 'Perco os pedidos porque não respondemos a tempo. Sou o dono e dec
 const dossie = montarDossie(lead, { conversa: [{ em: '2026-10-19T14:00:00Z', direcao: 'entrada', texto: fala }] })
 const decisao = { valor: { decisor_confirmado: 'sim', quem: 'Dono', como_paga: '' }, citacao: 'Sou o dono e decido.' }
 
+it('qualificação humana é mascarada antes do modelo, preservando data e impacto monetário literal', () => {
+  const spiced = { ...spicedVazio(), situacao: 'CPF 529.982.247-25', dor: 'CNPJ 12.345.678/0001-90', impacto: 'Perde R$ 12.345.678,90. Fale com (41) 99999-1234.',
+    evento_critico: { fato: 'Conferir com contato@exemplo.com', data: '2026-10-31' }, decisao: { decisor_confirmado: 'sim' as const, quem: 'Dono (41) 98888-7777, dono@exemplo.com', como_paga: 'Telefone (41) 97777-1111' } }
+  const antes = JSON.stringify(spiced)
+  const s = montarDossie({ ...lead, spiced }).spiced!
+  assert.doesNotMatch(JSON.stringify(s), /529\.982|12\.345\.678\/0001|99999-1234|98888-7777|97777-1111|dono@|contato@/)
+  assert.match(s.impacto, /R\$ 12\.345\.678,90/)
+  assert.equal(s.evento_critico.data, '2026-10-31'); assert.equal(s.decisao.decisor_confirmado, 'sim')
+  assert.equal(JSON.stringify(spiced), antes)
+})
+
 it('registros comerciais estruturados não levam valores, quantidades ou referências ao copiloto', () => {
   const dados = { valor_centavos: 69000, quantidade: 27, referencia: 'recibo-comercial-reservado', data: '2026-10-19' }
   const eventos = ['valor_proposta', 'pagamento_confirmado', 'receita_desfeita', 'retencao_3m', 'indicacao_pedida', 'indicacao_recebida'].map(tipo => ({ tipo, em: '2026-10-19T14:00:00Z', origem: 'manual' as const, fonte: 'teste', rotulo: 'Pagamento R$ 690', texto: JSON.stringify(dados), registroTexto: JSON.stringify(dados) }))

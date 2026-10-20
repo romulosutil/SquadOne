@@ -175,7 +175,8 @@ describe("gate de envio: nenhum texto atual do sistema reprova", () => {
     };
     assert.equal(n8n.VARIACOES.length, 4);
     const fato = { empresa: 'Empresa de teste', raio_x_url: 'https://raio-x-prumo.vercel.app/teste', raio_x_achados: [{ id: 'site-fora-do-ar', dominio: 'empresa.com.br' }] };
-    assert.ok(!n8n.elegiveisDe(fato).includes('D'), 'D fica desligado sem aprovação');
+    assert.ok(n8n.elegiveisDe(fato).includes('D'), 'D aprovado para teste controlado');
+    assert.ok(!n8n.elegiveisDe(fato, false).includes('D'), 'rollback explícito retira D');
     assert.ok(n8n.elegiveisDe(fato, true).includes('D'), 'D só entra com aprovação e fato verificável');
     assert.ok(!n8n.elegiveisDe({ ...fato, raio_x_achados: [] }, true).includes('D'), 'aprovação não substitui a evidência');
     const moldeD = n8n.VARIACOES[3].replace('{FATO}', n8n.eventoCriticoDe(fato));

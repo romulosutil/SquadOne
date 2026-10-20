@@ -154,14 +154,14 @@ describe("publicarAvisoPessoal", () => {
     assert.equal(semBot.canal, "fila");
   });
 
-  it("P0 segue nos dois canais; R$ continua recusado antes de sair", async () => {
+  it("P0 segue na outbox exclusiva do Telegram; R$ continua recusado antes de sair", async () => {
     const dir = await fila();
     const enviados: Envio[] = [];
     await publicarAvisoPessoal({ ...base, prioridade: 0 }, { fila: dir, telegram: telegram(enviados), agora: as15h, log: silencio });
-    assert.equal(enviados.length, 1);
+    assert.equal(enviados.length, 0);
     assert.equal((await fs.readdir(dir)).length, 1);
     await assert.rejects(publicarAvisoPessoal({ ...base, texto: "Pagar R$ 300" }, { fila: dir, telegram: telegram(enviados), log: silencio }), AvisoInvalido);
-    assert.equal(enviados.length, 1);
+    assert.equal(enviados.length, 0);
   });
 
   it("a variável só desliga com false", () => {
@@ -181,34 +181,37 @@ describe("publicarAviso", () => {
     assert.equal((await fs.readdir(dir)).length, 1);
   });
 
-  it("P0: fila E Telegram, com título, texto e link", async () => {
+  it("P0: outbox durável, sem emissor concorrente e sem expiração", async () => {
     const dir = await fila();
     const enviados: string[] = [];
     const r = await publicarAviso({ ...base, prioridade: 0, link: "https://x.y/z" }, { fila: dir, telegram: async (t) => { enviados.push(t); }, log: silencio });
-    assert.equal(r.telegram, "enviado");
-    assert.deepEqual(enviados, [`${base.titulo}\n${base.texto}\nhttps://x.y/z`]);
+    assert.equal(r.telegram, "pendente");
+    assert.deepEqual(enviados, []);
+    const dados = JSON.parse(await fs.readFile(r.arquivo!, 'utf8'));
+    assert.deepEqual([dados.titulo, dados.texto, dados.link], [base.titulo, base.texto, 'https://x.y/z']);
+    assert.equal('expira_em' in dados, false);
     assert.equal((await fs.readdir(dir)).length, 1);
   });
 
-  it("P0 com a fila quebrada: o Telegram ainda sai, e a falha da fila sobe depois", async () => {
+  it("P0 com a outbox quebrada: falha sem confirmar nem disparar transporte alternativo", async () => {
     const enviados: string[] = [];
     await assert.rejects(
       publicarAviso({ ...base, prioridade: 0 }, { fila: path.join(os.tmpdir(), "squadone-sem-fila-xyz"), telegram: async (t) => { enviados.push(t); }, log: silencio }),
       /instale o dell-status/,
     );
-    assert.equal(enviados.length, 1);
+    assert.equal(enviados.length, 0);
   });
 
-  it("P0 com o Telegram fora: o aviso está na fila e nada lança", async () => {
+  it("P0 com o Telegram fora permanece publicado para o emissor único tentar", async () => {
     const dir = await fila();
     const r = await publicarAviso({ ...base, prioridade: 0 }, { fila: dir, telegram: async () => { throw new Error("fora"); }, log: silencio });
-    assert.equal(r.telegram, "falhou");
+    assert.equal(r.telegram, "pendente");
     assert.equal((await fs.readdir(dir)).length, 1);
   });
 
-  it("P0 sem bot: só a fila", async () => {
+  it("P0 sem bot permanece pendente no Telegram, nunca marcado entregue", async () => {
     const dir = await fila();
-    assert.equal((await publicarAviso({ ...base, prioridade: 0 }, { fila: dir })).telegram, "naoSeAplica");
+    assert.equal((await publicarAviso({ ...base, prioridade: 0 }, { fila: dir })).telegram, "pendente");
   });
 });
 

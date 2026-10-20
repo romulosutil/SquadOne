@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://squadone.local/schemas/01-Cacador.schema.json",
+  "title": "Arquivo sanitizado e inativo do Caçador — não publicar automaticamente",
+  "type": "array",
+  "minItems": 1,
+  "maxItems": 1,
+  "items": { "$ref": "#/$defs/workflow" },
+  "$defs": {
+    "workflow": {
+      "type": "object",
+      "required": ["name", "active", "nodes", "connections", "settings"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "active": { "const": false },
+        "nodes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/node" } },
+        "connections": { "type": "object" },
+        "settings": { "type": "object" }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "name", "type", "typeVersion", "position", "parameters"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "pattern": "^n8n-nodes-base\\." },
+        "typeVersion": { "type": "number" },
+        "position": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "number" } },
+        "parameters": { "type": "object" },
+        "credentials": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name"],
+            "properties": {
+              "id": { "const": "REDACTED_CREDENTIAL_ID" },
+              "name": { "const": "CONFIGURAR_MANUALMENTE" }
+            }
+          }
+        },
+        "disabled": { "type": "boolean" },
+        "executeOnce": { "type": "boolean" },
+        "alwaysOutputData": { "type": "boolean" },
+        "retryOnFail": { "type": "boolean" },
+        "maxTries": { "type": "number" },
+        "waitBetweenTries": { "type": "number" },
+        "onError": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

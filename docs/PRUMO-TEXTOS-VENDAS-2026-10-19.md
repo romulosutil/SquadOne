@@ -1,6 +1,6 @@
 # Textos comerciais para revisão — 19/10/2026
 
-Estado inicial: **pendentes de aprovação do Rômulo**. Os novos braços ficam desligados até aprovação explícita. Aprovar o texto não envia mensagem: follow-up continua com o Rômulo e primeiro contato segue suas autorizações e o teto compartilhado de 30/dia.
+Estado: **aprovados pelo Rômulo para teste controlado em 19/10/2026, às 21h37 (America/Sao_Paulo)**. Resposta literal nesta conversa: “Aprovar os textos para teste”. Os braços novos estão autorizados para o teste. Aprovar o texto não envia mensagem: follow-up continua com o Rômulo e primeiro contato segue suas autorizações e o teto compartilhado de 30/dia.
 
 ## Follow-up novo — braço B
 
@@ -34,4 +34,4 @@ O sorteio permanece estratificado e a letra de quem já recebeu mensagem nunca m
 
 ## Aprovação
 
-A resposta explícita do Rômulo nesta conversa será registrada aqui antes de ativar as variantes. Ausência de resposta não significa aprovação. O pedido de revisão vem do diagnóstico: “Os textos novos passam pelo Rômulo antes de ir ao ar.”
+Aprovação explícita recebida em 19/10/2026, às 21h37 (America/Sao_Paulo): **“Aprovar os textos para teste”**. Mantidos: teto compartilhado de 30 envios por dia, mínimo de 30 por braço antes de taxas/veredito, follow-up humano e letras de envios anteriores congeladas. Esta aprovação não religa caçadores, não cria coletas e não altera limites de prospecção. O pedido de revisão vem do diagnóstico: “Os textos novos passam pelo Rômulo antes de ir ao ar.”

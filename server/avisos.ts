@@ -18,9 +18,9 @@ import { ehMadrugada } from "./tempo.ts";
  * (`deploy/dell/README.md`, "Fila de avisos"): campo fora dele é recusado pelo `dell-status` e deixa
  * a verificação vermelha, por isso a validação daqui espelha a de lá e recusa ANTES de gravar.
  *
- * P0 vai aos DOIS canais (fila e Telegram): a sessão do WhatsApp não é oficial e cai, a Bot API é
- * oficial. Só P0, porque P0 também fura o silêncio. Capacidade pronta: nenhum chamador produz P0
- * hoje (o cartão de decisão que era P0 foi removido em 19/10/2026).
+ * P0 é exclusivamente Telegram. A fila é sua outbox durável: só o dell-status
+ * envia, sob a trava e a deduplicação existentes. Indisponibilidade não expira
+ * o P0 nem o transfere ao WhatsApp. A latência é a rodada do monitor (até 1 min).
  *
  * Aviso que NÃO passa pela fila perde a chave de 24 h do dell-status; por isso o caminho pessoal
  * guarda as chaves enviadas em disco (`RegistroDeEnviados`) e sobrevive ao reinício da Central, que
@@ -97,9 +97,13 @@ export function avisoParaArquivo(a: Aviso): Record<string, unknown> {
     origem: a.origem,
     chave: a.chave,
     prioridade: a.prioridade,
-    expira_em: a.expiraEm,
+    ...(!avisoExigeTelegram(a) ? { expira_em: a.expiraEm } : {}),
     ...(a.link ? { link: a.link } : {}),
   };
+}
+
+export function avisoExigeTelegram(a: Pick<Aviso, 'prioridade' | 'origem'>): boolean {
+  return a.prioridade === 0 || ['socorro', 'dell-status'].includes(a.origem);
 }
 
 /** Lança `AvisoInvalido` com o motivo. Mesmas regras do `validar_aviso` do dell-status, mais o R$. */
@@ -255,9 +259,9 @@ export interface DepsDePublicacao {
   /** Pasta da fila (`~/.local/share/avisos/fila`). */
   fila: string;
   /**
-   * sendMessage do bot ao chat do dono. Ausente = bot desligado: P0 só na fila. `silencioso` chega
-   * sem som (o `disable_notification` da Bot API). Deve lançar só se NENHUM chat recebeu: lançar com
-   * um chat entregue mandaria o aviso de novo pela fila.
+   * sendMessage do bot ao chat do dono para avisos pessoais. P0 usa a outbox e o dell-status. `silencioso` chega
+   * sem som (o `disable_notification` da Bot API).
+   * Deve lançar só se NENHUM chat recebeu: lançar com um chat entregue duplicaria o aviso pela fila.
    */
   telegram?: (texto: string, opcoes?: { silencioso?: boolean }) => Promise<void>;
   /** Só o caminho pessoal consulta e grava (`publicarAvisoPessoal`). Ausente = sem dedupe de 24 h. */
@@ -268,37 +272,18 @@ export interface DepsDePublicacao {
 
 export interface ResultadoDaPublicacao {
   arquivo: string | null;
-  telegram: "enviado" | "falhou" | "naoSeAplica";
+  telegram: "enviado" | "falhou" | "naoSeAplica" | "pendente";
 }
 
 /**
- * Fila sempre; P0 também no Telegram. O Telegram é tentado mesmo se a fila
- * falhar (é justamente quando o espelho vale), e falha dele não falha o aviso.
- * Fila que falha lança DEPOIS do espelho: quem chama (a vigia) não marca como
- * enviado e tenta de novo na varredura seguinte.
+ * Publicação durável. P0 aguarda o único emissor (dell-status) e nunca aciona
+ * outro transporte daqui. Falha de persistência lança: o produtor não confirma
+ * a publicação e tenta novamente. Avisos normais conservam seu roteamento.
  */
 export async function publicarAviso(aviso: Aviso, deps: DepsDePublicacao): Promise<ResultadoDaPublicacao> {
   validarAviso(aviso);
-  const log = deps.log ?? console;
-  let arquivo: string | null = null;
-  let falhaDaFila: unknown = null;
-  try {
-    arquivo = await gravarAvisoNaFila(deps.fila, aviso, deps.agora?.() ?? new Date());
-  } catch (err) {
-    falhaDaFila = err;
-  }
-  let telegram: ResultadoDaPublicacao["telegram"] = "naoSeAplica";
-  if (aviso.prioridade === 0 && deps.telegram) {
-    try {
-      await deps.telegram(textoDoAviso(aviso));
-      telegram = "enviado";
-    } catch (err) {
-      telegram = "falhou";
-      log.error(`[avisos] espelho P0 no Telegram falhou: ${(err as Error)?.message ?? err}`);
-    }
-  }
-  if (falhaDaFila) throw falhaDaFila;
-  return { arquivo, telegram };
+  const arquivo = await gravarAvisoNaFila(deps.fila, aviso, deps.agora?.() ?? new Date());
+  return { arquivo, telegram: avisoExigeTelegram(aviso) ? 'pendente' : 'naoSeAplica' };
 }
 
 /**
@@ -311,7 +296,7 @@ export async function publicarAviso(aviso: Aviso, deps: DepsDePublicacao): Promi
  * - Telegram desligado ou com falha: cai na fila de sempre, para o lembrete nunca se perder;
  * - a mesma chave não sai duas vezes em 24 h, mesmo depois de reinício (`deps.enviados`);
  * - a validação é a mesma da fila (schema e nenhum R$, regra 24).
- * O P0 segue por `publicarAviso` (os dois canais).
+ * O P0 segue por `publicarAviso` (outbox exclusiva do Telegram).
  */
 export function noSilencio(agora: Date): boolean {
   return ehMadrugada(agora);
@@ -326,6 +311,7 @@ export interface ResultadoDoPessoal {
 export async function publicarAvisoPessoal(aviso: Aviso, deps: DepsDePublicacao): Promise<ResultadoDoPessoal> {
   validarAviso(aviso);
   const agora = deps.agora?.() ?? new Date();
+  if (avisoExigeTelegram(aviso)) return enviarPessoal(aviso, deps, agora);
   if (deps.enviados && (await deps.enviados.jaEnviado(aviso.chave, agora))) return { canal: "repetido", arquivo: null };
   const resultado = await enviarPessoal(aviso, deps, agora);
   await deps.enviados?.marcar(aviso.chave, agora);
@@ -333,7 +319,7 @@ export async function publicarAvisoPessoal(aviso: Aviso, deps: DepsDePublicacao)
 }
 
 async function enviarPessoal(aviso: Aviso, deps: DepsDePublicacao, agora: Date): Promise<ResultadoDoPessoal> {
-  if (aviso.prioridade === 0) {
+  if (avisoExigeTelegram(aviso)) {
     const r = await publicarAviso(aviso, deps);
     return { canal: "fila", arquivo: r.arquivo };
   }

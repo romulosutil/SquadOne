@@ -73,7 +73,7 @@ const VARIACAO_EN = 'Hi, how are you? This is Rômulo. I found {NOME} on Google 
 // estado (a coluna mensagem_variante + ab_elegiveis), nao sai mais so do place_id.
 const LETRAS = ['A', 'B', 'C', 'D'];
 // Revisão humana pendente. Nunca autorizar a partir de campo do lead ou saída de modelo.
-const EVENTO_CRITICO_APROVADO = false;
+const EVENTO_CRITICO_APROVADO = true;
 const PRIMEIRA_EVENTO_CRITICO = 'Oi, tudo bem? Aqui é o Rômulo. {FATO} Reuni esse ponto no raio-x de como {O_A} {NOME} aparece no Google. Posso te mandar o link para dar uma olhada? É sem compromisso.';
 VARIACOES.push(PRIMEIRA_EVENTO_CRITICO);
 function eventoCriticoDe(lead) {

@@ -165,10 +165,10 @@ export const FLUXOS: FluxoDaOperacao[] = [
     id: 'iris',
     grupo: 'PRUMO',
     nome: 'PRUMO · Iris',
-    frase: 'Clínicas de terapia para o Iris. O Dell acha a clínica com WhatsApp no site; você revisa, convida em nome do PRUMO e conduz até o teste.',
+    frase: 'Clínicas de terapia para o Iris. O caçador está pausado desde 17/10/2026. Você revisa os leads existentes, convida em nome do PRUMO e conduz até o teste.',
     passos: [
       { titulo: 'Nichos e cidades', texto: 'deploy/dell/claude-ops/prumo-ofertas.json: ABA/TEA, multidisciplinar infantil, neuropsicologia, fono, TO e TCC; ES primeiro, depois BH, Rio, São Paulo e Campinas. Uma busca por rodada, em rodízio.', onde: 'voce', quando: 'quando quiser', comVoce: true },
-      { titulo: 'Caçador acha a clínica', texto: 'n8n "PRUMO · Iris — Caçador de clínicas": Google Places, depois o site de cada clínica. Fica quem tem WhatsApp publicado no site (celular) e não está em outro funil do PRUMO; sinais como convênio, ABA e equipe ordenam a Prioridade. Até 15 por rodada, na aba Clínicas. Nasceu desligado e foi ligado em 16/10/2026 (dias úteis, 9h); só enche a aba e avisa, nada é enviado. `prumo-ofertas.py --estado` diz se está ligado.', onde: 'dell', quando: 'dias úteis, 9h', verificacao: 'fluxo:QRVkAhJBvBxt9mx8', blueprint: 'OFERTAS-1-B1',
+      { titulo: 'Caçador acha a clínica', texto: 'n8n "PRUMO · Iris — Caçador de clínicas": Google Places, depois o site de cada clínica. Fica quem tem WhatsApp publicado no site (celular) e não está em outro funil do PRUMO; sinais como convênio, ABA e equipe ordenam a Prioridade. Até 15 por rodada, na aba Clínicas. Pausado desde 17/10/2026; não busca clínicas nem enche a aba. Os leads existentes continuam disponíveis para revisão. `prumo-ofertas.py --estado` diz se está ligado.', onde: 'dell', quando: 'pausado desde 17/10', verificacao: 'fluxo:QRVkAhJBvBxt9mx8', blueprint: 'OFERTAS-1-B1',
         trabalhador: { id: 'cacador-iris', nome: 'Caçador de clínicas', sala: 'prumo--iris', faz: 'acha no Google Places as clínicas de terapia com WhatsApp no site e põe até 15 por rodada na aba Clínicas', onde: 'n8n "PRUMO · Iris — Caçador de clínicas", no Dell' } },
       { titulo: 'Revisa a clínica', texto: `Em ${PRIMEIROS} (Triagem, filtro Iris), fora das ${caminhoDaAba('afazer')}: veja o site e decida. Sem interesse na Etapa tira a clínica da fila.`, onde: 'voce', quando: 'você decide', comVoce: true, link: triagem('iris'), blueprint: 'OFERTAS-2-B1' },
       { titulo: 'Enviar convite', texto: 'O toque abre o WhatsApp com o convite em nome do PRUMO (sem preço e sem link); "Convite enviado" é marcado pelo observador ou pelo "Enviei" explícito. As travas de horário e de ritmo valem igual: o convite é primeiro contato.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:mfyO1YAhBrXxe5Mb', blueprint: 'OFERTAS-3-P1' },
@@ -184,7 +184,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
     frase: 'Estamparias para o CRM de estamparia (white-label do CRM da Silmer). Primeiro provar que alguém quer: conversa, não venda.',
     passos: [
       { titulo: 'Nichos e cidades', texto: 'deploy/dell/claude-ops/prumo-ofertas.json: estamparia, camisetas e uniformes personalizados, silk, sublimação e confecção sob encomenda; ES primeiro. A Silmer, cliente do PRUMO, nunca entra.', onde: 'voce', quando: 'quando quiser', comVoce: true },
-      { titulo: 'Caçador acha a estamparia', texto: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias": a mesma regra do Iris (WhatsApp publicado no site, sem repetir lead de outro funil), na aba Estamparias. Nasceu desligado e foi ligado em 16/10/2026 (dias úteis, 9h); só enche a aba e avisa.', onde: 'dell', quando: 'dias úteis, 9h', verificacao: 'fluxo:6pIzCCmktXAUGOdf', blueprint: 'OFERTAS-1-B1',
+      { titulo: 'Caçador acha a estamparia', texto: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias": a mesma regra do Iris (WhatsApp publicado no site, sem repetir lead de outro funil), na aba Estamparias. Pausado desde 17/10/2026; não busca estamparias nem enche a aba. Os leads existentes continuam disponíveis para revisão.', onde: 'dell', quando: 'pausado desde 17/10', verificacao: 'fluxo:6pIzCCmktXAUGOdf', blueprint: 'OFERTAS-1-B1',
         trabalhador: { id: 'cacador-estampa', nome: 'Caçador de estamparias', sala: 'prumo--estamparias', faz: 'acha estamparias e confecções com WhatsApp no site e põe na aba Estamparias, sem repetir lead de outro funil', onde: 'n8n "PRUMO · CRM de estamparia — Caçador de estamparias", no Dell' } },
       { titulo: 'Revisa a estamparia', texto: `Em ${PRIMEIROS} (Triagem, filtro Estamparia), fora das ${caminhoDaAba('afazer')}: veja o site e decida.`, onde: 'voce', quando: 'você decide', comVoce: true, link: triagem('estampa'), blueprint: 'OFERTAS-2-B1' },
       { titulo: 'Enviar convite', texto: 'O toque abre o WhatsApp com o convite (organizar os pedidos que chegam pelo WhatsApp); "Convite enviado" é marcado pelo observador ou pelo "Enviei" explícito, dentro das travas de horário e de ritmo. O texto não diz que o CRM de estamparia já roda num cliente: a Silmer ainda está em homologação.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:rNp1Upq53IFIuRwT', blueprint: 'OFERTAS-3-P1' },
@@ -369,7 +369,7 @@ export const UM_DIA: HoraDoDia[] = [
     hora: '09:00',
     itens: [
       { onde: 'dell', titulo: 'Acompanhamento dos leads', nota: 'expira o lead sem resposta no 7º dia (o follow-up é decidido pela Central)' },
-      { onde: 'dell', titulo: 'Caçadores de clínicas e de estamparias', nota: 'só dias úteis; enchem a Triagem (hoje pausados)' },
+      { onde: 'dell', titulo: 'Caçadores de clínicas e de estamparias', nota: 'pausados desde 17/10; sem novas coletas' },
       { onde: 'dell', titulo: 'ASMR: conceito do dia', nota: 'Hermes' },
     ],
   },

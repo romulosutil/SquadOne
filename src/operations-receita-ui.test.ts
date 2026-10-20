@@ -9,12 +9,15 @@ import { build } from 'esbuild'
 import { aarrDoLead, textoDoRegistroReceita, opcoesDeterministicasDeReceita } from './operations/aarr.ts'
 
 // Componentes reais, sem navegador nem rede: o renderizador exercita os eventos e os mesmos serializers.
-async function componente(nome: string) {
+async function componente(nome: string, aprovacao?: { abertura: boolean; followup: boolean }) {
   const arquivo = path.resolve('src/operations', nome + '.vue')
   const { descriptor } = parse(await fs.readFile(arquivo, 'utf8'), { filename: arquivo })
   const script = compileScript(descriptor, { id: nome, inlineTemplate: true, templateOptions: { compilerOptions: { hoistStatic: false } } })
   const bundle = await build({ stdin: { contents: `${script.content}\nexport { createRenderer, nextTick, reactive, h } from 'vue'`, resolveDir: path.dirname(arquivo), sourcefile: nome + '.ts', loader: 'ts' },
-    plugins: [{ name: 'vue-real', setup(b) { b.onLoad({ filter: /\.vue$/ }, async ({ path: caminho }) => { const { descriptor: d } = parse(await fs.readFile(caminho, 'utf8'), { filename: caminho }); return { contents: compileScript(d, { id: caminho, inlineTemplate: true }).content, loader: 'ts', resolveDir: path.dirname(caminho) } }) } }],
+    plugins: [{ name: 'vue-real', setup(b) {
+      if (aprovacao) b.onLoad({ filter: /(?:followup-experimento|site-mensagem)\.ts$/ }, async ({ path: caminho }) => ({ contents: (await fs.readFile(caminho, 'utf8')).replace(/(EVENTO_CRITICO_APROVADO\s*=\s*)(?:true|false)/, `$1${aprovacao.abertura}`).replace(/(FOLLOWUP_NOVO_APROVADO\s*=\s*)(?:true|false)/, `$1${aprovacao.followup}`), loader: 'ts', resolveDir: path.dirname(caminho) }))
+      b.onLoad({ filter: /\.vue$/ }, async ({ path: caminho }) => { const { descriptor: d } = parse(await fs.readFile(caminho, 'utf8'), { filename: caminho }); return { contents: compileScript(d, { id: caminho, inlineTemplate: true }).content, loader: 'ts', resolveDir: path.dirname(caminho) } })
+    } }],
     bundle: true, write: false, platform: 'node', format: 'esm', define: { 'process.env.NODE_ENV': '"test"' } })
   const pasta = await fs.mkdtemp(path.join(os.tmpdir(), 'receita-ui-'))
   const modulo = path.join(pasta, 'componente.mjs'); await fs.writeFile(modulo, bundle.outputFiles[0].text)
@@ -116,5 +119,21 @@ it('Números mantém estrela global com seleção de uma linha e faixa AARRR no 
   const opcao = opcoesDeterministicasDeReceita(iris, 41)[0]
   iris.eventos = [registro('pagamento_confirmado', textoDoRegistroReceita('pagamento_confirmado', opcao, 'competencia-outubro', '2026-10-19'))]
   const { raiz, app, estado } = numeros.montar({ leads: [site], todosLeads: [site, iris], agora: Date.parse('2026-10-19T15:00:00Z'), parte: 'numeros' })
-  try { await numeros.runtime.nextTick(); assert.match(texto(raiz), /Estrela-guia: 1 recebimentos confirmados/); const titulos = todos(raiz).filter(n => n.tagName === 'H2'); assert.match(texto(titulos[0]), /AARRR/); assert.match(texto(raiz), /Histórico anterior: não medido/); estado.leads = [iris]; await numeros.runtime.nextTick(); assert.match(texto(raiz), /Estrela-guia: 1 recebimentos confirmados/) } finally { app.unmount(); globalThis.fetch = anterior }
+  try { await numeros.runtime.nextTick(); assert.match(texto(raiz), /Estrela-guia: 1 recebimentos confirmados/); const titulos = todos(raiz).filter(n => n.tagName === 'H2'); assert.match(texto(titulos[0]), /AARRR/); assert.match(texto(raiz), /Histórico anterior: não medido/); assert.match(texto(raiz), /respostas humanas comprovadas após o envio registrado/); estado.leads = [iris]; await numeros.runtime.nextTick(); assert.match(texto(raiz), /Estrela-guia: 1 recebimentos confirmados/) } finally { app.unmount(); globalThis.fetch = anterior }
+})
+
+for (const abertura of [true, false]) for (const followup of [true, false]) it(`Números reflete aprovação e rollback: abertura=${abertura}, follow-up=${followup}`, async () => {
+  const numeros = await componente('CrmResultados', { abertura, followup }), anterior = globalThis.fetch
+  globalThis.fetch = (async () => new Response('{}', { status: 503 })) as typeof fetch
+  const { raiz, app } = numeros.montar({ leads: [], todosLeads: [], agora: Date.parse('2026-10-19T15:00:00Z'), parte: 'numeros' })
+  try {
+    await numeros.runtime.nextTick()
+    const t = texto(raiz)
+    assert.match(t, abertura ? /Braço D: aprovado para teste controlado/ : /O braço D aguarda revisão do Rômulo/)
+    assert.match(t, followup ? /Texto novo: aprovado para teste controlado/ : /O texto novo aguarda revisão do Rômulo/)
+    if (abertura) assert.doesNotMatch(t, /O braço D aguarda revisão/)
+    assert.match(t, /respostas humanas comprovadas após o envio registrado/)
+    assert.match(t, /Estrela-guia: 0 recebimentos confirmados/)
+    assert.doesNotMatch(t, /pagamento confirmado.*R\$\s*[1-9]/)
+  } finally { app.unmount(); globalThis.fetch = anterior }
 })

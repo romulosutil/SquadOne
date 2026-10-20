@@ -110,8 +110,8 @@ class Gravar(ComFila):
         r, _ = calado(av.avisar, "T", "corpo\nem duas linhas", "backup-dell", chave="backup:2026-10-12",
                       prioridade=0, expira_em=exp, link="https://exemplo.ts.net:8443/crm", fila=self.fila)
         d = self.lido(r)
-        self.assertEqual(list(d), ["titulo", "texto", "origem", "chave", "prioridade", "expira_em", "link"])
-        self.assertEqual(d["expira_em"], "2026-10-12T18:00:00-03:00")
+        self.assertEqual(list(d), ["titulo", "texto", "origem", "chave", "prioridade", "link"])
+        self.assertNotIn('expira_em', d, 'outbox P0 não vence durante indisponibilidade do Telegram')
         self.assertEqual(d["texto"], "corpo\nem duas linhas")
         self.aceito_pelo_dell_status(r)
 

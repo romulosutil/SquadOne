@@ -626,7 +626,7 @@ class Seguir(unittest.TestCase):
         d = Path(tempfile.mkdtemp())
         try:
             logf, pos = d / "bridge.log", d / "posicao.json"
-            logf.write_text("a\nb\n")
+            logf.write_bytes(b"a\nb\n")  # bridge.log tem LF; a fixture não deve virar CRLF no Windows.
             inode = os.stat(logf).st_ino
             pos.write_text(json.dumps({"inode": inode, "posicao": 2}))  # formato antigo, sem salvo_em
             antigo, ob.POSICAO = ob.POSICAO, pos
@@ -638,14 +638,15 @@ class Seguir(unittest.TestCase):
                 self.assertEqual((onde["posicao"], onde["atraso_ate"]), (2, 4))
                 self.assertAlmostEqual(onde["salvo_em"], os.stat(pos).st_mtime, delta=1)
                 self.assertIsNone(next(g))
-                with open(logf, "a") as f:
-                    f.write("c\n")
+                with open(logf, "ab") as f:
+                    f.write(b"c\n")
                 self.assertEqual(next(g), "c\n")
                 self.assertEqual(onde["posicao"], 4)  # começo de "c": ao vivo (não < atraso_ate)
                 ob.salvar_posicao(inode, 6)
                 self.assertEqual(ob.posicao_salva()[:2], (inode, 6))
                 self.assertAlmostEqual(ob.posicao_salva()[2], time.time(), delta=5)
             finally:
+                g.close()  # libere o arquivo antes da limpeza também no Windows.
                 ob.POSICAO = antigo
         finally:
             shutil.rmtree(d)

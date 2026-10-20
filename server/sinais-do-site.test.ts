@@ -232,10 +232,24 @@ describe("prioridade e Ficha", () => {
     });
   }
 
-  it("fica entre 0 e 100 mesmo com acréscimo", () => {
-    const topo = { nota: "5,0 (900)", temSite: true, temWhatsapp: true, porte: "EPP" as const, taxaDoNicho: 0.5, sinais: "a · b · c" };
-    assert.equal(prioridadeDaTriagem({ ...topo, sinaisDoSite: com({ rodandoGoogleAds: true, semAgendamentoOnline: true }) }), 100);
-    assert.equal(prioridadeDaTriagem({ temSite: false, temWhatsapp: false, sinaisDoSite: com({ temAgencia: true, agencia: { nome: "A", confianca: 0.9 } }) }) >= 0, true);
+  it("dor comprovada supera boa reputação e os acréscimos respeitam 0..100", () => {
+    const contato = { temSite: true, temWhatsapp: true, porte: "EPP" as const, taxaDoNicho: 0.5, sinais: "a · b · c" };
+    const dor = { ...contato, nota: "1,0 (8)" };
+    const reputacao = { ...contato, nota: "5,0 (900)" };
+    const acrescimo = com({ rodandoGoogleAds: true, semAgendamentoOnline: true });
+    assert.equal(ajusteDaPrioridade(acrescimo).pontos, 6, "sinais do site mantêm seu peso pequeno");
+    assert.ok(prioridadeDaTriagem(dor) > prioridadeDaTriagem(reputacao), "com o mesmo contato, a dor explícita tem prioridade");
+    assert.equal(prioridadeDaTriagem({ ...reputacao, sinaisDoSite: acrescimo }), prioridadeDaTriagem(reputacao) + 6);
+    // Extremo positivo aceito pelo helper, não uma afirmação sobre uma nota real do Google.
+    const extremo = { ...contato, nota: "0,1 (5)", sinaisDoSite: acrescimo };
+    assert.equal(prioridadeDaTriagem(extremo), 100, "o acréscimo não ultrapassa o teto");
+    for (const entrada of [dor, reputacao, extremo, { ...contato, nota: "ilegível" },
+      { temSite: false, temWhatsapp: false, sinais: "profissional que atende sozinho", taxaDoNicho: -10,
+        sinaisDoSite: com({ temAgencia: true, agencia: { nome: "A", confianca: 0.9 } }) }]) {
+      const prioridade = prioridadeDaTriagem(entrada);
+      assert.ok(Number.isInteger(prioridade) && prioridade >= 0 && prioridade <= 100, JSON.stringify(entrada));
+    }
+    assert.equal(prioridadeDaTriagem({ temSite: false, temWhatsapp: false, sinais: "profissional que atende sozinho", taxaDoNicho: 0 }), 0);
   });
 
   it("os motivos dizem os pontos", () => {
