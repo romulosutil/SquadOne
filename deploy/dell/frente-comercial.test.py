@@ -3,6 +3,7 @@ import importlib.util
 import io
 import json
 import math
+import os
 from pathlib import Path
 import re
 import sys
@@ -13,8 +14,13 @@ import urllib.error
 import urllib.parse
 from unittest.mock import patch
 
+# Nenhum teste grava na fila de avisos de verdade: a variável aponta para uma pasta que não existe (a lib não a cria)
+# e os testes que precisam de fila criam a deles. Definida ANTES de carregar o módulo.
+os.environ['SQUADONE_AVISOS_FILA']=str(Path(tempfile.gettempdir())/'frente-comercial-teste-sem-fila')
 spec=importlib.util.spec_from_file_location('frente',Path(__file__).with_name('frente-comercial.py'))
 f=importlib.util.module_from_spec(spec);spec.loader.exec_module(f)
+AVISAR_REAL=f.avisar_time
+OBSERVADOR_REAL=f.observador_ativo
 
 MSG='Olá! Vi que a Empresa de teste ainda não tem site. Fiz uma prévia, posso mandar?'
 
@@ -47,6 +53,12 @@ class Frente(unittest.TestCase):
         self.r=f.Registro(Path(self.tmp.name)/'r.sqlite');self.addCleanup(self.r.db.close)
         self.now=dt.datetime(2026,10,19,14,tzinfo=dt.timezone.utc)
         self.data=Path(self.tmp.name)/'data';self.data.mkdir()
+        # Avisos e observador dublados: o teste nunca toca a fila, o systemd nem o Telegram.
+        self.avisos=[]
+        def aviso(titulo,texto,chave_,prioridade=2):self.avisos.append({'titulo':titulo,'texto':texto,'chave':chave_,'prioridade':prioridade});return True
+        for duble in (patch.object(f,'avisar_time',side_effect=aviso),patch.object(f,'observador_ativo',return_value=True)):
+            duble.start();self.addCleanup(duble.stop)
+        self.observador=f.observador_ativo  # o dublê: .return_value=False tira o observador do ar
 
     def rodar(self,crm,reserva,primeiros=None,marcar=None,vezes=1,existe=None,envia=None):
         """Uma rodada com tudo de fora dublado; nunca o disco, a Central, o n8n ou o WhatsApp de verdade."""
@@ -142,6 +154,14 @@ class Frente(unittest.TestCase):
     def test_central_fora_do_ar_nao_envia(self):
         x=self.rodar({'estado':'ok','leads':[lead()]},lambda l:{'reservado':False,'motivo':'http-503'})
         x.clique.assert_not_called();x.envio.assert_not_called()
+        # Parada técnica não pode parecer 'pronto': o aviso de "parado há 10 min" só olha o que está 'bloqueado'.
+        self.assertEqual(x.estados[-1]['estado'],'bloqueado')
+        self.assertEqual(x.estados[-1]['falha'],'http-503')
+
+    def test_recusa_de_ritmo_da_central_continua_pronto(self):
+        for motivo in ('fora-do-expediente','pausa','dia','hora','intervalo'):
+            x=self.rodar({'estado':'ok','leads':[lead()]},lambda l,m=motivo:{'reservado':False,'motivo':m})
+            self.assertEqual(x.estados[-1]['estado'],'pronto',motivo)
 
     def test_recusa_do_lead_passa_ao_proximo(self):
         crm={'estado':'ok','leads':[lead(),lead('site:outro','5511998887700')]}
@@ -528,5 +548,284 @@ class Frente(unittest.TestCase):
         gerais=literais(re.search(r'RECUSAS_GERAIS[^=]*=\s*new Set\(\[([^\]]+)\]\)',contato).group(1))
         self.assertEqual(set(f.RECUSAS_DO_LEAD)|gerais,todas,'a Central ganhou ou perdeu uma recusa: decida se é do lead ou geral')
         self.assertFalse(set(f.RECUSAS_DO_LEAD)&gerais)
+
+    # 6. Envio `incerto` (20/10/2026): não bloqueia o time para sempre, e ninguém fica sem saber que ele parou.
+    CHAVE='11'+'98887766'
+
+    def semear_incerto(self,minutos,l=None):
+        """Um envio ambíguo reservado `minutos` antes de self.now, com o plano do dia (de onde vem o nome da empresa)."""
+        l=l or lead()
+        r=f.Registro(Path(self.tmp.name)/'base'/'registro.sqlite')
+        try:
+            r.plano('2026-10-19',[l]);self.assertTrue(r.reservar(l,MSG,self.now-dt.timedelta(minutes=minutos)))
+        finally:r.db.close()
+
+    def conversa(self,*linhas,bruto=None):
+        p=Path(self.tmp.name)/'.local/share/whatsapp-conversas'/f'{self.CHAVE}.jsonl';p.parent.mkdir(parents=True,exist_ok=True)
+        p.write_bytes(bruto if bruto is not None else ('\n'.join(json.dumps(x) if isinstance(x,dict) else x for x in linhas)+'\n').encode())
+
+    def saida(self,minutos,texto=MSG,id_='3EB0REAL'):
+        return {'direcao':'saida','texto':texto,'id':id_,'em':f.iso(self.now-dt.timedelta(minutes=minutos))}
+
+    def estado_do_contato(self):
+        # Abre e fecha na hora: no Windows um registro aberto impede apagar a pasta temporária do subteste.
+        r=f.Registro(Path(self.tmp.name)/'base'/'registro.sqlite')
+        try:return r.contato(self.CHAVE)['estado']
+        finally:r.db.close()
+
+    def rodar_incerto(self,vezes=1):
+        return self.rodar({'estado':'ok','leads':[lead()]},lambda l:{'reservado':True,'texto':MSG},vezes=vezes)
+
+    def test_incerto_recente_bloqueia_e_avisa_uma_vez(self):
+        self.semear_incerto(5)
+        x=self.rodar_incerto(vezes=3)
+        self.assertEqual(x.estados[-1]['estado'],'bloqueado');self.assertIn('até 15 min',x.estados[-1]['detalhe'])
+        self.assertEqual(self.estado_do_contato(),'incerto')
+        x.reservar.assert_not_called();x.envio.assert_not_called()
+        self.assertEqual(len(self.avisos),1)
+        a=self.avisos[0]
+        self.assertIn('Empresa de teste',a['texto']);self.assertIn('15 min',a['texto']);self.assertEqual(a['prioridade'],2)
+        self.assertTrue(a['chave'].startswith('frente-comercial:incerto:'))
+        # sem telefone, sem número parcial, sem valor
+        for dado in ('5511998887766','98887766','R$'):self.assertNotIn(dado,json.dumps(self.avisos,ensure_ascii=False))
+        # a rodada seguinte, noutro processo (o estado vem do arquivo de alertas), não repete
+        self.rodar_incerto();self.assertEqual(len(self.avisos),1)
+
+    def test_incerto_de_mais_de_15_min_com_observador_vivo_e_sem_saida_vira_sem_confirmacao(self):
+        self.semear_incerto(16)
+        x=self.rodar_incerto(vezes=2)
+        final=x.estados[-1]
+        self.assertNotEqual(final['estado'],'bloqueado');self.assertIsNot(x.resultados[0],False)
+        r,c=self.contato();self.assertEqual(c['estado'],'sem_confirmacao');self.assertEqual(r.incertos(),[])
+        self.assertEqual(c['mensagem'],MSG);self.assertEqual(c['recibo'],'')
+        # nunca reenvia, nunca pede reserva, o lead sai da fila e não conta como enviado
+        x.envio.assert_not_called();x.reservar.assert_not_called();x.consulta.assert_not_called();x.clique.assert_not_called()
+        self.assertEqual((final['enviados'],final['semWhatsapp'],final['semConfirmacao']),(0,0,1))
+        self.assertEqual(final['fila'],[]);self.assertEqual(sum(s['enviados'] for s in final['setores']),0)
+        confira=[a for a in self.avisos if 'Confira no WhatsApp' in a['titulo']]
+        self.assertEqual(len(confira),1,self.avisos)
+        self.assertIn('Empresa de teste',confira[0]['texto']);self.assertIn('NÃO vai reenviar',confira[0]['texto']);self.assertEqual(confira[0]['prioridade'],1)
+        for dado in ('5511998887766','98887766','R$'):self.assertNotIn(dado,json.dumps(self.avisos,ensure_ascii=False))
+
+    def test_incerto_de_mais_de_15_min_com_observador_fora_continua_incerto_e_bloqueado(self):
+        self.semear_incerto(16);self.observador.return_value=False
+        x=self.rodar_incerto()
+        self.assertEqual(x.estados[-1]['estado'],'bloqueado');self.assertIn('mais de 15 min',x.estados[-1]['detalhe'])
+        self.assertEqual(self.estado_do_contato(),'incerto')
+        x.envio.assert_not_called();self.assertEqual([a for a in self.avisos if 'Confira' in a['titulo']],[])
+        # sem evidência não resolve nem horas depois
+        self.now+=dt.timedelta(hours=3);y=self.rodar_incerto()
+        self.assertEqual(self.estado_do_contato(),'incerto');self.assertEqual(y.estados[-1]['estado'],'bloqueado')
+
+    def test_incerto_com_saida_exata_na_conversa_vira_enviado_como_antes(self):
+        self.semear_incerto(16);self.conversa(self.saida(15))
+        x=self.rodar_incerto()
+        _,c=self.contato();self.assertEqual((c['estado'],c['recibo']),('enviado','3EB0REAL'))
+        x.envio.assert_not_called();self.assertEqual([a for a in self.avisos if 'Confira' in a['titulo']],[])
+        self.assertEqual(x.estados[-1]['semConfirmacao'],0)
+
+    def test_conversa_ilegivel_ou_duvidosa_nao_resolve(self):
+        casos={'linha torta':dict(linhas=('{não é json',)),'bytes inválidos':dict(bruto=b'\xff\xfe\x00{"a":1}\n'),
+               'saída exata sem id':dict(linhas=(self.saida(15,id_=None),)),
+               'saída exata fora da janela':dict(linhas=(self.saida(-5),)),   # 5 min DEPOIS do instante atual, além da janela de 900 s
+               'arquivo grande demais':dict(bruto=b'x'*5_000_001)}
+        for nome,caso in casos.items():
+            with self.subTest(nome):
+                with tempfile.TemporaryDirectory() as pasta:
+                    antes=(self.tmp,self.data)
+                    self.tmp=types.SimpleNamespace(name=pasta);self.data=Path(pasta)/'data';self.data.mkdir()
+                    try:
+                        self.semear_incerto(16)
+                        self.conversa(*caso.get('linhas',()),bruto=caso.get('bruto'))
+                        x=self.rodar_incerto()
+                        self.assertEqual(self.estado_do_contato(),'incerto');self.assertEqual(x.estados[-1]['estado'],'bloqueado')
+                        x.envio.assert_not_called()
+                    finally:self.tmp,self.data=antes
+
+    def test_conversa_legivel_sem_a_mensagem_conta_como_sem_saida(self):
+        # a conversa existe (ele escreveu, ou o Rômulo disse outra coisa), mas a mensagem do time não está lá
+        self.semear_incerto(16);self.conversa(self.saida(14,texto='Outra coisa'),{'direcao':'entrada','texto':MSG,'id':'x','em':f.iso(self.now)})
+        self.rodar_incerto()
+        self.assertEqual(self.estado_do_contato(),'sem_confirmacao')
+
+    def test_sem_confirmacao_so_troca_incerto_e_nao_conta_como_enviado_nem_pendencia(self):
+        l=lead();self.assertTrue(self.r.reservar(l,MSG,self.now))
+        self.assertTrue(self.r.marcar_sem_confirmacao(f.chave('5511998887766'),self.now))
+        self.assertEqual(self.r.contato(f.chave('5511998887766'))['estado'],'sem_confirmacao')
+        self.assertEqual(self.r.incertos(),[]);self.assertEqual(self.r.sem_confirmacao_do_dia('2026-10-19'),1)
+        self.assertEqual(self.r.sem_confirmacao_do_dia('2026-10-18'),0);self.assertEqual(self.r.sem_whatsapp_do_dia('2026-10-19'),0)
+        self.assertEqual(self.r.conferir_pendencias({'leads':[outro_produto('iris')]}),0)
+        with patch.object(f,'H',Path(self.tmp.name)):self.r.reconciliar()
+        self.assertEqual(self.r.contato(f.chave('5511998887766'))['estado'],'sem_confirmacao')
+        self.assertEqual(f.metricas_dos_setores([l],[],{'leads':[l]},self.r,self.now),[])
+        # a chave nunca é apagada: o lead não volta a ser reservado
+        self.assertFalse(self.r.reservar(l,MSG,self.now))
+        # nunca rebaixa um envio de verdade nem muda o que já não é `incerto`
+        c=lead('site:c','5511998887722');self.assertTrue(self.r.reservar(c,MSG,self.now));self.r.confirmar(f.chave('5511998887722'),'id')
+        self.assertFalse(self.r.marcar_sem_confirmacao(f.chave('5511998887722'),self.now))
+        self.assertEqual(self.r.contato(f.chave('5511998887722'))['estado'],'enviado')
+        b=lead('site:b','5511998887711');self.r.marcar_sem_whatsapp(b,self.now)
+        self.assertFalse(self.r.marcar_sem_confirmacao(f.chave('5511998887711'),self.now))
+        self.assertEqual(self.r.contato(f.chave('5511998887711'))['estado'],'sem_whatsapp')
+
+    def test_time_segue_para_o_proximo_depois_de_encerrar_o_incerto(self):
+        outro=lead('site:outro','5511998887700')
+        self.semear_incerto(16)
+        x=self.rodar({'estado':'ok','leads':[lead(),outro]},lambda l:{'reservado':True,'texto':MSG})
+        self.assertEqual([c.args[0]['id'] for c in x.envio.call_args_list],['site:outro'])
+        self.assertEqual(self.estado_do_contato(),'sem_confirmacao')
+        self.assertEqual(x.estados[-1]['enviados'],1);self.assertEqual(x.estados[-1]['semConfirmacao'],1)
+
+    def test_pausa_preserva_o_contador_de_sem_confirmacao(self):
+        (self.data/'frente-comercial.json').write_text(json.dumps({'dia':'2026-10-19','semConfirmacao':2,'fila':[]}))
+        self.assertEqual(self.rodar_parado({'ativo':False}).estados[-1]['semConfirmacao'],2)
+
+    # 7. Aviso de "parado": mais de 10 min seguidos no expediente, no máximo a cada 60 min, e "voltou".
+    def bloqueado(self,detalhe='Envio confirmado, mas o registro no CRM não foi confirmado.',**extra):
+        return {'estado':'bloqueado','detalhe':detalhe,**extra}
+
+    def acompanhar(self,estado,minutos=0,base=None):
+        agora_=(base or self.now)+dt.timedelta(minutes=minutos)
+        with patch.object(f,'DATA',self.data):f.acompanhar_bloqueio(estado,agora_)
+        return agora_
+
+    def parados(self):return [a for a in self.avisos if 'parado' in a['titulo']]
+
+    def voltou(self):return [a for a in self.avisos if 'voltou' in a['titulo']]
+
+    def test_bloqueio_so_avisa_depois_de_10_min_seguidos_e_repete_a_cada_60(self):
+        self.acompanhar(self.bloqueado(),0);self.acompanhar(self.bloqueado(),9);self.assertEqual(self.avisos,[])
+        self.acompanhar(self.bloqueado(),10)
+        self.assertEqual(len(self.parados()),1)
+        a=self.parados()[0];self.assertIn('parado há 10 min',a['texto']);self.assertIn('registro no CRM',a['texto']);self.assertEqual(a['prioridade'],1)
+        for m in (11,40,69):self.acompanhar(self.bloqueado(),m)
+        self.assertEqual(len(self.parados()),1)
+        self.acompanhar(self.bloqueado(),70)
+        self.assertEqual(len(self.parados()),2);self.assertIn('parado há 70 min',self.parados()[1]['texto'])
+        self.assertNotEqual(self.parados()[0]['chave'],self.parados()[1]['chave'])   # a chave de 24 h do dell-status não engole a repetição
+        self.acompanhar(self.bloqueado(),129);self.assertEqual(len(self.parados()),2)
+        self.acompanhar(self.bloqueado(),130);self.assertEqual(len(self.parados()),3)
+
+    def test_bloqueio_sobrevive_a_reinicio_e_o_detalhe_leva_o_nome_do_erro(self):
+        self.acompanhar(self.bloqueado(),0)
+        self.assertTrue((self.data/'frente-comercial-alertas.json').exists())
+        # outro processo: o relógio vem do arquivo, não da memória
+        self.acompanhar(self.bloqueado('O time interrompeu novos contatos.',falha='TimeoutError'),12)
+        self.assertIn('(erro: TimeoutError)',self.parados()[0]['texto']);self.assertIn('parado há 12 min',self.parados()[0]['texto'])
+
+    def test_bloqueio_que_acaba_avisa_que_voltou_e_zera_o_relogio(self):
+        self.acompanhar(self.bloqueado(),0);self.acompanhar(self.bloqueado(),10)
+        self.acompanhar({'estado':'pronto','detalhe':'ok'},12)
+        self.assertEqual(len(self.voltou()),1);self.assertIn('Time comercial voltou',self.voltou()[0]['texto'])
+        self.acompanhar({'estado':'pronto'},13);self.assertEqual(len(self.voltou()),1)
+        # um novo bloqueio começa do zero
+        self.acompanhar(self.bloqueado(),14);self.acompanhar(self.bloqueado(),20);self.assertEqual(len(self.parados()),1)
+        self.acompanhar(self.bloqueado(),24);self.assertEqual(len(self.parados()),2)
+
+    def test_bloqueio_curto_que_acaba_antes_dos_10_min_nao_avisa_nada(self):
+        self.acompanhar(self.bloqueado(),0);self.acompanhar({'estado':'pronto'},5);self.acompanhar({'estado':'pronto'},30)
+        self.assertEqual(self.avisos,[])
+        self.assertNotIn('desde',json.loads((self.data/'frente-comercial-alertas.json').read_text()))
+
+    def test_pausa_do_operador_encerra_o_bloqueio_sem_dizer_que_voltou(self):
+        self.acompanhar(self.bloqueado(),0);self.acompanhar(self.bloqueado(),10)
+        self.acompanhar({'estado':'pausado','detalhe':'pausado'},11)
+        self.assertEqual(self.voltou(),[])
+        self.acompanhar(self.bloqueado(),12);self.acompanhar(self.bloqueado(),15);self.assertEqual(len(self.parados()),1)
+
+    def test_fora_do_expediente_nao_avisa_parado_e_o_relogio_conta_da_abertura(self):
+        noite=dt.datetime(2026,10,19,22,tzinfo=dt.timezone.utc)   # 19h em SP
+        self.acompanhar(self.bloqueado(),0,base=noite);self.acompanhar(self.bloqueado(),180,base=noite);self.assertEqual(self.avisos,[])
+        # 8h00 de SP do dia seguinte: o bloqueio da véspera não vira "parado há 13 h"
+        abertura=dt.datetime(2026,10,20,11,tzinfo=dt.timezone.utc)
+        self.acompanhar(self.bloqueado(),0,base=abertura);self.acompanhar(self.bloqueado(),9,base=abertura);self.assertEqual(self.avisos,[])
+        self.acompanhar(self.bloqueado(),11,base=abertura)
+        self.assertEqual(len(self.parados()),1);self.assertIn('parado há 11 min',self.parados()[0]['texto'])
+        # sábado também é fora do expediente
+        sab=dt.datetime(2026,10,24,15,tzinfo=dt.timezone.utc)
+        self.acompanhar(self.bloqueado(),0,base=sab);self.acompanhar(self.bloqueado(),600,base=sab);self.assertEqual(len(self.parados()),1)
+
+    def test_voltou_fora_do_expediente_espera_a_abertura(self):
+        self.acompanhar(self.bloqueado(),0);self.acompanhar(self.bloqueado(),10)
+        noite=dt.datetime(2026,10,19,22,tzinfo=dt.timezone.utc)
+        self.acompanhar({'estado':'fora-do-horario'},0,base=noite)
+        self.assertEqual(self.voltou(),[])
+        manha=dt.datetime(2026,10,20,11,5,tzinfo=dt.timezone.utc)
+        self.acompanhar({'estado':'avaliando'},0,base=manha);self.assertEqual(len(self.voltou()),1)
+        self.acompanhar({'estado':'avaliando'},1,base=manha);self.assertEqual(len(self.voltou()),1)
+
+    def test_aviso_que_nao_entra_na_fila_tenta_de_novo_so_depois_de_5_min(self):
+        chamadas=[]
+        with patch.object(f,'avisar_time',side_effect=lambda *a,**k:chamadas.append(1) or False):
+            self.acompanhar(self.bloqueado(),0)
+            for m in (10,11,14):self.acompanhar(self.bloqueado(),m)
+            self.assertEqual(len(chamadas),1)
+            self.acompanhar(self.bloqueado(),15);self.assertEqual(len(chamadas),2)
+
+    def test_bloqueio_de_ponta_a_ponta_pela_rodada(self):
+        def marcar(l,texto):raise RuntimeError('n8n fora')
+        base=self.now
+        for minutos in (0,5,11,30,71):
+            self.now=base+dt.timedelta(minutes=minutos)
+            x=self.rodar({'estado':'ok','leads':[lead()]},lambda l:{'reservado':True,'texto':MSG},marcar=marcar)
+            self.assertEqual(x.estados[-1]['estado'],'bloqueado');self.assertEqual(x.estados[-1]['falha'],'RuntimeError')
+        self.assertEqual(len(self.parados()),2)
+        self.assertIn('parado há 11 min',self.parados()[0]['texto']);self.assertIn('parado há 71 min',self.parados()[1]['texto'])
+        self.assertIn('(erro: RuntimeError)',self.parados()[0]['texto'])
+        self.now+=dt.timedelta(minutes=1)
+        x=self.rodar({'estado':'ok','leads':[lead()]},lambda l:{'reservado':True,'texto':MSG})
+        self.assertEqual(x.envio.call_count,1);self.assertEqual(len(self.voltou()),1)
+
+    def test_falha_do_aviso_nunca_derruba_a_rodada_nem_muda_o_estado(self):
+        self.semear_incerto(5)
+        com=self.rodar_incerto()
+        for nome,duble in (('aviso que levanta',patch.object(f,'avisar_time',side_effect=OSError('disco cheio'))),
+                           ('alertas que não gravam',patch.object(f,'gravar_alertas',side_effect=OSError('somente leitura'))),
+                           ('observador que não responde',patch.object(self.observador,'side_effect',OSError('systemctl sumiu')))):
+            with self.subTest(nome),duble:
+                x=self.rodar_incerto()
+                self.assertEqual(x.estados[-1]['estado'],'bloqueado');self.assertEqual(x.estados[-1]['detalhe'],com.estados[-1]['detalhe'])
+                self.assertIsNot(x.resultados[0],False);self.assertEqual(self.estado_do_contato(),'incerto')
+        # e o mesmo para o acompanhamento do bloqueio (o aviso de "parado")
+        with patch.object(f,'avisar_time',side_effect=RuntimeError('fila')):
+            for m in (0,11,80):self.acompanhar(self.bloqueado(),m)
+
+    def test_avisar_time_grava_na_fila_com_a_origem_exclusiva_e_nunca_levanta(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            fila=Path(pasta)/'fila';fila.mkdir()
+            with patch.dict(os.environ,{'SQUADONE_AVISOS_FILA':str(fila)}):
+                self.assertTrue(AVISAR_REAL('⏸️ Time comercial parado','Time comercial parado há 11 min: x','frente-comercial:parado:abc:0',prioridade=1))
+                arquivos=list(fila.glob('*.json'));self.assertEqual(len(arquivos),1)
+                d=json.loads(arquivos[0].read_text(encoding='utf-8'))
+                self.assertEqual((d['origem'],d['chave'],d['prioridade']),('frente-comercial','frente-comercial:parado:abc:0',1))
+                self.assertNotIn('expira_em',d)   # origem exclusiva do Telegram: a lib tira a expiração
+                # "R$" a lib recusa: devolve False em vez de levantar
+                self.assertFalse(AVISAR_REAL('t','custa R$ 10','c'))
+            with patch.dict(os.environ,{'SQUADONE_AVISOS_FILA':str(Path(pasta)/'nao-existe')}):
+                self.assertFalse(AVISAR_REAL('t','x','c'))
+            with patch.object(f,'lib_de_aviso',side_effect=RuntimeError('lib quebrada')):self.assertFalse(AVISAR_REAL('t','x','c'))
+            with patch.object(f,'lib_de_aviso',return_value=None):self.assertFalse(AVISAR_REAL('t','x','c'))
+
+    def test_empresa_do_aviso_nao_leva_telefone_nem_valor(self):
+        r=f.Registro(Path(self.tmp.name)/'x.sqlite');self.addCleanup(r.db.close)
+        r.plano('2026-10-19',[lead()|{'empresa':'Oficina R$ 5 11998887766 Ltda'},lead('site:b','5511998887700')])
+        self.assertEqual(r.empresa_do('site:teste'),'Oficina 5 Ltda')
+        self.assertEqual(r.empresa_do('site:b'),'Empresa de teste');self.assertEqual(r.empresa_do('site:nao-existe'),'um lead')
+
+    def test_origem_do_aviso_esta_nas_tres_listas_de_origens_exclusivas_do_telegram(self):
+        raiz=Path(__file__).resolve().parents[2]
+        for arquivo,constante in (('deploy/dell/dell-status.py','ORIGENS_PELO_TELEGRAM'),('deploy/dell/lib/aviso.py','ORIGENS_TELEGRAM_EXCLUSIVO')):
+            texto=(raiz/arquivo).read_text(encoding='utf-8')
+            lista=re.search(rf'^{constante}\s*=\s*\{{([^}}]*)\}}',texto,re.MULTILINE).group(1)
+            self.assertIn(f.ORIGEM_DO_AVISO,re.findall(r'"([^"]+)"',lista),arquivo)
+        self.assertIn(f"'{f.ORIGEM_DO_AVISO}'",(raiz/'server/avisos.ts').read_text(encoding='utf-8'))
+
+    def test_observador_ativo_pergunta_ao_systemd_e_na_duvida_diz_que_nao(self):
+        for retorno,esperado in ((0,True),(3,False)):
+            with patch.object(f.subprocess,'run',return_value=types.SimpleNamespace(returncode=retorno)) as run:
+                self.assertIs(OBSERVADOR_REAL(),esperado)
+            self.assertEqual(run.call_args.args[0][:3],['systemctl','--user','is-active']);self.assertIn('whatsapp-observador-prumo',run.call_args.args[0])
+        for falha in (FileNotFoundError(),f.subprocess.TimeoutExpired('systemctl',10)):
+            with patch.object(f.subprocess,'run',side_effect=falha):self.assertIs(OBSERVADOR_REAL(),False)
 
 if __name__=='__main__':unittest.main()

@@ -18,6 +18,10 @@ entra em primeiro contato, com texto e destino da fonte validados na Central. De
   ofertas são anotadas no CRM após o recibo;
 - lead que o Rômulo já tocou hoje (Central ou Telegram) é dele; lead na fila do time some da
   Próxima venda e do aviso do Telegram (quemFazOPrimeiroContato).
+- 20/10/2026: um envio `incerto` não bloqueia mais para sempre. Passados 15 min sem a saída aparecer na conversa
+  gravada, com o observador vivo, vira `sem_confirmacao` (nunca `enviado`, nunca reenviado, nunca candidato de novo);
+  e três avisos pelo Telegram (origem `frente-comercial`, sem telefone nem valor) dizem ao Rômulo quando um envio
+  ficou sem confirmação, quando ele precisa conferir no WhatsApp e quando o time passou de 10 min parado no expediente.
 Nasce desligado: timer desabilitado e frente-comercial-config.json sem `ativo: true`.
 """
 from __future__ import annotations
@@ -58,6 +62,17 @@ N8N = 'http://127.0.0.1:5679/webhook'
 RECUSAS_DO_LEAD = ('nao-elegivel', 'nao-e-do-time', 'ja-tocado', 'mensagem-barrada')
 # A Central só aceita escrita da mesma origem (server/acesso.ts); é o que o curl local também manda.
 ORIGEM = {'Origin': CENTRAL}
+# Um `incerto` espera a janela de reconciliação do observador (900 s, ver Registro.evidencia) mais folga; só depois
+# disso, com o observador vivo e nenhuma saída com o texto exato na conversa, ele vira `sem_confirmacao`.
+ESPERA_DO_INCERTO = 15 * 60
+# Estados do registro que NUNCA voltam a ser candidatos nem contam como enviados: nada (ou nada que se saiba) saiu.
+NAO_CANDIDATOS = ('sem_whatsapp', 'sem_confirmacao')
+# Avisos pelo Telegram (origem exclusiva, ver ORIGENS_TELEGRAM_EXCLUSIVO em lib/aviso.py): parado há mais de 10 min
+# seguidos dentro do expediente, repetido no máximo a cada 60 min; uma nova tentativa de gravar só depois de 5 min.
+ORIGEM_DO_AVISO = 'frente-comercial'
+PARADO_APOS = 10 * 60
+REPETIR_PARADO = 60 * 60
+NOVA_TENTATIVA_DO_AVISO = 5 * 60
 
 def iso(now=None):
     return (now or dt.datetime.now(dt.timezone.utc)).isoformat()
@@ -304,11 +319,32 @@ class Registro:
             with self.db:self.db.execute('INSERT INTO contatos VALUES(?,?,?,?,?,?)',(key,l['id'],'sem_whatsapp',iso(now),'',''))
         except sqlite3.IntegrityError:
             with self.db:self.db.execute("UPDATE contatos SET estado='sem_whatsapp',em=?,mensagem='',recibo='' WHERE chave=? AND estado='incerto'",(iso(now),key))
-    def sem_whatsapp_do_dia(self,dia_):
-        return sum(1 for (em,) in self.db.execute("SELECT em FROM contatos WHERE estado='sem_whatsapp'") if dia(dt.datetime.fromisoformat(em))==dia_)
+    def marcar_sem_confirmacao(self,key,now):
+        # Encerra um `incerto` que o observador, vivo, não viu sair em 15 min. NÃO é `enviado` (não sabemos) nem apaga a
+        # chave (o lead não volta a ser candidato: reenviar arriscaria a mensagem em dobro). Só troca uma linha `incerto`
+        # e mantém a mensagem reservada, para o Rômulo comparar com o WhatsApp.
+        with self.db:
+            return self.db.execute("UPDATE contatos SET estado='sem_confirmacao',em=? WHERE chave=? AND estado='incerto'",(iso(now),key)).rowcount==1
+    def _do_dia(self,estado_,dia_):
+        return sum(1 for (em,) in self.db.execute("SELECT em FROM contatos WHERE estado=?",(estado_,)) if dia(dt.datetime.fromisoformat(em))==dia_)
+    def sem_whatsapp_do_dia(self,dia_): return self._do_dia('sem_whatsapp',dia_)
+    def sem_confirmacao_do_dia(self,dia_): return self._do_dia('sem_confirmacao',dia_)
     def confirmar(self,key,recibo):
         with self.db:self.db.execute("UPDATE contatos SET estado='enviado',recibo=? WHERE chave=?",(recibo,key))
     def incertos(self): return self.db.execute("SELECT chave,mensagem,em FROM contatos WHERE estado='incerto'").fetchall()
+    def incertos_com_id(self): return self.db.execute("SELECT chave,id,mensagem,em FROM contatos WHERE estado='incerto'").fetchall()
+    def empresa_do(self,id_):
+        """O nome da empresa para o aviso, vindo do plano do dia (o contato não o guarda); sem ele, 'um lead'."""
+        try:
+            for (candidatos,) in self.db.execute('SELECT candidatos FROM planos ORDER BY dia DESC').fetchall():
+                for l in json.loads(candidatos):
+                    if isinstance(l,dict) and l.get('id')==id_ and isinstance(l.get('empresa'),str):
+                        # Aviso não leva telefone nem "R$" (a lib recusa): tira o que pareça um ou outro.
+                        nome=re.sub(r'R\s*\$','',re.sub(r'\d{8,}','',l['empresa']))
+                        nome=re.sub(r'\s+',' ',nome).strip()[:80]
+                        if nome:return nome
+        except (sqlite3.Error,ValueError,TypeError):pass
+        return 'um lead'
     def pendencia_registro(self,l,em):
         with self.db:self.db.execute('INSERT OR REPLACE INTO pendencias_registro VALUES(?,?,?)',(l['id'],l['produto'],em))
     def conferir_pendencias(self,crm):
@@ -335,17 +371,35 @@ class Registro:
             return anterior
         with self.db:self.db.execute('INSERT INTO planos VALUES(?,?)',(dia_,json.dumps(candidatos,ensure_ascii=False)))
         return candidatos
+    def evidencia(self,key,text,em):
+        """O que a conversa gravada pelo observador diz de um envio ambíguo: ('confirmada', id), ('sem_saida', None) ou ('duvida', None).
+
+        Só a mensagem exata, com id da integração e dentro de [-30 s, +900 s] do reservado, confirma. `sem_saida` exige
+        conversa inteira legível e NENHUMA saída com o texto exato (em qualquer hora ou sem id: isso é dúvida, não
+        ausência). Arquivo grande demais, ilegível ou com linha torta é `duvida`: na dúvida nada se resolve.
+        """
+        p=H/'.local/share/whatsapp-conversas'/f'{key}.jsonl'
+        if not p.exists():return ('sem_saida',None)
+        try:
+            if p.stat().st_size>5_000_000:return ('duvida',None)
+            linhas=p.read_text(encoding='utf-8').splitlines()
+        except (OSError,UnicodeDecodeError):return ('duvida',None)
+        inicio=instante(em);duvida=False
+        for line in linhas:
+            if not line.strip():continue
+            try:m=json.loads(line)
+            except ValueError:duvida=True;continue
+            if not isinstance(m,dict):duvida=True;continue
+            if m.get('direcao')=='saida' and m.get('texto')==text:
+                t=instante(m.get('em'))
+                if m.get('id') and t and inicio and inicio-30<=t<=inicio+900:return ('confirmada',m['id'])
+                duvida=True
+        return ('duvida' if duvida else 'sem_saida',None)
     def reconciliar(self):
         # Só a mensagem exata, com id da integração, reconcilia um resultado ambíguo.
         for key,text,em in self.incertos():
-            p=H/'.local/share/whatsapp-conversas'/f'{key}.jsonl'
-            if not p.exists() or p.stat().st_size>5_000_000:continue
-            for line in p.read_text().splitlines():
-                try:m=json.loads(line)
-                except ValueError:continue
-                t=instante(m.get('em')); inicio=instante(em)
-                if m.get('direcao')=='saida' and m.get('texto')==text and m.get('id') and t and inicio and inicio-30<=t<=inicio+900:
-                    self.confirmar(key,m['id']);break
+            quem,recibo=self.evidencia(key,text,em)
+            if quem=='confirmada':self.confirmar(key,recibo)
 
 def inferir(agente, especialidade, lote, anteriores, funil=None, taxas=None):
     arquivo=H/'.local/share/claude-ops/luna_workflows.py'
@@ -383,12 +437,18 @@ def chave_evolution():
         if line.startswith('EVOLUTION_APIKEY='):return line.partition('=')[2].strip().strip('"\'')
     raise RuntimeError('A integração de WhatsApp não tem credencial disponível')
 
+def observador_ativo():
+    """Os dois serviços que gravam a conversa estão de pé agora. Erro ao perguntar = não está (sem evidência)."""
+    try:
+        ativos=subprocess.run(['systemctl','--user','is-active','evolution-adaptador','whatsapp-observador-prumo'],capture_output=True,text=True,timeout=10)
+    except (OSError,subprocess.SubprocessError):return False
+    return ativos.returncode==0
+
 def conexao():
     auth={'apikey':chave_evolution()}
     health=http('http://127.0.0.1:8081/instance/connectionState/prumo',headers=auth)
     if health.get('instance',{}).get('state')!='open':raise RuntimeError('O WhatsApp do PRUMO está desconectado')
-    ativos=subprocess.run(['systemctl','--user','is-active','evolution-adaptador','whatsapp-observador-prumo'],capture_output=True,text=True,timeout=10)
-    if ativos.returncode!=0:raise RuntimeError('A observação das conversas está indisponível')
+    if not observador_ativo():raise RuntimeError('A observação das conversas está indisponível')
     return auth
 
 EVOLUTION='http://127.0.0.1:8081'
@@ -500,6 +560,125 @@ def gravar(estado):
     estado['atualizadoEm']=iso()
     p=DATA/'frente-comercial.json';tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(estado,ensure_ascii=False));tmp.chmod(0o600);tmp.replace(p)
 
+# --- Avisos pelo Telegram (20/10/2026) -----------------------------------------------------------------------
+# Em 20/10 o time ficou 2 h parado sem que ninguém soubesse. Aqui só se conta o que aconteceu, sem telefone nem valor
+# (o nome da empresa pode). Nenhuma falha daqui derruba a rodada nem muda o estado do time.
+
+def lib_de_aviso():
+    """A lib da fila de avisos (deploy/dell/lib/aviso.py): ao lado deste arquivo no repo, ~/.local/lib/mel/ no Dell."""
+    for pasta in (Path(__file__).resolve().parent/'lib', H/'.local/lib/mel'):
+        try:
+            spec=importlib.util.spec_from_file_location('mel_aviso',pasta/'aviso.py')
+            mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+            return mod
+        except Exception:continue
+    return None
+
+def avisar_time(titulo, texto, chave_, prioridade=2):
+    """True se o aviso entrou na fila. Nunca levanta; o que falha só deixa o tipo do erro no stderr."""
+    try:
+        lib=lib_de_aviso()
+        if lib is None:
+            print('frente-comercial: lib de aviso ausente; aviso não gravado',file=sys.stderr);return False
+        return bool(lib.avisar(titulo,texto,ORIGEM_DO_AVISO,chave=chave_,prioridade=prioridade).gravado)
+    except Exception as e:
+        print('frente-comercial: aviso não gravado:',type(e).__name__,file=sys.stderr);return False
+
+def no_expediente(now): return proximo_expediente(now)==now.astimezone(SP)
+
+def curto(*partes):
+    """Um identificador estável e curto para as chaves de aviso (nada de id de lead ou telefone cru)."""
+    return hashlib.sha256('|'.join(str(p) for p in partes).encode()).hexdigest()[:12]
+
+def arquivo_de_alertas(): return DATA/'frente-comercial-alertas.json'
+
+def ler_alertas():
+    try:
+        a=json.loads(arquivo_de_alertas().read_text())
+        return a if isinstance(a,dict) else {}
+    except (OSError,ValueError):return {}
+
+def gravar_alertas(a):
+    DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
+    p=arquivo_de_alertas();tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(a,ensure_ascii=False));tmp.chmod(0o600);tmp.replace(p)
+
+def tratar_incertos(registro, now):
+    """Reconcilia os envios ambíguos e, passados 15 min, encerra os que o observador (vivo) não viu sair. Nunca levanta.
+
+    NUNCA reenvia: `sem_confirmacao` é trabalho do Rômulo (o aviso o manda conferir o WhatsApp). Menos de 15 min: o
+    observador ainda pode confirmar, o time segue bloqueado. Observador fora do ar ou conversa ilegível: sem evidência,
+    o envio continua `incerto` e o time bloqueado (o aviso de "parado" cobre).
+    """
+    try:
+        registro.reconciliar()
+        incertos=registro.incertos_com_id()
+        if not incertos:return
+        alertas=ler_alertas();avisados=set(alertas.get('incertosAvisados') or []);mudou=False
+        vivo=None
+        for key,id_,text,em in incertos:
+            inicio=instante(em)
+            if inicio is None:continue
+            marca=curto(id_,em);empresa=registro.empresa_do(id_)
+            if now.timestamp()-inicio<ESPERA_DO_INCERTO:
+                if marca not in avisados and avisar_time('⚠️ Envio sem confirmação',
+                        f'Envio sem confirmação para {empresa}: o time espera até 15 min pela confirmação e fica parado até lá. Nada será reenviado.',
+                        f'frente-comercial:incerto:{marca}'):
+                    avisados.add(marca);mudou=True
+                continue
+            if vivo is None:vivo=observador_ativo()
+            if not vivo:continue
+            quem,_=registro.evidencia(key,text,em)
+            if quem!='sem_saida':continue
+            if registro.marcar_sem_confirmacao(key,now):
+                avisar_time('⚠️ Confira no WhatsApp',
+                    f'Confira no WhatsApp do PRUMO se {empresa} recebeu a mensagem; o time seguiu para o próximo e NÃO vai reenviar.',
+                    f'frente-comercial:sem-confirmacao:{marca}',prioridade=1)
+        if mudou:
+            alertas['incertosAvisados']=sorted(avisados)[-200:];gravar_alertas(alertas)
+    except Exception as e:
+        print('frente-comercial: etapa dos envios incertos falhou:',type(e).__name__,file=sys.stderr)
+
+def acompanhar_bloqueio(estado, now):
+    """Avisa quando o time fica 'bloqueado' (qualquer motivo) por mais de 10 min seguidos dentro do expediente.
+
+    `desde` (arquivo pequeno em DATA) sobrevive a reinício. O tempo de "parado" conta do início do bloqueio ou da
+    abertura do expediente de hoje, o que for mais tarde: bloqueio da véspera não vira "parado há 14 h". Repete no
+    máximo a cada 60 min (cada repetição com a sua chave, para a de 24 h do dell-status não engolir) e avisa quando
+    voltar. Nunca levanta.
+    """
+    try:
+        a=ler_alertas();dentro=no_expediente(now);antes=json.dumps(a,sort_keys=True)
+        sufixo=lambda desde:curto(desde)
+        if a.get('voltouPendente') and dentro:
+            if avisar_time('✅ Time comercial voltou','Time comercial voltou: o bloqueio acabou.',f"frente-comercial:voltou:{sufixo(a['voltouPendente'])}",prioridade=3):
+                a.pop('voltouPendente',None)
+        if estado.get('estado')=='bloqueado':
+            desde=instante(a.get('desde'))
+            if desde is None:
+                a.update(desde=iso(now),avisos=0);a.pop('ultimoAvisoEm',None);a.pop('tentativaEm',None)
+            elif dentro:
+                local=now.astimezone(SP)
+                abertura=local.replace(hour=EXPEDIENTE_INICIO//60,minute=EXPEDIENTE_INICIO%60,second=0,microsecond=0).timestamp()
+                parado=now.timestamp()-max(desde,abertura)
+                ultimo=instante(a.get('ultimoAvisoEm'));tentativa=instante(a.get('tentativaEm'))
+                if (parado>=PARADO_APOS and (ultimo is None or now.timestamp()-ultimo>=REPETIR_PARADO)
+                        and (tentativa is None or now.timestamp()-tentativa>=NOVA_TENTATIVA_DO_AVISO)):
+                    detalhe=str(estado.get('detalhe') or 'sem detalhe')
+                    if estado.get('falha'):detalhe+=f" (erro: {estado['falha']})"
+                    a['tentativaEm']=iso(now)
+                    if avisar_time('⏸️ Time comercial parado',f'Time comercial parado há {int(parado//60)} min: {detalhe}',
+                            f"frente-comercial:parado:{sufixo(a['desde'])}:{a.get('avisos',0)}",prioridade=1):
+                        a.update(ultimoAvisoEm=iso(now),avisos=a.get('avisos',0)+1);a.pop('tentativaEm',None)
+        elif a.get('desde'):
+            # Saiu do bloqueio. Pausa é decisão do operador: some sem dizer "voltou". Fora do expediente o "voltou" espera a abertura.
+            if a.get('avisos',0)>0 and estado.get('estado')!='pausado':
+                if dentro:avisar_time('✅ Time comercial voltou','Time comercial voltou: o bloqueio acabou.',f"frente-comercial:voltou:{sufixo(a['desde'])}",prioridade=3)
+                else:a['voltouPendente']=a['desde']
+            for campo in ('desde','avisos','ultimoAvisoEm','tentativaEm'):a.pop(campo,None)
+        if json.dumps(a,sort_keys=True)!=antes:gravar_alertas(a)
+    except Exception as e:
+        print('frente-comercial: acompanhamento do bloqueio falhou:',type(e).__name__,file=sys.stderr)
+
 def motivo_da_pausa(config, now):
     """O detalhe a mostrar quando o time não deve trabalhar (desligado ou em pausa configurada); None = segue."""
     if not config.get('ativo'):return 'Primeiros contatos pausados. As conversas e o acompanhamento continuam disponíveis.'
@@ -509,7 +688,11 @@ def motivo_da_pausa(config, now):
 
 def rodada():
     now=agora(); alvo=proximo_expediente(now);dia_=dia(alvo)
-    estado={'dia':dia_,'estado':'avaliando','avaliados':0,'selecionados':0,'enviados':0,'semWhatsapp':0,'respondidos':0,'fila':[],'setores':[],'funil':[],'proximoEnvioEm':alvo.isoformat()}
+    estado={'dia':dia_,'estado':'avaliando','avaliados':0,'selecionados':0,'enviados':0,'semWhatsapp':0,'semConfirmacao':0,'respondidos':0,'fila':[],'setores':[],'funil':[],'proximoEnvioEm':alvo.isoformat()}
+    try:return _rodada(estado,now,alvo,dia_)
+    finally:acompanhar_bloqueio(estado,agora())
+
+def _rodada(estado, now, alvo, dia_):
     # Desligado ou em pausa: nada de ler o CRM, abrir o SQLite ou chamar o modelo. O timer roda a cada 60 s e,
     # com o time parado, lia tudo à toa. Os números do dia vêm do último estado gravado (nada sai enquanto parado).
     detalhe=motivo_da_pausa(ler_config(),now)
@@ -517,10 +700,10 @@ def rodada():
         try:
             anterior=json.loads((DATA/'frente-comercial.json').read_text())
             if anterior.get('dia')==dia_:
-                for campo in ['avaliados','selecionados','enviados','semWhatsapp','respondidos','fila','setores','funil']:estado[campo]=anterior.get(campo,estado[campo])
+                for campo in ['avaliados','selecionados','enviados','semWhatsapp','semConfirmacao','respondidos','fila','setores','funil']:estado[campo]=anterior.get(campo,estado[campo])
         except (OSError,ValueError):pass
         estado.update(estado='pausado',detalhe=detalhe);gravar(estado);return
-    registro=Registro(BASE/'registro.sqlite');registro.reconciliar()
+    registro=Registro(BASE/'registro.sqlite');tratar_incertos(registro,now)
     estado['avaliados']=len(registro.ids_avaliados(dia_))
     try:
         crm=ler_crm()
@@ -530,6 +713,7 @@ def rodada():
         for key,em in registro.db.execute("SELECT chave,em FROM contatos WHERE estado='enviado'"):
             if dia(dt.datetime.fromisoformat(em))==dia(now):estado['enviados']+=1
         estado['semWhatsapp']=registro.sem_whatsapp_do_dia(dia(now))
+        estado['semConfirmacao']=registro.sem_confirmacao_do_dia(dia(now))
         enviados={r[0] for r in registro.db.execute("SELECT chave FROM contatos WHERE estado='enviado'")}
         estado['respondidos']=len({chave(numero(l)) for l in crm['leads'] if numero(l) and chave(numero(l)) in enviados and instante(l.get('conversa',{}).get('ultimaEntrada')) and dia(dt.datetime.fromtimestamp(instante(l['conversa']['ultimaEntrada']),dt.timezone.utc))==dia(now)})
         if pendentes:
@@ -580,7 +764,7 @@ def rodada():
                     nota=round(sum(a['nota'] for a in avaliacoes)/3)
                     contato=registro.contato(chave(numero(l)))
                     # O plano do dia guarda o lead; descartado por falta de WhatsApp, ele não volta à fila (a tela leria "em preparação").
-                    if contato and contato['estado']=='sem_whatsapp':continue
+                    if contato and contato['estado'] in NAO_CANDIDATOS:continue
                     if nota>=65:nova.append({'id':l['id'],'empresa':l['empresa'],'produto':l['produto'],'setor':setor(l),'nota':nota,'estado':contato['estado'] if contato else 'pronto',
                         'motivo':avaliacoes[-1]['motivo'],'avaliacoes':[{k:a[k] for k in ['agente','nota','motivo']} for a in avaliacoes],
                         'mensagem':texto_do_lead(atuais_do_plano[l['id']]),'hash':fingerprint(l)})
@@ -592,16 +776,24 @@ def rodada():
         ids_novos={c['id'] for c in nova}
         anteriores_validos=[]
         for c in estado['fila']:
+            l=atuais_do_plano.get(c.get('id'))
+            # Descartado no registro (sem WhatsApp, ou envio que ninguém confirmou): sai da fila, a tela leria "em preparação".
+            contato_do_c=registro.contato(chave(numero(l))) if l and numero(l) else None
+            if contato_do_c and contato_do_c['estado'] in NAO_CANDIDATOS:continue
             if c.get('estado') in ('enviado','incerto','sem_whatsapp'):
                 anteriores_validos.append(c);continue
-            l=atuais_do_plano.get(c.get('id'))
             if (c.get('estado')=='pronto' and c.get('id') not in ids_novos and l
                     and elegivel(l) and fingerprint(l)==c.get('hash')):
                 anteriores_validos.append(c)
         estado['fila']=intercalar_ofertas(anteriores_validos+nova,lambda l:l['nota'])[:100]
         estado['selecionados']=len(estado['fila'])
         estado['setores']=metricas_dos_setores(candidatos,estado['fila'],crm,registro,now)
-        if registro.incertos():estado.update(estado='bloqueado',detalhe='Há um envio sem confirmação. O time aguarda evidência da integração e não repetirá a mensagem.');gravar(estado);return
+        pendentes_incertos=registro.incertos()
+        if pendentes_incertos:
+            velho=any((instante(em) or now.timestamp())<=now.timestamp()-ESPERA_DO_INCERTO for _k,_t,em in pendentes_incertos)
+            estado.update(estado='bloqueado',detalhe=('Há um envio sem confirmação há mais de 15 min e a integração não deu evidência (observador fora do ar ou conversa ilegível). Confira no WhatsApp do PRUMO; o time não repetirá a mensagem.'
+                if velho else 'Há um envio sem confirmação. O time aguarda até 15 min pela evidência da integração e não repetirá a mensagem.'))
+            gravar(estado);return
         if alvo>now:estado.update(estado='fora-do-horario',detalhe=f'Fila preparada para {alvo:%d/%m às %H:%M}. O time inicia os contatos no expediente e você assume as respostas.');gravar(estado);return
         fresh=ler_crm()
         # Os primeiros do dia de todas as superfícies: lead que o Rômulo já tocou (Central ou Telegram) é dele.
@@ -637,7 +829,12 @@ def rodada():
                 motivo=r.get('motivo')
                 if motivo in RECUSAS_DO_LEAD:continue
                 estado['proximoEnvioEm']=r.get('ate') or estado['proximoEnvioEm']
-                estado.update(estado='pronto',detalhe=DETALHE_DA_RECUSA.get(motivo,'A Central não reservou o primeiro contato agora. O time tenta de novo na próxima rodada.'))
+                if motivo in DETALHE_DA_RECUSA:
+                    estado.update(estado='pronto',detalhe=DETALHE_DA_RECUSA[motivo])
+                else:
+                    # Recusa que não é regra de ritmo (Central fora do ar, sem retrato, resposta ilegível): é parada técnica.
+                    # Como 'bloqueado', o aviso de "parado há 10 min" a cobre; antes aparecia como 'pronto' e ninguém via.
+                    estado.update(estado='bloqueado',detalhe='A Central não reservou o primeiro contato por um motivo técnico. O time tenta de novo na próxima rodada.',falha=str(motivo or 'sem-motivo')[:40])
                 break
             texto=r['texto']
             if not registro.reservar(l,texto,now):continue
@@ -672,6 +869,8 @@ def rodada():
     except Exception as e:
         # Não imprimir prompts, texto de lead, credencial ou resposta bruta de API.
         estado.update(estado='bloqueado',detalhe='O time interrompeu novos contatos para conferir uma etapa. Nenhum envio incerto será repetido.')
+        # O nome do erro (só a classe) vai ao aviso de "parado": sem ele o detalhe não diz qual etapa quebrou.
+        estado['falha']=type(e).__name__
         gravar(estado);print('frente-comercial: etapa interrompida:',type(e).__name__,file=sys.stderr)
         return False
     finally:

@@ -272,6 +272,11 @@ Fase 0 (19/10): as cinco linhas compartilham 30 primeiros contatos/dia, 12/h e
 envios feitos apenas pelo Rômulo, fora do executor automático. Iris e CRM de
 estamparia são produtos prontos; seus caçadores continuam pausados (AC-11).
 
+Envio ambíguo e parada (20/10/2026): um `incerto` espera 15 min pelo observador e, com ele vivo e sem a saída na conversa, vira
+`sem_confirmacao` (nunca reenviado); o time avisa pelo Telegram (origem `frente-comercial`, exclusiva do Telegram) quando um
+envio fica sem confirmação, quando o Rômulo deve conferir o WhatsApp e quando o time passa de 10 min `bloqueado` no expediente
+(`~/.local/share/squadone-operations/frente-comercial-alertas.json`). Depende da lib `aviso.py` em `~/.local/lib/mel/`.
+
 Estado privado: `~/.local/share/frente-comercial/registro.sqlite` (avaliações, orçamento de inferência,
 plano e recibos) e `~/.local/share/squadone-operations/frente-comercial{,-config}.json`. O app lê
 `/api/operations/crm/frente` e pausa/ativa em Mais › Primeiros contatos; nenhuma credencial ou comando
@@ -321,7 +326,7 @@ avisos", abaixo).
   Hermes a caminho" para o que tem remédio ou leitura própria (`IDS_COM_REMEDIO`, `IDS_COM_LEITURA`, replicados do
   `socorro.py` de propósito); com o `socorro.path` parado não grava pedido.
 - **Avisos pelo Telegram:** `ORIGENS_PELO_TELEGRAM` = `socorro`, `dell-status`, `backup-dell`, `atualizar-central`,
-  `silmer-drive-sync` (e todo P0): **exclusivos**, só pelo Telegram, sem `expira_em` e sem WhatsApp mesmo com o bot fora.
+  `silmer-drive-sync`, `frente-comercial` (e todo P0): **exclusivos**, só pelo Telegram, sem `expira_em` e sem WhatsApp mesmo com o bot fora.
   A mesma lista está em `lib/aviso.py` (`ORIGENS_TELEGRAM_EXCLUSIVO`) e em `server/avisos.ts`
   (`ORIGENS_QUE_EXIGEM_TELEGRAM`); `aviso.test.py`, `dell-status.test.py` e `server/avisos.test.ts` falham se divergirem.
   **Falha de fluxo do n8n (prefixo `n8n:`) é diferente, e é decisão de produto em aberto:** `sai_pelo_telegram` o manda
@@ -625,7 +630,7 @@ n8n grava direto: arquivo com menos de 5 s espera a rodada seguinte).
   do Hermes é o número que fala com os leads (restrição de 24 h em 15/10), então
   as falhas do Dell saem pelo bot da Central. O "Quebrou / Continua fora / Voltou
   ao normal" do próprio `dell-status` (`enviar_pessoal`) e os avisos da fila com
-  `origem` em `ORIGENS_PELO_TELEGRAM` (`socorro`, `dell-status`, `backup-dell`, `atualizar-central`, `silmer-drive-sync`; e o prefixo `n8n:`, que prefere o Telegram mas tem reserva no WhatsApp, ver "Avisos pelo Telegram" acima) vão por `sendMessage` ao
+  `origem` em `ORIGENS_PELO_TELEGRAM` (`socorro`, `dell-status`, `backup-dell`, `atualizar-central`, `silmer-drive-sync`, `frente-comercial`; e o prefixo `n8n:`, que prefere o Telegram mas tem reserva no WhatsApp, ver "Avisos pelo Telegram" acima) vão por `sendMessage` ao
   chat do dono, em texto puro, cortados em 4096 caracteres: na hora, **sem som
   das 22h às 7h** (`disable_notification`) salvo P0, sem contar no teto de 20 por
   hora (que protege o número) e com a chave de 24 h valendo igual. Bot desligado,

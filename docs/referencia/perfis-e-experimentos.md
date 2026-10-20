@@ -427,6 +427,24 @@ o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
   espera a próxima rodada, sem marca e sem bloqueio. Se o `sendText` ainda assim devolver 400 com `exists: false` para aquele número, a
   linha `incerto` vira `sem_whatsapp` (nada saiu). Só o erro ambíguo (timeout, 5xx, resposta sem id, destinatário diferente) segue `incerto` e bloqueia o time.
   O resumo do time traz `semWhatsapp` (contagem do dia, sem número).
+- **Envio `incerto` não trava o time para sempre** (20/10/2026): o erro ambíguo (timeout, 5xx, sem id, destinatário diferente) continua
+  bloqueando por até 15 min (`ESPERA_DO_INCERTO`, a janela de reconciliação de 900 s mais folga), porque o observador ainda pode confirmar
+  (`reconciliar`, como antes: texto exato + id da integração dentro da janela vira `enviado`). Passados 15 min, **com o observador vivo**
+  (`systemctl --user is-active evolution-adaptador whatsapp-observador-prumo`) e a conversa gravada **legível e sem nenhuma saída com o
+  texto exato**, a linha vira `sem_confirmacao`: nunca `enviado`, nunca reenviada, nunca candidata de novo (a chave fica), fora da fila e dos
+  enviados; o time segue para o próximo e o resumo traz `semConfirmacao` (contagem do dia, sem número). Observador fora do ar, conversa
+  ilegível ou duvidosa (linha torta, bytes inválidos, arquivo grande, saída exata sem id ou fora da janela): continua `incerto` e bloqueado.
+  O lead que vira `sem_confirmacao` é trabalho do Rômulo (o aviso o manda conferir no WhatsApp do PRUMO); a reserva que o time fez na Central
+  continua contando no teto do dia (conservador: não se sabe se saiu).
+- **Avisos pelo Telegram** (origem nova `frente-comercial`, exclusiva do Telegram nas três listas, sem telefone nem "R$"; o nome da empresa
+  pode): (i) nasce um `incerto` ("o time espera até 15 min pela confirmação"); (ii) `incerto` virou `sem_confirmacao` ("Confira no WhatsApp
+  do PRUMO se <empresa> recebeu a mensagem… NÃO vai reenviar", prioridade 1); (iii) time `bloqueado` (qualquer motivo, inclusive WhatsApp
+  desconectado e pendência de registro no CRM) por mais de 10 min seguidos no expediente: "Time comercial parado há N min: <detalhe> (erro:
+  <classe>)", repetido no máximo a cada 60 min (chave própria por repetição), e "Time comercial voltou" ao sair do bloqueio (pausa do operador
+  encerra sem "voltou"; fora do expediente nada além de (i) e (ii) sai, e o "parado há" conta da abertura do expediente). O relógio do
+  bloqueio fica em `frente-comercial-alertas.json` (600, em DATA) e sobrevive a reinício. Falha ao enfileirar nunca derruba a rodada.
+  Pendência de registro (envio confirmado, CRM sem a etapa) segue pegajosa de propósito: repetir a anotação poderia duplicar a nota no CRM;
+  o aviso (iii) cobre e a saída é anotar a ficha à mão.
 - **Quem faz o 1º contato** (`quemFazOPrimeiroContato`): lead na fila do time, com o time ligado, ou cujo envio o time já começou
   (incerto/enviado), é do time; o resto é do Rômulo. `GET /crm/venda` devolve `doTime` e a Próxima venda e o vendedor do Telegram tiram da
   fila o primeiro contato desses leads; o time não pede reserva para lead que o Rômulo já tocou hoje (Central ou Telegram).

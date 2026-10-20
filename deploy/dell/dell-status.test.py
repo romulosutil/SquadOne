@@ -2373,7 +2373,7 @@ class TelegramComoCanal(unittest.TestCase):
                 self.assertEqual(self.whatsapp, [])
 
     def test_origens_que_saem_pelo_telegram(self):
-        for origem in ("socorro", "backup-dell", "atualizar-central", "silmer-drive-sync", "n8n:03 · Balcão"):
+        for origem in ("socorro", "backup-dell", "atualizar-central", "silmer-drive-sync", "frente-comercial", "n8n:03 · Balcão"):
             self.assertTrue(ds.sai_pelo_telegram(origem), origem)
         for origem in ("teste", "squadone-lembretes", "n8nfake"):
             self.assertFalse(ds.sai_pelo_telegram(origem), origem)

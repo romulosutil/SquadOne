@@ -1639,7 +1639,7 @@ MAX_TELEGRAM = 4096  # caracteres por mensagem na Bot API
 # Avisos de falha ou pessoais que chegam pela fila e saem pelo Telegram, não pelo WhatsApp de vendas (OT-14):
 # o socorro, o backup, o atualizar-central, o sync do Drive do Silmer e todo aviso gravado por fluxo do n8n
 # (a origem é "n8n:<nome do fluxo>", ver ORIGEM_JS em claude-ops/n8n.py: por isso o prefixo).
-ORIGENS_PELO_TELEGRAM = {"socorro", "dell-status", "backup-dell", "atualizar-central", "silmer-drive-sync"}
+ORIGENS_PELO_TELEGRAM = {"socorro", "dell-status", "backup-dell", "atualizar-central", "silmer-drive-sync", "frente-comercial"}
 PREFIXOS_PELO_TELEGRAM = ("n8n:",)
 # O fluxo "00 · Avisar falha pelo Hermes" avisa toda falha de fluxo na hora, e o "Quebrou" do dell-status
 # (fluxo:<id>) avisa a mesma falha até 1 min depois, com a causa: o mesmo problema em duas mensagens (HC-10).
