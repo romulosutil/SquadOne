@@ -57,6 +57,7 @@ export function textoDoEvento(texto: string): string {
 }
 
 export const ROTULO_DA_PERDA: Record<NonNullable<CrmLead['motivoPerda']>, string> = {
+  'proposta-sem-retorno': 'Proposta sem retorno',
   recusou: 'Recusou',
   expirou: 'Sem resposta',
   esfriou: 'Parou de responder',

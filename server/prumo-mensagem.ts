@@ -9,7 +9,12 @@
 // sozinho na linha, "do Prumo" como no convite, a mesma saída fácil ("é só dizer").
 // PURO: a colinha (src/) importa daqui.
 
-import { artigoDe } from "./site-mensagem.ts";
+import { artigoDe, primeiraComEventoCritico, type eventoCriticoDe } from "./site-mensagem.ts";
+
+/** Texto candidato; não participa do envio enquanto a revisão humana não for aplicada. */
+export function primeiraComEventoCriticoDoPrumo(empresa: string, lead: Parameters<typeof eventoCriticoDe>[0], aprovado = false): string {
+  return primeiraComEventoCritico(nomeDaEmpresa(empresa), lead, aprovado).replace('Aqui é o Rômulo.', 'Aqui é o Rômulo, do PRUMO.');
+}
 
 export const SEGUNDA_PRUMO =
   "Aqui está o raio-x {ARTIGO} {NOME}:\n{RAIO_X}\n\nÉ uma página só, feita com o que aparece sobre vocês no Google: o que já está bom e os pontos que mexeríamos primeiro.\n\nSe quiserem, cuidamos desses pontos. Se não for o momento, é só dizer.\n\nO que acharam?";

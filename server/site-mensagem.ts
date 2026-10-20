@@ -97,7 +97,7 @@ export interface LeadDaMensagem {
   raioXUrl?: string;
 }
 
-const recebeuC = (l: LeadDaMensagem) => (l.variante ?? "").trim() === "C";
+const recebeuC = (l: LeadDaMensagem) => ['C', 'D'].includes((l.variante ?? "").trim());
 
 const numeroDe = (waMe: string) => /wa\.me\/(\d+)/.exec(waMe)?.[1] ?? "";
 
@@ -151,4 +151,32 @@ export function segundaDe(l: LeadDaMensagem) {
   }
   if (!site) return { numero: numeroDe(l.waMe), texto: "", link: "" };
   return abrir(l, raioX ? SEGUNDA_RAIO_X.split("{RAIO_X}").join(raioX) : SEGUNDA, SEGUNDA_EN);
+}
+
+// Variante D em revisão; espelho literal dos fatos e do texto do Balcão.
+export const EVENTO_CRITICO_APROVADO = false;
+export const PRIMEIRA_EVENTO_CRITICO = 'Oi, tudo bem? Aqui é o Rômulo. {FATO} Reuni esse ponto no raio-x de como {O_A} {NOME} aparece no Google. Posso te mandar o link para dar uma olhada? É sem compromisso.';
+export function eventoCriticoDe(lead: { raio_x_url?: unknown; raio_x_achados?: unknown }): string | null {
+  if (!lead || !/^https:\/\//.test(String(lead.raio_x_url || ''))) return null;
+  const achados = Array.isArray(lead.raio_x_achados) ? lead.raio_x_achados : [];
+  const dominio = (v: unknown) => typeof v === 'string' && /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(v) && v.length <= 180 ? v : '';
+  for (const a of achados) {
+    if (!a || typeof a !== 'object') continue;
+    if (a.id === 'dominio-vencido' && dominio(a.dominio) && /^\d{4}-\d{2}-\d{2}$/.test(a.data || '')) {
+      const d = new Date(a.data + 'T12:00:00Z');
+      if (Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === a.data) return 'No raio-x, o domínio ' + a.dominio + ' consta como vencido desde ' + a.data.split('-').reverse().join('/') + '.';
+    }
+    if (a.id === 'site-fora-do-ar' && dominio(a.dominio)) return 'Na conferência registrada no raio-x, o site ' + a.dominio + ' não abriu.';
+    if (a.id === 'posicao-na-busca' && Number.isInteger(a.posicao) && a.posicao > 3 && a.posicao <= 1000
+      && Number.isInteger(a.lidos) && a.lidos >= a.posicao && typeof a.consulta === 'string'
+      && a.consulta.trim() && a.consulta.length <= 120 && !/[<>\r\n{}]|https?:/i.test(a.consulta)) {
+      return 'Na busca registrada no raio-x por ‘' + a.consulta.trim() + '’, vocês ficaram em ' + a.posicao + 'º lugar no Google.';
+    }
+  }
+  return null;
+}
+
+export function primeiraComEventoCritico(empresa: string, lead: Parameters<typeof eventoCriticoDe>[0], aprovado = EVENTO_CRITICO_APROVADO): string {
+  const fato = eventoCriticoDe(lead);
+  return aprovado === true && fato ? PRIMEIRA_EVENTO_CRITICO.replace("{FATO}", fato).replace("{O_A}", artigoDe(empresa) === "da" ? "a" : "o").replace("{NOME}", empresa) : "";
 }

@@ -169,11 +169,17 @@ describe("gate de envio: nenhum texto atual do sistema reprova", () => {
 
   it("Site (primeira mensagem A, B, C e EN do JS do n8n)", () => {
     const js = fs.readFileSync(path.join(import.meta.dirname, "..", "deploy", "dell", "claude-ops", "site-mensagem.js"), "utf8");
-    const n8n = vm.runInNewContext(`${js}\n;({ VARIACOES, VARIACAO_EN, preencher })`, {}) as {
+    const n8n = vm.runInNewContext(`${js}\n;({ VARIACOES, VARIACAO_EN, preencher, elegiveisDe, eventoCriticoDe })`, {}) as {
       VARIACOES: string[]; VARIACAO_EN: string; preencher: (molde: string, nome: string, url: string, detalhe: string) => string;
+      elegiveisDe: (lead: unknown, aprovado?: boolean) => string; eventoCriticoDe: (lead: unknown) => string;
     };
-    assert.equal(n8n.VARIACOES.length, 3);
-    const moldes = [...n8n.VARIACOES, n8n.VARIACAO_EN]
+    assert.equal(n8n.VARIACOES.length, 4);
+    const fato = { empresa: 'Empresa de teste', raio_x_url: 'https://raio-x-prumo.vercel.app/teste', raio_x_achados: [{ id: 'site-fora-do-ar', dominio: 'empresa.com.br' }] };
+    assert.ok(!n8n.elegiveisDe(fato).includes('D'), 'D fica desligado sem aprovação');
+    assert.ok(n8n.elegiveisDe(fato, true).includes('D'), 'D só entra com aprovação e fato verificável');
+    assert.ok(!n8n.elegiveisDe({ ...fato, raio_x_achados: [] }, true).includes('D'), 'aprovação não substitui a evidência');
+    const moldeD = n8n.VARIACOES[3].replace('{FATO}', n8n.eventoCriticoDe(fato));
+    const moldes = [...n8n.VARIACOES.slice(0, 3), moldeD, n8n.VARIACAO_EN]
       .map((m) => m.split("{NOTA}").join("4,8").split("{AVALIACOES}").join("120").split("{PONTOS}").join("2 pontos que fazem"));
     for (const [i, molde] of moldes.entries()) {
       for (const lead of LEADS_DE_EXEMPLO.slice(0, 6)) {

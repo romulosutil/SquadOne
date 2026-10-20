@@ -187,15 +187,15 @@ describe("CRM: etapas do Site antes da venda", () => {
     const { leads } = visao();
     assert.equal(lead(leads, "site:followup").followupHoje, true);
     assert.equal(lead(leads, "site:followup").diasNaEtapa, 3);
-    assert.equal(lead(leads, "site:followup-ontem").followupHoje, false, "sem recibo de leitura, o followup_em do 05 não decide");
+    assert.equal(lead(leads, "site:followup-ontem").followupHoje, false, "acervo anterior ao corte continua protegido");
     assert.equal(lead(leads, "site:acervo").followupHoje, false);
     assert.equal(lead(leads, "site:acervo").acervo, true);
     assert.equal(lead(leads, "site:viu").followupHoje, false);
     // 15/10/2026: insistir com quem nem abriu a primeira mensagem é o que mais vira denúncia de spam.
-    assert.equal(lead(leads, "site:nao-leu").followupHoje, false, "no 3º dia, mas não leu: sem follow-up");
-    assert.equal(lead(leads, "site:nao-leu").links.followup, undefined);
+    assert.equal(lead(leads, "site:nao-leu").followupHoje, true, "Fase 3: sem recibo também entra");
+    assert.ok(lead(leads, "site:nao-leu").links.followup);
     assert.equal(lead(leads, "prumo:convite").followupHoje, true, "PRUMO: leu o convite");
-    assert.equal(lead(leads, "prumo:convite-nao-leu").followupHoje, false, "PRUMO: não leu o convite");
+    assert.equal(lead(leads, "prumo:convite-nao-leu").followupHoje, true, "PRUMO: sem recibo também entra");
   });
 
   it("links: wa_link só para quem está pronto, página do lead pela tailnet e conversa sem o texto", () => {
@@ -675,7 +675,7 @@ describe("CRM: lista Hoje e contagens", () => {
     const ids = (grupo: string) => hoje.find((g) => g.id === grupo)!.itens.map((i) => i.leadId);
     assert.deepEqual(hoje.map((g) => g.id), ["proximo", "followup", "resposta", "revisar", "proposta", "enviar"]);
     assert.deepEqual(ids("proximo"), ["prumo:diagnostico"]);
-    assert.deepEqual(ids("followup"), ["site:followup", "prumo:convite"]);
+    assert.deepEqual(ids("followup").sort(), ["site:followup", "site:nao-leu", "prumo:convite", "prumo:convite-nao-leu"].sort());
     assert.deepEqual(ids("resposta"), ["site:respondeu", "prumo:respondeu"]);
     assert.deepEqual(ids("revisar"), ["prumo:revisar"]);
     assert.deepEqual(ids("proposta"), ["site:com-proposta"]);
@@ -803,7 +803,7 @@ describe("CRM: Em contato e a regra dos 7 dias (08/10/2026)", () => {
       linhaSite("proposta-velha", { status: "enviado", enviado_em: dias(30), respondeu_em: dias(29) }),
     ], [], [{ em: dias(20), produto: "site", id: "proposta-velha", tipo: "proposta", texto: "", data: "2026-09-12" }]);
     assert.equal(estado(lead(leads, "site:recusou-velho")), "perdido/recusou/recusou");
-    assert.equal(estado(lead(leads, "site:proposta-velha")), "proposta/proposta/-");
+    assert.equal(estado(lead(leads, "site:proposta-velha")), "perdido/esfriou/proposta-sem-retorno");
   });
 });
 
@@ -903,7 +903,7 @@ describe("CRM: o loop fechado — 2ª mensagem e follow-up anotados (14/10/2026)
     assert.ok(feito.eventos.some((e) => e.tipo === "followup_enviado" && e.rotulo === "Follow-up enviado"));
     assert.equal(lead(v.leads, "site:fu-velho").followupHoje, true);
     assert.equal(lead(v.leads, "prumo:convite").followupHoje, false);
-    assert.deepEqual(v.hoje.find((g) => g.id === "followup")!.itens.map((i) => i.leadId), ["site:fu-velho"]);
+    assert.deepEqual(v.hoje.find((g) => g.id === "followup")!.itens.map((i) => i.leadId).sort(), ["site:fu-velho", "site:nao-leu", "prumo:convite-nao-leu"].sort());
   });
 
   it("interesseParado e followupJaEnviado em tabela", () => {
@@ -1033,7 +1033,7 @@ describe("CRM: reenvio do só-robô (14/10/2026)", () => {
     assert.match(texto, /^Oi, tudo bem\? Aqui é o Rômulo\. Mandei uma mensagem por aqui sobre uma demonstração de site que montei para a Empresa robo-1, mas acho que só chegou a resposta automática\./);
     assert.ok(um.links.followup!.startsWith("https://wa.me/5527999990030?text="));
     assert.equal(lead(v.leads, "site:robo-lembrete-ontem").followupHoje, true, "o lembrete do 05 foi ontem, o reenvio continua");
-    assert.equal(lead(v.leads, "site:gente-lembrete-ontem").followupHoje, false, "sem robô e sem recibo de leitura, o lembrete do 05 não o põe no follow-up");
+    assert.equal(lead(v.leads, "site:gente-lembrete-ontem").followupHoje, true, "Fase 3: só o envio confirmado encerra o follow-up");
     const hoje = lead(v.leads, "site:robo-hoje");
     assert.equal(`${hoje.followupHoje}/${hoje.reenvioDoRobo}/${hoje.links.followup}`, "false/undefined/undefined", "no mesmo dia do envio, não");
   });

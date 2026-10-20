@@ -18,6 +18,8 @@ import type { CrmLead } from './types'
 export const SAL_DO_TESTE_DO_RECIBO = 'squadone-recibo-1'
 /** 17/10/2026, 00:00 em São Paulo: quem foi enviado antes segue a regra antiga. */
 export const INICIO_DO_TESTE_DO_RECIBO = Date.parse('2026-10-17T03:00:00Z')
+/** A cadência de 19/10 passa a incluir todos; o experimento anterior fica como histórico. */
+export const FIM_DO_TESTE_DO_RECIBO = Date.parse('2026-10-19T03:00:00Z')
 export const DIAS_ATE_O_FOLLOWUP_DO_TESTE = 3
 /** Sem isto em cada braço, não há taxa (a mesma régua dos outros A/B da Central). */
 export const MINIMO_POR_BRACO_DO_RECIBO = 30
@@ -31,7 +33,7 @@ export function bracoDoRecibo(chave: string): BracoDoRecibo {
 
 /** O lead entra no teste? Só Site, enviado desde o início e sem recibo de leitura. */
 export function entraNoTesteDoRecibo(p: { produto: string; enviado?: number; visto?: number }): boolean {
-  return p.produto === 'site' && p.enviado !== undefined && p.enviado >= INICIO_DO_TESTE_DO_RECIBO && p.visto === undefined
+  return p.produto === 'site' && p.enviado !== undefined && p.enviado >= INICIO_DO_TESTE_DO_RECIBO && p.enviado < FIM_DO_TESTE_DO_RECIBO && p.visto === undefined
 }
 
 export interface LinhaDoRecibo { n: number; responderam: number; pediramParaParar: number }

@@ -71,7 +71,30 @@ const VARIACAO_EN = 'Hi, how are you? This is Rômulo. I found {NOME} on Google 
 // C, se o sorteio cair nela): o Balcao grava a letra nova junto com o wa_link novo.
 // 14/10/2026: o sorteio pelo hash deu lugar a alocarVariante (abaixo): a letra passa a ter
 // estado (a coluna mensagem_variante + ab_elegiveis), nao sai mais so do place_id.
-const LETRAS = ['A', 'B', 'C'];
+const LETRAS = ['A', 'B', 'C', 'D'];
+// Revisão humana pendente. Nunca autorizar a partir de campo do lead ou saída de modelo.
+const EVENTO_CRITICO_APROVADO = false;
+const PRIMEIRA_EVENTO_CRITICO = 'Oi, tudo bem? Aqui é o Rômulo. {FATO} Reuni esse ponto no raio-x de como {O_A} {NOME} aparece no Google. Posso te mandar o link para dar uma olhada? É sem compromisso.';
+VARIACOES.push(PRIMEIRA_EVENTO_CRITICO);
+function eventoCriticoDe(lead) {
+  if (!lead || !/^https:\/\//.test(String(lead.raio_x_url || ''))) return null;
+  const achados = Array.isArray(lead.raio_x_achados) ? lead.raio_x_achados : [];
+  const dominio = (v) => typeof v === 'string' && /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(v) && v.length <= 180 ? v : '';
+  for (const a of achados) {
+    if (!a || typeof a !== 'object') continue;
+    if (a.id === 'dominio-vencido' && dominio(a.dominio) && /^\d{4}-\d{2}-\d{2}$/.test(a.data || '')) {
+      const d = new Date(a.data + 'T12:00:00Z');
+      if (Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === a.data) return 'No raio-x, o domínio ' + a.dominio + ' consta como vencido desde ' + a.data.split('-').reverse().join('/') + '.';
+    }
+    if (a.id === 'site-fora-do-ar' && dominio(a.dominio)) return 'Na conferência registrada no raio-x, o site ' + a.dominio + ' não abriu.';
+    if (a.id === 'posicao-na-busca' && Number.isInteger(a.posicao) && a.posicao > 3 && a.posicao <= 1000
+      && Number.isInteger(a.lidos) && a.lidos >= a.posicao && typeof a.consulta === 'string'
+      && a.consulta.trim() && a.consulta.length <= 120 && !/[<>\r\n{}]|https?:/i.test(a.consulta)) {
+      return 'Na busca registrada no raio-x por ‘' + a.consulta.trim() + '’, vocês ficaram em ' + a.posicao + 'º lugar no Google.';
+    }
+  }
+  return null;
+}
 const NOTA_MINIMA_B = 4.3;
 const AVALIACOES_MINIMAS_B = 15;
 const citaNota = (t) => t.indexOf('{NOTA}') >= 0 || t.indexOf('{AVALIACOES}') >= 0;
@@ -103,13 +126,14 @@ function fatosDoGoogle(lead) {
 // de fora segue a fila de sempre do gerador e recebe a EN quando o demo sai.
 // O lead que ja tem demo sorteia entre as mesmas de antes, entao a letra dele nao muda.
 // Os indices de VARIACOES que este lead pode receber (com texto e com os fatos que o texto cita).
-const LETRAS_SEM_DEMO = ['A', 'C'];
-function indicesElegiveis(lead) {
+const LETRAS_SEM_DEMO = ['A', 'C', 'D'];
+function indicesElegiveis(lead, aprovado = EVENTO_CRITICO_APROVADO) {
   const semDemo = Boolean(lead && lead.sem_demo);
   const fatos = fatosDoGoogle(lead);
   const raioX = raioXDe(lead);
   const cabe = (t, i) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t))
-    && (!semDemo || LETRAS_SEM_DEMO.indexOf(LETRAS[i]) >= 0);
+    && (!semDemo || LETRAS_SEM_DEMO.indexOf(LETRAS[i]) >= 0)
+    && (LETRAS[i] !== 'D' || (aprovado === true && Boolean(eventoCriticoDe(lead))));
   return VARIACOES.map((t, i) => (cabe(t, i) ? i : -1)).filter(i => i >= 0);
 }
 // O molde da letra com {NOTA}, {AVALIACOES} e {PONTOS} ja preenchidos.
@@ -119,6 +143,7 @@ function moldeDaLetra(letra, lead) {
   const raioX = raioXDe(lead);
   if (fatos) molde = molde.split('{NOTA}').join(fatos.nota).split('{AVALIACOES}').join(fatos.avaliacoes);
   if (raioX) molde = molde.split('{PONTOS}').join(raioX.pontos);
+  if (letra === 'D') molde = molde.split('{FATO}').join(eventoCriticoDe(lead) || '');
   return molde;
 }
 // O hash de sempre (h * 31 + c): continua sendo o desempate da alocacao (14/10/2026).
@@ -129,9 +154,9 @@ function hashDoPlaceId(placeId) {
 }
 // O sorteio puro pelo hash (07/10 a 14/10/2026). O Balcao usa alocarVariante desde 14/10;
 // esta fica porque o espelho TS e os testes do texto de cada letra a usam.
-function varianteDe(placeId, eua, lead) {
+function varianteDe(placeId, eua, lead, aprovado = EVENTO_CRITICO_APROVADO) {
   if (eua) return lead && lead.sem_demo ? null : { letra: 'EN', molde: VARIACAO_EN };
-  const comTexto = indicesElegiveis(lead);
+  const comTexto = indicesElegiveis(lead, aprovado);
   if (!comTexto.length) return null;
   const letra = LETRAS[comTexto[hashDoPlaceId(placeId) % comTexto.length]];
   return { letra, molde: moldeDaLetra(letra, lead) };
@@ -154,14 +179,14 @@ function varianteDe(placeId, eua, lead) {
 // sorteia de novo, no estrato novo. Isso so acontece enquanto o lead e "pronto": o Balcao nunca
 // reescreve a letra de quem ja foi enviado, entao o que saiu nunca muda.
 // "ab", " A B " ou "BA" valem "AB"; vazio ou com outra letra, ''. (As letras saem de LETRAS, na ordem
-// A, B, C: o resultado e sempre um conjunto bem formado, entao nao ha o que validar depois.)
+// A, B, C, D: o resultado e sempre um conjunto bem formado, entao nao ha o que validar depois.)
 function normalizarElegiveis(valor) {
   const t = String(valor === undefined || valor === null ? '' : valor).toUpperCase().replace(/[^A-Z]/g, '');
   const letras = LETRAS.filter(l => t.indexOf(l) >= 0).join('');
   return letras && letras.length === new Set(t).size ? letras : '';
 }
 // O conjunto de letras do lead agora ("A", "AB", "AC", "ABC").
-function elegiveisDe(lead) { return indicesElegiveis(lead).map(i => LETRAS[i]).join(''); }
+function elegiveisDe(lead, aprovado = EVENTO_CRITICO_APROVADO) { return indicesElegiveis(lead, aprovado).map(i => LETRAS[i]).join(''); }
 // Nicho da coluna vertical, sem caixa, acento nem espaco sobrando; vazio e um estrato so.
 function estratoDoNicho(nicho) {
   const t = semAcento(String(nicho || '').normalize('NFC')).toLowerCase().replace(/\s+/g, ' ').trim();
@@ -184,7 +209,7 @@ function contarSorteios(linhas, ignorar) {
     const letra = letraCongelada(elegiveis, { letra: l.mensagem_variante, elegiveis });
     if (!letra) continue;
     const chave = chaveDoEstrato(l.vertical, elegiveis);
-    contagens[chave] = contagens[chave] || { A: 0, B: 0, C: 0 };
+    contagens[chave] = contagens[chave] || { A: 0, B: 0, C: 0, D: 0 };
     contagens[chave][letra]++;
   }
   return contagens;
@@ -196,8 +221,13 @@ function contarSorteios(linhas, ignorar) {
 // essa letra, sem sorteio. null = nenhuma mensagem possivel, como em varianteDe (sem demo e sem
 // raio-x, ou sem demo nos EUA): o Balcao nao grava letra nem wa_link.
 function alocarVariante(p) {
+  const enviada = p.lead && (p.lead.enviado_em || ['enviado', 'expirado', 'recusado', 'fechado'].includes(p.lead.status));
+  if (enviada && p.salva && LETRAS.includes(p.salva.letra) && normalizarElegiveis(p.salva.elegiveis).includes(p.salva.letra)) {
+    const elegiveis = normalizarElegiveis(p.salva.elegiveis);
+    return { letra: p.salva.letra, molde: moldeDaLetra(p.salva.letra, p.lead), elegiveis, chave: chaveDoEstrato(p.nicho, elegiveis), congelada: true };
+  }
   if (p.eua) return p.lead && p.lead.sem_demo ? null : { letra: 'EN', molde: VARIACAO_EN, elegiveis: '', chave: '', congelada: false };
-  const elegiveis = elegiveisDe(p.lead);
+  const elegiveis = elegiveisDe(p.lead, p.eventoCriticoAprovado ?? EVENTO_CRITICO_APROVADO);
   if (!elegiveis) return null;
   const chave = chaveDoEstrato(p.nicho, elegiveis);
   const salva = letraCongelada(elegiveis, p.salva);
@@ -219,7 +249,7 @@ function alocarVariante(p) {
 function alocarRodada(linhas, pedidos) {
   const ordenados = (pedidos || []).slice().sort((a, b) => (String(a.placeId) < String(b.placeId) ? -1 : String(a.placeId) > String(b.placeId) ? 1 : 0));
   const sorteiam = new Set(ordenados
-    .filter(p => !p.eua && !letraCongelada(elegiveisDe(p.lead), p.salva))
+    .filter(p => !p.eua && !letraCongelada(elegiveisDe(p.lead, p.eventoCriticoAprovado ?? EVENTO_CRITICO_APROVADO), p.salva))
     .map(p => String(p.placeId)));
   const contagens = contarSorteios(linhas, sorteiam);
   const saida = {};
@@ -227,7 +257,7 @@ function alocarRodada(linhas, pedidos) {
     const r = alocarVariante({ ...p, contagens });
     saida[p.placeId] = r;
     if (r && !r.congelada && r.chave) {
-      contagens[r.chave] = contagens[r.chave] || { A: 0, B: 0, C: 0 };
+      contagens[r.chave] = contagens[r.chave] || { A: 0, B: 0, C: 0, D: 0 };
       contagens[r.chave][r.letra]++;
     }
   }
@@ -394,7 +424,7 @@ function abrirNoWhatsApp(l, moldeBr, moldeEn) {
 }
 
 // A primeira mensagem foi a C (o raio-x)? A letra e a que o Balcao gravou no envio.
-const recebeuC = (l) => String(l.mensagem_variante || '').trim() === 'C';
+const recebeuC = (l) => ['C', 'D'].includes(String(l.mensagem_variante || '').trim());
 // O raio_x_url da linha, so se for https (vem do publicado.json pelo Balcao).
 function raioXDaLinha(l) {
   const url = String(l.raio_x_url || '').trim();

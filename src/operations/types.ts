@@ -81,6 +81,8 @@ export interface CrmResposta {
 }
 
 export interface CrmEvento {
+  /** Conteúdo estruturado da fonte para regras; a interface apresenta apenas texto e rótulo. */
+  registroTexto?: string
   tipo: string
   rotulo: string
   em: string
@@ -150,7 +152,7 @@ export interface CrmLead {
   etapa: CrmEtapa
   sinal: CrmSinal
   subEtapa: string
-  motivoPerda?: 'recusou' | 'expirou' | 'esfriou' | 'descartado' | 'sem-interesse' | 'sem-contato'
+  motivoPerda?: 'recusou' | 'expirou' | 'esfriou' | 'descartado' | 'sem-interesse' | 'sem-contato' | 'proposta-sem-retorno'
   /** A perda marcada na Central (aba CRM), que dá para desfazer de lá (16/10/2026, OT-06). */
   perdaManual?: 'sem-contato' | 'recusou' | 'dispensado'
   /**
@@ -271,6 +273,7 @@ export interface CrmVisao {
 
 export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'
   | 'spiced'
+  | 'cadencia_enviada'
   | 'segunda_enviada' | 'followup_enviado' | 'plus_enviado' | 'plus_respondeu' | 'recusou' | 'recusou_desfeito'
   | 'ganhou' | 'ganhou_desfeito' | 'dispensado' | 'dispensado_desfeito'
 

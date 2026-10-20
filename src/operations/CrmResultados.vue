@@ -14,6 +14,8 @@ import PorQueNaoVende from './PorQueNaoVende.vue'
 import { aprendizadosDosLeads, ROTULO_DO_TESTE } from './aprendizado-comercial'
 import { MINIMO_POR_BRACO_DO_RECIBO, leituraDoTesteDoRecibo } from './ab-recibo'
 import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } from './velocidade'
+import { leituraDoTestePlus, TAMANHO_DO_TESTE_PLUS } from './plus-experimento'
+import { leituraDoFollowup, MINIMO_POR_BRACO_DO_FOLLOWUP } from './followup-experimento'
 
 // "Resultados" (08/10/2026): quanto cada nicho, mensagem e versão do site
 // rendeu, contado só sobre quem foi enviado no período. Só leitura: os números
@@ -25,6 +27,8 @@ import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } 
 const props = withDefaults(defineProps<{ leads: CrmLead[]; agora: number; parte?: 'numeros' | 'resultados' }>(), { parte: 'numeros' })
 
 const periodo = ref<Periodo>('30')
+const testePlus = computed(() => leituraDoTestePlus(props.leads, props.agora))
+const testeFollowup = computed(() => leituraDoFollowup(props.leads))
 const aprendizados = computed(() => aprendizadosDosLeads(props.leads))
 const SECOES: Array<{ id: Criterio; titulo: string; explicacao: string; soSite: boolean }> = [
   { id: 'nicho', titulo: 'Por nicho', explicacao: 'Quem responde e quem fecha em cada busca.', soSite: false },
@@ -51,6 +55,7 @@ const bracos = computed(() => (ab.value ? [ab.value.comVideo, ab.value.semVideo]
 // A/B estratificado da 1ª mensagem (14/10/2026, ab-mensagem.ts): só leads com ab_elegiveis, letra
 // comparada só entre quem podia receber as duas. Também ignora o período: o teste conta inteiro.
 const abMensagem = computed(() => leituraDoAbMensagem(props.leads, props.agora))
+const abPrumo = computed(() => leituraDoAbMensagem(props.leads, props.agora, 'prumo'))
 const letraVenceu = (letra: string | null) => (letra ? `mensagem ${letra} ganhou` : 'não provado')
 
 // Depois do "sim" (16/10/2026, OT-09): onde o funil perde, com tempo e não só contagem. Sempre os
@@ -92,8 +97,31 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
     </div>
 
     <template v-if="parte === 'numeros'">
+      <section class="crm-grupo" aria-labelledby="crm-plus-teste">
+        <header class="crm-grupo__cabeca"><h2 id="crm-plus-teste">Plus · teste de {{ TAMANHO_DO_TESTE_PLUS }} envios</h2></header>
+        <p class="crm-grupo__explicacao">Primeiros envios confirmados desde {{ dataCurta(new Date(testePlus.inicio).toISOString()) }}. {{ testePlus.plus.enviados }} de {{ TAMANHO_DO_TESTE_PLUS }} no lote. Somente o Rômulo envia. Comparação com o Site enviado no mesmo período, até {{ dataHora(new Date(testePlus.fim).toISOString()) }}; respostas observadas até {{ dataHora(new Date(testePlus.observacaoAte).toISOString()) }}.</p>
+        <table class="crm-spiced-comparacao"><caption>Contagens por canal no mesmo período de envio</caption><thead><tr><th scope="col">Canal</th><th scope="col">Enviados</th><th scope="col">Respostas de gente</th><th scope="col">Quero ver</th><th scope="col">Propostas</th></tr></thead><tbody><tr v-for="[canal, linha] in [['Plus', testePlus.plus], ['Site', testePlus.site]] as const" :key="canal"><th scope="row">{{ canal }}</th><td>{{ linha.enviados }}</td><td>{{ linha.respostas }}</td><td>{{ linha.queroVer }}</td><td>{{ linha.propostas }}</td></tr></tbody></table>
+        <p class="crm-nota-pequena">Contagens, sem declarar vencedor com amostra pequena. O lote fecha no 20º envio e conserva o mesmo período para os dois canais.</p>
+      </section>
       <!-- OT-08 (16/10/2026): os degraus do funil moram aqui; a Hoje mostra só o gargalo. -->
       <PorQueNaoVende :leads="leads" :agora="agora" />
+      <section class="crm-grupo" aria-labelledby="crm-prumo-abertura">
+        <header class="crm-grupo__cabeca"><h2 id="crm-prumo-abertura">Serviços PRUMO · abertura A × D</h2></header>
+        <p class="crm-grupo__explicacao">A usa o convite habitual; D abre com um achado verificável do raio-x. Medição separada do Site, só com mensagem enviada e braço confirmado. O braço D aguarda revisão do Rômulo.</p>
+        <p v-if="!abPrumo.inicio" class="crm-nota-pequena">Nenhum envio com braço confirmado nesta oferta. O histórico sem letra continua fora da comparação.</p>
+        <div v-for="par in abPrumo.pares" :key="par.par">
+          <p>A: {{ par.x.enviados }} envios elegíveis · D: {{ par.y.enviados }} envios elegíveis.</p>
+          <p v-if="!par.numeros" class="crm-nota-pequena">{{ textoDoFaltam(par) }} Taxas só após {{ ENVIOS_MINIMOS_POR_BRACO }} em cada lado.</p>
+          <p v-else>Respondeu de gente: A {{ porcento(par.x.linha?.responderam ?? 0, par.x.enviados) }} · D {{ porcento(par.y.linha?.responderam ?? 0, par.y.enviados) }} · {{ textoDoP(par.numeros.p) }}. {{ letraVenceu(par.numeros.ganhou) }}.</p>
+        </div>
+      </section>
+      <section class="crm-grupo" aria-labelledby="crm-followup-teste">
+        <header class="crm-grupo__cabeca"><h2 id="crm-followup-teste">Follow-up · texto em teste</h2></header>
+        <p class="crm-grupo__explicacao">A conserva o texto anterior; B faz uma pergunta sobre a operação. O texto novo aguarda revisão do Rômulo. Só entra envio confirmado com braço e versão registrados; o histórico não recebe letra retroativa.</p>
+        <p class="crm-resultado__numeros">A: {{ testeFollowup.bracos.A.enviados }} envios · B: {{ testeFollowup.bracos.B.enviados }} envios.</p>
+        <p v-if="!testeFollowup.lido" class="crm-nota-pequena">Taxas e comparação só com {{ MINIMO_POR_BRACO_DO_FOLLOWUP }} envios confirmados em cada braço.</p>
+        <p v-else-if="testeFollowup.numeros" class="crm-resultado__numeros">Respondeu depois do follow-up: A {{ porcento(testeFollowup.bracos.A.responderam, testeFollowup.bracos.A.enviados) }} · B {{ porcento(testeFollowup.bracos.B.responderam, testeFollowup.bracos.B.enviados) }} · {{ textoDoP(testeFollowup.numeros.p) }}. Resultado exploratório; não autoriza envios.</p>
+      </section>
 
       <section class="crm-grupo" aria-labelledby="crm-aprendizados">
         <header class="crm-grupo__cabeca"><h2 id="crm-aprendizados">O que os leads ensinaram</h2></header>
@@ -202,25 +230,25 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
 
         <section class="crm-grupo" aria-labelledby="crm-resultado-recibo">
           <header class="crm-grupo__cabeca">
-            <h2 id="crm-resultado-recibo">Follow-up para quem não manda recibo (teste)</h2>
+            <h2 id="crm-resultado-recibo">Teste de recibo · histórico de 17 a 18/10</h2>
           </header>
           <ul class="crm-lista">
             <li class="crm-resultado">
               <div class="crm-resultado__cabeca">
-                <strong>Metade dos sem recibo recebe o follow-up do 3º dia</strong>
+                <strong>O teste anterior separava os envios sem recibo em dois grupos</strong>
                 <span v-if="recibo && (recibo.teste.n < MINIMO_POR_BRACO_DO_RECIBO || recibo.controle.n < MINIMO_POR_BRACO_DO_RECIBO)" class="crm-tag">amostra pequena</span>
               </div>
-              <p v-if="!recibo" class="crm-resultado__numeros">Começa com os enviados a partir de 17/10/2026: metade dos sem recibo recebe o follow-up do 3º dia.</p>
+              <p v-if="!recibo" class="crm-resultado__numeros">Sem amostra madura registrada no recorte histórico. Desde 19/10, o recibo não define quem entra no follow-up.</p>
               <template v-else>
                 <p class="crm-resultado__numeros">
-                  Com follow-up: {{ recibo.teste.responderam }} de {{ recibo.teste.n }} responderam ({{ porcento(recibo.teste.responderam, recibo.teste.n) }}) ·
-                  sem: {{ recibo.controle.responderam }} de {{ recibo.controle.n }} ({{ porcento(recibo.controle.responderam, recibo.controle.n) }})
+                  Com follow-up: {{ recibo.teste.responderam }} de {{ recibo.teste.n }} responderam<template v-if="recibo.p !== null"> ({{ porcento(recibo.teste.responderam, recibo.teste.n) }})</template> ·
+                  sem: {{ recibo.controle.responderam }} de {{ recibo.controle.n }}<template v-if="recibo.p !== null"> ({{ porcento(recibo.controle.responderam, recibo.controle.n) }})</template>
                 </p>
                 <p class="crm-nota-pequena">
                   Pediram para não receber mais: {{ recibo.teste.pediramParaParar }} com follow-up, {{ recibo.controle.pediramParaParar }} sem.
                   <template v-if="recibo.p !== null"> Fisher p = {{ recibo.p.toFixed(2) }}.</template>
                   <template v-else> Taxa só com {{ MINIMO_POR_BRACO_DO_RECIBO }} em cada lado.</template>
-                  Se a exclusão subir no grupo com follow-up, a regra "só quem leu" fica.
+                  O histórico não recebe novos braços nem altera a cadência atual.
                 </p>
               </template>
             </li>
@@ -230,11 +258,12 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
         <!-- O placar "Por mensagem" (em Resultados) mistura quem podia receber a B com quem não podia; este não. -->
         <section class="crm-grupo" aria-labelledby="crm-resultado-ab-mensagem">
           <header class="crm-grupo__cabeca">
-            <h2 id="crm-resultado-ab-mensagem">A × B (mesmo sorteio, por nicho)</h2>
+            <h2 id="crm-resultado-ab-mensagem">Primeira mensagem · A, B, C e D</h2>
           </header>
           <p class="crm-grupo__explicacao">
             Cada letra só é comparada entre leads que podiam receber as duas (coluna ab_elegiveis), com a letra equilibrada
             dentro de cada nicho pelo Balcão. "Respondeu" é gente. Conta o teste inteiro, sem período.
+            D abre com um fato verificável do raio-x e aguarda revisão do Rômulo.
             <template v-if="abMensagem.inicio">Só vale para envios sorteados desde {{ dataCurta(abMensagem.inicio) }}.</template>
           </p>
           <p v-if="!abMensagem.inicio" class="crm-vazio">
@@ -345,4 +374,6 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
 <style>
 /* Experimentos: a dobra abre numa pilha com o mesmo respiro entre os testes que entre os grupos de fora. */
 .crm-experimentos[open] { display: grid; gap: var(--esp-4); min-width: 0; }
+.crm-spiced-comparacao { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: var(--tam-apoio); }
+.crm-spiced-comparacao th, .crm-spiced-comparacao td { padding: var(--esp-1); overflow-wrap: anywhere; text-align: left; }
 </style>

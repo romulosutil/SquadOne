@@ -86,7 +86,7 @@ describe("fila de venda: 'mandar a proposta' depois do 'gostei'", () => {
       [LINK, { em: horas(3), produto: "site", id: "L", tipo: "proximo_passo", texto: "ligar para fechar", data: "2026-10-14" }]);
     const tipos = filaDeVenda(v, { primeiroLiberado: true, agora: AGORA.getTime() }).map((a) => a.tipo);
     assert.equal(tipos[0], "mandar-proposta", tipos.join(","));
-    assert.ok(tipos.includes("combinado"), tipos.join(","));
+    assert.equal(tipos.includes("combinado"), false, "Fase 3: um passo por lead, sem duplicar o combinado");
   });
 });
 

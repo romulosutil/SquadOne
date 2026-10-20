@@ -89,7 +89,7 @@ SP =timezone(timedelta(hours=-3))  # São Paulo, sem horário de verão desde 20
 # Como o CRM diz o lugar da pasta -> o diretório em ~/auto-site. _fechados/ fica de fora de propósito.
 LUGARES_QUE_ENTRAM = {"raiz": "", "_recusados/": "_recusados", "_concluidos/": "_concluidos",
                       "_em-conversa/": "_em-conversa", "_descartados/": "_descartados"}
-ROTULO_DA_PERDA = {"recusou": "recusou", "expirou": "sem resposta em 7 dias", "esfriou": "parou de responder",
+ROTULO_DA_PERDA = {"proposta-sem-retorno": "proposta sem retorno", "recusou": "recusou", "expirou": "sem resposta em 7 dias", "esfriou": "parou de responder",
                    "sem-contato": "sem contato fácil", "descartado": "descartado"}
 # Pedido de exclusão: onde a pasta de quem pediu pode estar (recusado vai para _recusados/ pelo site-pastas).
 PASTAS_DA_EXCLUSAO = ("", "_recusados", "_em-conversa", "_concluidos")

@@ -42,7 +42,7 @@ tenho interesse", e pousada e eventos seguiam ativas por causa delas. Desde
 O que foi enviado antes de 29/09/2026 é acervo: nada automático; o resumo único
 sai por `--resumo-backlog`.
 
-Uso: python3 site-acompanhamento.py              colunas que faltam na aba Buscas + publica e ativa os dois fluxos
+Uso: python3 site-acompanhamento.py              publica e ativa somente 05; preserva 06
      python3 site-acompanhamento.py --colunas    só acrescenta pausada_em e pausa_motivo na aba Buscas
      python3 site-acompanhamento.py --testar     roda cópias sem gravar nada (planilha de mentira no 05)
      python3 site-acompanhamento.py --testar-regra   a regra da pausa no node, sem n8n nem planilha
@@ -129,7 +129,22 @@ DECIDIR = f"""// Expiração no {EXPIRA_DIAS}º dia, só para o que foi enviado 
 const CORTE = Date.parse('{CORTE}');
 const hoje = diaSP(Date.now());
 const saida = [];
-for (const l of $input.all().map(i => i.json)) {{
+const registros = $('Ler aba CRM').all().map(i => i.json);
+if (registros.some(r => r.error)) throw new Error('Sem aba CRM atual: não expirar nem agendar toque.');
+const protecoes = new Map();
+for (const r of registros.filter(r => r.produto === 'site').sort((a,b) => String(a.em).localeCompare(String(b.em)))) {{
+  const p = protecoes.get(r.id) || {{proposta:false,proximo:false,pausa:false}};
+  if (r.tipo === 'proposta') p.proposta = true;
+  if (r.tipo === 'proposta_desfeita') p.proposta = false;
+  if (r.tipo === 'proximo_passo') p.proximo = Boolean(String(r.texto || '').trim());
+  if (r.tipo === 'nota' && String(r.texto || '').startsWith('[aprendizado-v1] ')) {{
+    try {{ p.pausa = JSON.parse(String(r.texto).slice('[aprendizado-v1] '.length)).pausarAteResposta === true; }} catch {{ /* Nota inválida não desfaz uma pausa válida. */ }}
+  }}
+  protecoes.set(r.id,p);
+}}
+for (const l of $('Ler a planilha').all().map(i => i.json)) {{
+  const p = protecoes.get(String(l.place_id));
+  if (p && (p.proposta || p.proximo || p.pausa)) continue;
   if (String(l.status ?? '').trim() !== 'enviado' || String(l.respondeu_em ?? '').trim()) continue;
   // Resposta classificada de gente também protege se respondeu_em ficou vazio por falha de cópia.
   if (['negativa', 'exclusao', 'interesse', 'licenca', 'neutra'].includes(String(l.resposta_tipo ?? '').trim())) continue;
@@ -175,6 +190,7 @@ def acompanhamento(erro):
          "parameters": {"rule": {"interval": [{"field": "days", "triggerAtHour": 9, "triggerAtMinute": 0}]}}},
         *recibos(),
         ler_aba("planilha", "Ler a planilha", LEADS_GID, "Leads", [660, 0]),
+        ler_aba_crm([770, 100]),
         code("decidir", "Decidir", DECIDIR, [880, 0]),
         {"id": "marcar", "name": "Marcar na planilha", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": [1100, 0],
          "credentials": SHEETS, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000,
@@ -875,9 +891,4 @@ if __name__ == "__main__":
     elif "--colunas" in sys.argv:
         colunas_buscas()
     else:
-        try:
-            colunas_buscas()
-        except (SystemExit, Exception) as e:  # sem as colunas a pausa funciona, só não lembra quem o Rômulo religou
-            print(f"colunas da aba Buscas não criadas ({e}); rode de novo com --colunas")
-        publicar(acompanhamento(erro))
-        publicar(funil(erro))
+        publicar(acompanhamento(erro))  # Fase 3: publicação restrita ao 05, nunca reconfigurar o 06.

@@ -125,6 +125,8 @@ class ExpiracaoSemFollowup(unittest.TestCase):
             self.skipTest("sem node")
         codigo = sa.DECIDIR.replace(sa.CORTE, "2026-09-01T00:00:00-03:00")
         nos = sa.sv.nos_de_arquivos("Ler recibos da pasta auto", "Ler o JSON do recibo", "recibo", recibos)
+        nos["Ler aba CRM"] = []
+        nos["Ler a planilha"] = [{"json": l} for l in linhas]
         return [i["json"] for i in sa.sv.rodar_js(codigo, nos, [{"json": l} for l in linhas])]
 
     def test_expirado_avisa_com_o_prazo_certo_e_so_ele(self):
@@ -364,6 +366,63 @@ class PontaAPonta(unittest.TestCase):
         self.assertEqual(codigo, 1)
         self.assertIn("NÃO entrou na fila de avisos (fila_ausente)", saida)
         self.assertFalse(self.fila.exists())
+
+
+
+
+# Fase 3: regra pura do 05, preservando o teste do aviso acima.
+"""Regras puras do 05: só fixtures e JavaScript local, sem importar n8n nem publicar fluxos."""
+import ast
+import json
+from pathlib import Path
+import subprocess
+import types
+import unittest
+
+tree = ast.parse(Path(__file__).with_name('site-acompanhamento.py').read_text(encoding='utf-8'))
+ctx = {'FOLLOWUP_DIAS': 3, 'EXPIRA_DIAS': 7,
+       'sv': types.SimpleNamespace(PASTA_DO_LEAD_JS="const naRaiz = id => id !== 'fora';"),
+       'DIAS_JS': 'const DIA=86400000;const diaSP=ms=>Math.floor((ms-10800000)/DIA);', 'CORTE': '2026-09-29T00:00:00-03:00'}
+expr = next(n.value for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'DECIDIR' for t in n.targets))
+JS = eval(compile(ast.Expression(expr), '<DECIDIR puro>', 'eval'), ctx)
+
+
+def rodar(leads, registros=None):
+    dados = {'leads': leads, 'registros': registros or []}
+    code = """const d=JSON.parse(require('node:fs').readFileSync(0,'utf8'));
+const $=n=>({all:()=> (n==='Ler a planilha'?d.leads:d.registros).map(json=>({json}))});
+const BaseDate=globalThis.Date;const Date=class extends BaseDate{constructor(...a){super(...(a.length?a:['2026-10-19T15:00:00Z']))}static now(){return BaseDate.parse('2026-10-19T15:00:00Z')}};
+console.log(JSON.stringify(new Function('$','Date',CODE)($,Date).map(x=>x.json)));
+""".replace('CODE', json.dumps(JS))
+    result = subprocess.run(['node', '-e', code], input=json.dumps(dados), text=True, capture_output=True, check=True)
+    return json.loads(result.stdout)
+
+
+class RelogioDoAcompanhamento(unittest.TestCase):
+    def test_sete_dias_e_followup_permanece_dono_central(self):
+        leads = [{'place_id': 'expira', 'status': 'enviado', 'enviado_em': '2026-10-12T12:00:00-03:00'},
+                 {'place_id': 'espera', 'status': 'enviado', 'enviado_em': '2026-10-13T12:00:00-03:00', 'followup_em': 'marcado'},
+                 {'place_id': 'toque', 'status': 'enviado', 'enviado_em': '2026-10-16T12:00:00-03:00', 'visto_em': ''},
+                 {'place_id': 'sexto', 'status': 'enviado', 'enviado_em': '2026-10-13T12:00:00-03:00'},
+                 {'place_id': 'segundo', 'status': 'enviado', 'enviado_em': '2026-10-17T12:00:00-03:00'}]
+        self.assertEqual([(r['place_id'], r['acao']) for r in rodar(leads)], [('expira', 'expirar')])
+
+    def test_proposta_compromisso_resposta_e_pasta_protegida_nao_expiram(self):
+        ids = ['proposta', 'combinado', 'humano', 'fora', 'pausa']
+        leads = [{'place_id': id_, 'status': 'enviado', 'enviado_em': '2026-10-01T12:00:00-03:00'} for id_ in ids]
+        leads[2]['resposta_tipo'] = 'neutra'
+        registros = [{'produto': 'site', 'id': 'proposta', 'tipo': 'proposta', 'em': '2026-10-02T12:00:00Z'},
+                     {'produto': 'site', 'id': 'combinado', 'tipo': 'proximo_passo', 'texto': 'retomar em novembro'},
+                     {'produto': 'site', 'id': 'pausa', 'tipo': 'nota', 'texto': '[aprendizado-v1] {"pausarAteResposta":true}'}]
+        self.assertEqual(rodar(leads, registros), [])
+
+    def test_falha_na_fonte_crm_interrompe_expiracao(self):
+        with self.assertRaises(subprocess.CalledProcessError): rodar([], [{'error': 'indisponível'}])
+
+    def test_publicacao_padrao_nao_altera_o_06(self):
+        calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == 'publicar']
+        self.assertEqual([n.args[0].func.id for n in calls if isinstance(n.args[0], ast.Call)], ['acompanhamento'])
+
 
 
 if __name__ == "__main__":

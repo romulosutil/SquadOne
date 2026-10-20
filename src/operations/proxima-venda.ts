@@ -34,6 +34,8 @@ import { ultimaRespostaDeGente } from './resultados'
 import { proximoDaJornada } from './jornada'
 import { gostouDepoisDoLink, indicouInteresseDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { lacunasDoSpiced, qualificadoParaProposta } from './spiced'
+import { cadenciaDoLead, textoDoRegistroCadencia } from './cadencia'
+import { metadataDoFollowup, textoDoRegistroFollowup } from './followup-experimento'
 import { contatoPausado } from './aprendizado-comercial'
 import { comHistoricoConferido } from './historico-comercial'
 import { pedeMaterial, textoParaATela } from './marcadores-da-conversa'
@@ -47,7 +49,7 @@ export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depoi
 export type TipoDeEnvioAnotado = 'segunda_enviada' | 'followup_enviado' | 'plus_enviado'
 
 /** O que o "Enviei" grava na aba CRM: um envio, a proposta (o servidor põe a data de hoje) ou a recusa. */
-export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou'
+export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou' | 'cadencia_enviada'
 
 export interface AcaoDeVenda {
   conferirHistorico?: boolean
@@ -71,6 +73,8 @@ export interface AcaoDeVenda {
   link?: { rotulo: string; url: string }
   /** O que o "Enviei" anota (POST /crm/venda/anotar); ausente quando não há nada a anotar (a conversa, o "o que achou?"). */
   anota?: AnotacaoDeVenda
+  /** Metadados do texto efetivamente enviado; só são registrados na confirmação humana. */
+  textoDoRegistro?: string
   /** Primeiro contato: conta na trava de ritmo. */
   primeiroContato: boolean
   /** Disse que quer ver, ou combinado atrasado: a tela destaca. */
@@ -182,6 +186,7 @@ const PERGUNTA_DEPOIS_DO_LINK: Record<CrmProduto, (empresa: string) => string> =
 /** Um dia depois da 2ª mensagem (link, demo ou Raio-X) sem resposta dele: perguntar o que achou. */
 function acaoDepoisDoLink(lead: CrmLead, agora: number | undefined): AcaoDeVenda | null {
   if (agora === undefined || lead.etapa !== 'contato' || !lead.links.whatsapp) return null
+  if (lead.proximoPasso?.data && lead.proximoPasso.data > new Date(agora - 3 * 3600_000).toISOString().slice(0, 10)) return null
   const segunda = Date.parse(lead.marcos.segundaEnviada ?? '')
   if (!Number.isFinite(segunda)) return null
   const desde = agora - segunda
@@ -251,6 +256,33 @@ function acaoMandarProposta(lead: CrmLead, momento?: MomentoDaVenda): AcaoDeVend
     anota: 'proposta',
     primeiroContato: false,
     quente: true,
+  }
+}
+
+function acaoDaCadencia(lead: CrmLead, ctx: ContextoDaVenda): AcaoDeVenda | null {
+  if (ctx.agora === undefined) return null
+  const c = cadenciaDoLead(lead, ctx.agora)
+  if (!c || (c.estado !== 'tocar' && c.estado !== 'revisar')) return null
+  const proposta = c.tipo === 'proposta'
+  if (c.estado === 'revisar') return {
+    chave: `${lead.id}|revisao-conversa|${c.origem}`, leadId: lead.id, empresa: lead.empresa, produto: lead.produto,
+    tipo: 'combinado', titulo: `Revise o próximo passo de ${lead.empresa}`, contexto: 'Conversa sem retorno há 7 dias',
+    porque: 'O silêncio pede revisão humana do combinado.', tatica: 'Confira a conversa antes de decidir retomar, esperar ou encerrar.',
+    primeiroContato: false, quente: false, conferirHistorico: true,
+  }
+  const sugestao = !proposta ? ctx.sugestoes?.get(lead.id) : undefined
+  const fallback = proposta
+    ? c.registro?.degrau === 'dia-3' ? 'Oi! Sobre a proposta, ficou alguma dúvida? Se não for a hora, me diga e combinamos quando voltar ao assunto.' : 'Oi! Conseguiu olhar a proposta? O que ainda falta esclarecer para decidir?'
+    : 'Oi! Ficou alguma dúvida do que conversamos? Podemos marcar 10 minutos para entender o próximo passo?'
+  const texto = sugestao?.mensagem.trim() || fallback
+  return {
+    chave: c.chave!, leadId: lead.id, empresa: lead.empresa, produto: lead.produto, tipo: proposta ? 'proposta' : 'depois-do-link',
+    titulo: proposta ? `${c.registro?.degrau === 'dia-3' ? 'Último toque' : 'Peça retorno'} da proposta de ${lead.empresa}` : `Retome a conversa com ${lead.empresa}`,
+    contexto: proposta ? 'Cadência da proposta' : 'Conversa sem retorno: 2º dia útil',
+    porque: proposta ? 'Retorno no degrau previsto, sem repetir todos os dias.' : 'Você respondeu e a conversa ainda não voltou.',
+    tatica: proposta ? 'Pergunte o que falta para decidir, sem reenviar preço.' : 'Use a leitura atual do copiloto ou a pergunta curta de descoberta.',
+    rascunho: texto, ...(lead.links.whatsapp ? { link: { rotulo: 'Abrir no WhatsApp com a mensagem', url: `${lead.links.whatsapp}${lead.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(texto)}` } } : {}),
+    anota: 'cadencia_enviada', textoDoRegistro: textoDoRegistroCadencia(c.registro!), primeiroContato: false, quente: false,
   }
 }
 
@@ -430,7 +462,7 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
   const link = linkDoPasso(item, lead)
   const primeiroContato = tipo === 'primeiro' || (tipo === 'followup' && Boolean(lead.reenvioDoRobo))
   const rascunho = (link && textoDoLink(link.url)) ?? (tipo === 'primeiro' ? lead.mensagemPronta : undefined)
-  const anota = anotaDoLink(lead, link?.url)
+  const anota = tipo === 'followup' && !lead.reenvioDoRobo ? 'followup_enviado' : anotaDoLink(lead, link?.url)
   const lugar = [ROTULO_CURTO[lead.produto], lead.nicho, lead.cidade].filter(Boolean).join(' · ')
   // Cada mensagem nova dele é uma vez nova de responder (o vendedor avisa de novo, a tela não a dá por feita).
   const vez = tipo === 'responder' && lead.conversa?.ultimaEntrada ? `|${lead.conversa.ultimaEntrada}` : ''
@@ -447,6 +479,7 @@ function acaoDoItem(item: CrmItemHoje, tipo: TipoDeVenda, lead: CrmLead): AcaoDe
     ...(rascunho ? { rascunho } : {}),
     ...(link ? { link } : {}),
     ...(anota ? { anota } : {}),
+    ...(anota === 'followup_enviado' && !lead.reenvioDoRobo && rascunho ? { textoDoRegistro: textoDoRegistroFollowup(metadataDoFollowup(lead.produto, lead.id, lead.plus?.oferta)) } : {}),
     primeiroContato,
     // A licença nova também é quente (pedeMaterial): fura o aviso aberto do vendedor como o "quero ver".
     quente: (tipo === 'responder' && pedeMaterial(lead.resposta)) || Boolean(item.urgente) || (tipo === 'combinado' && /atraso/.test(item.detalhe)),
@@ -472,6 +505,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     tatica: 'Confira o último combinado e salve espera, próximo passo ou encerramento. A revisão não envia mensagem.',
     contexto: 'Revisão comercial', primeiroContato: false, quente: false, conferirHistorico: true,
   }))
+  fila.push(...leads.flatMap(l => { const a = acaoDaCadencia(l, ctx); return a ? [a] : [] }))
   const vistas = new Set<string>()
   let primeiros = 0
   const depoisDoLink = leads.flatMap((l) => {
@@ -502,10 +536,11 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     for (const item of grupos.get(grupo)?.itens ?? []) {
       const lead = porId.get(item.leadId)
       if (!lead) continue
+      if (tipo === 'proposta') continue // Os degraus duráveis substituem a cobrança diária legada.
       // Quem gostou depois do link já tem a proposta na fila: "responder" seria o mesmo toque, sem a marca.
       if (tipo === 'responder' && comProposta.has(lead.id)) continue
       // Quem disse não tem o desfecho na fila: "responder" seria escrever a quem recusou.
-      if ((tipo === 'responder' || tipo === 'followup') && comDesfecho.has(lead.id)) continue
+      if (comDesfecho.has(lead.id)) continue
       const acao = acaoDoItem(item, tipo, lead)
       if (vistas.has(acao.chave)) continue
       if (acao.primeiroContato && ctx.primeirosDoTime?.has(lead.id)) continue
@@ -519,8 +554,11 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
       fila.push(acao)
     }
   }
-  const conscientes = fila.map((a) => comAConversa(a, porId.get(a.leadId), ctx))
-  return [...conscientes.filter((a) => !pulados.has(a.chave)), ...conscientes.filter((a) => pulados.has(a.chave))]
+  const conscientes = fila.filter(a => !comDesfecho.has(a.leadId) || a.tipo === 'desfecho')
+    .map((a) => comAConversa(a, porId.get(a.leadId), ctx))
+  const prioridade = (a: AcaoDeVenda) => a.conferirHistorico ? 5 : ({ responder: 0, 'mandar-proposta': 1, combinado: 2, 'depois-do-link': 3, proposta: 4, followup: 6, desfecho: 7, primeiro: 8 }[a.tipo])
+  const unicos = conscientes.sort((a, b) => prioridade(a) - prioridade(b)).filter((a, i, todos) => todos.findIndex(b => b.leadId === a.leadId) === i)
+  return [...unicos.filter((a) => !pulados.has(a.chave)), ...unicos.filter((a) => pulados.has(a.chave))]
 }
 
 /**

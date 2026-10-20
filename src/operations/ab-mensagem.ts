@@ -27,9 +27,9 @@ import { chaveDe, resultados, type LinhaDeResultado } from './resultados.ts'
 import type { CrmLead } from './types'
 
 export const ENVIOS_MINIMOS_POR_BRACO = 30
-export type Letra = 'A' | 'B' | 'C'
-export type Par = 'AB' | 'AC' | 'BC'
-export const PARES: readonly Par[] = ['AB', 'AC', 'BC']
+export type Letra = 'A' | 'B' | 'C' | 'D'
+export type Par = 'AB' | 'AC' | 'AD' | 'BC' | 'BD' | 'CD'
+export const PARES: readonly Par[] = ['AB', 'AC', 'AD', 'BC', 'BD', 'CD']
 
 /**
  * Desde quando cada letra tem o texto de hoje em site-mensagem.js. 19/10/2026: B e C ficaram mais
@@ -75,7 +75,7 @@ export interface LeituraDoAbMensagem {
 }
 
 const enviadoEm = (lead: CrmLead) => Date.parse(lead.marcos.enviado ?? '')
-const ehLetra = (v: string | undefined): v is Letra => v === 'A' || v === 'B' || v === 'C'
+const ehLetra = (v: string | undefined): v is Letra => v === 'A' || v === 'B' || v === 'C' || v === 'D'
 
 function braco(letra: Letra, leads: CrmLead[], lido: boolean, agora: number): BracoDoPar {
   const daLetra = leads.filter(l => l.abordagem?.mensagem === letra)
@@ -128,13 +128,14 @@ function lerPar(par: Par, sorteados: CrmLead[], agora: number): LeituraDoPar {
 }
 
 /** A leitura do A/B estratificado a partir do retrato do CRM. Ignora o período da tela: o teste conta inteiro. */
-export function leituraDoAbMensagem(leads: CrmLead[], agora: number): LeituraDoAbMensagem {
-  const enviados = leads.filter(l => l.produto === 'site' && Number.isFinite(enviadoEm(l)))
+export function leituraDoAbMensagem(leads: CrmLead[], agora: number, produto: 'site' | 'prumo' = 'site'): LeituraDoAbMensagem {
+  const enviados = leads.filter(l => l.produto === produto && Number.isFinite(enviadoEm(l)))
   const comColuna = enviados.filter(l => l.abordagem?.elegiveis)
   const sorteados = comColuna.filter(l => ehLetra(l.abordagem?.mensagem) && l.abordagem!.elegiveis!.includes(l.abordagem!.mensagem!))
   const inicioMs = comColuna.length ? Math.min(...comColuna.map(enviadoEm)) : null
-  const pares = inicioMs === null ? [] : PARES.map(par => lerPar(par, sorteados, agora))
-    .filter(l => l.par === 'AB' || (l.x.enviados > 0 && l.y.enviados > 0))
+  const paresDoProduto: readonly Par[] = produto === 'prumo' ? ['AD'] : PARES
+  const pares = inicioMs === null ? [] : paresDoProduto.map(par => lerPar(par, sorteados, agora))
+    .filter(l => produto === 'prumo' || l.par === 'AB' || (l.x.enviados > 0 && l.y.enviados > 0))
   return {
     inicio: inicioMs === null ? null : new Date(inicioMs).toISOString(),
     pares,

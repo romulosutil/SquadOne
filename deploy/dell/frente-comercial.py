@@ -426,7 +426,12 @@ def anotar_na_central(l, texto=None, em=None):
     """Depois do recibo confirmado, registra o estágio real no CRM; nunca repete o envio."""
     produto=l['produto'];tipo='plus_enviado' if produto=='plus' else 'nota'
     if produto in ('prumo','iris','estampa'):
-        nota='[Convite enviado confirmado pela integração do time]\n'+json.dumps({'enviadoEm':em or iso(),'mensagem':texto},ensure_ascii=False)
+        registro={'enviadoEm':em or iso(),'mensagem':texto}
+        ab=l.get('abordagem') or {}
+        if (produto=='prumo' and texto==texto_do_lead(l) and ab.get('mensagem') in ('A','D')
+                and ab.get('elegiveis') in ('A','AD') and ab['mensagem'] in ab['elegiveis']):
+            registro['abertura']={'mensagem_variante':ab['mensagem'],'ab_elegiveis':ab['elegiveis']}
+        nota='[Convite enviado confirmado pela integração do time]\n'+json.dumps(registro,ensure_ascii=False)
     else:nota='Primeiro contato enviado pelo time comercial (avaliado em 3 leituras do mesmo modelo, Diego, Elisa e Carla), confirmado pela integração do WhatsApp. A conversa segue com o Rômulo.'
     try:
         http(CENTRAL + '/api/operations/crm/registro', {'produto': produto, 'id': l['id'].partition(':')[2], 'tipo': tipo, 'data': '', 'texto': nota},

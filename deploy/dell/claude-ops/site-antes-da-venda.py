@@ -65,7 +65,8 @@ Também em 19/10/2026: a expiração passou de 10 para 7 dias (EXPIRA_DIAS, o me
 em server/crm.ts) e o lead "enviado" sem pasta nenhuma (a A sem demo não tem recibo) conta como "na raiz":
 sem isso nunca expirava.
 
-Uso: python3 site-antes-da-venda.py --balcao     (colunas que faltam + publica e ativa o Balcão)
+Uso: python3 site-antes-da-venda.py --balcao-restrito (só código do 03 existente; conserva ID e estado ativo)
+     python3 site-antes-da-venda.py --balcao     (colunas que faltam + publica e ativa o Balcão)
      python3 site-antes-da-venda.py --colunas    (só as colunas mensagem_variante, site_versao, raio_x_url e ab_elegiveis)
      python3 site-antes-da-venda.py --testar     (código do cruzamento no node, planilha de mentira, sem n8n)
      python3 site-antes-da-venda.py --testar-n8n (cópia do Balcão no n8n: recibos reais, planilha de
@@ -152,6 +153,24 @@ def criar_ou_trocar(wf):
         return wf["id"]
     return api("POST", "/workflows", wf)["id"]
 
+
+def publicar_balcao_restrito(api_fn=api, put_fn=put):
+    """Troca só o código da abordagem no 03 existente. Não cria nem ativa outro fluxo."""
+    import copy
+    nome = "03 · Balcão (Site antes da venda)"
+    alvos = [w for w in api_fn("GET", "/workflows?limit=200")["data"] if w.get("name") == nome]
+    if len(alvos) != 1:
+        raise ValueError("É preciso exatamente um 03 · Balcão existente; nada foi publicado.")
+    atual = api_fn("GET", f"/workflows/{alvos[0]['id']}")
+    novo = copy.deepcopy(atual)
+    nos = [n for n in novo.get("nodes", []) if n.get("name") == "Cruzar recibos e montar abordagem"]
+    if len(nos) != 1 or nos[0].get("type") != "n8n-nodes-base.code":
+        raise ValueError("Nó da abordagem ausente ou ambíguo; nada foi publicado.")
+    nos[0].setdefault("parameters", {})["jsCode"] = codigo_js("site-mensagem.js", "balcao-cruzar.js")
+    put_fn(novo)
+    if atual.get("active") is True:
+        api_fn("POST", f"/workflows/{atual['id']}/activate")
+    return {"id": atual["id"], "active": atual.get("active") is True}
 
 def balcao(erro):
     ler_planilha = {"resource": "sheet", "operation": "read",
@@ -968,6 +987,9 @@ def testar_n8n() -> int:
 
 
 if __name__ == "__main__":
+    if "--balcao-restrito" in sys.argv:
+        print(json.dumps(publicar_balcao_restrito(), ensure_ascii=False))
+        sys.exit(0)
     if "--testar" in sys.argv:
         sys.exit(testar())
     if "--testar-n8n" in sys.argv:

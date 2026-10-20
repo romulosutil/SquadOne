@@ -14,7 +14,7 @@
 // 08/10/2026). Nada de finanças pessoais entra aqui (RULES 24): o CRM não tem nenhuma.
 
 import {
-  CARDAPIO, objecoesNoTexto, colinhaDoLead, precoDaTabela, precoParaOCliente, precosNoTexto, preencher,
+  CARDAPIO, objecoesNoTexto, objecaoDaOferta, colinhaDoLead, precoDaTabela, precoParaOCliente, precosNoTexto, preencher,
   type IdDoServico,
 } from './colinha'
 import {
@@ -205,7 +205,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
   const nomear = (o: { id: IdDaOferta, porque: string }) => ({ id: o.id, nome: nomeDaOferta(o.id), porque: o.porque })
   // A colinha anda pelo produto; o Plus fala como o funil da oferta dele.
   const colinha = colinhaDoLead({ ...lead, produto: funil })
-  const reconhecidas = objecoesNoTexto(lead.resposta?.trecho)
+  const reconhecidas = objecoesNoTexto(lead.resposta?.trecho).map(o => objecaoDaOferta(o, lead))
   const objecoes = [...reconhecidas, ...colinha.objecoes]
     .filter((o, i, l) => l.findIndex((x) => x.id === o.id) === i)
     .slice(0, 4)

@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import CrmJornada from './CrmJornada.vue'
 import CrmAprendizado from './CrmAprendizado.vue'
 import CrmSpiced from './CrmSpiced.vue'
+import CrmConfirmarPasso from './CrmConfirmarPasso.vue'
 import CrmHistorico from './CrmHistorico.vue'
 import CrmRevisarClassificacao from './CrmRevisarClassificacao.vue'
 import AcompanhamentoObservado from '../office/AcompanhamentoObservado.vue'
@@ -185,6 +186,7 @@ const acaoDaFila = computed(() => (props.visao?.estado === 'ok'
   ? acaoDaFicha(props.visao, props.lead, Date.now(), primeiroDaFicha.value, sugestaoDaFila.value)
   : null))
 const agora = computed(() => historicoPendente.value && !contatoEmPausa.value ? { frase: 'Confira a conversa antes de decidir a retomada.', citaOProximo: false } : agoraDaFicha(props.lead, acaoDaFila.value))
+const passoConfirmavel = computed(() => !contatoEmPausa.value && !historicoPendente.value && acaoDaFila.value?.rascunho && acaoDaFila.value.textoDoRegistro && ['cadencia_enviada', 'followup_enviado'].includes(acaoDaFila.value.anota ?? '') ? acaoDaFila.value : null)
 
 // As ações de um toque. `principal`: é o passo de hoje (convite, primeira mensagem, 2ª mensagem ou
 // demo depois do "sim", follow-up). `envia`: é uma mensagem ao lead; abrir não a registra (o observador
@@ -199,7 +201,7 @@ const acoes = computed<AcaoDaFicha[]>(() => {
   const interesse = pedeMaterial(props.lead.resposta)
   // Site com a variação C: a segunda (segundaDe) leva o raio-x e o demo, não só o site. Com o Raio-X
   // avulso (demo sob pedido, 14/10/2026): só o raio-x antes do demo, só o demo depois do "Gerar demo".
-  const recebeuC = !prumo && props.lead.abordagem?.mensagem === 'C' && Boolean(l.raioX)
+  const recebeuC = !prumo && ['C', 'D'].includes(props.lead.abordagem?.mensagem ?? '') && Boolean(l.raioX)
   const segunda = prumo ? 'Mandar o Raio-X'
     : !recebeuC ? 'Mandar o link do site'
     : !raioXAvulso(l.raioX) ? 'Mandar o raio-x e o demo'
@@ -581,7 +583,8 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
 
 
     <!-- A mensagem que o botão vai abrir, à vista antes do toque (16/10/2026): revisar sem adivinhar. -->
-    <figure v-if="rascunho && !contatoEmPausa && !historicoPendente" class="crm-ficha__rascunho">
+    <CrmConfirmarPasso v-if="passoConfirmavel" :lead="lead" :acao="passoConfirmavel" :disponivel="disponivel" @registrado="emit('registrado')" />
+    <figure v-if="!passoConfirmavel && rascunho && !contatoEmPausa && !historicoPendente" class="crm-ficha__rascunho">
       <figcaption class="crm-muted">Mensagem que vai sair (revise; dá para mudar no WhatsApp antes de enviar)<template v-if="primariaVisivel?.chave === 'proposta' && proposta">. {{ proposta.origem === 'copiloto' ? 'Itens do copiloto, preços do cardápio.' : 'Texto base do Roteiro.' }}</template></figcaption>
       <blockquote>{{ rascunho }}</blockquote>
       <p v-if="primariaVisivel?.chave === 'proposta' && proposta?.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
@@ -596,7 +599,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
     <!-- Não fica mais preso ao topo ao rolar (AC-14, 17/10/2026): cobria a primeira linha da Conversa.
          Com o Desfecho logo abaixo e a ordem de decisão, ele já é a segunda coisa da folha. -->
     <a v-if="lead.etapa === 'novo'" class="botao" href="/crm?ver=triagem">Ver avaliação do time →</a>
-    <div v-if="primariaVisivel" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
+    <div v-if="primariaVisivel && !passoConfirmavel" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
       <!-- Primeiro contato travado (AC-22): o botão fica, desabilitado, e embaixo o recado único das
            travas diz quando volta; o "Liberar" é um link nele, só quando o horário é o que segura. -->
       <template v-if="primarioTravado">

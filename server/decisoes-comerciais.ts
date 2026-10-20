@@ -1,7 +1,7 @@
 import type { Router } from 'express'
 import type { CrmVisao } from '../src/operations/types.ts'
 import { hashDoContexto } from '../src/operations/revisao-resposta.ts'
-import { baseDaClassificacao, PREFIXO_CLASSIFICACAO, PREFIXO_CONVITE, ultimoConviteConfirmado } from '../src/operations/decisoes-comerciais.ts'
+import { aberturaConfirmadaDoLead, baseDaClassificacao, PREFIXO_CLASSIFICACAO, PREFIXO_CONVITE, ultimoConviteConfirmado } from '../src/operations/decisoes-comerciais.ts'
 
 /** Usa as notas da aba CRM existente: revisão humana, sem novo banco ou envio de mensagem. */
 export function montarDecisoesComerciais(router: Router, crm?: { visao(): Promise<CrmVisao>; registrar(entrada: unknown): Promise<unknown> }) {
@@ -35,7 +35,8 @@ export function montarDecisoesComerciais(router: Router, crm?: { visao(): Promis
         if (!['prumo', 'iris', 'estampa'].includes(lead.produto) || lead.etapa !== 'novo' || lead.sinal !== 'revisar' || ultimoConviteConfirmado(lead.eventos) || typeof mensagem !== 'string' || !mensagem.trim() || mensagem.length > 600 || !Number.isFinite(em) || em > Date.now() + 60_000 || (lead.desde && em < Date.parse(lead.desde))) {
           consumidos.delete(chave); res.status(400).json({ error: 'Confirme o conteúdo e o horário real do convite enviado. O contato precisa estar na triagem.' }); return
         }
-        texto = PREFIXO_CONVITE + JSON.stringify({ enviadoEm: new Date(em).toISOString(), mensagem: mensagem.trim() })
+        const abertura = aberturaConfirmadaDoLead(lead, mensagem)
+        texto = PREFIXO_CONVITE + JSON.stringify({ enviadoEm: new Date(em).toISOString(), mensagem: mensagem.trim(), ...(abertura ? { abertura } : {}) })
       }
       if (texto.length > 1000) { consumidos.delete(chave); res.status(400).json({ error: 'Reduza o motivo ou o conteúdo do registro.' }); return }
       gravando = true

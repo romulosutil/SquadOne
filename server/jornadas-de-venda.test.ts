@@ -54,7 +54,7 @@ function visaoCom(site: Record<string, string>, registros: Array<Record<string, 
   return montarCrm(retrato, { agora, pastas: [pasta] }) as unknown as CrmVisao;
 }
 
-const LIVRE = { primeiroLiberado: true };
+const LIVRE = { primeiroLiberado: true, agora: AGORA.getTime() };
 
 describe("jornada do Site: do pronto ao 'quero ver'", () => {
   it("pronto: a fila oferece a primeira mensagem, com o texto do Balcão para revisar", () => {
@@ -136,7 +136,7 @@ describe("jornada do Site: do pronto ao 'quero ver'", () => {
     );
     const tipos = filaDeVenda(v, LIVRE).map((a) => a.tipo);
     assert.ok(tipos.includes("proposta"), tipos.join(","));
-    assert.match(filaDeVenda(v, LIVRE).find((a) => a.tipo === "proposta")!.tatica, /não reenvie o preço/);
+    assert.match(filaDeVenda(v, LIVRE).find((a) => a.tipo === "proposta")!.tatica, /sem reenviar preço|não reenvie o preço/);
   });
 
   it("só o robô respondeu: no dia seguinte, o reenvio pedindo o responsável conta como primeiro contato", () => {
@@ -223,7 +223,7 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
 
   it("fora do expediente não avisa nada", () => {
     const sabado = Date.parse("2026-10-17T13:00:00Z");
-    assert.deepEqual(decidir(vPronto, estadoNovo(sabado), sabado).decisao, { tipo: "nada", motivo: "fora-do-expediente" });
+    assert.deepEqual(decidir(vPronto, estadoNovo(sabado), sabado).decisao, { tipo: "nada", motivo: "fila-vazia" });
   });
 
   it("primeiro contato do 'Enviei' conta na trava antes de o retrato ver", () => {
@@ -611,13 +611,13 @@ describe("teste do follow-up sem recibo", () => {
   it("o braço sai da chave, e só o teste recebe o follow-up sem ter lido", () => {
     const lead = visaoCom(site, [], depois).leads[0];
     assert.equal(lead.testeDoRecibo, bracoDoRecibo("L"));
-    assert.equal(lead.followupHoje, bracoDoRecibo("L") === "teste");
+    assert.equal(lead.followupHoje, true);
   });
 
   it("enviado antes do início segue a regra antiga, e quem leu recebe como sempre", () => {
     const antigo = visaoCom({ status: "enviado", enviado_em: "2026-10-16T13:00:00.000Z" }, [], new Date("2026-10-20T13:00:00Z")).leads[0];
     assert.equal(antigo.testeDoRecibo, undefined);
-    assert.equal(antigo.followupHoje, false);
+    assert.equal(antigo.followupHoje, true);
     const leu = visaoCom({ ...site, visto_em: "2026-10-17T14:00:00.000Z" }, [], depois).leads[0];
     assert.equal(leu.testeDoRecibo, undefined);
     assert.equal(leu.followupHoje, true);
@@ -630,9 +630,10 @@ describe("follow-up do 3º dia, uma regra só", () => {
   const base = { etapa: "contato" as const, emConversa: false, enviado: T - 3 * 86_400_000, leu: true, followups: [] as number[], agora: T };
   it("tabela", () => {
     assert.equal(followupDoTerceiroDia(base), true);
+    assert.equal(followupDoTerceiroDia({ ...base, enviado: T - 6 * 86_400_000, leu: false }), true, "janela até o sexto dia sem recibo");
     assert.equal(followupDoTerceiroDia({ ...base, enviado: T - 2 * 86_400_000 }), false, "antes do 3º dia");
     assert.equal(followupDoTerceiroDia({ ...base, enviado: T - 7 * 86_400_000 }), false, "no 7º dia já é Perdido");
-    assert.equal(followupDoTerceiroDia({ ...base, leu: false }), false, "sem recibo");
+    assert.equal(followupDoTerceiroDia({ ...base, leu: false }), true, "Fase 3: recibo não decide o follow-up");
     assert.equal(followupDoTerceiroDia({ ...base, emConversa: true }), false);
     assert.equal(followupDoTerceiroDia({ ...base, acervo: true }), false);
     assert.equal(followupDoTerceiroDia({ ...base, followups: [T - 3600_000] }), false, "já foi");

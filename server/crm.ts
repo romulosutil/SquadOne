@@ -1,5 +1,9 @@
 import fs from "node:fs/promises";
 import { lerRegistroSpiced, type Spiced } from '../src/operations/spiced.ts';
+import { cadenciaDoLead, cadenciaJaConfirmada, lerRegistroCadencia } from '../src/operations/cadencia.ts';
+import { lerRegistroFollowup } from '../src/operations/followup-experimento.ts';
+import { alocarAberturasPrumo } from '../src/operations/abertura-prumo.ts';
+import { contatoPausado } from '../src/operations/aprendizado-comercial.ts';
 import { protecaoDaDemo, revisaoComercialDoLead } from "./protecao-comercial.ts";
 import { revisaoDaClassificacao, ultimoConviteConfirmado, PREFIXO_CONVITE_TIME } from '../src/operations/decisoes-comerciais.ts';
 import { mensagemDoConvite } from './convite-mensagem.ts';
@@ -250,7 +254,7 @@ export const COLUNAS_DO_REGISTRO = {
  * em 48 h, com ou sem o link) nem se o follow-up do 3º dia foi mandado (não dava para medir se funciona).
  */
 export const TIPOS_DE_REGISTRO = ["nota", "proximo_passo", "proposta", "proposta_desfeita", "sem_contato", "sem_contato_desfeito",
-  "spiced",
+  "spiced", "cadencia_enviada",
   "segunda_enviada", "followup_enviado", "plus_enviado", "plus_respondeu", "recusou", "recusou_desfeito",
   "ganhou", "ganhou_desfeito", "dispensado", "dispensado_desfeito"] as const;
 /**
@@ -504,6 +508,7 @@ export function textoDoWaMe(valor: string): string | undefined {
 export type CrmOrigemDoEvento = "automático" | "manual";
 
 export interface CrmEvento {
+  registroTexto?: string;
   tipo: string;
   rotulo: string;
   em: string;
@@ -531,7 +536,7 @@ export interface CrmLead {
   sinal: CrmSinal;
   subEtapa: string;
   /** `expirou`: nunca respondeu em DIAS_SEM_RESPOSTA; `esfriou`: respondeu e parou de responder. */
-  motivoPerda?: "recusou" | "expirou" | "esfriou" | "descartado" | "sem-interesse" | "sem-contato";
+  motivoPerda?: "recusou" | "expirou" | "esfriou" | "descartado" | "sem-interesse" | "sem-contato" | "proposta-sem-retorno";
   /** A perda marcada na Central (aba CRM), que dá para desfazer de lá: "sem contato fácil", "recusou" ou o "Dispensar" da Triagem. */
   perdaManual?: "sem-contato" | "recusou" | "dispensado";
   /** O ganho marcado na Central (registro `ganhou`, AC-08), que dá para desfazer de lá; o da planilha não entra. */
@@ -753,6 +758,7 @@ function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
     const lista = mapa.get(chave) ?? [];
     // JSON qualificado nunca pode ser truncado até parecer outro registro válido.
     if (tipo === 'spiced' && !lerRegistroSpiced(c("texto"))) continue;
+    if (tipo === 'cadencia_enviada' && !lerRegistroCadencia(c("texto"))) continue;
     lista.push({ em, tipo, texto: tipo === 'spiced' ? c("texto") : texto(c("texto"), 1000), data: c("data") });
     mapa.set(chave, lista);
   }
@@ -840,7 +846,7 @@ export function followupDoTerceiroDia(e: {
   ultimaSaida?: number;
 }): boolean {
   const d = dias(e.enviado, e.agora);
-  return e.etapa === "contato" && !e.emConversa && !e.acervo && d !== undefined && e.leu
+  return e.etapa === "contato" && !e.emConversa && !e.acervo && d !== undefined
     && d >= DIAS_ATE_FOLLOWUP && d < DIAS_SEM_RESPOSTA
     && (e.ultimaSaida === undefined || e.enviado === undefined || e.ultimaSaida <= e.enviado + DIAS_ATE_FOLLOWUP * DIA_MS - DIA_MS)
     && !followupJaEnviado(e.followups, e.enviado);
@@ -981,6 +987,7 @@ function ultimaDoLead(datas: Array<number | undefined>, resposta: CrmResposta | 
 function eventosManuais(registros: Registro[]): CrmEvento[] {
   const rotulo: Record<CrmTipoDeRegistro, string> = {
     spiced: 'Qualificação SPICED confirmada',
+    cadencia_enviada: 'Toque de acompanhamento confirmado',
     nota: "Nota",
     proximo_passo: "Próximo passo",
     proposta: "Proposta enviada",
@@ -1004,7 +1011,11 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     em: new Date(r.em).toISOString(),
     origem: "manual" as const,
     fonte: TIPOS_DE_ENVIO.has(r.tipo) ? "aba CRM (anotado ao tocar no link na Central)" : "aba CRM (registrado na Central)",
-    ...(r.tipo === "proximo_passo"
+    ...(['spiced', 'cadencia_enviada'].includes(r.tipo) || (r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto)) ? { registroTexto: r.texto } : {}),
+    ...(r.tipo === 'spiced' ? { texto: 'Qualificação comercial confirmada pelo Rômulo.' }
+      : r.tipo === 'cadencia_enviada' ? { texto: lerRegistroCadencia(r.texto)?.tipo === 'conversa' ? 'Retomada da conversa confirmada.' : lerRegistroCadencia(r.texto)?.degrau === 'dia-3' ? 'Último retorno da proposta confirmado.' : 'Primeiro retorno da proposta confirmado.' }
+      : r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto) ? { texto: 'Follow-up confirmado pelo Rômulo.' }
+      : r.tipo === "proximo_passo"
       ? { texto: r.texto ? `${r.texto}${r.data ? ` (para ${formatarDia(r.data)})` : ""}` : r.data ? `Próximo passo concluído em ${formatarDia(r.data)}` : "Próximo passo limpo" }
       : r.tipo === "proposta" && r.data
         ? { texto: `Data da proposta: ${formatarDia(r.data)}${r.texto ? ` · ${r.texto}` : ""}` }
@@ -2099,15 +2110,39 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     if (lead.etapa !== "novo" && lead.triagem?.prioridade === undefined) continue;
     lead.triagem = { ...lead.triagem, prioridade: prioridadeDoLead(lead, taxas) };
   }
+  const aberturasPrumo = alocarAberturasPrumo(leads.filter(l => l.produto === 'prumo').map(l => {
+    const confirmado = ultimoConviteConfirmado(l.eventos);
+    let controle = confirmado?.mensagem ?? '';
+    try { controle = new URL(l.links.convite ?? '').searchParams.get('text') ?? controle } catch { /* sem convite: sem rascunho */ }
+    return { id: l.id, empresa: l.empresa, nicho: l.nicho, enviado: l.etapa !== 'novo' || Boolean(l.marcos.enviado), controle,
+      raio_x_url: l.links.raioX, raio_x_achados: l.achados,
+      ...(confirmado?.abertura ? { salva: { ...confirmado.abertura, mensagem: confirmado.mensagem } } : {}) };
+  }));
+  for (const l of leads) {
+    const abertura = l.produto === 'prumo' ? aberturasPrumo.get(l.id) : undefined;
+    if (!abertura) continue;
+    l.abordagem = { ...l.abordagem, mensagem: abertura.mensagem_variante, elegiveis: abertura.ab_elegiveis };
+    if (l.etapa === 'novo' && l.links.convite) {
+      const url = new URL(l.links.convite); url.searchParams.set('text', abertura.mensagem); l.links.convite = url.href;
+    }
+  }
   const contagens = contagemVazia();
   for (const lead of leads) {
     const revisao = revisaoDaClassificacao(lead);
+    const proximoFuturo = lead.proximoPasso?.data && lead.proximoPasso.data > new Date(agora - 3 * 3600_000).toISOString().slice(0, 10);
+    if (proximoFuturo || contatoPausado(lead)) lead.followupHoje = false;
     if (revisao?.decisao === 'reabrir') {
       lead.etapa = 'contato';
       lead.sinal = lead.marcos.respondeu ? (lead.produto === 'site' ? 'em-conversa' : 'respondeu-prumo') : (lead.produto === 'site' ? 'enviado' : 'convite');
       lead.subEtapa = 'Acompanhamento reaberto por você';
       delete lead.motivoPerda; delete lead.perdaManual; delete lead.ganhoManual; delete lead.diasParaSair;
       lead.followupHoje = false; lead.respostaNova = false; delete lead.interesseParado;
+    }
+    const cadencia = cadenciaDoLead(lead, agora);
+    if (cadencia?.estado === 'expirar') {
+      lead.etapa = 'perdido'; lead.sinal = 'esfriou'; lead.motivoPerda = 'proposta-sem-retorno';
+      lead.subEtapa = 'Proposta sem retorno'; lead.desde = new Date(cadencia.base + 10 * DIA_MS).toISOString();
+      lead.diasNaEtapa = dias(Date.parse(lead.desde), agora); lead.respostaNova = false; lead.followupHoje = false;
     }
     lead.revisaoComercial = revisao ? undefined : revisaoComercialDoLead(lead, agora);
     lead.demoProtegida = protecaoDaDemo(lead);
@@ -2141,7 +2176,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     perdas: {
       recusou: leads.filter((l) => l.motivoPerda === "recusou").length,
       expirou: leads.filter((l) => l.motivoPerda === "expirou").length,
-      esfriou: leads.filter((l) => l.motivoPerda === "esfriou").length,
+      esfriou: leads.filter((l) => l.motivoPerda === "esfriou" || l.motivoPerda === "proposta-sem-retorno").length,
       descartado: leads.filter((l) => l.motivoPerda === "descartado").length,
       semInteresse: leads.filter((l) => l.motivoPerda === "sem-interesse").length,
     },
@@ -2205,8 +2240,9 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   if (tipo === 'spiced' && (typeof corpo.texto !== 'string' || !lerRegistroSpiced(corpo.texto))) {
     throw new RegistroInvalido('SPICED inválido: confira os campos, limites e a data real do evento crítico.');
   }
+  if (tipo === 'cadencia_enviada' && !lerRegistroCadencia(corpo.texto)) throw new RegistroInvalido('Confirmação de acompanhamento inválida.');
   // Texto vai como está: o n8n grava com cellFormat RAW, então "=..." fica texto e nunca vira fórmula.
-  const textoSeguro = tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : bruto;
+  const textoSeguro = tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : tipo === 'cadencia_enviada' ? JSON.stringify(lerRegistroCadencia(corpo.texto)) : bruto;
   if (tipo === "nota" && !textoSeguro) throw new RegistroInvalido("Escreva a nota.");
   let data = typeof corpo.data === "string" ? corpo.data.trim() : "";
   if (data && !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new RegistroInvalido("Data inválida (use AAAA-MM-DD).");
@@ -2401,6 +2437,7 @@ export function envioRecenteNoLead(lead: Pick<CrmLead, "eventos">, tipo: CrmTipo
 }
 
 export class CrmStore {
+  private readonly cadenciasConfirmadas = new Map<string, Promise<RespostaDoRegistro>>();
   /**
    * Envios anotados por este processo há pouco, por produto:id:tipo. O retrato leva segundos para
    * refletir o registro e um clique duplo chega antes: sem isto, um toque viraria dois envios na
@@ -2537,6 +2574,14 @@ export class CrmStore {
    */
   async registrar(entrada: unknown, agora = new Date()): Promise<RespostaDoRegistro> {
     const registro = validarRegistro(entrada, agora);
+    if (registro.tipo === 'cadencia_enviada') {
+      const chave = `${registro.produto}:${registro.id}:${registro.texto}`;
+      const anterior = this.cadenciasConfirmadas.get(chave);
+      if (anterior) return { ...await anterior, repetido: true };
+      const resposta = this.gravar(registro, agora);
+      this.cadenciasConfirmadas.set(chave, resposta);
+      try { return await resposta } catch (e) { this.cadenciasConfirmadas.delete(chave); throw e }
+    }
     if (!TIPOS_DE_ENVIO.has(registro.tipo)) return this.gravar(registro, agora);
     const chave = `${registro.produto}:${registro.id}:${registro.tipo}`;
     for (const [k, v] of this.enviosRecentes) if (agora.getTime() - v.em >= JANELA_DE_REPETICAO_MS) this.enviosRecentes.delete(k);
@@ -2567,6 +2612,14 @@ export class CrmStore {
     const visao = await this.visao(agora);
     const lead = visao.leads.find((item) => item.id === `${registro.produto}:${registro.id}`);
     if (!lead) throw new RegistroInvalido("Lead não encontrado no retrato atual do CRM.");
+    if (registro.tipo === 'cadencia_enviada') {
+      const meta = lerRegistroCadencia(registro.texto)!;
+      if (cadenciaJaConfirmada(lead, meta)) return { ok: true, em: agora.toISOString(), repetido: true };
+      const atual = cadenciaDoLead(lead, agora.getTime());
+      if (atual?.estado !== 'tocar' || JSON.stringify(atual.registro) !== JSON.stringify(meta)) {
+        throw new RegistroInvalido('A conversa ou o degrau mudou. Confira a Ficha antes de confirmar o toque.');
+      }
+    }
     const jaNoRetrato = envioRecenteNoLead(lead, registro.tipo, agora.getTime());
     if (jaNoRetrato) return { ok: true, em: jaNoRetrato, repetido: true };
     if ((registro.tipo === "plus_enviado" || registro.tipo === "plus_respondeu") && lead.produto !== "plus") {

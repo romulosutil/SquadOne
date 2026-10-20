@@ -65,6 +65,7 @@ export interface AvisoAberto {
   leadId: string;
   primeiroContato: boolean;
   anota?: AcaoDeVenda["anota"];
+  textoDoRegistro?: string;
   produto: AcaoDeVenda["produto"];
   /** O texto da mensagem do Telegram, para o toque editar sem reler a fila. */
   texto: string;
@@ -94,6 +95,8 @@ export interface EstadoDoVendedor {
   /** Avisos que de fato saíram no Telegram hoje: o teto (MAX_AVISOS_POR_DIA) conta este, não `avisados`. */
   avisosHoje: number;
 }
+
+export const silencioDoVendedor = (ms: number) => { const h = new Date(ms - 3 * 3600_000).getUTCHours(); return h >= 22 || h < 7; };
 
 export const diaDeSP = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().slice(0, 10);
 
@@ -187,12 +190,12 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
     pulados: [...new Set([...estadoLido.pulados, ...entradas.filter(([, r]) => r.como === "pulada").map(([c]) => c)])],
   };
   const nada: Fechados = { fora: [], expirados: [], sairam: [] };
-  if (!noExpedienteDeVenda(agora)) return { decisao: { tipo: "nada", motivo: "fora-do-expediente" }, estado, fechados: nada };
+  if (silencioDoVendedor(agora)) return { decisao: { tipo: "nada", motivo: "fora-do-expediente" }, estado, fechados: nada };
   const toques = somarPrimeiros(doDia?.primeiros);
   const ritmo = ritmoDoEnvio(instantesDePrimeiroContato(visao?.leads ?? [], toques), agora);
   const porId = new Map((visao?.leads ?? []).map((l) => [l.id, l]));
   const fila = filaDeVenda(visao, {
-    primeiroLiberado: ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}), ...(doTime ? { primeirosDoTime: doTime } : {}),
+    primeiroLiberado: noExpedienteDeVenda(agora) && ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}), ...(doTime ? { primeirosDoTime: doTime } : {}),
   }, new Set(estado.pulados))
     .map((a) => comHistoricoConferido(a, porId.get(a.leadId)));
   const { ficam, fechados } = limparAbertos(estado.abertos, new Set(fila.map((a) => a.chave)), resolvidas, agora);
@@ -428,7 +431,7 @@ export interface DepsDoVendedor {
   /** Troca o texto e tira os botões (editMessageText sem reply_markup). Ausente: não fecha por fora. */
   editar?(chatId: number, mensagemId: number, texto: string): Promise<void>;
   /** POST do registro na aba CRM (o mesmo da Ficha): só para o que o link não marca sozinho. */
-  registrar(corpo: { produto: string; id: string; tipo: string; texto: ""; data: "" }): Promise<void>;
+  registrar(corpo: { produto: string; id: string; tipo: string; texto: string; data: "" }): Promise<void>;
   arquivoDeEstado: string;
   /** O histórico de avisos e toques (OT-09). Ausente: não mede. */
   arquivoDeHistorico?: string;
@@ -543,7 +546,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
 
   /** A anotação do "Enviei": uma vez por chave + tipo no dia, pela memória do servidor quando há. */
   async function anotarDoToque(aberto: AvisoAberto & { anota: NonNullable<AvisoAberto["anota"]> }): Promise<"anotou" | "ja-estava"> {
-    const corpo = { produto: aberto.produto, id: aberto.leadId.slice(aberto.leadId.indexOf(":") + 1), tipo: aberto.anota, texto: "" as const, data: "" as const };
+    const corpo = { produto: aberto.produto, id: aberto.leadId.slice(aberto.leadId.indexOf(":") + 1), tipo: aberto.anota, texto: aberto.textoDoRegistro ?? "", data: "" as const };
     const r = await deps.vendaDoDia.anotarUmaVez(aberto.chave, aberto.anota, "telegram", () => deps.registrar(corpo));
     return r.anotou ? "anotou" : "ja-estava";
   }
@@ -551,7 +554,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
   async function voltaSemFila(): Promise<Decisao> {
     const agora = deps.agora();
     const lido = await lerEstado();
-    if (!noExpedienteDeVenda(agora)) {
+    if (silencioDoVendedor(agora)) {
       if (lido.dia !== estadoNovo(agora).dia) await gravarEstado(estadoNovo(agora));
       return { tipo: "nada", motivo: "fora-do-expediente" };
     }
@@ -621,7 +624,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       const mensagens = await deps.enviar(texto, botoesDoAviso(decisao.acao, token, deps.origemCentral));
       const novoAberto: AvisoAberto = {
         chave: decisao.acao.chave, token, em: agora, leadId: decisao.acao.leadId, primeiroContato: decisao.acao.primeiroContato,
-        produto: decisao.acao.produto, texto, ...(decisao.acao.anota ? { anota: decisao.acao.anota } : {}),
+        produto: decisao.acao.produto, texto, ...(decisao.acao.anota ? { anota: decisao.acao.anota } : {}), ...(decisao.acao.textoDoRegistro ? { textoDoRegistro: decisao.acao.textoDoRegistro } : {}),
         tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}),
         ...(decisao.acao.conferirHistorico ? { conferirHistorico: true } : {}),
         ...(Array.isArray(mensagens) && mensagens.length ? { mensagens } : {}),

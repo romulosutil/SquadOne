@@ -156,7 +156,7 @@ VALIDAR_JS = """// Registro da Central. O servidor dela já validou; aqui confer
 const b = $('Registro da Central').first().json.body ?? {};
 const txt = (v, n) => String(v ?? '').replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/g, ' ').trim().slice(0, n);
 const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita', 'sem_contato', 'sem_contato_desfeito',
-  'spiced',
+  'spiced', 'cadencia_enviada',
   'segunda_enviada', 'followup_enviado', 'plus_enviado', 'plus_respondeu', 'recusou', 'recusou_desfeito',
   'ganhou', 'ganhou_desfeito', 'dispensado', 'dispensado_desfeito'];
 const recusa = (erro) => [{ json: { ok: false, erro } }];
@@ -188,6 +188,14 @@ if (b.tipo === 'spiced') {
   data = '';
 }
 if (data && !/^\\d{4}-\\d{2}-\\d{2}$/.test(data)) return recusa('Data inválida.');
+if (b.tipo === 'cadencia_enviada') {
+  let r;
+  try { r = JSON.parse(String(b.texto)); } catch { return recusa('Cadência inválida.'); }
+  if (String(b.texto).length > 1000 || !r || Array.isArray(r) || r.versao !== 1 || !['proposta','conversa'].includes(r.tipo)
+    || typeof r.origem !== 'string' || !Number.isFinite(Date.parse(r.origem))
+    || Object.keys(r).some(k => !['versao','tipo','origem','degrau','base'].includes(k))
+    || (r.tipo === 'proposta' ? !['dia-1','dia-3'].includes(r.degrau) : r.degrau !== 'dia-2' || typeof r.base !== 'string' || !Number.isFinite(Date.parse(r.base)))) return recusa('Cadência inválida.');
+}
 if (b.tipo === 'nota' && !texto) return recusa('Nota vazia.');
 const em = new Date().toISOString();
 return [{ json: { ok: true, em, linha: { em, produto: b.produto, id, empresa: txt(b.empresa, 120), tipo: b.tipo, texto, data, origem: 'Central' } } }];"""

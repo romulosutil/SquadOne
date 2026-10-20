@@ -19,6 +19,7 @@ import {
 } from '../../server/site-mensagem.ts'
 import { FOLLOWUP_PRUMO, SEGUNDA_PRUMO } from '../../server/prumo-mensagem.ts'
 import type { CrmEtapa, CrmProduto, CrmSinal, CrmTipoDeResposta } from './types'
+import { textoDasFaixasIris } from './precos-iris'
 export { PRECOS_CANONICOS_IRIS, FAIXAS_PRECIFICACAO_IRIS, ORIGEM_DOS_PRECOS_IRIS, mensalidadeIrisCentavos, detalharMensalidadeIris, textoDasFaixasIris } from './precos-iris'
 
 // ------------------------------------------------------------------ tipos
@@ -672,6 +673,8 @@ export const CDL: Trecho[] = [
 
 /** O que a colinha lê do lead (um pedaço de CrmLead, para o teste montar à mão). */
 export interface LeadDaColinha {
+  /** Plus recebe a resposta da oferta concreta, não o preço do Site por padrão. */
+  plus?: { oferta: 'site' | 'prumo' | 'iris' | 'estampa' }
   produto: CrmProduto
   etapa: CrmEtapa
   /** PRUMO `diagnostico`: o dono respondeu as 16 perguntas, é hora da devolutiva do Mapa. */
@@ -747,7 +750,7 @@ export interface ColinhaDoLead {
 
 // Recebeu a C = foi convidado para o raio-x (o mesmo recebeuC de server/site-mensagem.ts). Sem o
 // link na planilha, o texto mostra "[link do Raio-X]": melhor o Rômulo ver que falta que mandar o site.
-const recebeuRaioX = (lead: LeadDaColinha) => lead.produto === 'site' && (lead.abordagem?.mensagem ?? '').trim() === 'C'
+const recebeuRaioX = (lead: LeadDaColinha) => lead.produto === 'site' && ['C', 'D'].includes((lead.abordagem?.mensagem ?? '').trim())
 // Onde está o demo de quem recebeu a C (Trecho.demo): o Raio-X avulso é de quem não tinha demo no contato.
 const lugarDoDemo = (lead: LeadDaColinha): Trecho['demo'] =>
   !raioXAvulso(lead.links.raioX) ? 'junto' : lead.links.site?.trim() ? 'depois' : 'sem'
@@ -760,6 +763,25 @@ const temConteudo = (p: PassoDoRoteiro) => p.trechos.length > 0 || (p.perguntas?
 
 function unicas(lista: Objecao[]): Objecao[] {
   return lista.filter((o, i) => lista.findIndex((x) => x.id === o.id) === i)
+}
+
+/** Objeções de preço são da oferta discutida. Valores vêm só da tabela correspondente. */
+export function objecaoDaOferta(o: Objecao, lead: Pick<LeadDaColinha, 'produto' | 'plus'>): Objecao {
+  if (o.id !== 'quanto-custa' && o.id !== 'ta-caro') return o
+  const produto = lead.produto === 'plus' ? lead.plus?.oferta : lead.produto
+  if (produto === 'site') return o
+  let texto: string
+  if (produto === 'iris') texto = o.id === 'quanto-custa'
+    ? `${textoDasFaixasIris()} O total depende de quantas fichas ficam ativas no mês. Quantas vocês têm hoje?`
+    : 'Entendo. A Iris atende a governança da clínica e reúne as anotações das sessões para a reavaliação. O valor acompanha as fichas ativas do mês. Podemos conferir a quantidade e o trabalho que isso resolve antes de decidir?'
+  else if (produto === 'prumo') texto = o.id === 'quanto-custa'
+    ? 'O raio-x e o Mapa são gratuitos. O trabalho é proposto depois de entendermos o problema, o impacto e quem decide. Qual ponto vocês querem resolver primeiro?'
+    : 'Entendo. Vamos conferir o problema que precisa ser resolvido e o que entra na proposta. Qual parte parece maior do que o resultado esperado?'
+  else if (produto === 'estampa') texto = o.id === 'quanto-custa'
+    ? 'O preço do sistema para estamparia ainda precisa ser definido. Primeiro quero entender os pedidos, a equipe e o que precisa ficar organizado. Podemos ver isso por dez minutos?'
+    : 'Antes de comparar valores, precisamos confirmar o escopo e o preço do sistema de estamparia. Qual parte da organização dos pedidos mais pesa hoje?'
+  else texto = 'Qual solução vocês estão considerando? Confirmo o escopo e o preço correspondente antes de preparar a proposta.'
+  return { ...o, levaPara: undefined, resposta: { ...o.resposta, produtos: [lead.produto], texto, dica: 'Use a oferta deste lead. Sem desconto, promessa ou preço de outra solução.' } }
 }
 
 /**
@@ -835,7 +857,7 @@ export function colinhaDoLead(lead: LeadDaColinha): ColinhaDoLead {
 
   return {
     motivo,
-    objecoes: unicas(objecoes).filter((o) => o.resposta.produtos.includes(lead.produto)),
+    objecoes: unicas(objecoes).map(o => objecaoDaOferta(o, lead)).filter((o) => o.resposta.produtos.includes(lead.produto)),
     momentos: momentos.map((m) => doLead(passo(m), lead)).filter(temConteudo),
   }
 }

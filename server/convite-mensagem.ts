@@ -1,5 +1,11 @@
+import { primeiraComEventoCriticoDoPrumo } from './prumo-mensagem.ts'
+import type { eventoCriticoDe } from './site-mensagem.ts'
 /** Textos aprovados em prumo-simples.py e prumo-ofertas.json. Só monta o rascunho. */
-export function mensagemDoConvite(produto: string, empresa: string, segmento: string, agora: Date): string {
+export function mensagemDoConvite(produto: string, empresa: string, segmento: string, agora: Date, abertura?: { variante: 'A' | 'D'; raioX: Parameters<typeof eventoCriticoDe>[0]; aprovado: boolean }): string {
+  if (produto === 'prumo' && abertura?.variante === 'D') {
+    const candidata = primeiraComEventoCriticoDoPrumo(empresa, abertura.raioX, abertura.aprovado)
+    if (candidata) return candidata
+  }
   let nome = empresa.trim()
   for (let i = 0; i < 2; i++) nome = nome.replace(/[\s,.-]+(ltda|me|epp|eireli|s\.?\/?a\.?)\.?$/i, '').trim()
   if (nome === nome.toUpperCase() && /\p{Lu}{4}/u.test(nome)) nome = nome.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, a, b) => a + b.toUpperCase()).replace(/ (D[aeo]s?|E|Para|Em) /g, m => m.toLowerCase())
