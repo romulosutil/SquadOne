@@ -1,5 +1,7 @@
 # PRUMO — instalação do diagnóstico de vendas (19/10/2026)
 
+**Fases 2 a 5 instaladas na Mel.** Conferência final em 19/10 às 22:00:42 de São Paulo, código `0c9bb020210e37ac27751437fc2e16c884f61504`. Textos aprovados pelo Rômulo e habilitados para teste controlado. As seções abaixo preservam o estado observado em cada entrega.
+
 **Fase 2 instalada na Mel e conferida em 19/10 às 20:48:31 de São Paulo.** Commit de código `5cce535512024cd62b971f63551383ee922b04f2`, pai `52a076fd60b2e40ccdd616586c5e698723457710`. O diagnóstico original já existia na main; os cartões do blueprint acompanharam a implementação no mesmo commit.
 
 ## Integração e publicação
@@ -60,3 +62,19 @@ Commit `46a33ef5c44991a17181b6b0b1fb42958b98ea1e`, pai `51dec32350d927cb058cfa25
 Métrica canônica após GET real: semana de São Paulo iniciada em **19/10, zero recebimentos confirmados registrados e R$ 0**, nas cinco linhas. Histórico monetário anterior não medido. Aquisição em trinta dias: 281 envios e 46 respostas humanas comprovadas depois do envio registrado; o funil legado exibe 49 pela regra antiga. Auditoria sanitizada identificou sete registros sem a evidência temporal exigida e quatro respostas humanas preservadas na conversa apesar de bot posterior, sem corrigir ou inventar dados. Ativação qualificada zero, retenção zero elegíveis/ativas, indicações zero/zero.
 
 Rollback protegido e não executado em `~/.local/state/squadone-deploy/prumo-fase4-20261020T001900Z/`. Textos novos seguem desligados e preço da Estamparia pendente. Registrar ganho verbal não confirmou pagamento de ninguém.
+
+## Fase 5 — instalada e conferida às 22:00 de 19/10
+
+Commit `0c9bb020210e37ac27751437fc2e16c884f61504`, pai `46a33ef5c44991a17181b6b0b1fb42958b98ea1e`, árvore `5e947064549e329cfd452e13489d22706f05b2b9`. Publicados somente os 38 arquivos revisados, por índice e objetos isolados, CAS e push normal. HEAD, índice normal e alterações anteriores do checkout preservados.
+
+Snapshot integrado: **3.444 testes aprovados, zero falhas, dois ignorados**, typecheck e build aprovados. Linux: **433 aprovados, zero falhas, zero skips**; onze hashes de fontes/testes iguais ao snapshot final. Exercitados locks, permissão 600, persistência, reinício, correlação LID/mensagem, captura imutável e exclusividade de consumidor. Rota real com dados fictícios validou leitura 200, origem 403, JSON inválido 400, confirmação 201 e releitura; mais dezoito testes de histórico e guardas passaram. Nenhum teste usou dados comerciais reais.
+
+Handoff fresco antes da troca confirmou ociosidade pelos contratos dos processos, posições de leitura e capturas, sem introspecção presumida das filas em memória. Às **21:58:45**, instalados atomicamente `aviso.py`, `dell-status`, `whatsapp-observador`, `evolution-adaptador.py` e `site-mensagem.js`, nos cinco destinos existentes de instalados.json. Consumidores compatíveis iniciaram antes do produtor. Foram reiniciadas apenas as três unidades existentes; o timer do monitor manteve seu estado e seu oneshot não foi disparado para teste.
+
+No 03, alterado somente o código de “Cruzar recibos e montar abordagem”, preservando os outros catorze nós, conexões, credenciais, configurações e estado ativo. A autorização literal **“Aprovar os textos para teste”** habilitou as três flags; a interface reflete aprovação e rollback. Follow-ups continuam manuais, D exige fato verificável, teto compartilhado de trinta primeiros contatos/dia e mínimo de trinta por braço preservados. Nenhum caçador foi religado. O arquivo sanitizado do 01 foi versionado para auditoria, sem importação ou instalação.
+
+Build normal **na Mel** com configuração real às **21:59:22**; Central no ar às **21:59:24**. Conferência real às **22:00:42**: sete rotas 200, OAuth/Tasks conectados, clone limpo, cinco hashes instalados iguais à main e modos corretos. Dez leads com etapas, propostas, pausas e próximos passos intactos; oito preparos presentes. Todos os estados de workflows e unidades preservados. Saúde PRUMO normal, lista fresca e zero pendências. Não houve captura natural após a troca até essa conferência; nenhum estado privado artificial foi criado para aparentar teste em produção. Durabilidade e permissões foram verificadas nos 433 testes Linux isolados.
+
+Conferência visual somente leitura: AARRR legível, legenda temporal da aquisição e textos de aprovação corretos. Estrela-guia das cinco linhas: **zero recebimentos confirmados registrados / R$ 0 na semana iniciada em 19/10**; histórico anterior não medido. Aquisição 46/281, ativação qualificada zero, retenção zero e indicações zero/zero. Nenhuma mensagem ao lead ou escrita comercial sintética durante instalação e QA.
+
+Backups privados e rollback em `~/.local/state/squadone-deploy/prumo-fase5-20261020T003700Z/`. Rollback preparado, não executado: produtor primeiro; consumidor antigo não pode substituir o novo enquanto houver pendências do formato novo. Nesse caso, mantém-se o consumidor compatível e os dados privados para drenagem ou correção. Comprovante sanitizado: `output/diagnostico-vendas/integracao/fase5/instalacao-fase5.json`. Preço da Estamparia continua pendente de definição do Rômulo.
