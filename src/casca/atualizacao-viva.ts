@@ -7,8 +7,11 @@ export function useAtualizacaoViva(ler: (signal: AbortSignal) => Promise<unknown
   let ativo = false
   let timer: ReturnType<typeof setTimeout> | undefined
   let controle: AbortController | undefined
+  let pendente = false
   async function sincronizar() {
-    if (!ativo || atualizando.value || document.visibilityState === 'hidden') return
+    if (!ativo || document.visibilityState === 'hidden') return
+    if (atualizando.value) { pendente = true; return }
+    pendente = false
     clearTimeout(timer)
     controle = new AbortController()
     const prazo = setTimeout(() => controle?.abort(), 25_000)
@@ -17,7 +20,7 @@ export function useAtualizacaoViva(ler: (signal: AbortSignal) => Promise<unknown
     finally {
       clearTimeout(prazo)
       atualizando.value = false
-      if (ativo) timer = setTimeout(() => { void sincronizar() }, intervalo)
+      if (ativo) timer = setTimeout(() => { void sincronizar() }, pendente ? 200 : intervalo)
     }
   }
   const retomar = () => { if (!conferidoEm.value || Date.now() - conferidoEm.value > 3_000) void sincronizar() }

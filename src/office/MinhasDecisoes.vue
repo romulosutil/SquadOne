@@ -30,7 +30,10 @@ const clienteNaLeitura = computed(() => props.visao?.leads.some(l => l.id === se
 const atual = computed<Decisao | null>(() => selecionada.value ? decisoes.value.find(d => d.lead.id === selecionada.value!.lead.id) ?? { ...selecionada.value, acao: null, estado: 'acompanhando', motivo: 'Cliente ausente da leitura atual' } : null)
 const indice = computed(() => filtradas.value.findIndex(d => d.lead.id === atual.value?.lead.id))
 const proxima = computed(() => proximaDecisaoPorPrioridade(decisoes.value, atual.value?.lead.id))
-watch(() => atual.value?.estado, (estado, anterior) => { if (anterior === 'agora' && estado && estado !== 'agora') interacaoRegistrada.value = true })
+watch(() => atual.value?.estado, (estado, anterior) => {
+  if (anterior === 'agora' && estado && estado !== 'agora') interacaoRegistrada.value = true
+  if (estado === 'agora' && anterior !== 'agora') interacaoRegistrada.value = false
+})
 watch([filtro, busca, oferta], () => { pagina.value = 1 })
 watch(paginas, valor => { pagina.value = Math.min(pagina.value, valor) })
 async function focarTopo() { await nextTick(); topo.value?.focus(); topo.value?.scrollIntoView({ block: 'start' }) }
@@ -56,7 +59,7 @@ watch([() => props.visao, () => props.atualizando, () => props.erro, ocupado, av
   const destino = proximaDecisaoPorPrioridade(decisoes.value, pendente.id)
   if (destino) { abrir(destino); avisoDoAvanco.value = pendente.observado ? 'Resposta detectada no WhatsApp. Próximo cliente aberto por prioridade.' : 'Interação registrada. Próximo cliente aberto por prioridade.' }
 }, { flush: 'post' })
-const dataDaLeitura = computed(() => props.visao?.geradoEm ? new Date(props.visao.geradoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : props.conferidoEm ? new Date(props.conferidoEm).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '')
+const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferidoEm).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '')
 </script>
 
 <template>
@@ -76,11 +79,11 @@ const dataDaLeitura = computed(() => props.visao?.geradoEm ? new Date(props.visa
       <p v-if="avisoDoAvanco" class="recado recado--ok" role="status">{{ avisoDoAvanco }}</p>
       <p v-if="avancoPendente && !erro" class="texto-2 texto-pequeno" role="status">{{ avancoPendente.observado ? 'Resposta detectada no WhatsApp. Abrindo o próximo cliente…' : 'Interação registrada. Atualizando a fila para abrir o próximo cliente…' }}</p>
       <div v-if="interacaoRegistrada && !avancoPendente" class="minhas-decisoes__proxima" role="status"><div><span class="sobretitulo">{{ atualizando ? 'Atualizando prioridades…' : 'Interação registrada' }}</span><template v-if="proxima"><h3>Próxima: {{ proxima.lead.empresa }}</h3><p>{{ proxima.motivo }}</p></template><template v-else><h3>Nenhuma outra decisão pendente agora.</h3><p>Você pode terminar o acompanhamento deste cliente ou voltar à fila.</p></template></div><button v-if="proxima" class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
-      <MissaoDaConversa :key="atual.lead.id" :lead="atual.lead" :agente="agente" :disponivel="clienteNaLeitura && !erro && visao?.estado === 'ok' && visao.registro.disponivel" :motivo="atual.motivo" :acao="atual.acao" :estado="atual.estado" @ficha="emit('ficha', $event)" @interagiu="confirmarInteracao" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fila="voltar" />
+      <MissaoDaConversa :key="atual.lead.id" :lead="atual.lead" :agente="agente" :disponivel="clienteNaLeitura && !erro && visao?.estado === 'ok'" :registro-disponivel="visao?.registro.disponivel" :motivo="atual.motivo" :acao="atual.acao" :estado="atual.estado" @ficha="emit('ficha', $event)" @interagiu="confirmarInteracao" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fila="voltar" />
       <div v-if="interacaoRegistrada && !avancoPendente && proxima" class="minhas-decisoes__continuar"><p class="texto-2 texto-pequeno">A seguir · {{ proxima.lead.empresa }} · {{ proxima.motivo }}</p><button class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
     </template>
     <template v-else-if="visao?.estado === 'ok' || visao?.leads.length">
-      <div class="minhas-decisoes__introducao"><h3>Uma decisão por vez.</h3><p>Escolha um cliente, entenda o contexto e siga até registrar o que aconteceu.</p><ol aria-label="Como conduzir uma decisão"><li><strong>1</strong> Entender</li><li><strong>2</strong> Agir</li><li><strong>3</strong> Acompanhar</li></ol></div>
+      <div class="minhas-decisoes__introducao"><h3>Uma decisão por vez.</h3><p>Escolha um cliente e conduza a conversa. O time acompanha automaticamente os envios e as respostas capturados.</p><ol aria-label="Como conduzir uma decisão"><li><strong>1</strong> Entender</li><li><strong>2</strong> Agir</li><li><strong>3</strong> Acompanhar</li></ol></div>
       <div class="minhas-decisoes__estados" role="group" aria-label="Situação das decisões">
         <button v-for="e in estados" :key="e.id" type="button" :aria-pressed="filtro === e.id" @click="filtro = e.id"><strong>{{ contagens[e.id] }}</strong><span>{{ e.nome }}</span></button>
       </div>

@@ -1,5 +1,14 @@
 # Design do SquadOne
 
+Acompanhamento automático (21/10/2026): a jornada mostra as mensagens capturadas
+pela integração, sem pedir confirmação de envio ou cópia da resposta. A abertura
+do WhatsApp leva ao acompanhamento e fica aguardando sincronização até haver
+uma nova saída observada. Próxima ação é opcional; complemento, contato e retorno
+por fora ficam em uma dobra secundária. Eventos do servidor atualizam o CRM e a
+ficha aberta sem limpar rascunhos ou recolher a conversa expandida. A hora da
+consulta aparece separada da hora da mensagem. “Ao vivo” exige conexão ativa e
+leitura válida; consultas a cada 15 s e retorno ao app cobrem desconexões.
+
 Clareza das decisões (21/10/2026): Entender destaca uma situação, seguida dos trechos recentes
 do WhatsApp com autor e horário; orientações e marcos ficam em uma dobra. Agir mostra a conversa,
 a interpretação revisável e a resposta contextual; texto padrão é identificado. Acompanhar oferece

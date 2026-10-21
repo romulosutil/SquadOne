@@ -1,5 +1,16 @@
 # Arquitetura
 
+CRM ao vivo (21/10/2026): `server/crm-ao-vivo.ts` compartilha observadores do
+diretório das conversas e do retrato entre conexões de `GET /crm/ao-vivo`.
+Eventos SSE agrupados em 200 ms transportam apenas um sinal de atualização,
+sem conteúdo ou identificadores. `useSinalDoCrm` aciona a releitura serializada
+na Central e em Vendas; consulta de segurança a cada 15 s, retorno de foco e
+reconexão cobrem indisponibilidade. A ficha relê mensagens quando o resumo muda,
+mantendo expansão e rascunhos e cancelando requisições do cliente anterior.
+O acompanhamento da sala usa evidência observada; notas manuais são complementos
+ou contatos por fora. Mensagem capturada não conclui automaticamente uma tarefa
+interna, um compromisso ou um desfecho comercial.
+
 Entrada e alertas resilientes (19/10/2026): o adaptador existente mantém eventos úteis em espera privada quando não pode correlacionar com uma lista atual de leads. Mapa LID e identificação de processamento persistem entre reinícios; drenagem e gravação coordenam concorrência, com permissões restritas e sem dados pessoais nos logs. Falha de persistência não retorna sucesso ao emissor. O observador continua sendo o caminho da conversa e do encaminhamento comercial. O mecanismo existente de avisos conserva pendências críticas e as encaminha exclusivamente pelo Telegram, com nova tentativa se o transporte falhar; não depende do WhatsApp comercial. Não há novo serviço de prospecção, nova linha ou reativação de caçador.
 
 AARRR comercial (19/10/2026): funções puras calculam o placar a partir de confirmações na aba CRM existente. Valor de proposta, pagamento, correção, origem, motivo de perda, retenção e indicação são eventos distintos e auditáveis. O preço é determinado pelo catálogo da oferta e seus componentes, em centavos; o Iris usa a quantidade confirmada de fichas ativas e as faixas marginais. Não há valor livre do modelo ou preço presumido para Estamparia. A Ficha exige confirmação humana e aguarda a releitura da fonte; Números mostra aquisição e ativação no período indicado, recebimentos explícitos e a Estrela-guia global da semana de São Paulo. Mensalidade recebida não comprova atividade no terceiro mês. A indicação gera apenas um próximo passo para o Rômulo. Valores e referências comerciais ficam fora dos dossiês enviados aos modelos; Finanças pessoais não fazem parte dessa leitura.

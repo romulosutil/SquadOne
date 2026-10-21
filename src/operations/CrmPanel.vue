@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useSinalDoCrm } from '../casca/sinal-do-crm'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { navegar } from '../casca/rota'
 import Sheet from '../components/Sheet.vue'
@@ -138,7 +139,9 @@ const aoVoltarNoNavegador = () => { if (lerEndereco()) escreverEndereco(true) }
 // ------------------------------------------------------------------ leitura
 
 async function carregar(anunciar = false) {
-  if (carregando.value || desmontado) return
+  if (desmontado) return
+  if (carregando.value) { releituraPendente = true; return }
+  releituraPendente = false
   const controle = new AbortController()
   const prazo = window.setTimeout(() => controle.abort(), 25_000)
   carregando.value = true
@@ -158,6 +161,7 @@ async function carregar(anunciar = false) {
   } finally {
     window.clearTimeout(prazo)
     carregando.value = false
+    if (releituraPendente && !desmontado) void carregar()
   }
 }
 
@@ -220,6 +224,8 @@ function depoisDoRegistro() {
 }
 
 let desmontado = false
+let releituraPendente = false
+useSinalDoCrm(() => carregar())
 onMounted(async () => {
   primeiros.value = lerPrimeiros(armazenamento(), Date.now())
   // Foi para o Roteiro (no Mais): a casca troca a rota e este painel desmonta já.
@@ -230,7 +236,7 @@ onMounted(async () => {
   window.addEventListener('focus', aoMudarVisibilidade)
   await carregar()
   if (desmontado) return
-  temporizador = window.setInterval(() => { if (document.visibilityState === 'visible') carregar() }, 30_000)
+  temporizador = window.setInterval(() => { if (document.visibilityState === 'visible') carregar() }, 15_000)
   relogio = window.setInterval(() => { agora.value = Date.now() }, 30_000)
 })
 

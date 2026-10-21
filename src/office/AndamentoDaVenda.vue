@@ -9,7 +9,7 @@ const emit = defineEmits<{ registrado: []; confirmado: []; responder: []; ocupad
 const chave = `squadone.andamento.${JSON.stringify([props.lead.produto, props.lead.id])}`
 let salvo: { fato?: FatoDaVenda; texto?: string; data?: string; incerto?: boolean } = {}
 try { salvo = JSON.parse(sessionStorage.getItem(chave) ?? '{}') ?? {} } catch { /* O formulário continua sem persistência. */ }
-const fato = ref<FatoDaVenda>(props.mensagem ? 'envio' : props.fatoInicial ?? (['envio', 'retorno', 'passo'].includes(salvo.fato ?? '') ? salvo.fato! : 'retorno'))
+const fato = ref<FatoDaVenda>(props.mensagem ? 'envio' : props.fatoInicial ?? (['envio', 'retorno', 'passo', 'complemento'].includes(salvo.fato ?? '') ? salvo.fato! : 'complemento'))
 const compativel = !props.fatoInicial || salvo.fato === fato.value
 const texto = ref(props.mensagem || (compativel && typeof salvo.texto === 'string' ? salvo.texto.slice(0, 900) : ''))
 const data = ref(!props.mensagem && compativel && typeof salvo.data === 'string' ? salvo.data : '')
@@ -23,7 +23,7 @@ const retornoGravado = ref('')
 const retornoAtualizado = computed(() => !!retornoGravado.value && ultimoRetornoRegistrado(props.lead)?.registro === retornoGravado.value)
 const rascunhos: Partial<Record<FatoDaVenda, { texto: string; data: string }>> = {}
 watch([fato, texto, data, incerto], () => { try { sessionStorage.setItem(chave, JSON.stringify({ fato: fato.value, texto: texto.value, data: data.value, incerto: incerto.value })) } catch { /* Mantém o rascunho em memória. */ } }, { flush: 'sync' })
-const titulo = computed(() => fato.value === 'envio' ? 'O que você enviou?' : fato.value === 'retorno' ? 'O que o cliente respondeu?' : 'Qual é o próximo passo para avançar?')
+const titulo = computed(() => fato.value === 'envio' ? 'Qual contato você fez por fora e por qual canal?' : fato.value === 'retorno' ? 'O que o cliente disse por fora e por qual canal?' : fato.value === 'complemento' ? 'O que falta acrescentar ao contexto?' : 'Qual é o próximo passo para avançar?')
 function escolher(valor: FatoDaVenda) {
   rascunhos[fato.value] = { texto: texto.value, data: data.value }
   fato.value = valor; texto.value = rascunhos[valor]?.texto ?? (valor === 'envio' ? props.mensagem ?? '' : ''); data.value = rascunhos[valor]?.data ?? ''; previa.value = null; erro.value = ''; sucesso.value = ''
@@ -53,15 +53,15 @@ async function confirmar() {
 </script>
 <template>
   <section class="andamento-venda" aria-label="Avançar a venda na sala">
-    <h4 tabindex="-1">{{ fato === 'envio' ? 'Registrar mensagem enviada' : fato === 'retorno' ? 'Registrar resposta do cliente' : 'Definir próxima ação e data' }}</h4>
+    <h4 tabindex="-1">{{ fato === 'envio' ? 'Contato feito por fora' : fato === 'retorno' ? 'Retorno recebido por fora' : fato === 'complemento' ? 'Complementar contexto' : 'Definir próxima ação e data' }}</h4>
     <p class="texto-pequeno"><strong>{{ lead.empresa }}</strong></p>
-    <p class="texto-2 texto-pequeno">Registre fatos da conversa. Abrir o WhatsApp não comprova envio; silêncio não é recusa.</p>
+    <p class="texto-2 texto-pequeno">As mensagens capturadas já fazem parte de Vendas. Use este espaço apenas para complementar ou registrar algo por fora.</p>
     <div v-if="!previa && !sucesso" class="andamento-venda__acoes" role="group" aria-label="O que aconteceu com este cliente?">
-      <button v-for="op in (['envio', 'retorno', 'passo'] as const)" :key="op" type="button" class="botao botao--leve" :aria-pressed="fato === op" :disabled="salvando || incerto" @click="escolher(op)">{{ op === 'envio' ? 'Enviei' : op === 'retorno' ? 'Cliente respondeu' : 'Próximo passo' }}</button>
+      <button v-for="op in (['complemento', 'envio', 'retorno', 'passo'] as const)" :key="op" type="button" class="botao botao--leve" :aria-pressed="fato === op" :disabled="salvando || incerto" @click="escolher(op)">{{ op === 'envio' ? 'Contato por fora' : op === 'retorno' ? 'Retorno por fora' : op === 'complemento' ? 'Complemento' : 'Próximo passo' }}</button>
     </div>
     <form v-if="!previa && !incerto && !sucesso" @submit.prevent="revisar">
       <label class="rotulo">{{ titulo }}<textarea v-model="texto" class="campo" rows="3" maxlength="900" required /></label>
-      <p class="texto-2 texto-pequeno">{{ fato === 'envio' ? 'Confira o conteúdo que realmente saiu no WhatsApp, incluindo suas edições.' : fato === 'retorno' ? 'Registre as palavras do cliente e quem respondeu. Diferencie pedido, objeção e compromisso; não deduza interesse.' : 'Defina quem faz o quê e quando. Se ainda não combinaram, indique que é sua ação planejada. Isto não agenda envio nem compromisso no calendário.' }}</p>
+      <p class="texto-2 texto-pequeno">{{ fato === 'envio' ? 'Por exemplo: ligação ou encontro. Informe o canal e o que você comunicou.' : fato === 'retorno' ? 'Informe o canal, quem respondeu e as palavras do cliente, sem deduzir interesse.' : fato === 'complemento' ? 'Acrescente apenas o que ainda não aparece na conversa, como uma correção ou informação de contexto.' : 'Defina quem faz o quê e quando. Se ainda não combinaram, indique que é sua ação planejada. Isto não agenda envio nem compromisso no calendário.' }}</p>
       <label class="rotulo">{{ fato === 'passo' ? 'Data do próximo passo' : 'Data em que aconteceu' }}<input v-model="data" class="campo" type="date" required /></label>
       <button type="submit" class="botao botao--primario" :disabled="disponivel === false">Revisar registro</button>
     </form>
@@ -81,8 +81,7 @@ async function confirmar() {
       <button v-if="!retornoAtualizado" type="button" class="botao botao--leve" @click="emit('registrado')">Atualizar leitura do retorno</button>
       <p class="texto-2 texto-pequeno">O agente vai revisar a resposta e o próximo passo com os dados relidos. Você confirma cada ação depois.</p>
     </template>
-    <button v-if="sucesso && fato === 'envio'" type="button" class="botao botao--primario" @click="escolher(fato === 'envio' ? 'retorno' : 'passo')">{{ fato === 'envio' ? 'Registrar retorno do cliente' : 'Definir próximo passo' }}</button>
-    <button v-if="sucesso && fato === 'envio'" type="button" class="botao botao--leve" @click="escolher('passo')">Ainda sem retorno: planejar próximo passo</button>
+    <button v-if="sucesso && fato !== 'passo'" type="button" class="botao botao--leve" @click="escolher('passo')">Definir próxima ação, se necessário</button>
   </section>
 </template>
 <style scoped>

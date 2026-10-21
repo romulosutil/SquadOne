@@ -5,6 +5,7 @@ import type { Pessoa } from '../types'
 import AjustarProximoPasso from './AjustarProximoPasso.vue'
 import AndamentoDaVenda from './AndamentoDaVenda.vue'
 import ContextoDaDecisao from './ContextoDaDecisao.vue'
+import AcompanhamentoObservado from './AcompanhamentoObservado.vue'
 import type { FatoDaVenda } from './andamento'
 import { marcosDaMissao } from './missao'
 import { agoraDaFicha, type AcaoDeVenda } from '../operations/proxima-venda'
@@ -12,14 +13,14 @@ import { whatsappParaRevisao, hashDoContexto } from '../operations/revisao-respo
 import { nomesDasOfertas, type EstadoDaDecisao } from './decisoes'
 import { procedimentoDaDecisao, type MensagemDaDecisao } from './procedimento-da-decisao'
 
-const props = defineProps<{ lead: CrmLead; agente?: Pessoa; disponivel: boolean; motivo: string; acao?: AcaoDeVenda | null; estado?: EstadoDaDecisao }>()
+const props = defineProps<{ lead: CrmLead; agente?: Pessoa; disponivel: boolean; registroDisponivel?: boolean; motivo: string; acao?: AcaoDeVenda | null; estado?: EstadoDaDecisao }>()
 const emit = defineEmits<{ ficha: [id: string]; registrado: []; interagiu: []; ocupado: [valor: boolean]; fila: [] }>()
 const procedimento = computed(() => procedimentoDaDecisao(props.lead))
 const preparo = ref<MensagemDaDecisao | null>(null), preparando = ref(false), erroDoPreparo = ref('')
 const acaoEfetiva = computed(() => preparo.value ? preparo.value.acao : props.acao)
 const mensagem = computed(() => preparo.value?.mensagem ?? '')
 const passo = ref(props.estado === 'agora' || !props.estado || procedimento.value.tipo === 'robo' ? 1 : 3)
-const passos = [{ nome: 'Entender', detalhe: 'Contexto da conversa' }, { nome: 'Agir', detalhe: 'Sua próxima ação' }, { nome: 'Acompanhar', detalhe: 'Registrar e marcar retorno' }]
+const passos = [{ nome: 'Entender', detalhe: 'Contexto da conversa' }, { nome: 'Agir', detalhe: 'Sua próxima ação' }, { nome: 'Acompanhar', detalhe: 'Leitura automática da conversa' }]
 const marcos = computed(() => marcosDaMissao(props.lead))
 const agora = computed(() => procedimento.value.tipo === 'robo'
   ? { frase: procedimento.value.titulo, como: 'Use o menu ou aguarde o atendimento. O pedido de encaminhamento só cabe quando ainda não há uma pessoa na conversa.' }
@@ -33,24 +34,19 @@ function formatarData(valor: string) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) return valor.split('-').reverse().join('/')
   return Number.isFinite(Date.parse(valor)) ? new Date(valor).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Data não informada'
 }
-const ocupado = ref(false), abriu = ref(false), confirmado = ref(''), status = ref(''), erro = ref(''), incerto = ref(false)
+const ocupado = ref(false), abriu = ref(false)
+const saidaAoAbrir = ref<string | null>(null)
 const ajuste = ref<'concluir' | 'reagendar' | null>(null), registrar = ref(false)
-const mensagemParaRegistro = ref('')
 const fatoDoRegistro = ref<FatoDaVenda>('passo')
-function abrirRegistro(fato: FatoDaVenda, mensagem = '') { fatoDoRegistro.value = fato; mensagemParaRegistro.value = mensagem; registrar.value = true; ajuste.value = null; passo.value = 3 }
+function abrirRegistro(fato: FatoDaVenda) { fatoDoRegistro.value = fato; registrar.value = true; ajuste.value = null; passo.value = 3 }
+function acompanharEnvio() { saidaAoAbrir.value = props.lead.conversa?.ultimaSaida ?? (props.lead.conversa?.ultima.direcao === 'saida' ? props.lead.conversa.ultima.em : null); abriu.value = true; passo.value = 3 }
 const contexto = () => JSON.stringify([props.lead.etapa, props.lead.resposta, props.lead.conversa, props.lead.eventos, props.lead.proximoPasso, props.lead.proposta, props.lead.links, props.acao?.chave, props.acao?.rascunho])
 const contextoRevisado = ref(contexto())
-let hashRevisado = hashDoContexto(props.lead)
 const mudou = computed(() => contextoRevisado.value !== contexto())
 const linkDaAcao = computed(() => props.disponivel && props.estado !== 'encerrada' && preparo.value?.podeAbrir && !mudou.value ? whatsappParaRevisao(props.lead.links.whatsapp, mensagem.value) : '')
-const envioConfirmado = computed(() => !!confirmado.value)
-const anotacaoPossivel = computed(() => acaoEfetiva.value?.anota && acaoEfetiva.value.anota !== 'recusou' && !acaoEfetiva.value.primeiroContato && !acaoEfetiva.value.conferirHistorico)
-const registroDisponivel = computed(() => props.disponivel && props.estado !== 'encerrada')
-const anotacaoDaSessao = 'squadone.decisao.' + props.lead.id
-try { incerto.value = sessionStorage.getItem(anotacaoDaSessao) === 'incerto' } catch { /* Continua em memória. */ }
-function memorizarIncerto(valor: boolean) { try { if (valor) sessionStorage.setItem(anotacaoDaSessao, 'incerto'); else sessionStorage.removeItem(anotacaoDaSessao) } catch { /* Continua em memória. */ } }
+const registroDisponivel = computed(() => props.disponivel && props.registroDisponivel !== false && props.estado !== 'encerrada')
 function mudarOcupado(valor: boolean) { ocupado.value = valor; emit('ocupado', valor) }
-function revisarContexto() { contextoRevisado.value = contexto(); hashRevisado = hashDoContexto(props.lead); abriu.value = false; passo.value = 1; erro.value = ''; preparo.value = null; void prepararMensagem() }
+function revisarContexto() { contextoRevisado.value = contexto(); abriu.value = false; passo.value = 1; preparo.value = null; void prepararMensagem() }
 let controleDoPreparo: AbortController | undefined
 let validadeDoPreparo: ReturnType<typeof setTimeout> | undefined
 async function prepararMensagem() {
@@ -71,35 +67,17 @@ async function prepararMensagem() {
 }
 onMounted(() => { if (!['encerrado', 'espera', 'audio', 'interno'].includes(procedimento.value.tipo)) void prepararMensagem() })
 onBeforeUnmount(() => { controleDoPreparo?.abort(); clearTimeout(validadeDoPreparo) })
-watch(() => props.acao?.chave, () => { abriu.value = false })
-async function anotar() {
-  const a = acaoEfetiva.value
-  if (!a || !anotacaoPossivel.value || !registroDisponivel.value || !abriu.value || ocupado.value || incerto.value || envioConfirmado.value || mudou.value) return
-  mudarOcupado(true); erro.value = ''
-  try {
-    if (await hashDoContexto(props.lead) !== await hashRevisado) throw new Error('O contexto mudou. Revise a conversa atualizada antes de confirmar.')
-    memorizarIncerto(true)
-    const r = await fetch('/api/operations/crm/venda/anotar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, produto: props.lead.produto, id: props.lead.chave, tipo: a.anota, texto: a.textoDoRegistro ?? (a.anota === 'proposta' ? mensagem.value.slice(0, 1000) : '') }) })
-    const corpo = await r.json().catch(() => ({}))
-    if (!r.ok) { incerto.value = r.status >= 500; if (!incerto.value) memorizarIncerto(false); throw new Error(corpo.error ?? 'Não foi possível confirmar o registro.') }
-    const resolucao = await fetch('/api/operations/crm/venda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: a.chave, como: 'enviada' }) })
-    if (!resolucao.ok) { incerto.value = true; throw new Error('O envio foi anotado, mas não foi possível atualizar a fila. Confira o histórico e atualize a leitura antes de repetir.') }
-    memorizarIncerto(false); confirmado.value = a.chave
-    status.value = corpo.jaEstava ? 'Este envio já estava registrado.' : 'Envio confirmado e registrado.'
-    passo.value = 3; emit('interagiu'); emit('registrado')
-  } catch (e) { if (e instanceof TypeError) incerto.value = true; erro.value = e instanceof Error ? e.message : 'Não foi possível registrar.' }
-  finally { mudarOcupado(false) }
-}
+watch(() => props.estado, (estado, anterior) => { if (anterior === 'agora' && estado === 'acompanhando' && !registrar.value) passo.value = 3 })
 </script>
 
 <template>
   <article class="missao-conversa" aria-labelledby="missao-titulo">
     <header class="missao-conversa__cabeca"><span class="sobretitulo">{{ nomesDasOfertas[lead.produto] }} · {{ agente?.nome ?? 'Seu time' }}</span><h2 id="missao-titulo">{{ lead.empresa }}</h2><span class="etiqueta">{{ motivo }}</span></header>
     <nav class="missao-conversa__passos" aria-label="Passos desta decisão"><button v-for="(etapa, i) in passos" :key="etapa.nome" type="button" :aria-current="passo === i + 1 ? 'step' : undefined" :disabled="ocupado" @click="passo = i + 1"><span>{{ i + 1 }}</span><span class="missao-conversa__nome-passo"><strong>{{ etapa.nome }}</strong><small>{{ etapa.detalhe }}</small></span></button></nav>
-    <p v-if="!disponivel" class="recado recado--atencao" role="status">O registro está indisponível nesta leitura. Atualize a fila para conferir antes de salvar.</p>
+    <p v-if="!disponivel" class="recado recado--atencao" role="status">Sem leitura recente desta conversa. A atualização tenta novamente automaticamente.</p>
     <p v-if="preparando && passo === 2" class="texto-2 texto-pequeno" role="status">Preparando a mensagem com a conversa e o próximo passo deste cliente…</p>
     <div v-if="erroDoPreparo" class="recado recado--atencao" role="alert"><p>{{ erroDoPreparo }}</p><button type="button" class="botao botao--leve" :disabled="preparando || ocupado" @click="prepararMensagem">Preparar novamente</button></div>
-    <div v-if="mudou && !envioConfirmado && passo !== 3" class="recado recado--atencao" role="status"><p>A conversa ou a próxima ação mudou desde que você abriu esta decisão.</p><button class="botao botao--leve" type="button" :disabled="ocupado" @click="revisarContexto">Revisar contexto atualizado</button></div>
+    <div v-if="mudou && passo !== 3" class="recado recado--atencao" role="status"><p>A conversa ou a próxima ação mudou desde que você abriu esta decisão.</p><button class="botao botao--leve" type="button" :disabled="ocupado" @click="revisarContexto">Revisar contexto atualizado</button></div>
 
     <section v-if="passo === 1" class="missao-conversa__secao" aria-label="Entender o contexto">
       <div class="missao-conversa__resumo"><span class="sobretitulo">1 · Situação atual</span><h3>{{ situacao }}</h3><p>{{ lead.proximoPasso ? `Próxima ação registrada para ${formatarData(lead.proximoPasso.data)}.` : lead.conversa?.ultima.direcao === 'saida' ? 'Confira o que já foi respondido antes de fazer outro contato.' : 'Leia a troca abaixo para decidir como continuar.' }}</p></div>
@@ -113,37 +91,34 @@ async function anotar() {
       <div class="missao-conversa__objetivo"><span class="sobretitulo">2 · Agir</span><h3>{{ agora.frase }}</h3><p v-if="agora.como">{{ agora.como }}</p></div>
       <ContextoDaDecisao :lead="lead" />
       <div v-if="preparo?.leitura && !mudou" class="missao-conversa__leitura"><strong>Como a conversa foi interpretada</strong><p>{{ preparo.leitura }}</p><p class="texto-2 texto-pequeno">Confira esta interpretação com os trechos acima antes de enviar.</p></div>
-      <template v-if="(estado === 'agora' || procedimento.tipo === 'robo') && !envioConfirmado">
+      <template v-if="estado === 'agora' || procedimento.tipo === 'robo'">
         <p v-if="procedimento.tipo === 'robo'" class="recado">Só use o pedido de encaminhamento se o menu não indicar outro procedimento. Se já estiver na fila de atendimento, aguarde. A retomada é conferida na ficha.</p>
         <p v-if="preparo?.motivo" class="recado">{{ preparo.motivo }}</p>
         <div v-if="mensagem && !mudou" class="missao-conversa__rascunho"><span class="sobretitulo">{{ preparo?.origem === 'copiloto' ? 'Resposta preparada com a conversa' : 'Mensagem padrão · confira se cabe nesta conversa' }}</span><p>{{ mensagem }}</p></div>
         <p v-if="acaoEfetiva?.conferirHistorico" class="recado">Confira e confirme o histórico na ficha antes de retomar este contato.</p>
         <p v-else-if="acaoEfetiva?.primeiroContato" class="recado">O primeiro contato precisa da conferência de horário e ritmo na ficha.</p>
         <div class="missao-conversa__acoes">
-          <a v-if="linkDaAcao && !ocupado && !incerto" class="botao" :class="{ 'botao--primario': !abriu }" :href="linkDaAcao" target="_blank" rel="noopener" @click="abriu = true">{{ abriu ? 'Reabrir mensagem no WhatsApp ↗' : 'Revisar no WhatsApp ↗' }}</a>
-          <button v-if="abriu && anotacaoPossivel" type="button" class="botao botao--primario" :disabled="!registroDisponivel || ocupado || incerto || mudou" @click="anotar">{{ ocupado ? 'Registrando…' : 'Enviei esta mensagem · confirmar' }}</button>
-          <button v-if="abriu && !anotacaoPossivel" type="button" class="botao botao--primario" :disabled="!registroDisponivel || ocupado" @click="abrirRegistro('envio', mensagem)">Enviei · registrar o acontecimento</button>
+          <a v-if="linkDaAcao && !ocupado" class="botao" :class="{ 'botao--primario': !abriu }" :href="linkDaAcao" target="_blank" rel="noopener" @click="acompanharEnvio">{{ abriu ? 'Reabrir mensagem no WhatsApp ↗' : 'Revisar no WhatsApp ↗' }}</a>
           <button v-if="!linkDaAcao && !preparando" type="button" class="botao botao--primario" :disabled="ocupado" @click="emit('ficha', lead.id)">{{ acaoEfetiva?.conferirHistorico ? 'Conferir histórico na ficha' : 'Conduzir pela ficha' }}</button>
         </div>
-        <p class="texto-2 texto-pequeno">Abrir o WhatsApp prepara a mensagem. Confirme aqui somente depois de enviar; a confirmação registra a mensagem sugerida. Se você mudou o texto, registre o envio pela ficha.</p>
+        <p class="texto-2 texto-pequeno">Envie pelo WhatsApp. O time acompanha o texto que realmente sair, incluindo suas edições, assim que a integração o capturar.</p>
       </template>
       <button v-else type="button" class="botao botao--primario" @click="passo = 3">Ver acompanhamento →</button>
-      <button type="button" class="botao botao--leve" :disabled="ocupado" @click="passo = 3">Registrar resultado e marcar retorno →</button>
+      <button type="button" class="botao botao--leve" :disabled="ocupado" @click="passo = 3">Acompanhar conversa →</button>
     </section>
 
     <section v-if="passo === 3" class="missao-conversa__secao" aria-label="Acompanhar resultado">
-      <div class="missao-conversa__resumo"><span class="sobretitulo">3 · Acompanhar</span><h3>{{ estado === 'encerrada' ? 'Esta conversa foi encerrada' : envioConfirmado ? 'Envio registrado. Defina quando voltar.' : 'O que aconteceu e quando você volta?' }}</h3><p class="texto-2">{{ estado === 'encerrada' ? 'Consulte o resultado e o histórico na ficha de Vendas.' : 'Registre o envio ou a resposta. Depois, deixe uma próxima ação com data para saber quando retomar este cliente.' }}</p></div>
-      <p v-if="status" class="recado recado--ok" role="status">{{ status }} A leitura da fila será atualizada.</p>
+      <div class="missao-conversa__resumo"><span class="sobretitulo">3 · Acompanhar</span><h3>{{ estado === 'encerrada' ? 'Esta conversa foi encerrada' : 'Conversa acompanhada automaticamente' }}</h3><p class="texto-2">{{ estado === 'encerrada' ? 'Consulte o resultado e o histórico na ficha de Vendas.' : 'Envios e respostas capturados aparecem automaticamente. Você só precisa complementar o que faltar ou definir uma próxima ação.' }}</p></div>
+      <AcompanhamentoObservado :lead="lead" :saida-ao-abrir="abriu ? saidaAoAbrir : undefined" />
+      <p v-if="disponivel && props.registroDisponivel === false" class="texto-2 texto-pequeno">O acompanhamento continua disponível. Complementos e próximos passos aguardam a conexão de registro.</p>
+      <ContextoDaDecisao :lead="lead" />
       <div v-if="lead.proximoPasso && estado !== 'encerrada'" class="missao-conversa__combinado"><strong>Próximo passo · {{ formatarData(lead.proximoPasso.data) }}</strong><p>{{ lead.proximoPasso.texto }}</p><div v-if="!ajuste && !registrar && registroDisponivel" class="missao-conversa__acoes"><button type="button" class="botao" :disabled="ocupado" @click="ajuste = 'concluir'">Concluir este passo</button><button type="button" class="botao botao--leve" :disabled="ocupado" @click="ajuste = 'reagendar'">Reagendar</button></div><AjustarProximoPasso v-if="ajuste" :key="lead.id + ajuste" :lead="lead" :modo="ajuste" :disponivel="registroDisponivel" @confirmado="emit('interagiu')" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fechar="ajuste = null" /></div>
-      <p v-else-if="estado !== 'encerrada'" class="recado">Nenhum próximo passo registrado. Defina sua ação e a data para saber quando retomar.</p>
-      <div v-if="registroDisponivel && !registrar && !ajuste" class="missao-conversa__escolhas"><h4>Escolha o que registrar</h4><button class="botao botao--leve" type="button" :disabled="ocupado" @click="abrirRegistro('envio')">Enviei uma mensagem <span>Registrar o texto que saiu no WhatsApp</span></button><button class="botao botao--leve" type="button" :disabled="ocupado" @click="abrirRegistro('retorno')">O cliente respondeu <span>Guardar o que ele disse</span></button><button class="botao botao--leve" type="button" :disabled="ocupado" @click="abrirRegistro('passo')">Definir próxima ação e data <span>Por exemplo: conferir se houve retorno na sexta</span></button></div>
-      <AndamentoDaVenda v-if="registrar" :key="fatoDoRegistro" :lead="lead" :mensagem="mensagemParaRegistro || undefined" :disponivel="registroDisponivel" :fato-inicial="fatoDoRegistro" @confirmado="emit('interagiu')" @registrado="emit('registrado')" @ocupado="mudarOcupado" @responder="emit('ficha', lead.id)" />
+      <div v-if="registroDisponivel && !registrar && !ajuste" class="missao-conversa__escolhas"><button class="botao botao--leve" type="button" :disabled="ocupado" @click="abrirRegistro('passo')">Definir próxima ação e data <span>Quando houver algo a fazer além de aguardar a resposta</span></button><details class="dobra"><summary>Complementar ou registrar algo por fora</summary><p class="texto-2 texto-pequeno">Use apenas para contexto adicional, ligações, encontros ou outro canal. As mensagens já lidas dispensam registro.</p><button class="botao botao--leve" type="button" :disabled="ocupado" @click="abrirRegistro('complemento')">Complementar contexto</button><button class="botao botao--leve" type="button" :disabled="ocupado" @click="abrirRegistro('envio')">Registrar contato feito por fora</button><button class="botao botao--leve" type="button" :disabled="ocupado" @click="abrirRegistro('retorno')">Registrar retorno recebido por fora</button></details></div>
+      <AndamentoDaVenda v-if="registrar" :key="fatoDoRegistro" :lead="lead" :disponivel="registroDisponivel" :fato-inicial="fatoDoRegistro" @confirmado="emit('interagiu')" @registrado="emit('registrado')" @ocupado="mudarOcupado" @responder="emit('ficha', lead.id)" />
       <button v-if="registrar" class="botao botao--leve" type="button" :disabled="ocupado" @click="registrar = false">Fechar registro</button>
       <details class="dobra"><summary>Últimos registros · {{ lead.eventos.length }}</summary><ul class="missao-conversa__historico"><li v-for="(e, i) in lead.eventos.slice(-6).reverse()" :key="i"><strong>{{ e.rotulo }} · {{ formatarData(e.em) }}</strong><p v-if="e.texto">{{ e.texto }}</p></li></ul><p v-if="!lead.eventos.length" class="texto-2">Nenhum evento disponível nesta leitura.</p></details>
       <div class="missao-conversa__acoes"><button type="button" class="botao botao--leve" :disabled="ocupado" @click="emit('fila')">← Voltar à fila de decisões</button><button type="button" class="botao botao--leve" :disabled="ocupado" @click="emit('ficha', lead.id)">{{ estado === 'encerrada' ? 'Ver resultado na ficha' : 'Registrar desfecho na ficha' }}</button></div>
     </section>
-    <p v-if="erro" class="recado recado--erro" role="alert">{{ erro }}</p>
-    <div v-if="incerto" class="recado recado--atencao" role="status"><p>O resultado do registro é incerto. Confira o histórico na ficha antes de tentar novamente.</p><button type="button" class="botao botao--leve" @click="emit('ficha', lead.id)">Conferir histórico na ficha</button><button type="button" class="botao botao--leve" @click="incerto = false; memorizarIncerto(false); abriu = false">Conferi o histórico · liberar nova revisão</button></div>
   </article>
 </template>
 

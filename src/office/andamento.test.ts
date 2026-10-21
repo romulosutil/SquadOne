@@ -19,11 +19,19 @@ test('não grava texto vazio, sem data, data impossível ou acima do limite', ()
 
 test('contrato de cada ação é aceito pela validação real de Vendas sem outra oferta', () => {
   const agora = new Date('2026-10-18T15:00:00Z')
-  for (const fato of ['envio', 'retorno', 'passo'] as const) {
+  for (const fato of ['envio', 'retorno', 'passo', 'complemento'] as const) {
     const entrada = registroDaSala(lead, fato, 'Conferido pelo operador', '2026-10-18', agora)
     assert.deepEqual(validarRegistro(entrada, agora), entrada)
   }
   assert.throws(() => registroDaSala(lead, 'envio', 'teste', '2026-10-19', agora), /futura/)
   assert.throws(() => registroDaSala(lead, 'retorno', 'teste', '2026-10-19', agora), /futura/)
   assert.equal(registroDaSala(lead, 'passo', 'Ação planejada', '2026-10-19', agora).data, '2026-10-19')
+})
+
+test('complemento acrescenta contexto sem se passar por envio, retorno ou compromisso', () => {
+  const entrada = registroDaSala(lead, 'complemento', 'Correção: a responsável é Ana.', '2026-10-18');
+  assert.equal(entrada.tipo, 'nota');
+  assert.equal(entrada.data, '');
+  assert.match(entrada.texto, /^\[Contexto complementar · 2026-10-18\]\nCorreção:/);
+  assert.doesNotMatch(entrada.texto, /Envio confirmado|Retorno informado/);
 })
