@@ -29,6 +29,9 @@ const norm = (t) => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 const re = (fonte) => new RegExp(norm(fonte), 'i');
 const SEGMENTO = re(CONFIG.segmento);
 const FORA = re(CONFIG.fora);
+// Identidade da empresa, separada do endereço: uma clínica dentro de um shopping continua clínica.
+const FORA_ENTIDADE = CONFIG.fora_entidade ? re(CONFIG.fora_entidade) : null;
+const SITE_DIRETORIO = CONFIG.site_diretorio ? re(CONFIG.site_diretorio) : null;
 const CLIENTES = re(CONFIG.clientes);
 const PERFIL = re(CONFIG.perfil);
 const FORA_SEM_PERFIL = re(CONFIG.fora_sem_perfil);
@@ -153,6 +156,10 @@ async function checar(p) {
   if (p.businessStatus && p.businessStatus !== 'OPERATIONAL') return { ...base, descarte: 'Fechada no Google' };
   if (FORA.test(nomeTipo)) return { ...base, descarte: 'Fora do perfil (' + (tipo || 'ramo') + ')' };
 
+  if (FORA_ENTIDADE && (FORA_ENTIDADE.test(norm(nome)) || FORA_ENTIDADE.test(norm(tipo)))) {
+    return { ...base, descarte: 'Fora do perfil do Iris (centro comercial ou empreendimento, não clínica)' };
+  }
+
   let whats = null;
   let texto = '';
   let leuSite = false;
@@ -164,6 +171,12 @@ async function checar(p) {
     if (html === null) return { ...base, adiar: true };
     leuSite = true;
     texto = textoVisivel(html);
+    // Página de lojista pode descrever TEA/ABA e publicar o WhatsApp da administração no rodapé.
+    // Não atribuir esse contato à clínica, nem usar o celular do Google como fallback neste site.
+    const titulo = textoVisivel((html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i) ?? [])[1] ?? '');
+    if (SITE_DIRETORIO && (SITE_DIRETORIO.test(texto) || (FORA_ENTIDADE && FORA_ENTIDADE.test(titulo)))) {
+      return { ...base, descarte: 'Fora do perfil do Iris (site de centro comercial/diretório: contato da clínica não confirmado)' };
+    }
     whats = await whatsDoHtml(html, texto);
     // Botão de WhatsApp só na página de contato é comum em site pequeno.
     if (!whats) {

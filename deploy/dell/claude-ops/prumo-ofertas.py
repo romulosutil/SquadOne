@@ -223,6 +223,7 @@ def triar_js(oferta, o, leitores):
     cfg = {"rotulo": o["rotulo"], "plural": o["plural"], "segmento": o["segmento"], "fora": o["fora"], "clientes": CONFIG["clientes"], "sinais": o["sinais"],
            "perfil": o["perfil"], "perfil_motivo": o["perfil_motivo"], "fora_sem_perfil": o["fora_sem_perfil"],
            "fora_sem_perfil_motivo": o["fora_sem_perfil_motivo"], "solo": o.get("solo", ""), "instituicao": o.get("instituicao", ""),
+           "fora_entidade": o.get("fora_entidade", ""), "site_diretorio": o.get("site_diretorio", ""),
            "teto_por_rodada": o["teto_por_rodada"], "proxima_revisar": CONFIG["proxima_revisar"], "leitores": leitores,
            "convite_url": f"{WEBHOOK}/{o['convite']}?id="}
     return TRIAR.replace("__CONFIG__", json.dumps(cfg, ensure_ascii=False))
