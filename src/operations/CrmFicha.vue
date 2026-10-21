@@ -346,21 +346,34 @@ const conversaInteira = ref(false)
 const MAX_NA_FICHA = 12
 const conversa = computed(() => (conversaInteira.value ? conversaTodas.value : conversaTodas.value.slice(-MAX_NA_FICHA)))
 const conversaCortada = computed(() => conversa.value.length < conversaTodas.value.length)
+let controleDaConversa: AbortController | undefined
+let leadDaConversa = ''
 async function lerConversa() {
-  conversaTodas.value = []
-  conversaGuardada.value = null
+  controleDaConversa?.abort()
+  const controle = new AbortController()
+  controleDaConversa = controle
+  const prazo = setTimeout(() => controle.abort(), 15_000)
+  const id = props.lead.id
+  if (leadDaConversa !== id) {
+    conversaTodas.value = []
+    conversaGuardada.value = null
+    conversaInteira.value = false
+    leadDaConversa = id
+  }
   conversaErro.value = ''
-  conversaInteira.value = false
   try {
-    const r = await fetch(`/api/operations/crm/conversa?id=${encodeURIComponent(props.lead.chave)}`, { cache: 'no-store' })
+    const r = await fetch(`/api/operations/crm/conversa?id=${encodeURIComponent(props.lead.chave)}`, { cache: 'no-store', signal: controle.signal })
     const corpo = await r.json().catch(() => ({}))
     if (!r.ok) throw new Error(corpo.error ?? `HTTP ${r.status}`)
+    if (controle.signal.aborted || props.lead.id !== id) return
     conversaGuardada.value = Boolean(corpo.guardada)
     conversaTodas.value = Array.isArray(corpo.mensagens) ? corpo.mensagens : []
   } catch (e) {
-    conversaErro.value = `Não consegui ler a conversa: ${e instanceof Error ? e.message : String(e)}`
-  }
+    if (controleDaConversa === controle && props.lead.id === id) conversaErro.value = `Não consegui atualizar a conversa: ${e instanceof Error ? e.message : String(e)}`
+  } finally { clearTimeout(prazo) }
 }
+watch(() => JSON.stringify([props.lead.id, props.lead.conversa]), () => { void lerConversa() }, { immediate: true })
+onBeforeUnmount(() => controleDaConversa?.abort())
 
 // ------------------------------------------------------------ sinais do site (17/10/2026)
 
@@ -413,13 +426,11 @@ function verColinha(e: MouseEvent) {
 }
 
 onMounted(async () => {
-  void lerConversa()
   recomecarSinais()
   await nextTick()
   titulo.value?.focus()
 })
 watch(() => props.lead.id, () => {
-  void lerConversa()
   recomecarSinais()
   abaDeVenda.value = abaInicial()
   nota.value = ''

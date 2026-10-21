@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import https from "node:https";
 import path from "node:path";
 import express from "express";
+import { criarSinalDoCrm } from './crm-ao-vivo.ts';
 import { montarRevisaoDeResposta } from './revisao-resposta.ts';
 import { montarMensagemDaDecisao } from './mensagem-da-decisao.ts';
 import { montarDecisoesComerciais } from './decisoes-comerciais.ts';
@@ -470,6 +471,7 @@ export function createOperationsRouter(options: {
   sinaisDoSite?: LeitorDeSinais;
 }): express.Router {
   const router = express.Router();
+  const observarCrm = options.crm ? criarSinalDoCrm(options.crm.config ?? {}) : undefined;
   montarRevisaoDeResposta(router, options.crm);
   montarMensagemDaDecisao(router, { crm: options.crm, copiloto: options.copiloto });
   montarDecisoesComerciais(router, options.crm);
@@ -563,6 +565,18 @@ export function createOperationsRouter(options: {
       console.error("[operations] Falha ao ler o CRM:", error);
       res.status(500).json({ error: "Não foi possível ler o CRM agora." });
     }
+  });
+
+  router.get('/crm/ao-vivo', (_req, res) => {
+    if (!observarCrm) { res.status(503).json({ error: 'O CRM não está configurado nesta Central.' }); return; }
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    res.write('retry: 2000\n\n');
+    const parar = observarCrm(() => { if (!res.destroyed) res.write('event: atualizar\ndata: {}\n\n'); });
+    const pulso = setInterval(() => { if (!res.destroyed) res.write(': conectado\n\n'); }, 20_000);
+    res.on('close', () => { clearInterval(pulso); parar(); });
   });
 
   // A conversa do lead no WhatsApp (16/10/2026), como o observador gravou: só leitura, só leads.

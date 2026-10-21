@@ -7,6 +7,7 @@ import MinhasDecisoes from '../office/MinhasDecisoes.vue'
 import { decisoesDoEscritorio } from '../office/decisoes'
 import FrenteComercial from '../operations/FrenteComercial.vue'
 import { useAtualizacaoViva } from '../casca/atualizacao-viva'
+import { useSinalDoCrm } from '../casca/sinal-do-crm'
 import { useAgentes } from '../agentes/estado'
 import { useOverview } from '../casca/overview'
 import { andarDaCentral, gravarAndar, lerAndar } from '../casca/central'
@@ -63,10 +64,16 @@ async function lerSugestoes(signal: AbortSignal) {
 }
 async function lerTudo(signal: AbortSignal) {
   agora.value = Date.now()
-  await Promise.allSettled([lerCrm(signal), lerVenda(signal), lerTime(signal), lerFrente(signal), lerSugestoes(signal)])
-  return !erroDoCrm.value
+  await Promise.allSettled([lerVenda(signal), lerTime(signal), lerFrente(signal), lerSugestoes(signal)])
 }
-const { atualizando, conferidoEm, sincronizar } = useAtualizacaoViva(lerTudo)
+useAtualizacaoViva(lerTudo)
+const { atualizando, conferidoEm, sincronizar } = useAtualizacaoViva(async signal => {
+  agora.value = Date.now()
+  await lerCrm(signal)
+  return !erroDoCrm.value
+}, 15_000)
+// Mensagens novas não precisam esperar a consulta das outras integrações.
+const { conectado: crmAoVivo } = useSinalDoCrm(sincronizar)
 const filaPrioritaria = computed(() => filaDaTela(visaoDoCrm.value, { agora: agora.value, sugestoes: sugestoes.value }, resolvidas.value))
 // A mesma lista da aba "Conversas para você" de Vendas: conversas, combinados e os passos da fila de venda.
 const conversasPrioritarias = computed(() => conversasParaVoce(visaoDoCrm.value, agora.value, resolvidas.value))
@@ -117,7 +124,7 @@ onBeforeUnmount(() => { clearInterval(relogio); atrasos.forEach(clearTimeout) })
     <h1 class="so-leitor">Escritório de agentes · Central de comando</h1>
     <header class="central-imersiva__hud">
       <label class="central-imersiva__andar"><span>Escritório</span><select v-if="squads.length" :value="andar?.id" aria-label="Equipe no escritório" @change="escolherAndar(($event.target as HTMLSelectElement).value)"><option v-for="s in squads" :key="s.id" :value="s.id">{{ s.nome }}</option></select></label>
-      <span class="central-imersiva__sinal" role="status">{{ conferidoEm ? 'Ao vivo' : 'Conectando…' }}<template v-if="conferidoEm"> · {{ new Date(conferidoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) }}</template></span>
+      <span class="central-imersiva__sinal" role="status">{{ erroDoCrm ? 'Sem leitura recente' : crmAoVivo && conferidoEm ? 'Ao vivo' : conferidoEm ? 'Atualização periódica' : 'Conectando…' }}<template v-if="conferidoEm"> · {{ new Date(conferidoEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }}</template></span>
     </header>
     <GameMap v-if="andar" :key="andar.id" :squad="andar" imersivo :baloes="baloes" :painel-agentes="resumoAgentes" :painel-decisoes="resumoDecisoes" @painel="painel = $event" @abrir-agente="abrirAgente" />
     <p v-else class="central-imersiva__carregando" role="status">{{ semAndar }}</p>

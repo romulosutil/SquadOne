@@ -87,12 +87,51 @@ async function listen(server: http.Server): Promise<string> {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
+describe('CRM ao vivo', () => {
+  it('avisa novas mensagens sem transportar conteúdo privado nem registrar fatos comerciais', async () => {
+    const dataDir = await tempDir('squadone-crm-vivo-rota-');
+    const conversas = path.join(dataDir, 'conversas');
+    await fs.mkdir(conversas);
+    let leituras = 0, registros = 0;
+    const crm = { config: { retrato: path.join(dataDir, 'crm.json'), conversas }, visao: async () => { leituras++; return {}; }, registrar: async () => { registros++; } } as unknown as CrmStore;
+    const app = express();
+    app.use('/api/operations', createOperationsRouter({ config: { tools: {} } as OperationsConfig, store: new OperationsProjectStore(dataDir), readings: new HermesReadingsStore(dataDir), dataDir, readAgenda: async () => ({ state: 'disconnected', events: [] }), crm }));
+    const base = await listen(http.createServer(app));
+    const controle = new AbortController();
+    const prazo = setTimeout(() => controle.abort(), 5_000);
+    const r = await fetch(`${base}/api/operations/crm/ao-vivo`, { signal: controle.signal });
+    const leitor = r.body!.getReader();
+    const decoder = new TextDecoder();
+    const receber = async () => {
+      let texto = '';
+      while (!texto.includes('event: atualizar\ndata: {}\n\n')) {
+        const parte = await leitor.read();
+        assert.equal(parte.done, false);
+        texto += decoder.decode(parte.value);
+      }
+      return texto;
+    };
+    try {
+      assert.equal(r.status, 200);
+      assert.match(r.headers.get('content-type')!, /text\/event-stream/);
+      assert.equal(r.headers.get('x-accel-buffering'), 'no');
+      await receber(); // A leitura inicial cobre a janela de conexão.
+      await fs.writeFile(path.join(conversas, 'numero-privado.jsonl'), 'texto privado do cliente');
+      const evento = await receber();
+      assert.doesNotMatch(evento, /numero-privado|texto privado|cliente/);
+      assert.equal(leituras, 0);
+      assert.equal(registros, 0);
+    } finally { clearTimeout(prazo); controle.abort(); await leitor.cancel().catch(() => undefined); }
+  });
+});
+
 // O config/operations.example.json como era até 12/10/2026, com a entrada do
 // Syncthing no mesmo formato da configuração real do Dell. Precisa continuar
 // válido: o Dell fica com a entrada até ela ser tirada à mão depois do deploy.
 const EXEMPLO_ANTIGO_COM_SYNCTHING = {
   displayName: "Seu nome",
   autoDirectory: "/home/usuario/auto",
+  autoNotificationStateFile: "/home/usuario/.hermes/leads-notificados.json",
   tools: {
     hermes: { label: "Hermes Chat Web", description: "Conversas e agentes", launchUrl: "http://127.0.0.1:9119/chat", healthUrl: "http://127.0.0.1:9119/api/status" },
     ide: { label: "IDE", description: "code-server", launchUrl: "http://127.0.0.1:8080/", healthUrl: "http://127.0.0.1:8080/healthz" },
