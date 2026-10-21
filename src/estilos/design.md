@@ -263,3 +263,6 @@ envio a folha não fecha ("Aguarde…" no lugar de "Fechar").
 ### Escritório integrado · 18/10/2026
 
 A navegação flutua sobre a sala: amarelo marca somente a página atual; o acesso verde ao Assistente é uma ação separada, com aria-expanded. No desktop, a conversa ocupa uma área lateral independente e pode ser recolhida. O cenário ocupa toda a altura sem reservar faixa para o menu. No celular, a sala mantém escala legível e permite exploração horizontal; os cards continuam com uma única rolagem vertical. O card de agente prioriza o canal direto e diferencia conversas de clientes, agenda e operação, sem abas de nomes semelhantes.
+
+
+Minhas decisões (21/10/2026): fila com uma linha por cliente, busca, oferta e páginas; Precisa de você, Em acompanhamento e Encerradas. Cada decisão percorre Entender, Agir e Acompanhar. Procedimentos distinguem robô, recepção, áudio sem transcrição, espera e desfecho. Mensagens vêm da fila ou do copiloto com contexto relido antes e depois do preparo; mudança invalida a sugestão. Robô recebe orientação de menu e espera, sem tratar resposta automática como interesse ou liberar retomada fora das travas da ficha. Abrir WhatsApp não grava envio; confirmação e próximo passo são explícitos. Preserva seleção e rascunhos durante atualização.

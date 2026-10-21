@@ -5,8 +5,8 @@ import { ajusteDoPasso } from '../operations/ajuste-do-passo'
 import { diaEmSP } from '../operations/retomadas'
 import { hashDoContexto } from '../operations/revisao-resposta'
 import { focarNaSala } from './foco'
-const props = defineProps<{ lead: CrmLead; modo: 'concluir' | 'reagendar' }>()
-const emit = defineEmits<{ registrado: []; fechar: [] }>()
+const props = defineProps<{ lead: CrmLead; modo: 'concluir' | 'reagendar'; disponivel?: boolean }>()
+const emit = defineEmits<{ registrado: []; fechar: []; ocupado: [valor: boolean] }>()
 const contextoInicial = hashDoContexto(props.lead)
 const hoje = diaEmSP(new Date())
 const original = { ...props.lead.proximoPasso! }
@@ -21,13 +21,14 @@ const ancora = ref<HTMLElement | null>(null)
 const atualizado = computed(() => gravado.value && (props.modo === 'concluir' ? !props.lead.proximoPasso : props.lead.proximoPasso?.texto === previa.value?.texto && props.lead.proximoPasso?.data === previa.value?.data && props.lead.proximoPasso?.registradoEm !== original.registradoEm))
 watch(atualizado, async v => { if (v) { memoria(''); await nextTick(); focarNaSala(ancora.value) } })
 async function revisar() {
+  if (props.disponivel === false) return
   erro.value = ''
   try { if (await hashDoContexto(props.lead) !== await contextoInicial) throw new Error('O contexto mudou. Feche esta revisão, atualize a leitura e confira novamente.'); const r = ajusteDoPasso(props.modo, texto.value, data.value); previa.value = { ...r, contextoHash: await hashDoContexto(props.lead) }; await nextTick(); focarNaSala(ancora.value) }
   catch (e) { erro.value = (e as Error).message }
 }
 async function confirmar() {
-  if (!previa.value || ocupado.value || incerto.value || gravado.value) return
-  ocupado.value = true; erro.value = ''
+  if (!previa.value || ocupado.value || incerto.value || gravado.value || props.disponivel === false) return
+  ocupado.value = true; emit('ocupado', true); erro.value = ''
   try {
     memoria('incerto')
     const r = await fetch('/api/operations/crm/proximo-passo/ajustar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...previa.value, acao: props.modo, produto: props.lead.produto, id: props.lead.id }) })
@@ -37,7 +38,7 @@ async function confirmar() {
   } catch (e) {
     if (e instanceof TypeError) incerto.value = true
     erro.value = (e as Error).message
-  } finally { ocupado.value = false }
+  } finally { ocupado.value = false; emit('ocupado', false) }
 }
 nextTick(() => focarNaSala(ancora.value))
 </script>
@@ -52,13 +53,13 @@ nextTick(() => focarNaSala(ancora.value))
       <label v-if="modo === 'reagendar'" class="rotulo">Próxima ação para avançar<textarea v-model="texto" class="campo" maxlength="900" rows="3" required /></label>
       <label class="rotulo">{{ modo === 'concluir' ? 'Quando você concluiu?' : 'Nova data' }}<input v-model="data" class="campo" type="date" :max="modo === 'concluir' ? hoje : undefined" :min="modo === 'reagendar' ? hoje : undefined" required /></label>
       <p class="texto-2 texto-pequeno">{{ modo === 'concluir' ? 'Confirme apenas o passo que você já resolveu. Não marca a venda como ganha ou perdida. As regras de prazo de Vendas continuam valendo.' : 'Indique sua ação planejada; só descreva como combinado aquilo que o cliente confirmou.' }}</p>
-      <button type="submit" class="botao botao--primario">Revisar alteração</button>
+      <button type="submit" class="botao botao--primario" :disabled="disponivel === false">Revisar alteração</button>
     </form>
     <template v-if="previa && !gravado">
       <p v-if="modo === 'concluir'">Ao confirmar, este passo será concluído em {{ previa.data.split('-').reverse().join('/') }} e deixará de ser um próximo passo ativo após atualizar Vendas.</p>
       <template v-else><p class="ajuste-passo__texto">Novo passo: {{ previa.texto }}</p><p>Nova data: {{ previa.data.split('-').reverse().join('/') }}. {{ previa.data === hoje ? 'Fica na lista de Hoje após atualizar Vendas.' : original.data <= hoje ? 'Sai de Hoje quando a leitura for atualizada.' : 'Passa a aparecer na nova data após atualizar Vendas.' }}</p></template>
       <p class="texto-2 texto-pequeno">O histórico fica preservado. Não envia mensagem nem altera o calendário.</p>
-      <button type="button" class="botao botao--primario" :disabled="ocupado || incerto" @click="confirmar">{{ ocupado ? 'Gravando…' : modo === 'concluir' ? 'Confirmar conclusão do passo' : 'Confirmar reagendamento' }}</button>
+      <button type="button" class="botao botao--primario" :disabled="ocupado || incerto || disponivel === false" @click="confirmar">{{ ocupado ? 'Gravando…' : modo === 'concluir' ? 'Confirmar conclusão do passo' : 'Confirmar reagendamento' }}</button>
       <button v-if="!incerto" type="button" class="botao botao--leve" :disabled="ocupado" @click="previa = null">Voltar e editar</button>
     </template>
     <p v-if="erro" role="alert" class="recado recado--atencao">{{ erro }}</p>

@@ -4,6 +4,7 @@ import https from "node:https";
 import path from "node:path";
 import express from "express";
 import { montarRevisaoDeResposta } from './revisao-resposta.ts';
+import { montarMensagemDaDecisao } from './mensagem-da-decisao.ts';
 import { montarDecisoesComerciais } from './decisoes-comerciais.ts';
 import os from "node:os";
 import { CrmStore, RegistroFalhou, RegistroIndisponivel, RegistroInvalido, siteProprioDoLead } from "./crm.ts";
@@ -470,6 +471,7 @@ export function createOperationsRouter(options: {
 }): express.Router {
   const router = express.Router();
   montarRevisaoDeResposta(router, options.crm);
+  montarMensagemDaDecisao(router, { crm: options.crm, copiloto: options.copiloto });
   montarDecisoesComerciais(router, options.crm);
 
   router.get("/overview", async (_req, res) => {

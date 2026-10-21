@@ -4,12 +4,12 @@ import type { CrmLead } from '../operations/types'
 import { focarNaSala } from './foco'
 import { ultimoRetornoRegistrado } from '../operations/retorno-da-venda'
 import { registroDaSala, type FatoDaVenda } from './andamento'
-const props = defineProps<{ lead: CrmLead; mensagem?: string }>()
-const emit = defineEmits<{ registrado: []; responder: [] }>()
+const props = defineProps<{ lead: CrmLead; mensagem?: string; fatoInicial?: FatoDaVenda; disponivel?: boolean }>()
+const emit = defineEmits<{ registrado: []; responder: []; ocupado: [valor: boolean] }>()
 const chave = `squadone.andamento.${JSON.stringify([props.lead.produto, props.lead.id])}`
 let salvo: { fato?: FatoDaVenda; texto?: string; data?: string; incerto?: boolean } = {}
 try { salvo = JSON.parse(sessionStorage.getItem(chave) ?? '{}') ?? {} } catch { /* O formulário continua sem persistência. */ }
-const fato = ref<FatoDaVenda>(props.mensagem ? 'envio' : ['envio', 'retorno', 'passo'].includes(salvo.fato ?? '') ? salvo.fato! : 'retorno')
+const fato = ref<FatoDaVenda>(props.mensagem ? 'envio' : ['envio', 'retorno', 'passo'].includes(salvo.fato ?? '') ? salvo.fato! : props.fatoInicial ?? 'retorno')
 const texto = ref(props.mensagem || (typeof salvo.texto === 'string' ? salvo.texto.slice(0, 900) : ''))
 const data = ref(!props.mensagem && typeof salvo.data === 'string' ? salvo.data : '')
 const tituloDaPrevia = ref<HTMLElement | null>(null)
@@ -28,14 +28,15 @@ function escolher(valor: FatoDaVenda) {
   fato.value = valor; texto.value = rascunhos[valor]?.texto ?? (valor === 'envio' ? props.mensagem ?? '' : ''); data.value = rascunhos[valor]?.data ?? ''; previa.value = null; erro.value = ''; sucesso.value = ''
 }
 function revisar() {
+  if (props.disponivel === false) return
   erro.value = ''; sucesso.value = ''
   try { previa.value = registroDaSala(props.lead, fato.value, texto.value, data.value); nextTick(() => focarNaSala(tituloDaPrevia.value)) }
   catch (e) { erro.value = e instanceof Error ? e.message : 'Confira os campos.' }
 }
 async function confirmar() {
-  if (!previa.value || salvando.value || incerto.value) return
+  if (!previa.value || salvando.value || incerto.value || props.disponivel === false) return
   const registro = previa.value
-  salvando.value = true; erro.value = ''
+  salvando.value = true; emit('ocupado', true); erro.value = ''
   try {
     const r = await fetch('/api/operations/crm/registro', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(registro) })
     const corpo = await r.json().catch(() => ({}))
@@ -46,7 +47,7 @@ async function confirmar() {
   } catch (e) {
     if (e instanceof TypeError) incerto.value = true
     erro.value = `${e instanceof Error ? e.message : 'Não foi possível confirmar.'}${incerto.value ? ' O resultado é incerto. Confira o histórico antes de repetir para evitar duplicação.' : ''}`
-  } finally { salvando.value = false }
+  } finally { salvando.value = false; emit('ocupado', false) }
 }
 </script>
 <template>
@@ -61,13 +62,13 @@ async function confirmar() {
       <label class="rotulo">{{ titulo }}<textarea v-model="texto" class="campo" rows="3" maxlength="900" required /></label>
       <p class="texto-2 texto-pequeno">{{ fato === 'envio' ? 'Confira o conteúdo que realmente saiu no WhatsApp, incluindo suas edições.' : fato === 'retorno' ? 'Registre as palavras do cliente e quem respondeu. Diferencie pedido, objeção e compromisso; não deduza interesse.' : 'Defina quem faz o quê e quando. Se ainda não combinaram, indique que é sua ação planejada. Isto não agenda envio nem compromisso no calendário.' }}</p>
       <label class="rotulo">{{ fato === 'passo' ? 'Data do próximo passo' : 'Data em que aconteceu' }}<input v-model="data" class="campo" type="date" required /></label>
-      <button type="submit" class="botao botao--primario">Revisar registro</button>
+      <button type="submit" class="botao botao--primario" :disabled="disponivel === false">Revisar registro</button>
     </form>
     <div v-if="previa" class="andamento-venda__previa">
       <strong ref="tituloDaPrevia" tabindex="-1">Confirmar para {{ lead.empresa }} · {{ lead.produto }}</strong>
       <p class="andamento-venda__texto">{{ previa.texto }}</p><p v-if="previa.data">Data: {{ previa.data.split('-').reverse().join('/') }}</p>
       <p class="texto-2 texto-pequeno">{{ fato === 'passo' ? 'Atualiza o próximo passo atual em Vendas.' : 'Grava uma nota identificada em Vendas, sem alterar a etapa ou a classificação da conversa.' }}</p>
-      <button type="button" class="botao botao--primario" :disabled="salvando || incerto" @click="confirmar">{{ salvando ? 'Gravando…' : 'Confirmar e registrar' }}</button>
+      <button type="button" class="botao botao--primario" :disabled="salvando || incerto || disponivel === false" @click="confirmar">{{ salvando ? 'Gravando…' : 'Confirmar e registrar' }}</button>
       <button type="button" class="botao botao--leve" :disabled="salvando" @click="previa = null">Voltar e editar</button>
     </div>
     <p v-if="erro" role="alert" class="recado recado--atencao">{{ erro }}</p>

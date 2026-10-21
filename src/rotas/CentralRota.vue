@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import GameMap from '../components/GameMap.vue'
 import Sheet from '../components/Sheet.vue'
 import SalaComando from '../office/SalaComando.vue'
-import MissaoDaConversa from '../office/MissaoDaConversa.vue'
+import MinhasDecisoes from '../office/MinhasDecisoes.vue'
+import { decisoesDoEscritorio } from '../office/decisoes'
 import FrenteComercial from '../operations/FrenteComercial.vue'
 import { useAtualizacaoViva } from '../casca/atualizacao-viva'
 import { useAgentes } from '../agentes/estado'
@@ -13,9 +14,9 @@ import type { BalaoDaSala } from '../office/baloes'
 import { fonteDoCrm, operacaoDaSala, temOperacao, type OperacaoDaSala } from '../office/operacao'
 import { conversasParaVoce } from '../operations/conversas-para-conduzir'
 import { recomendacoesDoTime } from '../operations/recomendacoes-do-time'
-import { acaoDoLead, filaDaTela, type Resolvidas, type SugestaoDeVenda } from '../operations/proxima-venda'
+import { filaDaTela, type Resolvidas, type SugestaoDeVenda } from '../operations/proxima-venda'
 import { lerFrente, useFrente } from '../casca/frente'
-import type { CrmProduto, CrmVisao } from '../operations/types'
+import type { CrmVisao } from '../operations/types'
 import type { TimeLido } from '../casca/hoje'
 import type { Capacidades } from '../casca/destinos'
 import { navegar, interceptarLink } from '../casca/rota'
@@ -70,24 +71,8 @@ const filaPrioritaria = computed(() => filaDaTela(visaoDoCrm.value, { agora: ago
 // A mesma lista da aba "Conversas para você" de Vendas: conversas, combinados e os passos da fila de venda.
 const conversasPrioritarias = computed(() => conversasParaVoce(visaoDoCrm.value, agora.value, resolvidas.value))
 const recomendacoes = computed(() => !erroFrente.value && frente.value?.ativo && frente.value.estado !== 'sem-sinal' ? recomendacoesDoTime({ avaliados: frente.value.avaliados ?? 0, selecionados: frente.value.selecionados ?? 0, enviados: frente.value.enviados ?? 0, setores: frente.value.setores ?? [] }) : [])
-const ofertas: { id: CrmProduto; nome: string }[] = [
-  { id: 'site', nome: 'Site' }, { id: 'prumo', nome: 'PRUMO' }, { id: 'iris', nome: 'Iris' },
-  { id: 'plus', nome: 'Plus' }, { id: 'estampa', nome: 'Estamparia' },
-]
 const acoesDoCrm = computed(() => erroDoCrm.value || visaoDoCrm.value?.estado !== 'ok' ? [] : filaPrioritaria.value.filter(a => !a.primeiroContato))
-const proximaAcaoDoCrm = computed(() => acoesDoCrm.value[0] ?? null)
-const pendenciasPorOferta = computed(() => ofertas.map(o => ({ ...o, total: acoesDoCrm.value.filter(a => a.produto === o.id).length })))
-const totaisDoFunil = computed(() => {
-  const leads = visaoDoCrm.value?.estado === 'ok' ? visaoDoCrm.value.leads : []
-  return {
-    novo: leads.filter(l => l.etapa === 'novo').length,
-    contato: leads.filter(l => l.etapa === 'contato').length,
-    proposta: leads.filter(l => l.etapa === 'proposta').length,
-    ganho: leads.filter(l => l.etapa === 'ganho').length,
-    perdido: leads.filter(l => l.etapa === 'perdido').length,
-    conversa: leads.filter(l => !!l.conversa?.ultimaEntrada).length,
-  }
-})
+const decisoesPendentes = computed(() => decisoesDoEscritorio(visaoDoCrm.value?.leads ?? [], acoesDoCrm.value, agora.value, conversasPrioritarias.value).filter(d => d.estado === 'agora'))
 const dellLido = computed(() => overview.value ? resumo.value : null)
 const andarEscolhido = ref<string | null>(lerAndar(armazenamento()))
 const squads = computed(() => props.capacidades.agentes ? roster.value?.squads ?? [] : [])
@@ -100,18 +85,7 @@ const operacoes = computed<Record<string, OperacaoDaSala>>(() => {
 })
 const agenteDaMissao = computed(() => squads.value.flatMap(s => s.dominios).find(d => d.id === 'prumo--geral')?.po)
 const baloes = computed<Record<string, BalaoDaSala>>(() => conversasPrioritarias.value.length && agenteDaMissao.value ? { [agenteDaMissao.value.id]: { texto: 'Sua vez', tom: 'amarelo', destaque: true } } : {})
-const missaoId = ref<string | null>(null)
 const guardandoContexto = ref(false)
-watch(painel, p => { if (p === 'decisoes') missaoId.value = conversasPrioritarias.value[0]?.lead.id ?? null })
-const leadDaMissao = computed(() => conversasPrioritarias.value.find(m => m.lead.id === missaoId.value)?.lead ?? conversasPrioritarias.value[0]?.lead ?? null)
-// A ação da fila de venda para o lead da missão (a mesma da Próxima venda e da Ficha): o cartão mostra o
-// passo, a mensagem pronta e o link, em vez de só abrir a conversa.
-const acaoDaMissao = computed(() => {
-  const item = conversasPrioritarias.value.find(m => m.lead.id === leadDaMissao.value?.id)
-  if (item?.acao) return item.acao
-  return visaoDoCrm.value?.estado === 'ok' && leadDaMissao.value ? acaoDoLead(visaoDoCrm.value, leadDaMissao.value.id, agora.value, sugestoes.value.get(leadDaMissao.value.id)) : null
-})
-const motivoDaMissao = computed(() => conversasPrioritarias.value.find(m => m.lead.id === leadDaMissao.value?.id)?.rotulo ?? 'Andamento atualizado')
 const turnoDoTime = computed(() => erroFrente.value ? 'Time sem leitura recente' : !frente.value ? 'Lendo o time…' : frente.value.cicloParado ? 'Time ativo, mas o ciclo está parado' : ({ avaliando: 'Turno do time · avaliando', enviando: 'Turno do time · iniciando contato', 'fora-do-horario': 'Fila pronta · próximo expediente', pausado: 'Primeiros contatos pausados', bloqueado: 'Time precisa de atenção', pronto: 'Time acompanhando a fila', concluido: 'Rodada do time concluída' }[frente.value.estado] ?? 'Time acompanhando'))
 function abrirFichaDaMissao(id: string) { painel.value = null; navegar(`/crm?lead=${encodeURIComponent(id)}`) }
 const resumoAgentes = computed(() => ({
@@ -119,8 +93,8 @@ const resumoAgentes = computed(() => ({
   detalhe: erroFrente.value ? 'Aguardando a integração' : frente.value?.cicloParado ? 'Ciclo do time parado' : frente.value?.estado === 'avaliando' ? 'Time avaliando os próximos contatos' : frente.value?.estado === 'pausado' ? 'Primeiros contatos pausados' : frente.value?.fila.find(c => c.estado === 'pronto') ? `Próximo WhatsApp: ${frente.value.fila.find(c => c.estado === 'pronto')!.empresa}` : frente.value?.detalhe ?? 'Decisões e trabalho do time',
 }))
 const resumoDecisoes = computed(() => ({
-  resumo: erroDoCrm.value ? 'Sem leitura recente' : !visaoDoCrm.value ? 'Lendo as conversas…' : `${acoesDoCrm.value.length} ações de Vendas · ${recomendacoes.value.length} alertas da prospecção`,
-  detalhe: proximaAcaoDoCrm.value?.titulo ?? recomendacoes.value[0]?.titulo ?? 'Veja o que precisa de você',
+  resumo: erroDoCrm.value ? 'Sem leitura recente' : !visaoDoCrm.value ? 'Lendo as conversas…' : `${decisoesPendentes.value.length} decisões pendentes · ${recomendacoes.value.length} alertas`,
+  detalhe: decisoesPendentes.value[0]?.lead.empresa ?? recomendacoes.value[0]?.titulo ?? 'Veja os acompanhamentos e resultados',
 }))
 const estadoSemMissao = computed(() => erroDoCrm.value ? 'Não foi possível conferir suas conversas. O time tentará novamente.' : !visaoDoCrm.value ? 'Conferindo o que precisa de você…' : 'Nenhuma conversa pede sua ação agora.')
 const salaAberta = computed(() => andar.value?.dominios.find(d => d.id === pessoaSelecionada.value?.salaId) ?? null)
@@ -148,12 +122,12 @@ onBeforeUnmount(() => { clearInterval(relogio); atrasos.forEach(clearTimeout) })
     <GameMap v-if="andar" :key="andar.id" :squad="andar" imersivo :baloes="baloes" :painel-agentes="resumoAgentes" :painel-decisoes="resumoDecisoes" @painel="painel = $event" @abrir-agente="abrirAgente" />
     <p v-else class="central-imersiva__carregando" role="status">{{ semAndar }}</p>
     <span class="central-imersiva__explorar" aria-hidden="true">↔ Deslize para explorar o escritório</span>
-    <div class="central-imersiva__turnos"><button type="button" @click="painel = 'agentes'"><span class="central-imersiva__ponto"></span>{{ turnoDoTime }}</button><button v-if="acoesDoCrm.length || conversasPrioritarias.length || recomendacoes.length" class="central-imersiva__sua-vez" type="button" @click="painel = 'decisoes'">{{ acoesDoCrm.length ? `Sua vez · ${acoesDoCrm.length} ${acoesDoCrm.length === 1 ? 'ação de Vendas' : 'ações de Vendas'}` : conversasPrioritarias.length ? `Sua vez · ${conversasPrioritarias.length} ${conversasPrioritarias.length === 1 ? 'conversa' : 'conversas'}` : `${recomendacoes.length} alertas da prospecção` }}</button><span v-else class="central-imersiva__sem-missao">{{ estadoSemMissao }}</span></div>
+    <div class="central-imersiva__turnos"><button type="button" @click="painel = 'agentes'"><span class="central-imersiva__ponto"></span>{{ turnoDoTime }}</button><button class="central-imersiva__sua-vez" type="button" @click="painel = 'decisoes'">{{ decisoesPendentes.length ? `Sua vez · ${decisoesPendentes.length} ${decisoesPendentes.length === 1 ? 'decisão' : 'decisões'}` : 'Minhas decisões e acompanhamentos' }}</button><span v-if="!decisoesPendentes.length" class="central-imersiva__sem-missao">{{ estadoSemMissao }}</span></div>
 
-    <Sheet v-if="painel" :bloqueada="guardandoContexto" flutuante :titulo="painel === 'agentes' ? 'Decisões e andamento dos agentes' : painel === 'decisoes' ? 'Minhas decisões' : pessoaAberta?.nome ?? 'Agente'" :subtitulo="painel === 'agente' ? pessoaAberta?.papel : 'Seu escritório continua ao fundo'" @fechar="painel = null">
+    <Sheet v-if="painel" :bloqueada="guardandoContexto" flutuante :titulo="painel === 'agentes' ? 'Decisões e andamento dos agentes' : painel === 'decisoes' ? 'Minhas decisões' : pessoaAberta?.nome ?? 'Agente'" :subtitulo="painel === 'agente' ? pessoaAberta?.papel : painel === 'decisoes' ? 'Entenda o contexto, escolha a ação e acompanhe o resultado' : 'Seu escritório continua ao fundo'" @fechar="painel = null">
       <div class="central-imersiva__painel" @click="aoClicarNoPainel">
         <template v-if="painel === 'agentes'"><FrenteComercial /><p class="texto-2 texto-pequeno">As avaliações, os envios e as respostas vêm das integrações. Abra um agente no escritório para acompanhar seus pedidos e conversar.</p></template>
-        <template v-else-if="painel === 'decisoes'"><section v-if="visaoDoCrm?.estado === 'ok' && !erroDoCrm" class="central-imersiva__recomendacoes" aria-label="Prioridade entre ofertas em Vendas"><h2>Fila de Vendas · todas as ofertas</h2><p class="texto-2 texto-pequeno">A prioridade das suas ações usa etapas, respostas, compromissos e a última conversa observada no WhatsApp. O time avalia os novos primeiros contatos nas cinco ofertas.</p><p class="texto-2 texto-pequeno">Funil observado: {{ totaisDoFunil.novo }} novos · {{ totaisDoFunil.contato }} em contato · {{ totaisDoFunil.proposta }} em proposta · {{ totaisDoFunil.ganho }} ganhos · {{ totaisDoFunil.perdido }} perdidos · {{ totaisDoFunil.conversa }} com entrada observada no WhatsApp.</p><div class="central-imersiva__ofertas"><span v-for="o in pendenciasPorOferta" :key="o.id" class="etiqueta">{{ o.nome }} · {{ o.total }} ações</span></div><article v-if="proximaAcaoDoCrm" class="recado"><strong>Próxima ação: {{ proximaAcaoDoCrm.titulo }}</strong><p>{{ proximaAcaoDoCrm.contexto }}</p><p>{{ proximaAcaoDoCrm.porque }}</p><p v-if="proximaAcaoDoCrm.conversa">{{ proximaAcaoDoCrm.conversa }}</p><p v-if="proximaAcaoDoCrm.copiloto">Leitura do copiloto: {{ proximaAcaoDoCrm.copiloto.porque }}</p><p>{{ proximaAcaoDoCrm.tatica }}</p><button class="botao botao--leve" type="button" @click="abrirFichaDaMissao(proximaAcaoDoCrm.leadId)">Abrir ficha</button></article><p v-else class="texto-2 texto-pequeno">Nenhuma conversa ou compromisso da fila geral pede ação agora. Primeiros contatos aguardam a avaliação e o ritmo próprios.</p></section><section v-if="recomendacoes.length" class="central-imersiva__recomendacoes" aria-label="Alertas da prospecção"><h2>Alertas da prospecção</h2><article v-for="r in recomendacoes" :key="r.id" class="recado"><strong>{{ r.titulo }}</strong><p>{{ r.evidencia }}</p><p>{{ r.proximoPasso }}</p></article><button class="botao botao--leve" type="button" @click="painel = 'agentes'">Ver métricas por setor</button></section><MissaoDaConversa v-if="leadDaMissao" :key="leadDaMissao.id" :lead="leadDaMissao" :agente="agenteDaMissao" :disponivel="visaoDoCrm?.registro.disponivel ?? false" :motivo="motivoDaMissao" :acao="acaoDaMissao" @ficha="abrirFichaDaMissao" @registrado="relerDepoisDoRegistro" @ocupado="guardandoContexto = $event" /><p v-else-if="!recomendacoes.length && !proximaAcaoDoCrm && (erroDoCrm || !visaoDoCrm)" class="recado">{{ estadoSemMissao }}</p><details v-if="conversasPrioritarias.length > 1" class="dobra"><summary>Outras missões · {{ conversasPrioritarias.length - 1 }}</summary><button v-for="m in conversasPrioritarias.filter(m => m.lead.id !== leadDaMissao?.id)" :key="m.lead.id" class="botao botao--leve" type="button" @click="missaoId = m.lead.id">{{ m.lead.empresa }}</button></details></template>
+        <MinhasDecisoes v-else-if="painel === 'decisoes'" :visao="visaoDoCrm" :erro="erroDoCrm" :acoes="acoesDoCrm" :conversas="conversasPrioritarias" :agora="agora" :agente="agenteDaMissao" :alertas="recomendacoes" :atualizando="atualizando" :conferido-em="conferidoEm" @ficha="abrirFichaDaMissao" @registrado="relerDepoisDoRegistro" @ocupado="guardandoContexto = $event" @atualizar="sincronizar" @agentes="painel = 'agentes'" />
         <SalaComando v-else-if="salaAberta && andar" :key="salaAberta.id" :sala="salaAberta" :squad="andar" :time="timeLido" :conversar="pessoaSelecionada" :visao="visaoDoCrm" :erro="erroDoCrm" :fila="filaPrioritaria" :operacao="operacoes[salaAberta.id]" @registrado="relerDepoisDoRegistro" />
       </div>
     </Sheet>
