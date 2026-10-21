@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { decisoesDoEscritorio, proximaDecisaoPorPrioridade } from './decisoes.ts'
+import { decisoesDoEscritorio, novaRespostaEnviada, proximaDecisaoPorPrioridade } from './decisoes.ts'
 import { notaDoAprendizado } from '../operations/aprendizado-comercial.ts'
 import type { CrmLead } from '../operations/types.ts'
 import type { AcaoDeVenda } from '../operations/proxima-venda.ts'
@@ -79,4 +79,22 @@ test('planejar retorno futuro move para acompanhamento; resposta posterior recup
   assert.equal(decisoesDoEscritorio([cliente], [{ ...acao('plano'), tipo: 'responder' }], agora)[0].estado, 'acompanhando')
   const novo = { ...cliente, conversa: { ...resposta!, ultima: { ...resposta!.ultima, em: '2026-10-21T15:10:00Z' } } }
   assert.equal(decisoesDoEscritorio([novo], [{ ...acao('plano'), tipo: 'responder' }], agora)[0].estado, 'agora')
+})
+
+test('nova saída observada aciona avanço mesmo com outra tarefa ainda ativa no cliente', () => {
+  const antes = lead('a', { conversa: resposta })
+  const depois = { ...antes, conversa: { ...resposta!, ultimaSaida: '2026-10-21T15:05:00Z', ultima: { direcao: 'saida' as const, em: '2026-10-21T15:05:00Z', trecho: 'Expliquei como funciona.' } } }
+  assert.equal(novaRespostaEnviada(antes, depois), true)
+  assert.equal(novaRespostaEnviada(depois, { ...depois }), false, 'releitura do mesmo envio não avança outra vez')
+  assert.equal(novaRespostaEnviada(antes, { ...depois, id: 'b' }), false, 'abrir outro cliente com envio antigo não avança')
+  assert.equal(novaRespostaEnviada(undefined, depois), false)
+})
+
+test('retorno posterior, mensagem recebida e saída histórica não são uma nova resposta enviada', () => {
+  const antes = lead('a', { conversa: resposta })
+  const recebeu = { ...antes, conversa: { ...resposta!, ultima: { ...resposta!.ultima, em: '2026-10-21T15:06:00Z' }, ultimaSaida: '2026-10-21T15:05:00Z' } }
+  assert.equal(novaRespostaEnviada(antes, recebeu), false, 'uma nova resposta do cliente mantém a decisão aberta')
+  const historico = { ...antes, conversa: { ...resposta!, ultimaSaida: '2026-10-21T14:00:00Z' } }
+  assert.equal(novaRespostaEnviada(antes, historico), false)
+  assert.equal(novaRespostaEnviada(antes, { ...antes, conversa: { ...resposta!, ultimaSaida: 'inválido' } }), false)
 })

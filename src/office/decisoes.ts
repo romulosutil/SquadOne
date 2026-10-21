@@ -27,6 +27,14 @@ export function proximaDecisaoPorPrioridade(decisoes: readonly Decisao[], atualI
   return decisoes.find(d => d.estado === 'agora' && d.lead.id !== atualId) ?? null
 }
 
+/** Só uma nova saída do cliente aberto aciona o avanço; reler uma mensagem antiga não aciona. */
+export function novaRespostaEnviada(antes: CrmLead | undefined, depois: CrmLead | undefined): boolean {
+  if (!antes || !depois || antes.id !== depois.id || antes.produto !== depois.produto) return false
+  const saida = (lead: CrmLead) => Math.max(Date.parse(lead.conversa?.ultimaSaida ?? '') || 0,
+    lead.conversa?.ultima.direcao === 'saida' ? Date.parse(lead.conversa.ultima.em) || 0 : 0)
+  return saida(depois) > saida(antes) && respostaJaAtendida(depois)
+}
+
 /** Uma linha por cliente. A ordem de Vendas e as proteções de contato continuam valendo. */
 export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly AcaoDeVenda[], agora: number, conversasLidas?: readonly { lead: CrmLead; rotulo: string }[]): Decisao[] {
   const conversas = conversasLidas ?? conversasParaConduzir(leads, agora)
