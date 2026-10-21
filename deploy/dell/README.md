@@ -1,5 +1,18 @@
 # Central de Operações no Dell
 
+## Contagem e ritmo após a restrição de 21/10/2026
+
+`GET /api/operations/crm/frente` calcula `respostasHoje` a partir da visão atual do CRM:
+somente `marcos.enviado` no dia de São Paulo, um destinatário por número, separado em
+`humanas`, `robos` (somente automação) e `semResposta`. Humana tem prioridade sobre robô;
+retorno hoje de um disparo de ontem fica fora. Reservar ou abrir link não confirma envio.
+Sem CRM atual, a métrica é indisponível, sem reaproveitar o antigo `respondidos` do serviço.
+
+A regra compartilhada `REGRAS_DO_RITMO` passa a 10 primeiros contatos por dia, 4 por
+hora móvel e 15 minutos entre contatos, para Central, Telegram e executor. São limites
+internos conservadores, sem garantia contra restrições. A pausa operacional `ativo=false`
+foi preservada; a publicação e a revisão de 24h não reativam o executor.
+
 ## PRUMO: medição e Fonte com Luna (18/10/2026)
 
 O site consulta uma fila pública persistente no serviço Easypanel

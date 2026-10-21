@@ -66,11 +66,14 @@ async function alterarConfiguracao() {
   <section class="frente-comercial painel-venda" aria-labelledby="frente-titulo">
     <header class="cabecalho-bloco"><div><p class="sobretitulo">Prospecção pelo time</p><h2 id="frente-titulo">Primeiros contatos</h2></div><span class="etiqueta" :data-tom="erro || frente?.estado === 'bloqueado' ? 'atencao' : 'neutro'" role="status">{{ rotulo }}</span></header>
     <p class="texto-2">Diego, Elisa e Carla comparam Site, PRUMO, Iris, Estamparia e Plus. O funil completo e as respostas observadas orientam a prioridade; só leads novos com destino e mensagem validados recebem o primeiro contato.</p>
-    <div v-if="frente?.atualizadoEm" class="metricas-venda" aria-label="Resultado do time hoje">
-      <div><strong>{{ frente.enviados }}<small> / 100</small></strong><span>contatos iniciados pelo time hoje</span></div>
-      <div><strong>{{ frente.respondidos }}</strong><span>respostas observadas</span></div>
-      <div><strong>{{ frente.avaliados }}</strong><span>leads avaliados pelo time</span></div>
+    <div v-if="frente?.respostasHoje" class="metricas-venda frente-comercial__metricas" aria-label="Respostas aos disparos de hoje">
+      <div><strong>{{ frente.respostasHoje.enviados }}<small> / {{ frente.limite }}</small></strong><span>disparos confirmados hoje</span></div>
+      <div><strong>{{ frente.respostasHoje.humanas }}</strong><span>respostas humanas</span></div>
+      <div><strong>{{ frente.respostasHoje.robos }}</strong><span>somente robôs</span></div>
+      <div><strong>{{ frente.respostasHoje.semResposta }}</strong><span>sem resposta</span></div>
     </div>
+    <p v-if="frente?.respostasHoje" class="texto-2 texto-pequeno">Somente destinatários com disparo confirmado hoje, no horário de São Paulo, pelo time ou por você. Cada contato aparece em uma categoria; uma resposta humana substitui a automática.</p>
+    <p v-else class="texto-2 texto-pequeno" role="status">Contagem do dia indisponível. Aguardando uma leitura atual de Vendas.</p>
     <p v-if="erro" class="recado recado--atencao" role="status">{{ erro }}</p>
     <p v-else-if="frente?.cicloParado" class="recado recado--atencao" role="status"><strong>Ativo, mas o ciclo está parado {{ desdeQuando }}.</strong> O time não está avaliando nem enviando; o timer do Dell (frente-comercial.timer) precisa voltar.</p>
     <p v-else-if="frente?.detalhe" class="frente-comercial__detalhe">{{ frente.detalhe }}</p>
@@ -96,11 +99,14 @@ async function alterarConfiguracao() {
       </li></ol>
       <button v-if="frente.fila.length > limite" class="botao botao--leve" type="button" @click="limite += 10">Ver mais escolhas</button>
     </details>
-    <footer class="frente-comercial__rodape"><template v-if="props.configurar"><button class="botao" type="button" :disabled="!frente || salvando" @click="alterarConfiguracao">{{ salvando ? 'Salvando…' : frente?.ativo ? 'Pausar primeiros contatos' : 'Ativar primeiros contatos' }}</button><p class="texto-2 texto-pequeno">Conta: WhatsApp do PRUMO. Até 30 por dia útil, dentro do expediente e dos limites de ritmo. A pausa impede novos envios; as conversas continuam disponíveis.</p></template><a v-else class="link-discreto" href="/mais?abrir=primeiros-contatos">Configurar primeiros contatos →</a></footer>
+    <p v-if="frente" class="texto-2 texto-pequeno">Limites compartilhados: {{ frente.limite }} primeiros contatos por dia, {{ frente.porHora }} por hora e {{ frente.intervaloMinutos }} minutos entre contatos. Limites internos não garantem ausência de bloqueio. Inicie contato apenas com autorização do destinatário.</p>
+    <footer class="frente-comercial__rodape"><template v-if="props.configurar"><button class="botao" type="button" :disabled="!frente || salvando" @click="alterarConfiguracao">{{ salvando ? 'Salvando…' : frente?.ativo ? 'Pausar primeiros contatos' : 'Ativar primeiros contatos' }}</button><p class="texto-2 texto-pequeno">Conta: WhatsApp do PRUMO. A pausa impede novos envios e exige ativação manual; as conversas continuam disponíveis.</p></template><a v-else class="link-discreto" href="/mais?abrir=primeiros-contatos">Configurar primeiros contatos →</a></footer>
   </section>
 </template>
 <style scoped>
 .frente-comercial { display: grid; gap: var(--esp-4); }
+.frente-comercial__metricas { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 39.99rem) { .frente-comercial__metricas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .frente-comercial__linha { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--esp-3); align-items: start; }
 .frente-comercial__linha a { color: inherit; }
 .frente-comercial__linha p { font-size: var(--tam-apoio); margin-top: var(--esp-1); }

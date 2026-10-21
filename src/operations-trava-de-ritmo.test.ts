@@ -67,57 +67,57 @@ describe('trava de ritmo dos primeiros contatos', () => {
     assert.equal(textoDoRitmo(ritmoDoEnvio([], agora, REGRAS), REGRAS), '0 de 10 primeiros contatos hoje (enviados ou convites abertos).')
   })
 
-  it('o teto atual é 30 em todas as semanas, sem aumento pela idade do número', () => {
+  it('o teto atual é 10 em todas as semanas, sem aumento pela idade do número', () => {
     assert.equal(REGRAS_DO_RITMO.inicioDoNumero, '2026-10-16')
-    for (const dia of ['18', '19', '23', '30']) assert.equal(tetoDoDia(sp(dia, '08:00')), 30)
-    assert.equal(tetoDoDia(Date.parse('2027-03-01T12:00:00-03:00')), 30)
+    for (const dia of ['18', '19', '23', '30']) assert.equal(tetoDoDia(sp(dia, '08:00')), 10)
+    assert.equal(tetoDoDia(Date.parse('2027-03-01T12:00:00-03:00')), 10)
     assert.equal(REGRAS_DO_RITMO.pausadoAte, null)
   })
 
-  it('permite 30 contatos distribuídos no expediente e barra o 31º até o dia seguinte', () => {
+  it('permite 10 contatos distribuídos no expediente e barra o 11º até o dia seguinte', () => {
     const inicio = sp('19', '08:00')
     const enviados: number[] = []
-    for (let i = 0; i < 30; i++) {
-      const agora = inicio + i * 5 * MIN
+    for (let i = 0; i < 10; i++) {
+      const agora = inicio + i * 15 * MIN
       assert.equal(noExpedienteDeVenda(agora), true)
       assert.equal(ritmoDoEnvio(enviados, agora).motivo, null, `contato ${i + 1}`)
       enviados.push(agora)
-      if (i < 29) assert.notEqual(ritmoDoEnvio(enviados, agora + MIN).motivo, null, 'não libera rajada')
+      if (i < 9) assert.notEqual(ritmoDoEnvio(enviados, agora + MIN).motivo, null, 'não libera rajada')
     }
-    assert.equal(enviados[29], sp('19', '10:25'))
+    assert.equal(enviados[9], sp('19', '10:15'))
     assert.deepEqual(ritmoDoEnvio(enviados, sp('19', '10:30')), {
-      motivo: 'dia', ate: sp('20', '00:00'), enviadosHoje: 30, teto: 30,
+      motivo: 'dia', ate: sp('20', '00:00'), enviadosHoje: 10, teto: 10,
     })
     assert.equal(ritmoDoEnvio(enviados, sp('20', '08:00')).motivo, null)
   })
 
-  it('o teto de 12 na hora e os 5 minutos seguram envios mesmo com cota diária disponível', () => {
+  it('o teto de 4 na hora e os 15 minutos seguram envios mesmo com cota diária disponível', () => {
     const agora = sp('19', '10:00')
-    assert.equal(ritmoDoEnvio([agora], agora + 5 * MIN - 1).motivo, 'intervalo')
-    assert.equal(ritmoDoEnvio([agora], agora + 5 * MIN).motivo, null)
+    assert.equal(ritmoDoEnvio([agora], agora + 15 * MIN - 1).motivo, 'intervalo')
+    assert.equal(ritmoDoEnvio([agora], agora + 15 * MIN).motivo, null)
     // Histórico de envios externos/importados mais próximos que o intervalo interno.
-    const doze = Array.from({ length: 12 }, (_, i) => agora + i * MIN)
-    assert.deepEqual(ritmoDoEnvio(doze, agora + 20 * MIN), {
-      motivo: 'hora', ate: agora + 60 * MIN, enviadosHoje: 12, teto: 30,
+    const quatro = Array.from({ length: 4 }, (_, i) => agora + i * MIN)
+    assert.deepEqual(ritmoDoEnvio(quatro, agora + 20 * MIN), {
+      motivo: 'hora', ate: agora + 60 * MIN, enviadosHoje: 4, teto: 10,
     })
-    assert.equal(ritmoDoEnvio(doze, agora + 60 * MIN).motivo, null)
+    assert.equal(ritmoDoEnvio(quatro, agora + 60 * MIN).motivo, null)
   })
 
-  it('a pausa por restrição prevalece mesmo com o teto de 30', () => {
+  it('a pausa por restrição prevalece mesmo com o teto de 10', () => {
     const agora = sp('19', '10:00')
     const ate = sp('22', '10:00')
     assert.deepEqual(ritmoDoEnvio([], agora, { ...REGRAS_DO_RITMO, pausadoAte: new Date(ate).toISOString() }), {
-      motivo: 'pausa', ate, enviadosHoje: 0, teto: 30,
+      motivo: 'pausa', ate, enviadosHoje: 0, teto: 10,
     })
   })
 
-  it('soma Central, Telegram e retrato sem duplicar o contato e sem oferecer o 31º', () => {
+  it('soma Central, Telegram e retrato sem duplicar o contato e sem oferecer o 11º', () => {
     const inicio = sp('19', '08:00')
-    const toques = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`lead-${i}`, inicio + i * 5 * MIN]))
+    const toques = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`lead-${i}`, inicio + i * 15 * MIN]))
     const servidor = Object.fromEntries(Object.entries(toques).map(([id, em]) => [id, { em }]))
     const leads = Object.entries(toques).map(([id, t]) => ({ id, sinal: 'enviado' as const, marcos: { enviado: new Date(t).toISOString() } }))
     const instantes = instantesDePrimeiroContato(leads, somarPrimeiros(servidor, toques))
-    assert.equal(instantes.length, 30)
+    assert.equal(instantes.length, 10)
     assert.equal(ritmoDoEnvio(instantes, sp('19', '10:30')).motivo, 'dia')
   })
 })

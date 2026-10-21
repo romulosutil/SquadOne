@@ -282,6 +282,8 @@ envio a folha não fecha ("Aguarde…" no lugar de "Fechar").
 
 ## Componentes de finanças
 
+Primeiros contatos (21/10/2026): o painel separa disparos confirmados hoje, respostas humanas, somente robôs e sem resposta, pelo dia de São Paulo e um destinatário por categoria. A resposta humana substitui o robô. Sem CRM atual, mostra contagem indisponível; os limites de dia, hora e intervalo vêm da mesma regra usada pelo envio. A pausa continua exigindo ativação manual.
+
 - **Bloco**: `--superficie`, `--linha`, `--raio-bloco`, sem sombra, título curto em cima
   ("Tenho", "Devo", "Gastei") e o total em `.numero-grande` logo abaixo.
 - **Barra de proporção**: largura em %, sempre com o número ao lado; nunca a

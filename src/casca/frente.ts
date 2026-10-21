@@ -22,7 +22,10 @@ export interface FrenteLida {
   /** A hora da última rodada que o script gravou (ISO); null sem nenhuma. */
   ultimaRodadaEm?: string | null
   enviados?: number
-  respondidos?: number
+  respondidos?: number | null
+  respostasHoje?: { dia: string; enviados: number; humanas: number; robos: number; semResposta: number } | null
+  intervaloMinutos?: number
+  porHora?: number
   avaliados?: number
   selecionados?: number
   setores?: SetorDaFrente[]

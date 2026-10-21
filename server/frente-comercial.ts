@@ -4,7 +4,8 @@ import path from 'node:path';
 import express, { type Router } from 'express';
 import type { CrmVisao } from '../src/operations/types.ts';
 import { frenteDosArquivos, primeirosDoTime, mensagemDoPrimeiroContato, reservaDoTime, type FrenteDoPrimeiro, type ReservaDoTime } from '../src/operations/primeiro-contato.ts';
-import { tetoDoDia } from '../src/operations/trava-de-ritmo.ts';
+import { tetoDoDia, REGRAS_DO_RITMO } from '../src/operations/trava-de-ritmo.ts';
+import { respostasDoDia } from './respostas-do-dia.ts';
 import { noExpedienteDeVenda } from '../src/operations/trava-de-horario.ts';
 import { conferirMensagem } from './gate-de-envio.ts';
 import type { MemoriaDaVenda } from './venda-do-dia.ts';
@@ -48,25 +49,28 @@ export async function lerPrimeirosDoTime(dataDir: string): Promise<Set<string>> 
 }
 
 /** Estado derivado do serviço de domínio. Nenhum segredo ou comando chega ao navegador. */
-export async function lerFrente(dataDir: string, agora = Date.now()) {
+export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pick<CrmVisao, 'estado' | 'leads'> | null) {
   const config = (await lerJson(path.join(dataDir, CONFIG))) ?? { ativo: false };
   const bruto = await lerJson(path.join(dataDir, ESTADO));
   // O teto é o da trava de ritmo da Central, dividido com as telas e o Telegram: não é uma cota do time.
   const limite = tetoDoDia(agora);
+  const respostasHoje = visao?.estado === 'ok' ? respostasDoDia(visao.leads, agora) : null;
+  const metricas = { respostasHoje, intervaloMinutos: REGRAS_DO_RITMO.intervaloMs / 60_000, porHora: REGRAS_DO_RITMO.porHora };
   const ativo = config.ativo === true;
   // A última rodada: a hora gravada pelo script (`atualizadoEm`); sem ela legível, o mtime do arquivo de estado.
   const gravada = bruto ? Date.parse(bruto.atualizadoEm) : NaN;
   const ultimaRodada = Number.isFinite(gravada) ? gravada : bruto ? await fs.stat(path.join(dataDir, ESTADO)).then((st) => st.mtimeMs).catch(() => null) : null;
   const ultimaRodadaEm = ultimaRodada === null ? null : new Date(ultimaRodada).toISOString();
   const cicloParado = ativo && noExpedienteDeVenda(agora) && (ultimaRodada === null || agora - ultimaRodada > CICLO_PARADO_APOS_MS);
-  if (!bruto) return { ativo, estado: 'iniciando', limite, fila: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
+  if (!bruto) return { ...metricas, ativo, estado: 'iniciando', limite, fila: [], setores: [], funil: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
   const stale = !Number.isFinite(Date.parse(bruto.atualizadoEm)) || agora - Date.parse(bruto.atualizadoEm) > 10 * 60_000;
   return {
+    ...metricas,
     ativo, estado: stale ? 'sem-sinal' : config.ativo === false ? 'pausado' : bruto.estado,
     cicloParado, ultimaRodadaEm,
     limite, dia: bruto.dia, atualizadoEm: bruto.atualizadoEm,
     avaliados: bruto.avaliados ?? 0, selecionados: bruto.selecionados ?? 0,
-    enviados: bruto.enviados ?? 0, respondidos: bruto.respondidos ?? 0,
+    enviados: bruto.enviados ?? 0, respondidos: respostasHoje?.humanas ?? null,
     funil: (Array.isArray(bruto.funil) ? bruto.funil : []).slice(0, 5).map((m: Record<string, unknown>) => ({
       produto: ['site', 'prumo', 'iris', 'estampa', 'plus'].includes(String(m.produto)) ? m.produto : 'desconhecido',
       ...Object.fromEntries(['novo', 'contato', 'proposta', 'ganho', 'perdido', 'elegiveis', 'contatosObservados', 'respostasWhatsapp'].map(k => [k, typeof m[k] === 'number' ? m[k] : 0])),
@@ -108,7 +112,10 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
   const { dataDir } = deps;
   const agora = deps.agora ?? Date.now;
   router.get('/crm/frente', async (_req, res, next) => {
-    try { res.set('Cache-Control', 'no-store').json(await lerFrente(dataDir, agora())); } catch (e) { next(e); }
+    try {
+      const visao = deps.visao ? await deps.visao().catch(() => null) : null;
+      res.set('Cache-Control', 'no-store').json(await lerFrente(dataDir, agora(), visao));
+    } catch (e) { next(e); }
   });
   router.post('/crm/frente/config', express.json({ limit: '4kb' }), async (req, res, next) => {
     try {

@@ -162,13 +162,13 @@ describe("ritmo somando a Central e o Telegram", () => {
     }
   });
 
-  it("29 da Central + 1 do Telegram: o teto do dia (30) segura nas duas superfícies", () => {
+  it("9 da Central + 1 do Telegram: o teto do dia (10) segura nas duas superfícies", () => {
     const inicio = Date.parse("2026-10-19T08:00:00-03:00");
     const agora = Date.parse("2026-10-19T17:00:00-03:00");
-    const daCentral = Object.fromEntries(Array.from({ length: 29 }, (_, i) => [`site:${i}`, { em: inicio + i * 5 * min }]));
+    const daCentral = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`site:${i}`, { em: inicio + i * 15 * min }]));
     // Separadas, as duas superfícies ainda teriam cota; a soma barra o próximo contato.
     assert.equal(ritmoDoEnvio(instantesDePrimeiroContato([], somarPrimeiros(daCentral)), agora).motivo, null);
-    assert.equal(ritmoDoEnvio(instantesDePrimeiroContato([], somarPrimeiros(daCentral, { "site:tg": inicio + 29 * 5 * min })), agora).motivo, "dia");
+    assert.equal(ritmoDoEnvio(instantesDePrimeiroContato([], somarPrimeiros(daCentral, { "site:tg": inicio + 9 * 15 * min })), agora).motivo, "dia");
   });
 });
 
