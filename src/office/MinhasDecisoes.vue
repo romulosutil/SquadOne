@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import type { Pessoa } from '../types'
 import type { CrmVisao } from '../operations/types'
 import type { AcaoDeVenda } from '../operations/proxima-venda'
@@ -12,6 +12,8 @@ const emit = defineEmits<{ ficha: [id: string]; registrado: []; ocupado: [valor:
 const filtro = ref<EstadoDaDecisao>('agora'), busca = ref(''), oferta = ref(''), pagina = ref(1)
 const selecionada = ref<Decisao | null>(null), ocupado = ref(false)
 const interacaoRegistrada = ref(false)
+const avancoPendente = shallowRef<{ id: string; leitura: CrmVisao | null } | null>(null)
+const avisoDoAvanco = ref('')
 const topo = ref<HTMLElement | null>(null)
 const decisoes = computed(() => decisoesDoEscritorio(props.visao?.leads ?? [], props.acoes, props.agora, props.conversas))
 const estados = [
@@ -32,9 +34,22 @@ watch(() => atual.value?.estado, (estado, anterior) => { if (anterior === 'agora
 watch([filtro, busca, oferta], () => { pagina.value = 1 })
 watch(paginas, valor => { pagina.value = Math.min(pagina.value, valor) })
 async function focarTopo() { await nextTick(); topo.value?.focus(); topo.value?.scrollIntoView({ block: 'start' }) }
-function abrir(d: Decisao) { if (ocupado.value) return; selecionada.value = d; interacaoRegistrada.value = false; void focarTopo() }
-function voltar() { if (ocupado.value) return; selecionada.value = null; void focarTopo() }
+function abrir(d: Decisao) { if (ocupado.value) return; avancoPendente.value = null; avisoDoAvanco.value = ''; selecionada.value = d; interacaoRegistrada.value = false; void focarTopo() }
+function voltar() { if (ocupado.value) return; avancoPendente.value = null; avisoDoAvanco.value = ''; selecionada.value = null; void focarTopo() }
 function mudarOcupado(valor: boolean) { ocupado.value = valor; emit('ocupado', valor) }
+function confirmarInteracao() {
+  interacaoRegistrada.value = true
+  if (atual.value) avancoPendente.value = { id: atual.value.lead.id, leitura: props.visao }
+}
+// Aguarda a releitura e o fim da gravação para abrir a prioridade atual sem desmontar um envio em curso.
+watch([() => props.visao, () => props.atualizando, () => props.erro, ocupado], () => {
+  const pendente = avancoPendente.value
+  if (!pendente || ocupado.value || props.atualizando || props.erro || props.visao?.estado !== 'ok' || props.visao === pendente.leitura) return
+  avancoPendente.value = null
+  if (atual.value?.lead.id !== pendente.id) return
+  const destino = proximaDecisaoPorPrioridade(decisoes.value, pendente.id)
+  if (destino) { abrir(destino); avisoDoAvanco.value = 'Interação registrada. Próximo cliente aberto por prioridade.' }
+}, { flush: 'post' })
 const dataDaLeitura = computed(() => props.visao?.geradoEm ? new Date(props.visao.geradoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : props.conferidoEm ? new Date(props.conferidoEm).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '')
 </script>
 
@@ -52,9 +67,11 @@ const dataDaLeitura = computed(() => props.visao?.geradoEm ? new Date(props.visa
         <span class="texto-2 texto-pequeno">{{ indice >= 0 ? `${indice + 1} de ${filtradas.length} nesta fila` : 'Situação atualizada' }}</span>
         <button v-if="proxima" class="botao botao--leve" type="button" :disabled="ocupado || atualizando" @click="abrir(proxima)">Próxima por prioridade →</button>
       </nav>
-      <div v-if="interacaoRegistrada" class="minhas-decisoes__proxima" role="status"><div><span class="sobretitulo">{{ atualizando ? 'Atualizando prioridades…' : 'Interação registrada' }}</span><template v-if="proxima"><h3>Próxima: {{ proxima.lead.empresa }}</h3><p>{{ proxima.motivo }}</p></template><template v-else><h3>Nenhuma outra decisão pendente agora.</h3><p>Você pode terminar o acompanhamento deste cliente ou voltar à fila.</p></template></div><button v-if="proxima" class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
-      <MissaoDaConversa :key="atual.lead.id" :lead="atual.lead" :agente="agente" :disponivel="clienteNaLeitura && !erro && visao?.estado === 'ok' && visao.registro.disponivel" :motivo="atual.motivo" :acao="atual.acao" :estado="atual.estado" @ficha="emit('ficha', $event)" @interagiu="interacaoRegistrada = true" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fila="voltar" />
-      <div v-if="interacaoRegistrada && proxima" class="minhas-decisoes__continuar"><p class="texto-2 texto-pequeno">A seguir · {{ proxima.lead.empresa }} · {{ proxima.motivo }}</p><button class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
+      <p v-if="avisoDoAvanco" class="recado recado--ok" role="status">{{ avisoDoAvanco }}</p>
+      <p v-if="avancoPendente && !erro" class="texto-2 texto-pequeno" role="status">Interação registrada. Atualizando a fila para abrir o próximo cliente…</p>
+      <div v-if="interacaoRegistrada && !avancoPendente" class="minhas-decisoes__proxima" role="status"><div><span class="sobretitulo">{{ atualizando ? 'Atualizando prioridades…' : 'Interação registrada' }}</span><template v-if="proxima"><h3>Próxima: {{ proxima.lead.empresa }}</h3><p>{{ proxima.motivo }}</p></template><template v-else><h3>Nenhuma outra decisão pendente agora.</h3><p>Você pode terminar o acompanhamento deste cliente ou voltar à fila.</p></template></div><button v-if="proxima" class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
+      <MissaoDaConversa :key="atual.lead.id" :lead="atual.lead" :agente="agente" :disponivel="clienteNaLeitura && !erro && visao?.estado === 'ok' && visao.registro.disponivel" :motivo="atual.motivo" :acao="atual.acao" :estado="atual.estado" @ficha="emit('ficha', $event)" @interagiu="confirmarInteracao" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fila="voltar" />
+      <div v-if="interacaoRegistrada && !avancoPendente && proxima" class="minhas-decisoes__continuar"><p class="texto-2 texto-pequeno">A seguir · {{ proxima.lead.empresa }} · {{ proxima.motivo }}</p><button class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
     </template>
     <template v-else-if="visao?.estado === 'ok' || visao?.leads.length">
       <div class="minhas-decisoes__introducao"><h3>Uma decisão por vez.</h3><p>Escolha um cliente, entenda o contexto e siga até registrar o que aconteceu.</p><ol aria-label="Como conduzir uma decisão"><li><strong>1</strong> Entender</li><li><strong>2</strong> Agir</li><li><strong>3</strong> Acompanhar</li></ol></div>

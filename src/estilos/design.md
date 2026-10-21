@@ -6,7 +6,9 @@ a interpretação revisável e a resposta contextual; texto padrão é identific
 registrar envio, registrar resposta ou definir ação e data. Após confirmação ou saída observada,
 a resposta anterior deixa de ser pendência; material solicitado e passos vencidos continuam ativos.
 Uma nova entrada reabre a decisão. O próximo cliente vem da primeira prioridade global disponível,
-independente da posição e dos filtros, com atalho após o registro sem descartar o formulário atual.
+independente da posição e dos filtros. Após registrar a interação, a fila é relida e o próximo
+cliente abre automaticamente, quando a gravação termina. Se não houver outro cliente, a tela
+permanece no acompanhamento atual; falha na gravação ou releitura não avança a navegação.
 
 Escritório imersivo (18/10/2026, correção explícita do Rômulo): a home é um único ambiente aberto em pixel art, com os agentes animados e clicáveis. Dois telões compartilhados mostram as decisões e o andamento do time e as conversas que dependem do usuário; abrem detalhes sobre o cenário. Navegação fixa no rodapé em todas as larguras: Escritório, Assistente, Vendas e Mais. Sem trilho lateral nem campo de busca visível. Vendas abre em drawer; o Assistente conserva seu comportamento e escopo geral. Mais dá acesso a Agenda, Finanças, Entrada e Configurações. A sala permanece montada atrás dos painéis, sem rolagem de página ou zoom manual; painéis têm uma única região de rolagem. Esta decisão substitui a home de cartões com escritório recolhido, sem alterar o serviço comercial autorizado ou suas proteções.
 
