@@ -1,5 +1,15 @@
 # Design do SquadOne
 
+Avisos de novas respostas (21/10/2026): durante Minhas decisões, novas mensagens humanas
+aparecem em uma faixa visível com o nome do cliente e a prioridade na fila global atual.
+A faixa não troca o cliente aberto, não move o foco nem limpa rascunhos. Cada cliente tem
+um aviso; várias chegadas são ordenadas pela prioridade e sua posição acompanha a fila.
+A lista de avisos tem altura limitada e rolagem para preservar o espaço do atendimento.
+Dispensar não altera a conversa ou o CRM. A primeira leitura e a repetição do mesmo envio
+não avisam novamente; uma mensagem posterior pode gerar outro aviso. Mensagens automáticas
+e respostas já atendidas ficam fora. Falha na leitura não anuncia prioridade como atual.
+
+
 Retorno à fila (21/10/2026): uma resposta humana posterior ao envio reabre a decisão
 na prioridade de resposta, pela hora da mensagem mais recente. Resoluções e pulos anteriores
 não escondem nem rebaixam o novo retorno; o histórico permanece intacto e há uma linha por

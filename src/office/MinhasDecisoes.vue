@@ -6,6 +6,7 @@ import type { AcaoDeVenda } from '../operations/proxima-venda'
 import type { recomendacoesDoTime } from '../operations/recomendacoes-do-time'
 import { decisoesDoEscritorio, novaRespostaEnviada, respostaJaAtendida, proximaDecisaoPorPrioridade, nomesDasOfertas, type Decisao, type EstadoDaDecisao } from './decisoes'
 import MissaoDaConversa from './MissaoDaConversa.vue'
+import { avisosPorPrioridade, lerNovasRespostas, type LeituraDasRespostas, type RespostaParaAviso } from './avisos-de-resposta'
 
 const props = defineProps<{ visao: CrmVisao | null; erro: string; acoes: AcaoDeVenda[]; conversas?: readonly { lead: import('../operations/types').CrmLead; rotulo: string }[]; agora: number; agente?: Pessoa; alertas: ReturnType<typeof recomendacoesDoTime>; atualizando: boolean; conferidoEm: number | null }>()
 const emit = defineEmits<{ ficha: [id: string]; registrado: []; ocupado: [valor: boolean]; atualizar: []; agentes: [] }>()
@@ -14,8 +15,20 @@ const selecionada = ref<Decisao | null>(null), ocupado = ref(false)
 const interacaoRegistrada = ref(false)
 const avancoPendente = shallowRef<{ id: string; leitura: CrmVisao | null; observado?: boolean } | null>(null)
 const avisoDoAvanco = ref('')
+const respostasParaAvisar = ref<RespostaParaAviso[]>([])
+let leituraDasRespostas: LeituraDasRespostas | null = null
 const topo = ref<HTMLElement | null>(null)
 const decisoes = computed(() => decisoesDoEscritorio(props.visao?.leads ?? [], props.acoes, props.agora, props.conversas))
+const avisosDeResposta = computed(() => avisosPorPrioridade(respostasParaAvisar.value, decisoes.value))
+function dispensarAviso(id: string) { respostasParaAvisar.value = respostasParaAvisar.value.filter(a => a.id !== id) }
+watch([() => props.visao, () => props.atualizando, () => props.erro], () => {
+  if (props.erro || props.atualizando || props.visao?.estado !== 'ok') return
+  const resultado = lerNovasRespostas(props.visao.leads, leituraDasRespostas, Date.now())
+  leituraDasRespostas = resultado.leitura
+  const avisos = new Map(respostasParaAvisar.value.map(a => [a.id, a]))
+  for (const aviso of resultado.novas) avisos.set(aviso.id, aviso)
+  respostasParaAvisar.value = [...avisos.values()]
+}, { immediate: true })
 const estados = [
   { id: 'agora', nome: 'Precisa de você' },
   { id: 'acompanhando', nome: 'Em acompanhamento' },
@@ -69,6 +82,11 @@ const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferid
       <button class="botao botao--leve" type="button" :disabled="atualizando || ocupado" @click="emit('atualizar')">{{ atualizando ? 'Atualizando…' : 'Atualizar' }}</button>
     </div>
     <div v-if="erro || visao?.estado !== 'ok'" class="recado recado--atencao" role="status">{{ erro || visao?.mensagem || 'Carregando as conversas e os próximos passos…' }}<p v-if="visao?.leads.length">Você está vendo a última leitura disponível. Atualize antes de registrar uma decisão.</p></div>
+    <aside v-if="avisosDeResposta.length && !erro && visao?.estado === 'ok'" class="minhas-decisoes__avisos" aria-label="Novas respostas no WhatsApp" role="status" aria-live="polite" aria-atomic="false">
+      <strong>{{ avisosDeResposta.length === 1 ? 'Nova resposta no WhatsApp' : 'Novas respostas no WhatsApp' }}</strong>
+      <ul><li v-for="aviso in avisosDeResposta" :key="aviso.id"><div><strong>{{ aviso.empresa }} respondeu</strong><span>{{ atualizando ? 'Atualizando prioridade…' : `Prioridade ${aviso.posicao} de ${aviso.total} na fila` }}</span></div><button class="botao botao--leve" type="button" :aria-label="`Dispensar aviso de ${aviso.empresa}`" @click="dispensarAviso(aviso.id)">Dispensar</button></li></ul>
+      <p v-if="atual" class="texto-pequeno">O atendimento atual continua aberto.</p>
+    </aside>
 
     <template v-if="atual">
       <nav class="minhas-decisoes__navegacao" aria-label="Navegação entre decisões">
@@ -116,6 +134,13 @@ const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferid
 .minhas-decisoes__topo, .minhas-decisoes__navegacao, .minhas-decisoes__titulo-fila, .minhas-decisoes__paginacao { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--esp-2); }
 .minhas-decisoes p, .minhas-decisoes h3 { margin: 0; }
 .minhas-decisoes h3 { font-size: var(--tam-secao); }
+.minhas-decisoes__avisos { position: sticky; top: 0; z-index: var(--camada-fixa); display: grid; gap: var(--esp-2); padding: var(--esp-3) var(--esp-4); background: var(--realce); border: var(--linha-fina); border-radius: var(--raio-controle); }
+.minhas-decisoes__avisos > strong { font-size: var(--tam-apoio); }
+.minhas-decisoes__avisos ul { display: grid; gap: var(--esp-2); max-height: min(25dvh, calc(var(--esp-16) * 2)); overflow-y: auto; padding: 0; margin: 0; list-style: none; }
+.minhas-decisoes__avisos li { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3); }
+.minhas-decisoes__avisos li > div { display: grid; gap: var(--esp-1); min-width: 0; overflow-wrap: anywhere; }
+.minhas-decisoes__avisos li span { font-size: var(--tam-apoio); }
+.minhas-decisoes__avisos p { color: var(--texto-2); }
 .minhas-decisoes__proxima { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--esp-4); padding: var(--esp-4); background: var(--realce); border-radius: var(--raio-controle); }
 .minhas-decisoes__proxima > div { display: grid; gap: var(--esp-2); flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .minhas-decisoes__continuar { display: grid; gap: var(--esp-3); border-top: var(--divisor); padding-top: var(--esp-4); }
