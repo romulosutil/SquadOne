@@ -2,7 +2,8 @@ import type { CrmLead } from '../operations/types'
 import type { AcaoDeVenda } from '../operations/proxima-venda'
 import { conversasParaConduzir } from '../operations/conversas-para-conduzir'
 import { contatoPausado } from '../operations/aprendizado-comercial'
-import { procedimentoDaDecisao } from './procedimento-da-decisao'
+import { planoFuturoEmEspera, procedimentoDaDecisao } from './procedimento-da-decisao'
+import { ultimoRetornoRegistrado } from '../operations/retorno-da-venda'
 
 export type EstadoDaDecisao = 'agora' | 'acompanhando' | 'encerrada'
 export interface Decisao {
@@ -13,6 +14,19 @@ export interface Decisao {
 }
 export const nomesDasOfertas = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', plus: 'Plus', estampa: 'Estamparia' } as const
 
+/** Confirmação real ou saída observada atende a resposta anterior; uma entrada posterior reabre. */
+export function respostaJaAtendida(lead: CrmLead): boolean {
+  const c = lead.conversa
+  const entrada = Math.max(Date.parse(c?.ultimaEntrada ?? '') || 0, c?.ultima.direcao === 'entrada' ? Date.parse(c.ultima.em) || 0 : 0, Date.parse(ultimoRetornoRegistrado(lead)?.registradoEm ?? '') || 0)
+  const envios = lead.eventos.filter(e => e.origem === 'manual' && /^\[Envio confirmado pelo operador · \d{4}-\d{2}-\d{2}\]\r?\n\S/.test(e.texto ?? '')).map(e => Date.parse(e.em) || 0)
+  const saida = Math.max(c?.ultima.direcao === 'saida' ? Date.parse(c.ultima.em) || 0 : 0, Date.parse(c?.ultimaSaida ?? '') || 0, ...envios)
+  return saida > entrada && saida > 0
+}
+
+export function proximaDecisaoPorPrioridade(decisoes: readonly Decisao[], atualId?: string): Decisao | null {
+  return decisoes.find(d => d.estado === 'agora' && d.lead.id !== atualId) ?? null
+}
+
 /** Uma linha por cliente. A ordem de Vendas e as proteções de contato continuam valendo. */
 export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly AcaoDeVenda[], agora: number, conversasLidas?: readonly { lead: CrmLead; rotulo: string }[]): Decisao[] {
   const conversas = conversasLidas ?? conversasParaConduzir(leads, agora)
@@ -21,10 +35,14 @@ export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly 
   for (const acao of acoes) if (!acao.primeiroContato && !porAcao.has(acao.leadId)) porAcao.set(acao.leadId, acao)
   const ordem = new Map([...new Set([...porAcao.keys(), ...conversas.map(c => c.lead.id)])].map((id, i) => [id, i]))
   return leads.flatMap((lead): Decisao[] => {
-    const acao = porAcao.get(lead.id) ?? null
-    const conversa = porConversa.get(lead.id)
+    const atendida = respostaJaAtendida(lead)
+    const candidata = porAcao.get(lead.id) ?? null
+    const materialPendente = ['interesse', 'licenca'].includes(lead.resposta?.tipo ?? '') && !!lead.links.segunda && !lead.marcos.segundaEnviada && !lead.conversa?.linkEm
+    const acao = atendida && !materialPendente && candidata?.tipo === 'responder' ? null : candidata
+    const conversa = atendida && porConversa.get(lead.id)?.rotulo === 'Resposta recebida' ? undefined : porConversa.get(lead.id)
     if (lead.etapa === 'ganho' || lead.etapa === 'perdido') return [{ lead, estado: 'encerrada', motivo: lead.etapa === 'ganho' ? 'Venda ganha' : 'Conversa encerrada', acao: null }]
-    const protegido = contatoPausado(lead) || lead.resposta?.tipo === 'negativa' || lead.resposta?.tipo === 'exclusao'
+    const esperaPlanejada = planoFuturoEmEspera(lead, new Date(agora))
+    const protegido = contatoPausado(lead) || esperaPlanejada || lead.resposta?.tipo === 'negativa' || lead.resposta?.tipo === 'exclusao'
     if ((!protegido || acao?.tipo === 'desfecho') && (acao || conversa)) return [{ lead, estado: 'agora', motivo: conversa?.rotulo ?? acao!.titulo, acao }]
     const temConversa = lead.etapa === 'contato' || lead.etapa === 'proposta' || !!lead.conversa || !!lead.proximoPasso
     if (!temConversa) return []

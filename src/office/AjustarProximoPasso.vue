@@ -6,7 +6,7 @@ import { diaEmSP } from '../operations/retomadas'
 import { hashDoContexto } from '../operations/revisao-resposta'
 import { focarNaSala } from './foco'
 const props = defineProps<{ lead: CrmLead; modo: 'concluir' | 'reagendar'; disponivel?: boolean }>()
-const emit = defineEmits<{ registrado: []; fechar: []; ocupado: [valor: boolean] }>()
+const emit = defineEmits<{ registrado: []; confirmado: []; fechar: []; ocupado: [valor: boolean] }>()
 const contextoInicial = hashDoContexto(props.lead)
 const hoje = diaEmSP(new Date())
 const original = { ...props.lead.proximoPasso! }
@@ -34,7 +34,7 @@ async function confirmar() {
     const r = await fetch('/api/operations/crm/proximo-passo/ajustar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...previa.value, acao: props.modo, produto: props.lead.produto, id: props.lead.id }) })
     const corpo = await r.json().catch(() => ({}))
     if (!r.ok) { incerto.value = r.status >= 500 || r.status === 409; if (!incerto.value) memoria(''); throw new Error(corpo.error ?? 'Não foi possível confirmar.') }
-    gravado.value = true; emit('registrado')
+    gravado.value = true; emit('confirmado'); emit('registrado')
   } catch (e) {
     if (e instanceof TypeError) incerto.value = true
     erro.value = (e as Error).message

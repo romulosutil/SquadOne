@@ -26,11 +26,16 @@ export function montarMensagemDaDecisao(router: Router, op: { crm?: { visao(): P
       let acao = acaoDoLead(visao, id, Date.now(), paraFila())
       if (acao?.conferirHistorico || acao?.primeiroContato || acao?.tipo === 'desfecho') return void res.json({ ...base, acao, motivo: acao.tatica })
       if (!acao && lead.conversa?.ultima.direcao !== 'entrada') return void res.json({ ...base, motivo: 'Aguarde a resposta ou a data do próximo passo. Não há uma ação de contato pendente nesta leitura.' })
-      if ((!acao?.rascunho || impedimentoDaMensagem(acao.rascunho)) && !sugestao && op.copiloto && copilotoServe(lead)) {
+      // Um texto padrão preenchido não substitui uma leitura da conversa atual.
+      if (!sugestao && op.copiloto && copilotoServe(lead)) {
         sugestao = await op.copiloto.sugerir(produto, id)
         acao = acaoDoLead(visao, id, Date.now(), paraFila())
       }
-      let mensagem = acao?.rascunho ?? sugestao?.sugestao.mensagem ?? ''
+      let mensagem = sugestao?.sugestao.mensagem ?? acao?.rascunho ?? ''
+      if (sugestao && acao?.anota) {
+        const { anota: _anota, ...semConfirmacaoPadrao } = acao
+        acao = semConfirmacaoPadrao
+      }
       const material = linkDoRaioXParaMensagem(lead.links.raioX)
       if (material) mensagem = mensagem.replace(/\[link(?: do raio-x)?\]/gi, material)
       const motivo = impedimentoDaMensagem(mensagem)
@@ -38,7 +43,7 @@ export function montarMensagemDaDecisao(router: Router, op: { crm?: { visao(): P
       const releitura = await op.crm.visao()
       const atual = releitura.leads.find(l => l.id === id && l.produto === produto)
       if (releitura.estado !== 'ok' || !atual || await hashDoContexto(atual) !== contextoHash) return void res.status(409).json({ error: 'Chegou um novo contexto durante o preparo. Atualize para preparar novamente.' })
-      res.json({ ...base, acao, mensagem: motivo ? null : mensagem, origem: motivo ? null : sugestao ? 'copiloto' : 'fila', podeAbrir: !motivo, ...(motivo ? { motivo: 'O contexto ainda não permite preparar uma mensagem completa. Confira os dados ou o material na ficha.' } : {}) })
+      res.json({ ...base, acao, leitura: sugestao?.sugestao.momento?.leitura, porque: sugestao?.sugestao.porque, proximaAcao: sugestao?.sugestao.momento?.passo, mensagem: motivo ? null : mensagem, origem: motivo ? null : sugestao ? 'copiloto' : 'fila', podeAbrir: !motivo, ...(motivo ? { motivo: 'O contexto ainda não permite preparar uma mensagem completa. Confira os dados ou o material na ficha.' } : {}) })
     } catch { res.status(503).json({ error: 'Não foi possível preparar a mensagem com o contexto atual. Tente novamente ou confira a ficha.' }) }
   })
 }

@@ -12,6 +12,9 @@ export interface MensagemDaDecisao {
   podeAbrir: boolean
   acao: AcaoDeVenda | null
   motivo?: string
+  leitura?: string
+  porque?: string
+  proximaAcao?: string
 }
 
 export interface ProcedimentoDaDecisao {
@@ -22,18 +25,28 @@ export interface ProcedimentoDaDecisao {
   mensagem?: string
 }
 
+export function planoFuturoEmEspera(lead: CrmLead, agora = new Date()): boolean {
+  const plano = lead.proximoPasso
+  if (!plano?.texto || plano.data <= diaEmSP(agora)) return false
+  const entradaEm = Math.max(Date.parse(lead.conversa?.ultimaEntrada ?? '') || 0, lead.conversa?.ultima.direcao === 'entrada' ? Date.parse(lead.conversa.ultima.em) || 0 : 0)
+  const planoEm = Date.parse(plano.registradoEm) || 0
+  return !entradaEm || !planoEm || planoEm >= entradaEm
+}
+
 /** Orientação operacional; o texto da conversa é evidência, nunca uma instrução para executar. */
 export function procedimentoDaDecisao(lead: CrmLead, agora = new Date()): ProcedimentoDaDecisao {
   if (['ganho', 'perdido'].includes(lead.etapa) || ['negativa', 'exclusao'].includes(lead.resposta?.tipo ?? '')) return {
     tipo: 'encerrado', titulo: 'Respeitar o desfecho', passos: ['Confira o resultado registrado e o motivo literal na ficha.', 'Não faça uma nova abordagem a quem recusou ou pediu exclusão.'], resultadoEsperado: 'Desfecho correto no histórico, sem nova cobrança.',
   }
   const plano = lead.proximoPasso
-  if (contatoPausado(lead) || plano?.texto && (plano.data > diaEmSP(agora) || rotuloDoPasso(plano.texto) === 'Conferir combinado de espera')) return {
+  if (contatoPausado(lead) || plano?.texto && (planoFuturoEmEspera(lead, agora) || rotuloDoPasso(plano.texto) === 'Conferir combinado de espera')) return {
     tipo: 'espera', titulo: 'Respeitar a espera e a data combinada', passos: [plano?.texto ? `Próximo passo: ${plano.texto}${plano.data ? ` · ${plano.data.split('-').reverse().join('/')}` : ''}.` : 'O contato está pausado até uma resposta humana.', 'Confira o combinado antes de retomar. A preparação não antecipa o contato.', 'Se a situação mudou, registre o fato e revise o próximo passo.'], resultadoEsperado: 'Um próximo passo com data, sem contato antecipado.',
   }
   const ultima = lead.conversa?.ultima
-  const papel = ultima?.direcao === 'entrada' ? papelDaMensagem(ultima.trecho, ultima.papel) : undefined
-  const robo = papel === 'robo' || (lead.resposta?.tipo === 'bot' && (!ultima || ultima.direcao === 'saida'))
+  const entrada = ultima?.direcao === 'entrada' ? ultima : lead.conversa?.recentes?.filter(m => m.direcao === 'entrada').at(-1)
+  const papel = entrada ? papelDaMensagem(entrada.trecho, entrada.papel) : undefined
+  const temHumano = !!lead.conversa?.ultimaEntrada || !!lead.conversa?.entradas && lead.conversa.entradas.gente + lead.conversa.entradas.recepcao > 0
+  const robo = papel === 'robo' || (!entrada && !temHumano && lead.resposta?.tipo === 'bot')
   if (robo) return {
     tipo: 'robo', titulo: 'Só o robô respondeu. Primeiro, chegue a uma pessoa.',
     passos: [

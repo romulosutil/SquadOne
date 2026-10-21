@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { decisoesDoEscritorio } from './decisoes.ts'
+import { decisoesDoEscritorio, proximaDecisaoPorPrioridade } from './decisoes.ts'
 import { notaDoAprendizado } from '../operations/aprendizado-comercial.ts'
 import type { CrmLead } from '../operations/types.ts'
 import type { AcaoDeVenda } from '../operations/proxima-venda.ts'
@@ -40,4 +40,43 @@ test('primeiro contato e ações de cliente inexistente não criam decisões; re
   assert.equal(decisoesDoEscritorio([lead('novo', { etapa: 'novo' })], [{ ...acao('novo'), primeiroContato: true }, acao('inexistente')], agora).length, 0)
   const depois = decisoesDoEscritorio([{ ...antes[0], etapa: 'ganho' }, antes[1]], acoes, agora)
   assert.deepEqual(depois.map(d => [d.lead.id, d.estado]), [['b', 'agora'], ['a', 'encerrada']])
+})
+
+test('envio confirmado atende a resposta antiga; uma nova entrada volta à fila por prioridade', () => {
+  const a = lead('a', { conversa: resposta }), b = lead('b', { conversa: resposta })
+  const envio = { tipo: 'nota', origem: 'manual', em: '2026-10-21T15:05:00Z', texto: '[Envio confirmado pelo operador · 2026-10-21]\nExpliquei como funciona.', rotulo: 'Nota', fonte: 'planilha' } as const
+  const atendido = { ...a, eventos: [envio] }
+  const acoes = [{ ...acao('a'), tipo: 'responder' as const }, { ...acao('b'), tipo: 'responder' as const }]
+  const fila = decisoesDoEscritorio([atendido, b], acoes, agora)
+  assert.equal(fila.find(d => d.lead.id === 'a')?.estado, 'acompanhando')
+  assert.equal(proximaDecisaoPorPrioridade(fila, 'a')?.lead.id, 'b')
+  const novaEntrada = { ...atendido, conversa: { ...resposta!, ultima: { ...resposta!.ultima, em: '2026-10-21T15:10:00Z' } } }
+  assert.equal(decisoesDoEscritorio([novaEntrada, b], acoes, agora)[0].lead.id, 'a')
+  assert.equal(a.eventos.length, 0)
+})
+
+test('saída observada tira resposta antiga mesmo com fila anterior, mas preserva próximo passo vencido', () => {
+  const cliente = lead('a', { conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em, ultima: { direcao: 'saida', em: '2026-10-21T15:05:00Z', trecho: 'Já respondi.' } } })
+  const antiga = [{ lead: cliente, rotulo: 'Resposta recebida' }]
+  assert.equal(decisoesDoEscritorio([cliente], [{ ...acao('a'), tipo: 'responder' }], agora, antiga)[0].estado, 'acompanhando')
+  const comPlano = { ...cliente, proximoPasso: { texto: 'Revisar internamente o material', data: '2026-10-20', registradoEm: '' } }
+  assert.equal(decisoesDoEscritorio([comPlano], [], agora)[0].estado, 'agora')
+})
+
+test('próxima decisão escolhe a primeira prioridade global, inclusive antes do item atual e fora do filtro', () => {
+  const fila = decisoesDoEscritorio([lead('a'), lead('b'), lead('c')], [acao('a'), acao('b')], agora)
+  assert.equal(proximaDecisaoPorPrioridade(fila, 'b')?.lead.id, 'a')
+  assert.equal(proximaDecisaoPorPrioridade(fila.filter(d => d.lead.id !== 'a'), 'b'), null)
+})
+
+test('responder com texto não esconde material solicitado que ainda falta enviar', () => {
+  const cliente = lead('material', { resposta: { tipo: 'licenca', trecho: 'Pode enviar o vídeo' }, links: { segunda: 'https://wa.me/5511999990000?text=Material' }, conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em, ultima: { direcao: 'saida', em: '2026-10-21T15:05:00Z', trecho: 'Já vou buscar o vídeo.' } } })
+  assert.equal(decisoesDoEscritorio([cliente], [{ ...acao('material'), tipo: 'responder' }], agora)[0].estado, 'agora')
+})
+
+test('planejar retorno futuro move para acompanhamento; resposta posterior recupera prioridade', () => {
+  const cliente = lead('plano', { conversa: resposta, proximoPasso: { texto: 'Conferir retorno na sexta', data: '2026-10-23', registradoEm: '2026-10-21T15:05:00Z' } })
+  assert.equal(decisoesDoEscritorio([cliente], [{ ...acao('plano'), tipo: 'responder' }], agora)[0].estado, 'acompanhando')
+  const novo = { ...cliente, conversa: { ...resposta!, ultima: { ...resposta!.ultima, em: '2026-10-21T15:10:00Z' } } }
+  assert.equal(decisoesDoEscritorio([novo], [{ ...acao('plano'), tipo: 'responder' }], agora)[0].estado, 'agora')
 })

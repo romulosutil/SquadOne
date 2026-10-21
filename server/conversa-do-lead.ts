@@ -131,6 +131,7 @@ export interface ResumoDaConversa {
   desde: string;
   mensagens: number;
   ultima: { direcao: "entrada" | "saida"; em: string; trecho: string; papel?: PapelDaMensagem };
+  recentes?: ResumoDaConversa['ultima'][];
   /**
    * A última mensagem de GENTE (o lead ou a recepção): o robô não conta (17/10/2026). É ela que
    * recomeça o prazo de Perdido e que diz "ele escreveu de novo"; a saudação automática não diz nada.
@@ -195,6 +196,9 @@ export function resumirConversa(mensagens: readonly MensagemDaConversa[] | null 
   return {
     desde: mensagens[0].em,
     mensagens: mensagens.length,
+    recentes: mensagens.slice(-6).map(m => ({ direcao: m.direcao, em: m.em,
+      trecho: m.texto.length > MAX_TRECHO ? `${m.texto.slice(0, MAX_TRECHO - 1)}…` : m.texto,
+      ...(papelDe(m) ? { papel: papelDe(m) } : {}) })),
     ultima: { direcao: ultima.direcao, em: ultima.em, trecho: trecho.length > MAX_TRECHO ? `${trecho.slice(0, MAX_TRECHO - 1)}…` : trecho,
       ...(papelDaUltima ? { papel: papelDaUltima } : {}) },
     ...(ultimaEntrada ? { ultimaEntrada } : {}),

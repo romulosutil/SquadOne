@@ -4,13 +4,14 @@ import type { Pessoa } from '../types'
 import type { CrmVisao } from '../operations/types'
 import type { AcaoDeVenda } from '../operations/proxima-venda'
 import type { recomendacoesDoTime } from '../operations/recomendacoes-do-time'
-import { decisoesDoEscritorio, nomesDasOfertas, type Decisao, type EstadoDaDecisao } from './decisoes'
+import { decisoesDoEscritorio, proximaDecisaoPorPrioridade, nomesDasOfertas, type Decisao, type EstadoDaDecisao } from './decisoes'
 import MissaoDaConversa from './MissaoDaConversa.vue'
 
 const props = defineProps<{ visao: CrmVisao | null; erro: string; acoes: AcaoDeVenda[]; conversas?: readonly { lead: import('../operations/types').CrmLead; rotulo: string }[]; agora: number; agente?: Pessoa; alertas: ReturnType<typeof recomendacoesDoTime>; atualizando: boolean; conferidoEm: number | null }>()
 const emit = defineEmits<{ ficha: [id: string]; registrado: []; ocupado: [valor: boolean]; atualizar: []; agentes: [] }>()
 const filtro = ref<EstadoDaDecisao>('agora'), busca = ref(''), oferta = ref(''), pagina = ref(1)
 const selecionada = ref<Decisao | null>(null), ocupado = ref(false)
+const interacaoRegistrada = ref(false)
 const topo = ref<HTMLElement | null>(null)
 const decisoes = computed(() => decisoesDoEscritorio(props.visao?.leads ?? [], props.acoes, props.agora, props.conversas))
 const estados = [
@@ -26,10 +27,12 @@ const visiveis = computed(() => filtradas.value.slice((pagina.value - 1) * 8, pa
 const clienteNaLeitura = computed(() => props.visao?.leads.some(l => l.id === selecionada.value?.lead.id) ?? false)
 const atual = computed<Decisao | null>(() => selecionada.value ? decisoes.value.find(d => d.lead.id === selecionada.value!.lead.id) ?? { ...selecionada.value, acao: null, estado: 'acompanhando', motivo: 'Cliente ausente da leitura atual' } : null)
 const indice = computed(() => filtradas.value.findIndex(d => d.lead.id === atual.value?.lead.id))
+const proxima = computed(() => proximaDecisaoPorPrioridade(decisoes.value, atual.value?.lead.id))
+watch(() => atual.value?.estado, (estado, anterior) => { if (anterior === 'agora' && estado && estado !== 'agora') interacaoRegistrada.value = true })
 watch([filtro, busca, oferta], () => { pagina.value = 1 })
 watch(paginas, valor => { pagina.value = Math.min(pagina.value, valor) })
 async function focarTopo() { await nextTick(); topo.value?.focus(); topo.value?.scrollIntoView({ block: 'start' }) }
-function abrir(d: Decisao) { if (ocupado.value) return; selecionada.value = d; void focarTopo() }
+function abrir(d: Decisao) { if (ocupado.value) return; selecionada.value = d; interacaoRegistrada.value = false; void focarTopo() }
 function voltar() { if (ocupado.value) return; selecionada.value = null; void focarTopo() }
 function mudarOcupado(valor: boolean) { ocupado.value = valor; emit('ocupado', valor) }
 const dataDaLeitura = computed(() => props.visao?.geradoEm ? new Date(props.visao.geradoEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : props.conferidoEm ? new Date(props.conferidoEm).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' }) : '')
@@ -47,9 +50,11 @@ const dataDaLeitura = computed(() => props.visao?.geradoEm ? new Date(props.visa
       <nav class="minhas-decisoes__navegacao" aria-label="Navegação entre decisões">
         <button type="button" class="botao botao--leve" :disabled="ocupado" @click="voltar">← Voltar à fila</button>
         <span class="texto-2 texto-pequeno">{{ indice >= 0 ? `${indice + 1} de ${filtradas.length} nesta fila` : 'Situação atualizada' }}</span>
-        <button v-if="indice >= 0 && indice < filtradas.length - 1" class="botao botao--leve" type="button" :disabled="ocupado" @click="abrir(filtradas[indice + 1]!)">Próxima decisão →</button>
+        <button v-if="proxima" class="botao botao--leve" type="button" :disabled="ocupado || atualizando" @click="abrir(proxima)">Próxima por prioridade →</button>
       </nav>
-      <MissaoDaConversa :key="atual.lead.id" :lead="atual.lead" :agente="agente" :disponivel="clienteNaLeitura && !erro && visao?.estado === 'ok' && visao.registro.disponivel" :motivo="atual.motivo" :acao="atual.acao" :estado="atual.estado" @ficha="emit('ficha', $event)" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fila="voltar" />
+      <div v-if="interacaoRegistrada" class="minhas-decisoes__proxima" role="status"><div><span class="sobretitulo">{{ atualizando ? 'Atualizando prioridades…' : 'Interação registrada' }}</span><template v-if="proxima"><h3>Próxima: {{ proxima.lead.empresa }}</h3><p>{{ proxima.motivo }}</p></template><template v-else><h3>Nenhuma outra decisão pendente agora.</h3><p>Você pode terminar o acompanhamento deste cliente ou voltar à fila.</p></template></div><button v-if="proxima" class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
+      <MissaoDaConversa :key="atual.lead.id" :lead="atual.lead" :agente="agente" :disponivel="clienteNaLeitura && !erro && visao?.estado === 'ok' && visao.registro.disponivel" :motivo="atual.motivo" :acao="atual.acao" :estado="atual.estado" @ficha="emit('ficha', $event)" @interagiu="interacaoRegistrada = true" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fila="voltar" />
+      <div v-if="interacaoRegistrada && proxima" class="minhas-decisoes__continuar"><p class="texto-2 texto-pequeno">A seguir · {{ proxima.lead.empresa }} · {{ proxima.motivo }}</p><button class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
     </template>
     <template v-else-if="visao?.estado === 'ok' || visao?.leads.length">
       <div class="minhas-decisoes__introducao"><h3>Uma decisão por vez.</h3><p>Escolha um cliente, entenda o contexto e siga até registrar o que aconteceu.</p><ol aria-label="Como conduzir uma decisão"><li><strong>1</strong> Entender</li><li><strong>2</strong> Agir</li><li><strong>3</strong> Acompanhar</li></ol></div>
@@ -85,6 +90,9 @@ const dataDaLeitura = computed(() => props.visao?.geradoEm ? new Date(props.visa
 .minhas-decisoes__topo, .minhas-decisoes__navegacao, .minhas-decisoes__titulo-fila, .minhas-decisoes__paginacao { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--esp-2); }
 .minhas-decisoes p, .minhas-decisoes h3 { margin: 0; }
 .minhas-decisoes h3 { font-size: var(--tam-secao); }
+.minhas-decisoes__proxima { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--esp-4); padding: var(--esp-4); background: var(--realce); border-radius: var(--raio-controle); }
+.minhas-decisoes__proxima > div { display: grid; gap: var(--esp-2); flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.minhas-decisoes__continuar { display: grid; gap: var(--esp-3); border-top: var(--divisor); padding-top: var(--esp-4); }
 .minhas-decisoes__introducao { display: grid; gap: var(--esp-3); }
 .minhas-decisoes__introducao > p { color: var(--texto-2); }
 .minhas-decisoes__introducao ol { display: flex; flex-wrap: wrap; gap: var(--esp-5); padding: 0; margin: 0; list-style: none; font-size: var(--tam-apoio); }
@@ -94,7 +102,7 @@ const dataDaLeitura = computed(() => props.visao?.geradoEm ? new Date(props.visa
 .minhas-decisoes__estados button { display: grid; text-align: left; gap: var(--esp-1); border: 0; border-radius: var(--raio-controle); padding: var(--esp-4); color: var(--texto); background: var(--superficie-2); font: inherit; cursor: pointer; min-height: var(--toque); }
 .minhas-decisoes__estados button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto); box-shadow: inset 0 0 0 var(--linha-espessura) var(--borda); }
 .minhas-decisoes__estados strong { font-size: var(--tam-secao); font-variant-numeric: tabular-nums; }
-.minhas-decisoes__estados span { font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
+.minhas-decisoes__estados span { font-size: var(--tam-apoio); font-weight: var(--peso-medio); overflow-wrap: anywhere; }
 .minhas-decisoes__filtros { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--esp-3); }
 .minhas-decisoes__filtros .rotulo { min-width: 0; }
 .minhas-decisoes__filtros .campo { width: 100%; min-width: 0; }

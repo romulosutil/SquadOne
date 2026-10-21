@@ -5,13 +5,14 @@ import { focarNaSala } from './foco'
 import { ultimoRetornoRegistrado } from '../operations/retorno-da-venda'
 import { registroDaSala, type FatoDaVenda } from './andamento'
 const props = defineProps<{ lead: CrmLead; mensagem?: string; fatoInicial?: FatoDaVenda; disponivel?: boolean }>()
-const emit = defineEmits<{ registrado: []; responder: []; ocupado: [valor: boolean] }>()
+const emit = defineEmits<{ registrado: []; confirmado: []; responder: []; ocupado: [valor: boolean] }>()
 const chave = `squadone.andamento.${JSON.stringify([props.lead.produto, props.lead.id])}`
 let salvo: { fato?: FatoDaVenda; texto?: string; data?: string; incerto?: boolean } = {}
 try { salvo = JSON.parse(sessionStorage.getItem(chave) ?? '{}') ?? {} } catch { /* O formulário continua sem persistência. */ }
-const fato = ref<FatoDaVenda>(props.mensagem ? 'envio' : ['envio', 'retorno', 'passo'].includes(salvo.fato ?? '') ? salvo.fato! : props.fatoInicial ?? 'retorno')
-const texto = ref(props.mensagem || (typeof salvo.texto === 'string' ? salvo.texto.slice(0, 900) : ''))
-const data = ref(!props.mensagem && typeof salvo.data === 'string' ? salvo.data : '')
+const fato = ref<FatoDaVenda>(props.mensagem ? 'envio' : props.fatoInicial ?? (['envio', 'retorno', 'passo'].includes(salvo.fato ?? '') ? salvo.fato! : 'retorno'))
+const compativel = !props.fatoInicial || salvo.fato === fato.value
+const texto = ref(props.mensagem || (compativel && typeof salvo.texto === 'string' ? salvo.texto.slice(0, 900) : ''))
+const data = ref(!props.mensagem && compativel && typeof salvo.data === 'string' ? salvo.data : '')
 const tituloDaPrevia = ref<HTMLElement | null>(null)
 const previa = ref<ReturnType<typeof registroDaSala> | null>(null)
 const salvando = ref(false)
@@ -43,7 +44,7 @@ async function confirmar() {
     if (!r.ok) { incerto.value = r.status >= 500; throw new Error(corpo.error ?? 'O servidor não confirmou o registro.') }
     sucesso.value = 'Registro confirmado na planilha. A leitura de Vendas será atualizada em alguns segundos.'
     if (fato.value === 'retorno') retornoGravado.value = registro.texto
-    previa.value = null; texto.value = ''; data.value = ''; emit('registrado')
+    previa.value = null; texto.value = ''; data.value = ''; emit('confirmado'); emit('registrado')
   } catch (e) {
     if (e instanceof TypeError) incerto.value = true
     erro.value = `${e instanceof Error ? e.message : 'Não foi possível confirmar.'}${incerto.value ? ' O resultado é incerto. Confira o histórico antes de repetir para evitar duplicação.' : ''}`
@@ -52,7 +53,7 @@ async function confirmar() {
 </script>
 <template>
   <section class="andamento-venda" aria-label="Avançar a venda na sala">
-    <h4 tabindex="-1">Continuar a venda</h4>
+    <h4 tabindex="-1">{{ fato === 'envio' ? 'Registrar mensagem enviada' : fato === 'retorno' ? 'Registrar resposta do cliente' : 'Definir próxima ação e data' }}</h4>
     <p class="texto-pequeno"><strong>{{ lead.empresa }}</strong></p>
     <p class="texto-2 texto-pequeno">Registre fatos da conversa. Abrir o WhatsApp não comprova envio; silêncio não é recusa.</p>
     <div v-if="!previa && !sucesso" class="andamento-venda__acoes" role="group" aria-label="O que aconteceu com este cliente?">

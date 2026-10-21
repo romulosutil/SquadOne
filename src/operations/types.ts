@@ -103,6 +103,8 @@ export interface CrmResumoDaConversa {
   desde: string
   mensagens: number
   ultima: { direcao: 'entrada' | 'saida', em: string, trecho: string, papel?: 'recepcao' | 'robo' }
+  /** Trechos recentes em ordem, para conferir o contexto que sustenta uma decisão. */
+  recentes?: CrmResumoDaConversa['ultima'][]
   /** A última de gente (o lead ou a recepção); o robô não conta. */
   ultimaEntrada?: string
   ultimaEntradaRobo?: string
