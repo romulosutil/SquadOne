@@ -1,11 +1,11 @@
 import fs from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import express, { type Router } from 'express';
 import type { CrmVisao } from '../src/operations/types.ts';
 import { frenteDosArquivos, primeirosDoTime, mensagemDoPrimeiroContato, reservaDoTime, type FrenteDoPrimeiro, type ReservaDoTime } from '../src/operations/primeiro-contato.ts';
 import { tetoDoDia, REGRAS_DO_RITMO } from '../src/operations/trava-de-ritmo.ts';
 import { respostasDoDia } from './respostas-do-dia.ts';
+import { criarProtecaoProspeccao, lerPausaAutomatica, RetomadaRecusada, type SinalDaConta } from './protecao-prospeccao.ts';
 import { noExpedienteDeVenda } from '../src/operations/trava-de-horario.ts';
 import { conferirMensagem } from './gate-de-envio.ts';
 import type { MemoriaDaVenda } from './venda-do-dia.ts';
@@ -52,21 +52,22 @@ export async function lerPrimeirosDoTime(dataDir: string): Promise<Set<string>> 
 export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pick<CrmVisao, 'estado' | 'leads'> | null) {
   const config = (await lerJson(path.join(dataDir, CONFIG))) ?? { ativo: false };
   const bruto = await lerJson(path.join(dataDir, ESTADO));
+  const pausaAutomatica = await lerPausaAutomatica(dataDir);
   // O teto é o da trava de ritmo da Central, dividido com as telas e o Telegram: não é uma cota do time.
   const limite = tetoDoDia(agora);
   const respostasHoje = visao?.estado === 'ok' ? respostasDoDia(visao.leads, agora) : null;
-  const metricas = { respostasHoje, intervaloMinutos: REGRAS_DO_RITMO.intervaloMs / 60_000, porHora: REGRAS_DO_RITMO.porHora };
-  const ativo = config.ativo === true;
+  const metricas = { respostasHoje, pausaAutomatica, intervaloMinutos: REGRAS_DO_RITMO.intervaloMs / 60_000, porHora: REGRAS_DO_RITMO.porHora };
+  const ativo = config.ativo === true && !pausaAutomatica;
   // A última rodada: a hora gravada pelo script (`atualizadoEm`); sem ela legível, o mtime do arquivo de estado.
   const gravada = bruto ? Date.parse(bruto.atualizadoEm) : NaN;
   const ultimaRodada = Number.isFinite(gravada) ? gravada : bruto ? await fs.stat(path.join(dataDir, ESTADO)).then((st) => st.mtimeMs).catch(() => null) : null;
   const ultimaRodadaEm = ultimaRodada === null ? null : new Date(ultimaRodada).toISOString();
   const cicloParado = ativo && noExpedienteDeVenda(agora) && (ultimaRodada === null || agora - ultimaRodada > CICLO_PARADO_APOS_MS);
-  if (!bruto) return { ...metricas, ativo, estado: 'iniciando', limite, fila: [], setores: [], funil: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
+  if (!bruto) return { ...metricas, ativo, estado: pausaAutomatica ? 'pausado' : 'iniciando', detalhe: pausaAutomatica?.detalhe ?? '', limite, fila: [], setores: [], funil: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
   const stale = !Number.isFinite(Date.parse(bruto.atualizadoEm)) || agora - Date.parse(bruto.atualizadoEm) > 10 * 60_000;
   return {
     ...metricas,
-    ativo, estado: stale ? 'sem-sinal' : config.ativo === false ? 'pausado' : bruto.estado,
+    ativo, estado: pausaAutomatica ? 'pausado' : stale ? 'sem-sinal' : config.ativo === false ? 'pausado' : bruto.estado,
     cicloParado, ultimaRodadaEm,
     limite, dia: bruto.dia, atualizadoEm: bruto.atualizadoEm,
     avaliados: bruto.avaliados ?? 0, selecionados: bruto.selecionados ?? 0,
@@ -82,8 +83,8 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
       selecionados: typeof s.selecionados === 'number' ? s.selecionados : 0,
       enviados: typeof s.enviados === 'number' ? s.enviados : 0,
     })),
-    proximoEnvioEm: bruto.proximoEnvioEm ?? null,
-    detalhe: typeof bruto.detalhe === 'string' ? bruto.detalhe.slice(0, 400) : '',
+    proximoEnvioEm: pausaAutomatica ? null : bruto.proximoEnvioEm ?? null,
+    detalhe: pausaAutomatica?.detalhe ?? (typeof bruto.detalhe === 'string' ? bruto.detalhe.slice(0, 400) : ''),
     fila: (Array.isArray(bruto.fila) ? bruto.fila : []).slice(0, 100).map((l: Record<string, unknown>) => ({
       id: l.id, empresa: l.empresa, produto: l.produto, setor: l.setor, nota: l.nota, estado: l.estado, motivo: l.motivo,
       avaliacoes: l.avaliacoes, enviadoEm: l.enviadoEm, mensagem: l.mensagem,
@@ -97,6 +98,8 @@ export interface DepsDaFrente {
   /** O retrato do CRM. Ausente (CRM não configurado): o time não reserva nada. */
   visao?: () => Promise<Pick<CrmVisao, 'estado' | 'leads'>>;
   agora?: () => number;
+  saude?: () => Promise<'open' | SinalDaConta | null>;
+  vigiar?: boolean;
 }
 
 function mesmaOrigem(req: express.Request): boolean {
@@ -111,9 +114,17 @@ function mesmaOrigem(req: express.Request): boolean {
 export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
   const { dataDir } = deps;
   const agora = deps.agora ?? Date.now;
+  const protecao = criarProtecaoProspeccao({ dir: dataDir, agora, visao: deps.visao, saude: deps.saude });
+  const relogios: ReturnType<typeof setTimeout>[] = [];
+  if (deps.vigiar) {
+    const conferir = () => { void protecao.verificar().catch(() => console.error('[frente] proteção não pôde ser conferida; envios exigem nova verificação.')); };
+    relogios.push(setTimeout(conferir, 0), setInterval(conferir, 60_000));
+    relogios.forEach(r => r.unref());
+  }
   router.get('/crm/frente', async (_req, res, next) => {
     try {
       const visao = deps.visao ? await deps.visao().catch(() => null) : null;
+      await protecao.verificar(visao);
       res.set('Cache-Control', 'no-store').json(await lerFrente(dataDir, agora(), visao));
     } catch (e) { next(e); }
   });
@@ -121,13 +132,18 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
     try {
       if (!mesmaOrigem(req)) return res.status(403).json({ error: 'Confirme a configuração na própria Central.' });
       if (Object.keys(req.body ?? {}).length !== 1 || typeof req.body.ativo !== 'boolean') return res.status(400).json({ error: 'Informe se o time deve iniciar primeiros contatos.' });
-      await fs.mkdir(dataDir, { recursive: true });
-      const arq = path.join(dataDir, CONFIG);
-      const tmp = `${arq}.${randomUUID()}.tmp`;
-      const anterior = (await lerJson(arq)) ?? {};
-      await fs.writeFile(tmp, JSON.stringify({ ...anterior, ativo: req.body.ativo, atualizadoEm: new Date(agora()).toISOString() }), { mode: 0o600 });
-      await fs.rename(tmp, arq);
-      return res.json({ ativo: req.body.ativo });
+      return res.json(await protecao.configurar(req.body.ativo));
+    } catch (e) {
+      if (e instanceof RetomadaRecusada) return res.status(409).json({ error: e.message });
+      return next(e);
+    }
+  });
+  // O executor só relata sinais limitados da própria integração; nenhum payload bruto é persistido.
+  router.post('/crm/frente/sinal', express.json({ limit: '1kb' }), async (req, res, next) => {
+    try {
+      if (!mesmaOrigem(req) || !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress ?? '')) return res.status(403).json({ error: 'Sinal disponível somente na integração local.' });
+      if (Object.keys(req.body ?? {}).length !== 1 || !['restricao', 'recusa', 'desconectado'].includes(req.body?.sinal)) return res.status(400).json({ error: 'Sinal inválido.' });
+      return res.json({ pausaAutomatica: await protecao.verificar(null, req.body.sinal) });
     } catch (e) { return next(e); }
   });
   router.post('/crm/frente/reservar', express.json({ limit: '4kb' }), async (req, res) => {
@@ -139,6 +155,8 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
     try {
       const visao = deps.visao ? await deps.visao() : null;
       if (!visao || visao.estado !== 'ok') return void res.status(503).json({ reservado: false, motivo: 'sem-retrato', ate: null });
+      const pausa = await protecao.verificar(visao);
+      if (pausa) return void res.json({ reservado: false, motivo: 'pausa', ate: pausa.revisarApos, detalhe: pausa.detalhe });
       const frente = await lerFrenteDoPrimeiro(dataDir);
       const lead = visao.leads.find((l) => l.id === leadId);
       const texto = mensagemDoPrimeiroContato(lead);
@@ -156,4 +174,5 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
       res.status(500).json({ reservado: false, error: 'Não deu para reservar agora.' });
     }
   });
+  return { pararProtecao: () => relogios.forEach(r => clearTimeout(r)) };
 }

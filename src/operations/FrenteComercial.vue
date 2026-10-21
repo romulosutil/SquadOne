@@ -35,6 +35,7 @@ const desdeQuando = computed(() => frente.value?.ultimaRodadaEm ? `desde ${hora(
 const quemEnvia = computed(() => {
   const f = frente.value
   const time = !f ? 'Lendo o time…'
+    : f.pausaAutomatica ? 'Pausa automática em todos os primeiros contatos, inclusive os seus. Respostas às conversas existentes continuam disponíveis.'
     : !f.ativo ? 'Pausado: os primeiros contatos são seus, pela Ficha e pelo "Envie para X" do Telegram.'
     : f.cicloParado ? `Ativo, mas o ciclo está parado ${desdeQuando.value}. Os leads da fila dele saem do Telegram e ninguém os envia até o ciclo voltar; pause o time para eles voltarem para você.`
     : 'Ativo e rodando: os primeiros contatos das cinco ofertas que o time cobre (Site, Plus, PRUMO, Iris e Estamparia), dentro do expediente e do teto do dia, são do time.'
@@ -57,8 +58,8 @@ const ultimaLeitura = computed(() => frente.value?.atualizadoEm && Number.isFini
 async function alterarConfiguracao() {
   if (!frente.value || salvando.value) return
   salvando.value = true
-  try { const r = await fetch('/api/operations/crm/frente/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !frente.value.ativo }) }); if (!r.ok) throw new Error(); frente.value.ativo = !frente.value.ativo; esquecerAFrente(); await sincronizar() }
-  catch { erro.value = 'Não foi possível alterar a configuração. O estado anterior foi mantido.' }
+  try { const r = await fetch('/api/operations/crm/frente/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: !frente.value.ativo }) }); const corpo = await r.json(); if (!r.ok) throw new Error(corpo.error || 'Não foi possível alterar a configuração.'); esquecerAFrente(); await sincronizar() }
+  catch (e) { erro.value = e instanceof Error ? e.message : 'Não foi possível alterar a configuração. O estado anterior foi mantido.'; esquecerAFrente() }
   finally { salvando.value = false }
 }
 </script>
@@ -74,9 +75,15 @@ async function alterarConfiguracao() {
     </div>
     <p v-if="frente?.respostasHoje" class="texto-2 texto-pequeno">Somente destinatários com disparo confirmado hoje, no horário de São Paulo, pelo time ou por você. Cada contato aparece em uma categoria; uma resposta humana substitui a automática.</p>
     <p v-else class="texto-2 texto-pequeno" role="status">Contagem do dia indisponível. Aguardando uma leitura atual de Vendas.</p>
+    <section v-if="frente?.pausaAutomatica" class="recado recado--atencao" aria-label="Pausa automática dos primeiros contatos" role="status">
+      <strong>Pausa automática desde {{ dataHora(frente.pausaAutomatica.desde) }}</strong>
+      <p>{{ frente.pausaAutomatica.detalhe }}</p>
+      <p v-if="frente.pausaAutomatica.revisarApos">Revisão a partir de {{ dataHora(frente.pausaAutomatica.revisarApos) }}. O prazo não reativa os envios.</p>
+      <p>Retomada somente manual, após nova conferência da conta e dos retornos. Respostas às conversas existentes continuam disponíveis.</p>
+    </section>
     <p v-if="erro" class="recado recado--atencao" role="status">{{ erro }}</p>
     <p v-else-if="frente?.cicloParado" class="recado recado--atencao" role="status"><strong>Ativo, mas o ciclo está parado {{ desdeQuando }}.</strong> O time não está avaliando nem enviando; o timer do Dell (frente-comercial.timer) precisa voltar.</p>
-    <p v-else-if="frente?.detalhe" class="frente-comercial__detalhe">{{ frente.detalhe }}</p>
+    <p v-else-if="frente?.detalhe && !frente.pausaAutomatica" class="frente-comercial__detalhe">{{ frente.detalhe }}</p>
     <p v-else-if="!frente?.atualizadoEm" class="texto-2">As avaliações e os envios aparecem aqui assim que o serviço iniciar. Nenhum contato é considerado enviado antes da confirmação da integração.</p>
     <section class="frente-comercial__quem" aria-labelledby="frente-quem">
       <h3 id="frente-quem">Quem envia hoje</h3>
@@ -100,6 +107,7 @@ async function alterarConfiguracao() {
       <button v-if="frente.fila.length > limite" class="botao botao--leve" type="button" @click="limite += 10">Ver mais escolhas</button>
     </details>
     <p v-if="frente" class="texto-2 texto-pequeno">Limites compartilhados: {{ frente.limite }} primeiros contatos por dia, {{ frente.porHora }} por hora e {{ frente.intervaloMinutos }} minutos entre contatos. Limites internos não garantem ausência de bloqueio. Inicie contato apenas com autorização do destinatário.</p>
+    <p class="texto-2 texto-pequeno">Pausa automática: bloqueio ou recusa da integração, conta desconectada ou pelo menos 5 contatos enviados há 1 hora ou mais, nas últimas 24 horas, com 80% sem resposta humana. Robôs não são respostas humanas.</p>
     <footer class="frente-comercial__rodape"><template v-if="props.configurar"><button class="botao" type="button" :disabled="!frente || salvando" @click="alterarConfiguracao">{{ salvando ? 'Salvando…' : frente?.ativo ? 'Pausar primeiros contatos' : 'Ativar primeiros contatos' }}</button><p class="texto-2 texto-pequeno">Conta: WhatsApp do PRUMO. A pausa impede novos envios e exige ativação manual; as conversas continuam disponíveis.</p></template><a v-else class="link-discreto" href="/mais?abrir=primeiros-contatos">Configurar primeiros contatos →</a></footer>
   </section>
 </template>

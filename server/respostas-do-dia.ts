@@ -8,10 +8,16 @@ const diaSP = (em: number) => new Date(em - 3 * 60 * 60_000).toISOString().slice
 /** Um destinatário por disparo confirmado hoje. Abrir um link ou reservar não é enviar. */
 export function respostasDoDia(leads: readonly CrmLead[], agora: number) {
   const dia = diaSP(agora);
+  const inicio = Date.parse(`${dia}T00:00:00-03:00`);
+  return { dia, ...respostasNaJanela(leads, agora, inicio, agora) };
+}
+
+/** A janela limita o envio, não a resposta: um retorno recente pode resolver um contato mais antigo. */
+export function respostasNaJanela(leads: readonly CrmLead[], agora: number, inicio: number, fim: number) {
   const grupos = new Map<string, { humana: boolean; robo: boolean }>();
   for (const lead of leads) {
     const enviado = Date.parse(lead.marcos.enviado ?? '');
-    if (!Number.isFinite(enviado) || enviado > agora || diaSP(enviado) !== dia) continue;
+    if (!Number.isFinite(enviado) || enviado > agora || enviado < inicio || enviado > fim) continue;
     const depois = (em: string | undefined) => {
       const t = Date.parse(em ?? '');
       return Number.isFinite(t) && t >= enviado && t <= agora;
@@ -33,5 +39,5 @@ export function respostasDoDia(leads: readonly CrmLead[], agora: number) {
   const valores = [...grupos.values()];
   const humanas = valores.filter(v => v.humana).length;
   const robos = valores.filter(v => !v.humana && v.robo).length;
-  return { dia, enviados: valores.length, humanas, robos, semResposta: valores.length - humanas - robos };
+  return { enviados: valores.length, humanas, robos, semResposta: valores.length - humanas - robos };
 }

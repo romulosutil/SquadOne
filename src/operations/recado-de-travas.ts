@@ -118,7 +118,7 @@ export function recadoDasTravas(e: EntradaDoRecado): RecadoDeTravas {
     const depois = foraSemLiberar && e.ritmo.motivo !== 'dia' ? ' Depois disso ainda é fora do expediente.' : ''
     switch (e.ritmo.motivo) {
       case 'pausa':
-        return { pode, trava: 'ritmo', titulo: `Pausado até ${ate === null ? '—' : dataHora(new Date(ate).toISOString())} (aviso do WhatsApp)`, detalhe: longoDoRitmo + depois, continua, podeLiberar: false, ate }
+        return { pode, trava: 'ritmo', titulo: ate === null ? 'Primeiros contatos pausados: confira o motivo no painel' : `Pausado até ${dataHora(new Date(ate).toISOString())} (aviso do WhatsApp)`, detalhe: longoDoRitmo + depois, continua, podeLiberar: false, ate }
       case 'dia': {
         // O teto zera à meia-noite, mas o próximo envio só sai quando o expediente abre.
         const volta = ate === null ? null : proximaAbertura(ate)

@@ -2,6 +2,26 @@
 
 ## Contagem e ritmo após a restrição de 21/10/2026
 
+A Central confere a proteção a cada 60 s, sem depender de painel aberto, e antes de reservar
+um envio. A janela é móvel de 24 h: pelo menos 5 destinatários enviados há 60 min ou mais,
+com 80% ou mais sem resposta humana, pausam novos primeiros contatos. Robôs entram como
+sem resposta humana; envios recentes e reservas sem recibo não entram. A mesma classificação
+do painel calcula a regra. `prospeccao-pausa.json` (600/atômico) guarda motivo, hora e amostra
+agregada, e a configuração do time é desligada sem apagar outros campos.
+
+Estado fechado da Evolution pausa por desconexão; estado explícito de restrição/bloqueio
+ou recusa HTTP 403/429 também pausa. O executor grava primeiro `prospeccao-sinal.json`
+(somente sinal e hora), depois avisa a rota local `/crm/frente/sinal`. Número destinatário
+inexistente não é bloqueio da conta. Não há envio de teste, reenvio ou reconexão automática.
+Um aviso que exista só na tela do celular, sem reflexo na integração, não é detectável por ela.
+
+A pausa sobrevive à meia-noite, reconexões e reinícios; bloqueia reservas do executor,
+os links de primeiro contato na Ficha/Triagem e os novos avisos do Telegram. Conversas
+existentes continuam disponíveis. A ativação manual relê conta e CRM e recusa se a causa
+continuar; restrição informada exige ainda ao menos 24 h internas antes da revisão.
+Após o push, reinstale `deploy/dell/frente-comercial.py` em `~/.local/bin/frente-comercial`
+(já cadastrado em `instalados.json`). Não ative o time durante a instalação.
+
 `GET /api/operations/crm/frente` calcula `respostasHoje` a partir da visão atual do CRM:
 somente `marcos.enviado` no dia de São Paulo, um destinatário por número, separado em
 `humanas`, `robos` (somente automação) e `semResposta`. Humana tem prioridade sobre robô;

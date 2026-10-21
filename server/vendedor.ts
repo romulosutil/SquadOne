@@ -179,7 +179,7 @@ export const RODAPE_DO_EXPIRADO = "⌛ 30 min sem toque: fica para o fim da fila
  * fila, não tira nada do operador.
  */
 export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLido: EstadoDoVendedor, agora: number,
-  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>, doDia?: DoDia | null, doTime?: ReadonlySet<string>): { decisao: Decisao; estado: EstadoDoVendedor; fechados: Fechados } {
+  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>, doDia?: DoDia | null, doTime?: ReadonlySet<string>, pausaPrimeiros = false): { decisao: Decisao; estado: EstadoDoVendedor; fechados: Fechados } {
   const resolvidas = doDia?.resolvidas ?? {};
   const entradas = Object.entries(resolvidas);
   // O que se resolveu hoje conta aqui: enviado ou recusa marcada é como avisado; pulado vai para o fim.
@@ -195,7 +195,7 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   const ritmo = ritmoDoEnvio(instantesDePrimeiroContato(visao?.leads ?? [], toques), agora);
   const porId = new Map((visao?.leads ?? []).map((l) => [l.id, l]));
   const fila = filaDeVenda(visao, {
-    primeiroLiberado: noExpedienteDeVenda(agora) && ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}), ...(doTime ? { primeirosDoTime: doTime } : {}),
+    primeiroLiberado: !pausaPrimeiros && noExpedienteDeVenda(agora) && ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}), ...(doTime ? { primeirosDoTime: doTime } : {}),
   }, new Set(estado.pulados))
     .map((a) => comHistoricoConferido(a, porId.get(a.leadId)));
   const { ficam, fechados } = limparAbertos(estado.abertos, new Set(fila.map((a) => a.chave)), resolvidas, agora);
@@ -443,6 +443,7 @@ export interface DepsDoVendedor {
   vendaDoDia: MemoriaDaVenda;
   /** Os leads cujo primeiro contato é do time comercial (server/frente-comercial.ts). Ausente: nenhum. */
   primeirosDoTime?(): Promise<ReadonlySet<string>>;
+  pausaPrimeiros?(): Promise<boolean>;
   origemCentral?: string;
   agora(): number;
   /**
@@ -571,7 +572,9 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     // Quem faz o primeiro contato é só o primeirosDoTime (a regra da Central, src/operations/primeiro-contato.ts):
     // o arquivo de config do time existir não tira o lead novo do operador, ligado ou não. lerPrimeirosDoTime nunca rejeita.
     const doTime = deps.primeirosDoTime ? await deps.primeirosDoTime() : undefined;
-    const { decisao, estado, fechados } = decidir(visao, lido, agora, sugestoes, doDia, doTime);
+    let pausaPrimeiros = true;
+    try { pausaPrimeiros = deps.pausaPrimeiros ? await deps.pausaPrimeiros() : false; } catch { /* Sem leitura da proteção: primeiros contatos continuam barrados. */ }
+    const { decisao, estado, fechados } = decidir(visao, lido, agora, sugestoes, doDia, doTime, pausaPrimeiros);
     const historico = fechadosNaVolta(fechados, agora);
     // O que a Central resolveu fecha aqui também; o que expirou vale como pular lá (AC-06).
     for (const { aberto, resolvida } of fechados.fora) await fecharMensagens(aberto, rodapeDeFora(resolvida));

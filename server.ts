@@ -55,6 +55,7 @@ import { criarVigia, type Vigia } from "./server/vigia.ts";
 import { resumoMatinalLigado } from "./server/resumo-matinal.ts";
 import { criarVendedor, type Vendedor } from "./server/vendedor.ts";
 import { lerPrimeirosDoTime } from "./server/frente-comercial.ts";
+import { lerPausaAutomatica } from "./server/protecao-prospeccao.ts";
 import { criarMemoriaDaVenda } from "./server/venda-do-dia.ts";
 import { lerConversaDoNumero } from "./server/conversa-do-lead.ts";
 import { descreverHistorico } from "./server/roster-historico.ts";
@@ -476,6 +477,7 @@ async function startServer() {
       readAgenda,
       dataDir: operationsDataDir,
       memoriaDaVenda,
+      vigiarProspeccao: true,
       uso: usoDaCentral,
       assistente: assistenteDoProcesso,
       ...(sinaisDoSite ? { sinaisDoSite } : {}),
@@ -519,6 +521,7 @@ async function startServer() {
           arquivoDeEstado: path.join(operationsDataDir, "vendedor.json"),
           // O time comercial faz o primeiro contato dos leads da fila dele: o aviso não os oferece.
           primeirosDoTime: () => lerPrimeirosDoTime(operationsDataDir),
+          pausaPrimeiros: async () => Boolean(await lerPausaAutomatica(operationsDataDir)),
           arquivoDeHistorico: path.join(operationsDataDir, "vendedor-historico.jsonl"),
           vendaDoDia: memoriaDaVenda,
           origemCentral: (process.env.SQUADONE_ORIGEM_CENTRAL ?? "").trim() || undefined,

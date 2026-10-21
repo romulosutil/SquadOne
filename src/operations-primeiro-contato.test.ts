@@ -159,4 +159,11 @@ describe('a tela e o Telegram não oferecem o primeiro contato dos leads do time
     const todos = decidir(v, estadoDoDia(null, AGORA), AGORA, undefined, null, new Set(['p0', 'p1', 'p2']))
     assert.deepEqual(todos.decisao, { tipo: 'nada', motivo: 'fila-vazia' })
   })
+  it('a pausa automática retira primeiros contatos e fecha avisos antigos do Telegram', () => {
+    const estado = estadoDoDia(null, AGORA)
+    const aberto = decidir(v, estado, AGORA)
+    assert.equal(aberto.decisao.tipo, 'avisar')
+    const pausado = decidir(v, estado, AGORA, undefined, null, undefined, true)
+    assert.deepEqual(pausado.decisao, { tipo: 'nada', motivo: 'fila-vazia' })
+  })
 })

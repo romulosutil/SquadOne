@@ -292,6 +292,8 @@ envio a folha não fecha ("Aguarde…" no lugar de "Fechar").
 
 ## Componentes de finanças
 
+Pausa automática da prospecção (21/10/2026): aviso de atenção com hora, evidência agregada e motivo específico; distingue restrição, recusa da integração, desconexão e acúmulo sem resposta humana. O prazo de revisão não promete retomada. A Ficha e a Triagem mostram a mesma trava; respostas às conversas existentes continuam disponíveis.
+
 Primeiros contatos (21/10/2026): o painel separa disparos confirmados hoje, respostas humanas, somente robôs e sem resposta, pelo dia de São Paulo e um destinatário por categoria. A resposta humana substitui o robô. Sem CRM atual, mostra contagem indisponível; os limites de dia, hora e intervalo vêm da mesma regra usada pelo envio. A pausa continua exigindo ativação manual.
 
 - **Bloco**: `--superficie`, `--linha`, `--raio-bloco`, sem sombra, título curto em cima

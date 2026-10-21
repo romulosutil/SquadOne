@@ -27,6 +27,7 @@ const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estamp
 const TIPOS_DA_ANOTACAO_DE_VENDA: ReadonlySet<string> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado", "proposta", "recusou", "cadencia_enviada", "indicacao_pedida"]);
 import { lerStatusDoDell } from "./dell-status.ts";
 import { lerPrimeirosDoTime, montarFrenteComercial } from "./frente-comercial.ts";
+import { lerPausaAutomatica, saudeDaContaWhatsapp } from "./protecao-prospeccao.ts";
 
 export type SquadOneMode = "app" | "operations";
 export type OperationsState = "healthy" | "syncing" | "unavailable" | "unknown";
@@ -461,6 +462,8 @@ export function createOperationsRouter(options: {
   copiloto?: Copiloto | null;
   readAgenda: () => Promise<AgendaSummary>;
   dataDir: string;
+  /** Laço de segurança do processo de produção; testes de rota não iniciam tarefas de fundo. */
+  vigiarProspeccao?: boolean;
   /** O "Enviei"/"Pular" do dia, dividido com o vendedor (OT-01); ausente, a rota cria a sua. */
   memoriaDaVenda?: MemoriaDaVenda;
   /** Contador de uso (server/uso.ts, AC-28); ausente, /uso responde 503. */
@@ -714,8 +717,8 @@ export function createOperationsRouter(options: {
     // memoriaDaVenda.ler() lança em erro de leitura que não seja ENOENT: sem o catch a rejeição ficaria sem
     // dono (Express 4) e poderia derrubar o processo. Quem lê o dia (as telas, o vendedor) já trata o 500.
     try {
-      const [dia, doTime] = await Promise.all([memoriaDaVenda.ler(), lerPrimeirosDoTime(options.dataDir)]);
-      res.json({ ...dia, doTime: [...doTime] });
+      const [dia, doTime, pausaPrimeiros] = await Promise.all([memoriaDaVenda.ler(), lerPrimeirosDoTime(options.dataDir), lerPausaAutomatica(options.dataDir)]);
+      res.json({ ...dia, doTime: [...doTime], pausaPrimeiros });
     } catch (error) {
       console.error("[venda] não leu o dia:", error);
       res.status(500).json({ error: "Não deu para ler o dia agora." });
@@ -724,7 +727,7 @@ export function createOperationsRouter(options: {
   // O time comercial (deploy/dell/frente-comercial.py, desligado por padrão): estado, pausa e a reserva
   // do primeiro contato pela mesma janela e ritmo da Central.
   montarFrenteComercial(router, {
-    dataDir: options.dataDir, memoriaDaVenda, ...(options.crm ? { visao: () => options.crm!.visao() } : {}),
+    dataDir: options.dataDir, memoriaDaVenda, ...(options.crm ? { visao: () => options.crm!.visao(), vigiar: options.vigiarProspeccao === true, saude: saudeDaContaWhatsapp } : {}),
   });
   // A Central resolve uma ação: { chave, como } (enviada | pulada | recusa), ou o formato de 16/10
   // ({ chave, pulou }) de uma aba aberta antes da atualização. Por onde é sempre "central": o
@@ -751,6 +754,8 @@ export function createOperationsRouter(options: {
       return void res.status(400).json({ error: "Diga o lead do primeiro contato." });
     }
     try {
+      const pausa = await lerPausaAutomatica(options.dataDir);
+      if (pausa) return void res.status(423).json({ error: pausa.detalhe, pausaPrimeiros: pausa });
       res.json(await memoriaDaVenda.primeiroContato(leadId, "central"));
     } catch (error) {
       console.error("[venda] primeiro contato não gravou:", error);

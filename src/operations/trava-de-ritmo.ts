@@ -118,7 +118,7 @@ export function ritmoDoEnvio(instantes: readonly number[], agora: number, regras
 export function motivoCurtoDoRitmo(ritmo: Pick<EstadoDoRitmo, 'motivo' | 'ate' | 'enviadosHoje' | 'teto'>): string {
   const quando = ritmo.ate === null ? '' : hora(new Date(ritmo.ate).toISOString())
   switch (ritmo.motivo) {
-    case 'pausa': return `Pausado até ${quando}`
+    case 'pausa': return ritmo.ate === null ? 'Primeiros contatos pausados; confira o motivo no painel' : `Pausado até ${quando}`
     case 'dia': return `Teto de hoje: ${ritmo.enviadosHoje} de ${ritmo.teto}`
     case 'hora': return `Teto da hora; o próximo sai às ${quando}`
     case 'intervalo': return `O próximo sai às ${quando}`
@@ -132,7 +132,7 @@ export function textoDoRitmo(estado: EstadoDoRitmo, regras: RegrasDoRitmo = REGR
   const minutos = Math.round(regras.intervaloMs / MIN)
   switch (estado.motivo) {
     case 'pausa':
-      return `Primeiros contatos pausados até ${quando} depois de um aviso do WhatsApp. Respostas e conversas seguem normais.`
+      return estado.ate === null ? 'Primeiros contatos pausados pela proteção. Confira o motivo no painel e revise antes de reativar. Respostas e conversas seguem disponíveis.' : `Primeiros contatos pausados até ${quando} depois de um aviso do WhatsApp. Respostas e conversas seguem normais.`
     case 'dia':
       return `Teto de hoje atingido: ${estado.enviadosHoje} de ${estado.teto} primeiros contatos. Amanhã a fila volta.`
     case 'hora':

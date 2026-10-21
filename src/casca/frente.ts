@@ -26,6 +26,7 @@ export interface FrenteLida {
   respostasHoje?: { dia: string; enviados: number; humanas: number; robos: number; semResposta: number } | null
   intervaloMinutos?: number
   porHora?: number
+  pausaAutomatica?: { motivo: string; desde: string; detalhe: string; revisarApos: string | null } | null
   avaliados?: number
   selecionados?: number
   setores?: SetorDaFrente[]

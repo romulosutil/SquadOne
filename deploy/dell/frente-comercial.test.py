@@ -56,9 +56,14 @@ class Frente(unittest.TestCase):
         # Avisos e observador dublados: o teste nunca toca a fila, o systemd nem o Telegram.
         self.avisos=[]
         def aviso(titulo,texto,chave_,prioridade=2):self.avisos.append({'titulo':titulo,'texto':texto,'chave':chave_,'prioridade':prioridade});return True
-        for duble in (patch.object(f,'avisar_time',side_effect=aviso),patch.object(f,'observador_ativo',return_value=True)):
+        for duble in (patch.object(f,'avisar_time',side_effect=aviso),patch.object(f,'observador_ativo',return_value=True),patch.object(f,'protecao_permite_envio',return_value=True)):
             duble.start();self.addCleanup(duble.stop)
         self.observador=f.observador_ativo  # o dublê: .return_value=False tira o observador do ar
+
+    def test_pausa_entre_reserva_e_envio_nao_envia(self):
+        f.protecao_permite_envio.return_value=False
+        r=self.rodar({'leads':[lead()]},lambda l:{'reservado':True,'texto':MSG})
+        self.assertEqual(r.envio.call_count,0);self.assertEqual(r.estados[-1]['estado'],'pausado')
 
     def rodar(self,crm,reserva,primeiros=None,marcar=None,vezes=1,existe=None,envia=None):
         """Uma rodada com tudo de fora dublado; nunca o disco, a Central, o n8n ou o WhatsApp de verdade."""
@@ -827,5 +832,34 @@ class Frente(unittest.TestCase):
             self.assertEqual(run.call_args.args[0][:3],['systemctl','--user','is-active']);self.assertIn('whatsapp-observador-prumo',run.call_args.args[0])
         for falha in (FileNotFoundError(),f.subprocess.TimeoutExpired('systemctl',10)):
             with patch.object(f.subprocess,'run',side_effect=falha):self.assertIs(OBSERVADOR_REAL(),False)
+
+class ProtecaoDaConta(unittest.TestCase):
+    def test_conferencia_final_falha_fechada(self):
+        for resposta in ({},{'ativo':True},{'ativo':False,'pausaAutomatica':None},{'ativo':True,'pausaAutomatica':{'motivo':'recusa'}}):
+            with patch.object(f,'http',return_value=resposta):self.assertFalse(f.protecao_permite_envio())
+        with patch.object(f,'http',return_value={'ativo':True,'pausaAutomatica':None}):self.assertTrue(f.protecao_permite_envio())
+
+    def test_sinais_explicitos_e_recusas_sem_confundir_destinatario(self):
+        self.assertEqual(f.sinal_da_recusa(500,{'message':'account is restricted'}),'restricao')
+        self.assertEqual(f.sinal_da_recusa(403,{'message':'Forbidden'}),'recusa')
+        self.assertEqual(f.sinal_da_recusa(429,{'message':'Too many requests'}),'recusa')
+        self.assertIsNone(f.sinal_da_recusa(400,{'message':'recipient blocked'}))
+        self.assertIsNone(f.sinal_da_recusa(500,{'message':'temporary service error'}))
+
+    def test_sinal_persiste_antes_do_http_e_sem_payload_privado(self):
+        with tempfile.TemporaryDirectory() as tmp,patch.object(f,'DATA',Path(tmp)):
+            def sem_central(*args,**kwargs):
+                dado=json.loads((Path(tmp)/'prospeccao-sinal.json').read_text())
+                self.assertEqual(set(dado),{'sinal','em'});self.assertEqual(dado['sinal'],'restricao')
+                raise TimeoutError()
+            with patch.object(f,'http',side_effect=sem_central):f.relatar_sinal('restricao')
+            self.assertTrue((Path(tmp)/'prospeccao-sinal.json').exists())
+
+    def test_erro_de_envio_pausa_sem_reenviar(self):
+        for code,corpo,sinal in ((403,{'message':'Forbidden'},'recusa'),(429,{},'recusa'),(500,{'message':'account banned'},'restricao')):
+            erro=urllib.error.HTTPError('u',code,'x',{},io.BytesIO(json.dumps(corpo).encode()))
+            with patch.object(f,'http',side_effect=erro) as envio,patch.object(f,'relatar_sinal') as relatar:
+                with self.assertRaises(urllib.error.HTTPError):f.enviar(lead(),'Olá',{'apikey':'fake'})
+                self.assertEqual(envio.call_count,1);relatar.assert_called_once_with(sinal)
 
 if __name__=='__main__':unittest.main()

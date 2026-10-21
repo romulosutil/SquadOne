@@ -446,8 +446,14 @@ def observador_ativo():
 
 def conexao():
     auth={'apikey':chave_evolution()}
-    health=http('http://127.0.0.1:8081/instance/connectionState/prumo',headers=auth)
-    if health.get('instance',{}).get('state')!='open':raise RuntimeError('O WhatsApp do PRUMO está desconectado')
+    try:health=http('http://127.0.0.1:8081/instance/connectionState/prumo',headers=auth)
+    except urllib.error.HTTPError as e:
+        if e.code in (403,429):relatar_sinal('recusa')
+        raise
+    estado=health.get('instance',{}).get('state')
+    if estado!='open':
+        relatar_sinal('restricao' if estado in ('blocked','restricted','banned') else 'desconectado')
+        raise RuntimeError('O WhatsApp do PRUMO está desconectado ou restrito')
     if not observador_ativo():raise RuntimeError('A observação das conversas está indisponível')
     return auth
 
@@ -455,6 +461,20 @@ EVOLUTION='http://127.0.0.1:8081'
 
 class NumeroSemWhatsapp(Exception):
     """A Evolution afirmou, de forma legível, que o número não existe no WhatsApp: nada saiu."""
+
+def sinal_da_recusa(codigo, corpo):
+    # Só sinais explícitos de CONTA. Número destinatário inexistente ou bloqueado não prova bloqueio da conta.
+    texto=json.dumps(corpo,ensure_ascii=False).lower()[:16000]
+    if any(t in texto for t in ('account restricted','account is restricted','account banned','account has been banned','account blocked','temporarily banned','conta restrita','conta bloqueada','conta banida')):return 'restricao'
+    return 'recusa' if codigo in (403,429) else None
+
+def relatar_sinal(sinal):
+    """Grava o sinal mínimo antes do aviso à Central. Sem texto, telefone, id ou resposta bruta."""
+    DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
+    p=DATA/'prospeccao-sinal.json';tmp=p.with_suffix('.tmp')
+    tmp.write_text(json.dumps({'sinal':sinal,'em':iso()}));tmp.chmod(0o600);tmp.replace(p)
+    try:http(CENTRAL+'/api/operations/crm/frente/sinal',{'sinal':sinal},ORIGEM,timeout=10)
+    except Exception:pass  # O sinal em disco será relido pela proteção; nunca repetir envio para testar.
 
 def item_do_numero(itens, n):
     """O item de uma resposta de `whatsappNumbers` que fala deste número, ou None se não der para ter certeza."""
@@ -488,11 +508,18 @@ def enviar(l, text, auth):
         resposta=corpo.get('response') if isinstance(corpo,dict) else None
         item=item_do_numero(resposta.get('message') if isinstance(resposta,dict) else None,numero(l))
         if e.code==400 and item and item.get('exists') is False:raise NumeroSemWhatsapp() from None
+        sinal=sinal_da_recusa(e.code,corpo)
+        if sinal:relatar_sinal(sinal)
         raise
     key=r.get('key',{})
     if key.get('fromMe') is not True or not key.get('id') or chave(key.get('remoteJid','').split('@')[0])!=chave(numero(l)):
         raise RuntimeError('A integração não confirmou o destinatário e o id do envio')
     return key['id']
+
+def protecao_permite_envio():
+    """Última conferência após a reserva. Resposta ilegível ou Central fora do ar não liberam envio."""
+    r=http(CENTRAL+'/api/operations/crm/frente',timeout=15)
+    return isinstance(r,dict) and r.get('ativo') is True and 'pausaAutomatica' in r and r['pausaAutomatica'] is None
 
 def reservar_na_central(l):
     """A Central decide se este primeiro contato sai agora, com a regra das telas e do Telegram.
@@ -843,6 +870,13 @@ def _rodada(estado, now, alvo, dia_):
                 except Exception:
                     # Nada saiu: a reserva da Central impede outra tentativa hoje.
                     registro.liberar(chave(numero(l)));raise
+            try:liberado=protecao_permite_envio()
+            except Exception:
+                registro.liberar(chave(numero(l)));raise  # A requisição de envio ainda não começou.
+            if not liberado:
+                registro.liberar(chave(numero(l)))
+                estado.update(estado='pausado',detalhe='A proteção interrompeu os primeiros contatos. Confira o motivo no painel antes de reativar.')
+                break
             estado.update(estado='enviando',detalhe='Carla está iniciando uma conversa aprovada pelo time.');gravar(estado)
             try:recibo=enviar(l,texto,auth)
             except NumeroSemWhatsapp:

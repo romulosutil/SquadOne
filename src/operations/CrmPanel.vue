@@ -75,6 +75,7 @@ const liberados = liberadosDoDia
 // comercial também gravam); o localStorage fica de reforço até o servidor confirmar.
 const primeiros = ref<PrimeirosContatos>({})
 const primeirosDoServidor = ref<Record<string, { em: number }>>({})
+const pausaPrimeiros = ref<{ detalhe: string } | null>({ detalhe: 'Aguardando a conferência dos primeiros contatos.' })
 /** O "Enviei"/"Pular" do dia (o mesmo arquivo do Telegram): tira da lista "Conversas para você" o que já foi resolvido. */
 const resolvidas = ref<Resolvidas>({})
 /**
@@ -86,12 +87,13 @@ const precisaDoDia = computed(() => vista.value === 'afazer' || vista.value === 
 async function lerDoDia() {
   try {
     const r = await fetch('/api/operations/crm/venda', { cache: 'no-store' })
-    if (!r.ok) return
-    const corpo = await r.json() as { primeiros?: Record<string, { em: number }>; resolvidas?: Resolvidas }
+    if (!r.ok) throw new Error('Proteção indisponível')
+    const corpo = await r.json() as { primeiros?: Record<string, { em: number }>; resolvidas?: Resolvidas; pausaPrimeiros?: { detalhe: string } | null }
+    pausaPrimeiros.value = corpo.pausaPrimeiros ?? null
     if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
     resolvidas.value = corpo?.resolvidas && typeof corpo.resolvidas === 'object' ? corpo.resolvidas : {}
     absorverDia(corpo)
-  } catch { /* sem servidor: o retrato e o reforço local */ }
+  } catch { pausaPrimeiros.value = { detalhe: 'Não foi possível conferir a proteção. Aguarde a atualização antes de iniciar contato.' } }
 }
 const anuncio = ref('')
 /** O servidor não guardou o convite aberto: vale só neste aparelho (o ritmo do Telegram e do time não sabe). */
@@ -277,8 +279,10 @@ const totalTriagem = computed(() => {
 // Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
 const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).filter(l => l.produto === 'site'), agora.value))
 // Todas as ofertas: o teto é do número de WhatsApp, não do filtro da tela.
-const ritmo = computed<EstadoDoRitmo>(() => ritmoDoEnvio(
-  instantesDePrimeiroContato(visao.value?.leads ?? [], somarPrimeiros(primeirosDoServidor.value, primeiros.value)), agora.value))
+const ritmo = computed<EstadoDoRitmo>(() => {
+  const atual = ritmoDoEnvio(instantesDePrimeiroContato(visao.value?.leads ?? [], somarPrimeiros(primeirosDoServidor.value, primeiros.value)), agora.value)
+  return pausaPrimeiros.value ? { ...atual, motivo: 'pausa', ate: null } : atual
+})
 const cobertura = computed(() => coberturaDoHistorico((visao.value?.leads ?? []).filter((l) => l.produto === 'site' || l.produto === 'prumo')))
 const contagens = computed(() => Object.fromEntries(ETAPAS.map(e => [e, leads.value.filter(l => l.etapa === e).length])) as Record<CrmEtapa, number>)
 const lead = computed(() => (leadId.value ? porId.value.get(leadId.value) ?? null : null))
@@ -389,6 +393,7 @@ function abrirColinha() {
     </header>
     <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
     <!-- Discreto de propósito: o WhatsApp já abriu; só o ritmo do servidor ficou sem saber do convite aberto. -->
+    <p v-if="pausaPrimeiros && precisaDoDia" class="recado recado--atencao" role="status">{{ pausaPrimeiros.detalhe }} Respostas às conversas existentes continuam disponíveis.</p>
     <p v-if="avisoDoPrimeiro" class="crm-nota-pequena crm-anotacao-falhou" role="alert">
       {{ avisoDoPrimeiro }}
       <button type="button" class="crm-mais" @click="avisoDoPrimeiro = ''">Entendi</button>

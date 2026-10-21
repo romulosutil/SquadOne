@@ -212,3 +212,48 @@ test('pausa é configuração de negócio da mesma origem, sem ampliar limites o
     const config = JSON.parse(await fs.readFile(arquivo, 'utf8')); assert.equal(config.ativo, false); assert.equal(config.limite, undefined); assert.equal(config.pausadoAte, '2030-01-01');
   } finally { await m.fechar(); }
 });
+
+test('proteção pausa antes da reserva, mostra motivo no painel e recusa ativação com taxa ruim', async () => {
+  const ls = Array.from({ length: 5 }, (_, i) => lead(`site:enviado${i}`, { links: { whatsapp: `https://wa.me/551199888770${i}` }, marcos: { enviado: '2026-10-19T12:00:00Z' } }));
+  const m = await montar([...ls, lead('site:novo')], [{ id: 'site:novo', estado: 'pronto' }]);
+  try {
+    const reserva = await m.reservar('site:novo'); assert.equal(reserva.corpo.motivo, 'pausa');
+    assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros, {});
+    const painel = await (await fetch(`${m.base}/crm/frente`)).json();
+    assert.equal(painel.ativo, false); assert.equal(painel.pausaAutomatica.motivo, 'sem-resposta-humana'); assert.match(painel.detalhe, /5 de 5/);
+    const ativar = await fetch(`${m.base}/crm/frente/config`, { method: 'POST', headers: { Origin: m.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: true }) });
+    assert.equal(ativar.status, 409);
+    assert.equal(JSON.parse(await fs.readFile(path.join(m.dir, 'frente-comercial-config.json'), 'utf8')).ativo, false);
+  } finally { await m.fechar(); }
+});
+
+test('relato de restrição é local, validado e não permite retomada imediata', async () => {
+  const m = await montar([], []);
+  const sinal = (body: unknown, origin: string | null = m.base) => fetch(`${m.base}/crm/frente/sinal`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(origin ? { Origin: origin } : {}) }, body: JSON.stringify(body) });
+  try {
+    assert.equal((await sinal({ sinal: 'restricao' }, null)).status, 403);
+    assert.equal((await sinal({ sinal: 'restricao', payload: 'não aceitar' })).status, 400);
+    assert.equal((await sinal({ sinal: 'restricao' })).status, 200);
+    const painel = await (await fetch(`${m.base}/crm/frente`)).json();
+    assert.equal(painel.pausaAutomatica.motivo, 'restricao'); assert.match(painel.detalhe, /bloqueio ou restrição/);
+    const nova = await m.reservar('site:novo'); assert.equal(nova.corpo.motivo, 'pausa');
+  } finally { await m.fechar(); }
+});
+
+test('monitor pausa sem abrir painel nem fazer requisição HTTP', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'frente-vigia-'));
+  await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
+  const monitor = montarFrenteComercial(express.Router(), { dataDir: dir, agora: () => AGORA,
+    memoriaDaVenda: criarMemoriaDaVenda(path.join(dir, 'venda-do-dia.json'), () => AGORA),
+    visao: async () => ({ estado: 'ok', leads: [] }), saude: async () => 'desconectado', vigiar: true });
+  try {
+    let ativo = true;
+    for (let i = 0; i < 50 && ativo; i++) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      ativo = JSON.parse(await fs.readFile(path.join(dir, 'frente-comercial-config.json'), 'utf8')).ativo;
+    }
+    assert.equal(ativo, false);
+    const p = JSON.parse(await fs.readFile(path.join(dir, 'prospeccao-pausa.json'), 'utf8'));
+    assert.equal(p.motivo, 'desconectado');
+  } finally { monitor.pararProtecao(); await fs.rm(dir, { recursive: true, force: true }); }
+});
