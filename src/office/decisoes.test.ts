@@ -4,20 +4,46 @@ import { decisoesDoEscritorio, novaRespostaEnviada, proximaDecisaoPorPrioridade 
 import { notaDoAprendizado } from '../operations/aprendizado-comercial.ts'
 import type { CrmLead } from '../operations/types.ts'
 import type { AcaoDeVenda } from '../operations/proxima-venda.ts'
+import { procedimentoDaDecisao } from './procedimento-da-decisao.ts'
 
 const agora = Date.parse('2026-10-21T15:00:00-03:00')
 const lead = (id: string, campos: Partial<CrmLead> = {}): CrmLead => ({ id, empresa: id, produto: 'site', etapa: 'contato', marcos: {}, links: {}, eventos: [], ...campos }) as CrmLead
 const acao = (leadId: string, chave = leadId): AcaoDeVenda => ({ leadId, chave, titulo: 'Responder cliente', primeiroContato: false }) as AcaoDeVenda
 const resposta = { ultima: { direcao: 'entrada', em: '2026-10-21T15:00:00Z', trecho: 'Podemos conversar?' } } as CrmLead['conversa']
 
-test('uma linha por cliente preserva ordem e ação de Vendas, mesmo com dois motivos', () => {
+test('uma linha por cliente prioriza respostas observadas e preserva a ação de Vendas', () => {
   const a = lead('a', { conversa: resposta }), b = lead('b'), c = lead('c', { conversa: resposta })
   const primeira = acao('b')
   const fila = decisoesDoEscritorio([a, b, c], [primeira, acao('a'), acao('b', 'outra')], agora)
-  assert.deepEqual(fila.map(d => d.lead.id), ['b', 'a', 'c'])
-  assert.equal(fila[0].acao, primeira)
-  assert.equal(fila[1].motivo, 'Resposta recebida')
-  assert.equal(fila[2].acao, null)
+  assert.deepEqual(fila.map(d => d.lead.id), ['a', 'c', 'b'])
+  assert.equal(fila[2].acao, primeira)
+  assert.equal(fila[0].motivo, 'Resposta recebida')
+  assert.equal(fila[1].acao, null)
+})
+
+test('cliente respondido volta pela hora da nova resposta, mesmo depois de uma proposta na fila antiga', () => {
+  const novo = lead('novo', { conversa: { ...resposta!, ultima: { ...resposta!.ultima, em: '2026-10-21T17:55:00Z' } } })
+  const antigo = lead('antigo', { conversa: resposta })
+  const proposta = lead('proposta')
+  const fila = decisoesDoEscritorio([proposta, antigo, novo], [{ ...acao('proposta'), tipo: 'mandar-proposta' }, { ...acao('antigo'), tipo: 'responder' }], agora)
+  assert.deepEqual(fila.map(d => d.lead.id), ['novo', 'antigo', 'proposta'])
+  assert.equal(proximaDecisaoPorPrioridade(fila, 'antigo')?.lead.id, 'novo')
+  assert.equal(fila.filter(d => d.lead.id === 'novo').length, 1)
+})
+
+test('nova resposta permite continuar a conversa mesmo com espera ou tarefa interna anteriores', () => {
+  for (const texto of ['Esperar o retorno, sem nova cobrança', 'Revisar internamente o material']) {
+    const cliente = lead('retorno', { conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em }, proximoPasso: { texto, data: '2026-10-23', registradoEm: '2026-10-21T14:00:00Z' } })
+    assert.equal(decisoesDoEscritorio([cliente], [], agora)[0].estado, 'agora')
+    assert.equal(procedimentoDaDecisao(cliente, new Date(agora)).tipo, 'humano')
+    assert.equal(cliente.proximoPasso?.texto, texto, 'o plano continua preservado para revisão')
+  }
+})
+
+test('prioridade fornecida pela fila compartilhada preserva pulo da mesma resposta', () => {
+  const a = lead('a', { conversa: resposta }), b = lead('b', { conversa: resposta })
+  const lista = [{ lead: b, rotulo: 'Resposta recebida', prioridade: 0 }, { lead: a, rotulo: 'Resposta recebida', prioridade: 10 }]
+  assert.deepEqual(decisoesDoEscritorio([a, b], [acao('a')], agora, lista).map(d => d.lead.id), ['b', 'a'])
 })
 
 test('futuro, espera e encerrados têm destinos distintos; estoque novo fica fora das decisões', () => {

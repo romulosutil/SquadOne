@@ -16,7 +16,7 @@
  *   pequena: 1 de 3 não é 33%.
  */
 import { ROTULO_DO_REGIME } from './crm-formato'
-import { pedeMaterial } from './marcadores-da-conversa'
+import { papelDaMensagem, pedeMaterial } from './marcadores-da-conversa'
 import type { CrmLead } from './types'
 import { noExpedienteDeVenda, TEXTO_DO_EXPEDIENTE } from './trava-de-horario'
 
@@ -106,7 +106,7 @@ export function respondeuDeGente(lead: Pick<CrmLead, 'marcos' | 'resposta'> & Pa
  */
 export function entradaDeGenteDaVez(lead: Pick<CrmLead, 'resposta'> & Partial<Pick<CrmLead, 'conversa'>>): number | null {
   const ultima = lead.conversa?.ultima
-  if (!ultima || ultima.direcao !== 'entrada' || ultima.papel === 'robo' || lead.resposta?.tipo === 'bot') return null
+  if (!ultima || ultima.direcao !== 'entrada' || papelDaMensagem(ultima.trecho, ultima.papel) === 'robo') return null
   const em = Date.parse(ultima.em)
   return Number.isFinite(em) ? em : null
 }

@@ -76,9 +76,11 @@ export function conversasParaVoce(
   const fila = filaDaTela(visao, { agora }, resolvidas)
   // Os leads cujos passos foram todos resolvidos hoje: a conversa deles espera a próxima mensagem.
   const comPasso = new Set(fila.map((a) => a.leadId))
-  const resolvidosDoLead = Object.keys(resolvidas).length
-    ? new Set(filaDaTela(visao, { agora }).filter((a) => resolvidas[a.chave] && !resolvidas[a.chave].pulou && !comPasso.has(a.leadId)).map((a) => a.leadId))
-    : new Set<string>()
+  const resolvidosDoLead = new Map<string, number>()
+  if (Object.keys(resolvidas).length) for (const a of filaDaTela(visao, { agora })) {
+    const resolucao = resolvidas[a.chave]
+    if (resolucao && !resolucao.pulou && !comPasso.has(a.leadId)) resolvidosDoLead.set(a.leadId, Math.max(resolvidosDoLead.get(a.leadId) ?? 0, resolucao.em))
+  }
   const pulou = (a: AcaoDeVenda | undefined) => (a && resolvidas[a.chave]?.pulou ? PULADO : 0)
 
   const acaoDoLead = new Map<string, AcaoDeVenda>()
@@ -87,9 +89,11 @@ export function conversasParaVoce(
   const itens: Array<ConversaParaVoce & { daFila: boolean }> = []
   const vistos = new Set<string>()
   for (const c of base) {
-    if (resolvidosDoLead.has(c.lead.id)) continue
+    const resolvidoEm = resolvidosDoLead.get(c.lead.id)
+    if (resolvidoEm !== undefined && (!c.resposta || c.em <= resolvidoEm)) continue
     const acao = acaoDoLead.get(c.lead.id)
-    itens.push({ ...c, prioridade: c.prioridade + pulou(acao), ...(acao ? { acao } : {}), daFila: false })
+    const respostaPosterior = c.resposta && acao && c.em > (resolvidas[acao.chave]?.em ?? 0)
+    itens.push({ ...c, prioridade: c.prioridade + (respostaPosterior ? 0 : pulou(acao)), ...(acao ? { acao } : {}), daFila: false })
     vistos.add(c.lead.id)
   }
   const porId = new Map(visao.leads.map((l) => [l.id, l] as [string, CrmLead]))

@@ -1,5 +1,13 @@
 # Design do SquadOne
 
+Retorno à fila (21/10/2026): uma resposta humana posterior ao envio reabre a decisão
+na prioridade de resposta, pela hora da mensagem mais recente. Resoluções e pulos anteriores
+não escondem nem rebaixam o novo retorno; o histórico permanece intacto e há uma linha por
+cliente. Vendas e Minhas decisões usam a mesma prioridade. O cliente que já está aberto
+permanece na tela, e o próximo avanço usa a fila atualizada. Uma nova mensagem humana supera
+a classificação antiga de robô e permite revisar espera ou tarefa interna anterior.
+
+
 Acompanhamento automático (21/10/2026): a jornada mostra as mensagens capturadas
 pela integração, sem pedir confirmação de envio ou cópia da resposta. A abertura
 do WhatsApp leva ao acompanhamento e fica aguardando sincronização até haver

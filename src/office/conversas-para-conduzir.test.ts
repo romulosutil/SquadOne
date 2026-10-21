@@ -55,6 +55,33 @@ test('sem retrato legível, lista vazia', () => {
   assert.deepEqual(conversasParaVoce({ ...comRetrato([], []), estado: 'sem-retrato' } as CrmVisao, agora), []);
 });
 
+test('nova resposta supera a resolução ou pulo do passo anterior sem apagar o histórico', () => {
+  const recebida = (em: string) => ({ desde: '2026-10-13T12:00:00Z', mensagens: 4, ultimaEntrada: em, ultimaSaida: '2026-10-18T20:00:00Z', ultima: { direcao: 'entrada', em, trecho: 'Quero esclarecer uma dúvida' } });
+  const a = base('a', { followupHoje: true, conversa: recebida('2026-10-18T21:00:00Z'), links: { whatsapp: 'https://wa.me/551', followup: 'https://wa.me/551?text=oi' } });
+  const v = comRetrato([a], [{ id: 'followup', ids: ['a'] }]);
+  const chave = conversasParaVoce(v, agora)[0].acao!.chave;
+  const em = Date.parse('2026-10-18T21:30:00Z');
+  const feita = { [chave]: { em, pulou: false } };
+  assert.equal(conversasParaVoce(v, agora, feita).length, 0);
+  const b = base('b', { conversa: recebida('2026-10-18T21:50:00Z') });
+  const nova = { ...a, conversa: recebida('2026-10-18T22:00:00Z') } as CrmLead;
+  const atualizada = comRetrato([b, nova], [{ id: 'followup', ids: ['a'] }]);
+  for (const pulou of [false, true]) {
+    const lista = conversasParaVoce(atualizada, agora, { [chave]: { em, pulou } });
+    assert.deepEqual(lista.map(c => c.lead.id), ['a', 'b']);
+    assert.equal(lista[0].prioridade, 0);
+    assert.equal(lista.filter(c => c.lead.id === 'a').length, 1);
+  }
+  assert.deepEqual(feita, { [chave]: { em, pulou: false } });
+});
+
+test('mensagem humana posterior supera classificação antiga de robô; menu automático continua fora', () => {
+  const conversa = { ultima: { direcao: 'entrada', em: '2026-10-18T22:00:00Z', trecho: '*[Ana]* Pode me explicar?' } };
+  const pessoa = base('humano', { conversa, resposta: { tipo: 'bot', em: '2026-10-17T12:00:00Z', trecho: '[Bot] Aguarde' } });
+  const robo = base('robo', { conversa: { ultima: { ...conversa.ultima, trecho: '[Bot] Aguarde na fila' } } });
+  assert.deepEqual(conversasParaConduzir([robo, pessoa], agora).map(c => c.lead.id), ['humano']);
+});
+
 // Auditoria da Fase 3 (20/10/2026): a revisão do contexto (`conferirHistorico`, tipo 'combinado') ganhava a
 // prioridade do combinado e passava na frente do "o que achou?" e da proposta sem retorno. A ordem agora
 // é a da fila de venda, de uma tabela só (PRIORIDADE_DA_FILA).
