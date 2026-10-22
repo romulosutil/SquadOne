@@ -516,9 +516,13 @@ def enviar(l, text, auth):
         raise RuntimeError('A integração não confirmou o destinatário e o id do envio')
     return key['id']
 
-def protecao_permite_envio():
+def protecao_permite_envio(estado=None):
     """Última conferência após a reserva. Resposta ilegível ou Central fora do ar não liberam envio."""
     r=http(CENTRAL+'/api/operations/crm/frente',timeout=15)
+    if isinstance(estado,dict) and isinstance(r,dict):
+        intervalo=r.get('intervaloMinutos')
+        if isinstance(intervalo,(int,float)) and not isinstance(intervalo,bool) and 1<=intervalo<=1440:
+            estado['intervaloMinutos']=intervalo
     return isinstance(r,dict) and r.get('ativo') is True and 'pausaAutomatica' in r and r['pausaAutomatica'] is None
 
 def reservar_na_central(l):
@@ -870,7 +874,7 @@ def _rodada(estado, now, alvo, dia_):
                 except Exception:
                     # Nada saiu: a reserva da Central impede outra tentativa hoje.
                     registro.liberar(chave(numero(l)));raise
-            try:liberado=protecao_permite_envio()
+            try:liberado=protecao_permite_envio(estado)
             except Exception:
                 registro.liberar(chave(numero(l)));raise  # A requisição de envio ainda não começou.
             if not liberado:
@@ -890,7 +894,7 @@ def _rodada(estado, now, alvo, dia_):
             registrado=anotar_na_central(l,texto,confirmado_em)
             c.update(estado='enviado',enviadoEm=confirmado_em,mensagem=texto);estado['enviados']+=1
             estado['setores']=metricas_dos_setores(candidatos,estado['fila'],fresh,registro,now)
-            estado['proximoEnvioEm']=iso(dt.datetime.fromisoformat(confirmado_em)+dt.timedelta(minutes=5))
+            estado['proximoEnvioEm']=iso(dt.datetime.fromisoformat(confirmado_em)+dt.timedelta(minutes=estado.get('intervaloMinutos',30)))
             if not registrado and l['produto']!='site':
                 registro.pendencia_registro(l,confirmado_em)
                 estado.update(estado='bloqueado',detalhe='Envio confirmado, mas o registro no CRM não foi confirmado. Confira a ficha e o WhatsApp antes de retomar.');break

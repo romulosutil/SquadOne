@@ -834,6 +834,16 @@ class Frente(unittest.TestCase):
             with patch.object(f.subprocess,'run',side_effect=falha):self.assertIs(OBSERVADOR_REAL(),False)
 
 class ProtecaoDaConta(unittest.TestCase):
+    def test_previsao_do_proximo_contato_usa_o_intervalo_confirmado_pela_central(self):
+        estado={}
+        with patch.object(f,'http',return_value={'ativo':True,'pausaAutomatica':None,'intervaloMinutos':30}):
+            self.assertTrue(f.protecao_permite_envio(estado))
+        self.assertEqual(estado['intervaloMinutos'],30)
+        for invalido in (None,True,0,-1,'30',float('inf')):
+            with patch.object(f,'http',return_value={'ativo':True,'pausaAutomatica':None,'intervaloMinutos':invalido}):
+                self.assertTrue(f.protecao_permite_envio(estado))
+            self.assertEqual(estado['intervaloMinutos'],30)
+
     def test_conferencia_final_falha_fechada(self):
         for resposta in ({},{'ativo':True},{'ativo':False,'pausaAutomatica':None},{'ativo':True,'pausaAutomatica':{'motivo':'recusa'}}):
             with patch.object(f,'http',return_value=resposta):self.assertFalse(f.protecao_permite_envio())
