@@ -90,6 +90,10 @@ import traceback
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+sys.path.append(str(Path.home() / ".local/lib/mel"))
+from qualidade_prumo import proteger as proteger_qualidade, arquivos_site, recibo as recibo_qualidade
+
 AUTO = Path(os.environ.get("AUTO_DIR", str(Path.home() / "auto-site")))
 LOGS = AUTO / ".logs"
 LOG_FILA = LOGS / "execucao-fila.log"
@@ -256,8 +260,6 @@ def permissoes_do_claude(slug: str, rascunho: Path) -> dict:
         f"Bash({home}/.claude/skills/impeccable/scripts/impeccable *)",
         "Bash(~/.claude/skills/impeccable/scripts/impeccable *)",
         "Bash(vercel whoami)", "Bash(vercel --version)",
-        f"Bash(vercel link --cwd {palco} --yes --project demo-{slug} --scope {VERCEL_SCOPE})",
-        f"Bash(vercel deploy --cwd {palco} --prod --yes --scope {VERCEL_SCOPE})",
     ]
     for alvo in (f"{lead}/**", f"{AUTO}/registro.md", f"{AUTO}/_build/**", f"{rascunho}/**"):
         allow += [f"Edit(/{alvo})", f"Write(/{alvo})"]
@@ -322,9 +324,7 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
   mkdir -p {palco}
   cp {lead}/index.html {palco}/
   cp {lead}/{IMAGEM_DA_PREVIA} {palco}/{copias_de_seo}
-  vercel link --cwd {palco} --yes --project demo-{slug} --scope {VERCEL_SCOPE}
-  vercel deploy --cwd {palco} --prod --yes --scope {VERCEL_SCOPE}
-  Depois siga o CLAUDE.md: URL da linha "Aliased:", curl dando 200, publicado.json, registro.md. Se o deploy falhar, deixe o index.html completo sem publicado.json: o runner publica.
+  Não execute vercel link/deploy e não grave publicado.json. Termine com o index.html e os arquivos completos: o runner aplica a trava da Prumo, identifica homologação e publica. Publicação Profissional exige avaliação individual guardada pelo responsável fora desta pasta. Não crie nem aprove essa avaliação por conta própria.
 - No resumo final, diga se alguma negação fez falta ao site."""
 
 
@@ -836,6 +836,13 @@ def deploy_do_palco(pasta: Path, log_lead: Path) -> str | None:
     """Sobe index.html, og.jpg e os arquivos do SEO (só os que existem) para demo-<slug>. Devolve a URL da
     linha "Aliased:" ou None."""
     slug = pasta.name
+    try:
+        finais, _ = proteger_qualidade("site", pasta, arquivos_site(pasta))
+    except Exception as erro:
+        log(f"Publicação bloqueada pela qualidade: {type(erro).__name__}: {erro}", "ERRO", log_lead)
+        return None
+    for nome, corpo in finais.items():
+        (pasta / nome).write_bytes(corpo)
     with tempfile.TemporaryDirectory(prefix=f"demo-{slug}-") as palco:
         shutil.copy2(pasta / "index.html", Path(palco) / "index.html")
         # O og:image do index.html aponta para a imagem; o robots.txt, para o sitemap.
@@ -902,6 +909,7 @@ def publicar_na_vercel(pasta: Path, log_lead: Path) -> bool:
         "site_url": url,
         "vercel_project": f"demo-{slug}",
         "publicado_em": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "qualidade": recibo_qualidade("site", pasta),
     }
     (pasta / "publicado.json").write_text(json.dumps(recibo, ensure_ascii=False, indent=2), encoding="utf-8")
     log(f"Recibo escrito com a URL real: {url}", arquivo=log_lead)
@@ -914,7 +922,12 @@ def validar(pasta: Path, log_lead: Path) -> bool:
         log(f"Recibo não gerado: {recibo}", "ERRO", log_lead)
         return False
     try:
-        url = json.loads(recibo.read_text(encoding="utf-8-sig"))["site_url"]
+        publicado = json.loads(recibo.read_text(encoding="utf-8-sig"))
+        url = publicado["site_url"]
+        _, atual = proteger_qualidade("site", pasta, arquivos_site(pasta))
+        registrado = publicado.get("qualidade") or {}
+        if any(registrado.get(k) != atual.get(k) for k in ("profissional", "estado", "versao", "produto_id", "referencia", "avaliacao_id")):
+            raise ValueError("Recibo de publicação sem qualidade atual; exige republicação pela trava")
         assert isinstance(url, str) and url.startswith(("http://", "https://"))
     except Exception as e:  # noqa: BLE001 — qualquer recibo ilegível é falha do lead
         log(f"publicado.json inválido: {e}", "ERRO", log_lead)
@@ -1065,7 +1078,7 @@ def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tup
         if indice.exists() and not html_completo(indice):
             indice.replace(pasta / "index.truncado.html")
             log("index.html ficou truncado (sem </html>): guardado como index.truncado.html, não publicado.", "ERRO", log_lead)
-    if html_completo(indice) and not (pasta / "publicado.json").exists():
+    if html_completo(indice) and (not (pasta / "publicado.json").exists() or not validar(pasta, log_lead)):
         publicar_na_vercel(pasta, log_lead)
     if validar(pasta, log_lead):
         falha = pasta / "falha.log"

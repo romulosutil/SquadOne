@@ -121,6 +121,10 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+sys.path.append(str(Path.home() / ".local/lib/mel"))
+from qualidade_prumo import proteger as proteger_qualidade
+
 # O cálculo PRUMO (Nota de presença e a calculadora) mora com o Mapa, em prumo-mapa/calculo_prumo.py:
 # no repo, ao lado deste arquivo; no Dell, na cópia instalada em ~/.local/share/prumo-mapa/ (a mesma
 # pasta de onde vem a fonte). Sem ele o Raio-X sai como na versão 2, sem a nota (e o main avisa no log).
@@ -1776,6 +1780,11 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
         if local is not None:
             arquivos[nome] = local
     arquivos[f"{CAMINHO}/index.html"] = pagina_html.encode("utf-8")
+    try:
+        arquivos, qualidade = proteger_qualidade("raio-x", pasta, arquivos, [f"{CAMINHO}/index.html"], dados["campos"].get("place_id"))
+        pagina_html = arquivos[f"{CAMINHO}/index.html"].decode("utf-8")
+    except Exception as erro:
+        return False, f"Qualidade bloqueou a publicação: {erro}"
     alias = (deploy or deploy_na_vercel)(arquivos, projeto, log_lead)
     if alias.rstrip("/") != site_url:
         return False, f"o deploy respondeu outro endereço ({alias or 'sem linha Aliased:'}) em vez de {site_url}"
@@ -1788,7 +1797,7 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
         return False, f"depois do deploy o demo mudou ou caiu ({codigo}); confira {site_url}"
     gravar_recibo(pasta / "publicado.json", {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
                                              "raio_x_achados": achados(diag), "raio_x_versao": VERSAO,
-                                             "raio_x_em": agora()})
+                                             "raio_x_em": agora(), "qualidade_raio_x": qualidade})
     try:
         (pasta / "raio-x.html").write_text(pagina_html, encoding="utf-8")  # cópia local, para o backup e para conferir
     except OSError:
@@ -1847,6 +1856,12 @@ def publicar_avulso(pasta: Path, dados: dict, diag: dict, pagina_html: str, reci
         nome = nome_avulso(slug, recibo)
         alvo = AVULSO_PASTA / f"{nome}.html"
         corpo = pagina_html.encode("utf-8")
+        try:
+            protegidos, qualidade = proteger_qualidade("raio-x", pasta, {f"{nome}.html": corpo}, [f"{nome}.html"], dados["campos"]["place_id"])
+            corpo = protegidos[f"{nome}.html"]
+            pagina_html = corpo.decode("utf-8")
+        except Exception as erro:
+            return False, f"Qualidade bloqueou a publicação: {erro}"
         anterior = alvo.read_bytes() if alvo.exists() else None
         alvo.write_bytes(corpo)
         try:
@@ -1864,7 +1879,8 @@ def publicar_avulso(pasta: Path, dados: dict, diag: dict, pagina_html: str, reci
         return False, f"publicado, mas {url} não respondeu com este Raio-X ({codigo})"
     gravar_recibo_avulso(pasta, dados, {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
                                         "raio_x_achados": achados(diag), "raio_x_versao": VERSAO,
-                                        "raio_x_em": agora(), "raio_x_projeto": AVULSO_PROJETO})
+                                        "raio_x_em": agora(), "raio_x_projeto": AVULSO_PROJETO,
+                                        "qualidade_raio_x": qualidade})
     try:
         (pasta / "raio-x.html").write_text(pagina_html, encoding="utf-8")
     except OSError:

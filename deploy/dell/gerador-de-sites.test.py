@@ -249,7 +249,7 @@ class Descarte(unittest.TestCase):
 
     def test_deploy_do_runner_leva_so_index_e_imagem_da_previa(self):
         pasta = self.auto / "b-bom"
-        (pasta / "index.html").write_text("<html></html>")
+        (pasta / "index.html").write_text("<html><body>Prévia</body></html>")
         (pasta / "og.jpg").write_bytes(b"\xff\xd8jpg")
         (pasta / "Fotos").mkdir()
         vistos = []
@@ -272,6 +272,25 @@ class Descarte(unittest.TestCase):
         self.assertEqual(vistos[-1], ["index.html", "og.jpg"])  # nada de content.md nem Fotos/
         recibo = json.loads((pasta / "publicado.json").read_text())
         self.assertEqual((recibo["site_url"], recibo["place_id"]), ("https://demo-b-bom.vercel.app", "pid-b-bom"))
+        self.assertFalse(recibo["qualidade"]["profissional"])
+        self.assertIn('data-prumo-homologacao="1"', (pasta / "index.html").read_text())
+
+    def test_profissional_pendente_nao_chama_vercel(self):
+        from unittest.mock import patch
+        from qualidade_prumo import motor, arquivos_site
+        raiz, q, motor_publicacao = motor()
+        pasta = self.auto / "b-bom"
+        (pasta / "index.html").write_text("<html><body>Entrega</body></html>")
+        ref = motor_publicacao.referencia("pid-b-bom")
+        cfg = motor_publicacao.preparar(q.ler(raiz / "06-qualidade/catalogo.json"), "site", ref, arquivos_site(pasta))
+        privado = self.auto / "_avaliacoes-test"
+        alvo = privado / ref.replace(":", "-") / "site.json"
+        alvo.parent.mkdir(parents=True)
+        alvo.write_text(json.dumps(cfg))
+        self.m.LOGS.mkdir(exist_ok=True)
+        with patch.dict(os.environ, {"PRUMO_QUALIDADE_AVALIACOES_DIR": str(privado)}), patch.object(self.m.subprocess, "run") as publicar:
+            self.assertIsNone(self.m.deploy_do_palco(pasta, self.auto / ".logs/x.log"))
+            publicar.assert_not_called()
 
     def test_instrucoes_pedem_a_previa_do_link(self):
         texto = self.m.instrucoes_da_execucao("b-bom", Path("/tmp/gerador-x"))
@@ -352,22 +371,20 @@ class ListaDePermissao(unittest.TestCase):
         a = f"/{self.auto}"  # regra de caminho absoluto começa com //
         for regra in ("Bash(python3 *)", "Bash(google-chrome *)", "Bash(chrome *)", "Bash(curl *)", "WebFetch", "Skill",
                       f"Edit({a}/b-bom/**)", f"Write({a}/registro.md)", f"Write(//tmp/gerador-x/**)",
-                      "Bash(rm -rf b-bom/*)",
-                      "Bash(vercel link --cwd /tmp/gerador-x/esteira-deploy/demo-b-bom --yes --project demo-b-bom "
-                      "--scope romulodesigns)",
-                      "Bash(vercel deploy --cwd /tmp/gerador-x/esteira-deploy/demo-b-bom --prod --yes "
-                      "--scope romulodesigns)"):
+                      "Bash(rm -rf b-bom/*)"):
             self.assertIn(regra, p["allow"])
         # nada de escrever na pasta inteira, de rm livre nem de vercel livre
         for regra in (f"Edit({a}/**)", f"Write({a}/**)", "Bash(rm *)", "Bash(vercel *)", "Bash(git *)", "Bash"):
             self.assertNotIn(regra, p["allow"])
+        self.assertFalse(any("vercel deploy" in x or "vercel link" in x for x in p["allow"]))
         for regra in ("Bash(git *)", "Bash(sudo *)", "Bash(wget *)", "Bash(npx *)", "Bash(curl * -d*)",
                       "Bash(rm *registro.md*)", f"Edit({a}/CLAUDE.md)", f"Write({a}/.claude/**)",
                       f"Read(/{Path.home()}/.ssh/**)", f"Read(/{Path.home()}/.config/**)", "mcp__*"):
             self.assertIn(regra, p["deny"])
         self.assertEqual(p["additionalDirectories"], ["/tmp/gerador-x"])
         instrucoes = cmd[cmd.index("--append-system-prompt") + 1]
-        self.assertIn("vercel deploy --cwd /tmp/gerador-x/esteira-deploy/demo-b-bom", instrucoes)
+        self.assertIn("Não execute vercel link/deploy", instrucoes)
+        self.assertNotIn("vercel deploy --cwd", instrucoes)
 
     def rodar_claude_falso(self, modo=""):
         bin_falso = self.auto / ".bin"

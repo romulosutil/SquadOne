@@ -1,0 +1,10 @@
+[Unit]
+Description=Prumo — mantém contexto canônico nos workflows
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

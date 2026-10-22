@@ -1,5 +1,11 @@
 # SquadOne
 
+## Qualidade da Prumo (21/10/2026)
+
+A Prumo é a fonte dos critérios, nomes e aceite; o SquadOne executa. Leia `docs/referencia/organizacao-prumo.md` e `../prumo/00-contexto/organizacao.md` antes de criar ou alterar ofertas e fluxos. Site e Raio-X passam por `deploy/dell/lib/qualidade_prumo.py` antes de publicar. Homologação é identificada; Profissional exige todos os obrigatórios, IQS completo, referência e manifesto exatos. O gerador não publica diretamente nem assina aceite; avaliações aprovadas ficam na área privada, fora da pasta do lead. O Mapa continua como rascunho, sem envio automático.
+
+`prumo_contexto.py` injeta o guia canônico em cada entrada dos workflows Prumo/Site e seus subworkflows. O `n8n.py` mantém essa integração nas regenerações; `prumo-contexto.timer` confere a sincronização a cada 15 minutos e preserva os fluxos pausados. A cópia operacional é identificada por SHA256 em `~/.local/share/prumo-contexto/`.
+
 Escritório isométrico onde squads de agentes de IA (Pessoal, Pay4Fun...) recebem demandas em linguagem natural e as transforma em eventos no Google Calendar. Uso pessoal, um usuário só.
 
 ## Comandos

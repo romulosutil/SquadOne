@@ -1,0 +1,9 @@
+[Unit]
+Description=Prumo — sincroniza organização e critérios no n8n
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/share/claude-ops/prumo-contexto-sincronizar.py --aplicar
+TimeoutStartSec=240
+UMask=0077

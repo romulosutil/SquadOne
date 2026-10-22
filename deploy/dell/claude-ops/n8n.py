@@ -50,6 +50,9 @@ def api(method, path, body=None):
         if cred_luna.exists():
             from workflow_luna import usar_luna
             body = usar_luna(body, cred_luna.read_text().strip())
+        from prumo_contexto import preparar as preparar_contexto, carregar as carregar_contexto, do_escopo
+        if do_escopo(body):
+            body = preparar_contexto(body, carregar_contexto())
     if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}
