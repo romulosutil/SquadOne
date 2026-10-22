@@ -14,7 +14,10 @@ controla os dois ciclos diários do Grok nem garante o limite de envios dessa VM
 
 O histórico dirigido preserva âncoras reais dos eventos de leads, inclusive saídas
 de outros aparelhos, e consulta o identificador confirmado pela sessão quando o
-telefone do CRM usa outra forma do nono dígito. Menus e rodapés de atendimento são
+telefone do CRM usa outra forma do nono dígito. Com telefone conferido, consulta a
+janela recente por padrão; uma âncora antiga só retorna mensagens anteriores a ela
+(`anteriores=true`). Assim, a recuperação após uma queda não fica presa no passado.
+Menus e rodapés de atendimento são
 lidos como texto, sem inferir humanidade pela ausência de `papel`. Grupos ficam fora.
 Retornos solicitados aguardam até 10 min; `somenteConsultar=true` lê o estado sem
 reenviar pedidos. `diagnostico` contém só contagens de eventos, correlação e janela.

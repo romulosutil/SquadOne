@@ -151,19 +151,22 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
     const chave = req.body?.chave
     try {
       if (typeof chave !== 'string' || !/^\d{10}$/.test(chave) || !permitidos().has(chave)) return res.status(404).json({ error: 'Lead não encontrado.' })
+      const numero = String(req.body?.numero || '')
+      const numeroConferido = /^55\d{10,11}$/.test(numero) && chaveDoNumero(numero) === chave
+      // Uma âncora antiga pagina para trás e perde respostas posteriores à queda.
+      const janelaRecente = numeroConferido && req.body?.anteriores !== true
       const anterior = pedidos.get(chave)
       if (req.body?.somenteConsultar === true) return res.json({ ...(anterior || { recebidas: 0, gravadas: 0 }), solicitado: Boolean(anterior), diagnostico, cobertura: 'parcial' })
-      if (anterior && agora() - anterior.solicitadoEm < validadeDoPedido && !(req.body?.audio === true && !anterior.comAudio)) return res.json({ ...anterior, cobertura: 'parcial' })
+      if (anterior && Boolean(anterior.janelaRecente) === janelaRecente && agora() - anterior.solicitadoEm < validadeDoPedido && !(req.body?.audio === true && !anterior.comAudio)) return res.json({ ...anterior, cobertura: 'parcial' })
       const lista = JSON.parse(fs.readFileSync(ancoras, 'utf8'))[chave] || []
-      const ancora = lista.filter((a) => a.id && a.jid && Number.isFinite(a.ts)).sort((a, b) => b.ts - a.ts)[0]
-      const numero = String(req.body?.numero || '')
-      const semAncora = !ancora && /^55\d{10,11}$/.test(numero) && chaveDoNumero(numero) === chave
+      const ancora = janelaRecente ? null : lista.filter((a) => a.id && a.jid && Number.isFinite(a.ts)).sort((a, b) => b.ts - a.ts)[0]
+      const semAncora = !ancora && numeroConferido
       if (!ancora && !semAncora) return res.status(409).json({ error: 'Sem identificador real nem telefone completo conferido para pedir o histórico deste lead.' })
       if (ancora && resolver({ remoteJid: ancora.jid }) !== chave) return res.status(409).json({ error: 'Identidade da âncora não conferida para este lead.' })
       const sock = getSocket()
       if (!sock?.fetchMessageHistory) return res.status(503).json({ error: 'Hermes sem conexão de histórico.' })
       if (pedidos.size >= 100) pedidos.delete(pedidos.keys().next().value)
-      pedidos.set(chave, { solicitadoEm: agora(), recebidas: 0, gravadas: 0, metodo: ancora ? 'ancora-real' : 'janela-sem-id', comAudio: req.body?.audio === true })
+      pedidos.set(chave, { solicitadoEm: agora(), recebidas: 0, gravadas: 0, metodo: janelaRecente ? 'janela-recente' : ancora ? 'ancora-real' : 'janela-sem-id', janelaRecente, comAudio: req.body?.audio === true })
       // Campo oldestMsgId opcional no protocolo instalado. Nunca inventa um identificador.
       const jid = ancora?.jid?.endsWith('@lid') ? ancora.jid : jidDaSessao(chave) || ancora?.jid || `${numero}@s.whatsapp.net`
       await sock.fetchMessageHistory(50, ancora ? { remoteJid: jid, id: ancora.id, fromMe: ancora.fromMe } : { remoteJid: jid }, ancora ? ancora.ts * 1000 : agora())

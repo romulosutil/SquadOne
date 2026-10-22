@@ -51,8 +51,8 @@ def main():
         tmp.chmod(0o600)
         tmp.replace(destino)
 
-    def consultar(chave, numero):
-        req = urllib.request.Request(URL, data=json.dumps({'chave': chave, 'numero': numero}).encode(), headers={'Content-Type': 'application/json', 'X-Observador': segredo})
+    def consultar(chave, numero, somente_consultar=False):
+        req = urllib.request.Request(URL, data=json.dumps({'chave': chave, 'numero': numero, 'somenteConsultar': somente_consultar}).encode(), headers={'Content-Type': 'application/json', 'X-Observador': segredo})
         try:
             with urllib.request.urlopen(req, timeout=15) as r:
                 return r.status, json.load(r)
@@ -67,7 +67,7 @@ def main():
             codigo, dados = consultar(chave, alvo['numero'])
             if codigo in (200, 202) and not dados.get('recebidas'):
                 time.sleep(3)
-                codigo, dados = consultar(chave, alvo['numero'])
+                codigo, dados = consultar(chave, alvo['numero'], somente_consultar=True)
             resultado.update({'http': codigo, 'consulta': dados, 'estado': 'recebido' if dados.get('recebidas', 0) > 0 else 'sem-retorno' if codigo in (200, 202) else 'erro'})
         except Exception as e:
             resultado.update({'estado': 'erro', 'erro': type(e).__name__})

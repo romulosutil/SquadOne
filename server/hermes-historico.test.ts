@@ -31,7 +31,7 @@ it('consulta na conexão existente: autentica, filtra leads, usa âncora real e 
     assert.equal(lotes.length, 1); assert.equal(lotes[0].length, 1); assert.equal(lotes[0][0].direcao, 'entrada')
     const retorno = res(); await h.consultar(req('1199990000'), retorno); assert.equal(retorno.corpo.recebidas, 1); assert.equal(retorno.corpo.gravadas, 1); assert.equal(chamadas.length, 1)
     const janela = res(); await h.consultar(req('1199990001', segredo, { numero: '5511999990001' }), janela)
-    assert.equal(janela.codigo, 202); assert.equal(janela.corpo.metodo, 'janela-sem-id')
+    assert.equal(janela.codigo, 202); assert.equal(janela.corpo.metodo, 'janela-recente')
     assert.deepEqual((chamadas[1] as any[])[1], { remoteJid: '5511999990001@s.whatsapp.net' })
     await h.consultar(req('1199990000', segredo, { audio: true }), res())
     h.receber({ messages: [{ key: { remoteJid: '5511999990000@s.whatsapp.net', id: 'audio-1', fromMe: false }, messageTimestamp: 1792238300, message: { audioMessage: { seconds: 12, mimetype: 'audio/ogg' } } }] })
@@ -61,8 +61,11 @@ it('resolve o formato real da sessão, preserva saídas de outro aparelho e acei
       arquivar: (lote: any[]) => { lotes.push(lote); return { status: 0, stdout: JSON.stringify({ gravadas: lote.length }) } } })
     const req = (extra = {}) => ({ body: { chave, ...extra }, headers: { 'x-observador': segredo } })
     const res = () => ({ codigo: 200, corpo: null as any, status(codigo: number) { this.codigo = codigo; return this }, json(corpo: any) { this.corpo = corpo; return this } })
-    await h.consultar(req(), res())
+    const recente = res(); await h.consultar(req({ numero: '5511999990000' }), recente)
+    assert.equal(recente.corpo.metodo, 'janela-recente')
     assert.equal(chamadas[0][1].remoteJid, jidReal, 'não usa o nono dígito que a sessão não reconhece')
+    assert.equal(chamadas[0][1].id, undefined, 'não usa âncora antiga para buscar respostas posteriores à desconexão')
+    assert.equal(chamadas[0][2], agora)
     assert.equal(chaveDoNumero('551199990000:12@s.whatsapp.net'), chave)
     h.observar({ messages: [
       { key: { remoteJid: '987654321@lid', id: 'saida-outro-aparelho', fromMe: true }, messageTimestamp: 1792238450, message: { conversation: 'Mensagem da nossa conta' } },
