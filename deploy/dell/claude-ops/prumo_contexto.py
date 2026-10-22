@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 PREFIXO = "prumo-organizacao-"
-GATILHOS = {"scheduleTrigger", "manualTrigger", "webhook", "executeWorkflowTrigger", "formTrigger", "cron"}
+GATILHOS = {"scheduleTrigger", "manualTrigger", "webhook", "executeWorkflowTrigger", "formTrigger", "errorTrigger", "cron"}
 
 
 def carregar(raiz=None):

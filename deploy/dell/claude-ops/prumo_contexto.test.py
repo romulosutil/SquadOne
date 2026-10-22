@@ -34,6 +34,11 @@ class ContextoTest(unittest.TestCase):
         self.wf["name"] = "Radar PNCP"
         self.assertEqual(preparar(self.wf, self.ctx), self.wf)
 
+    def test_fluxo_de_falha_tambem_recebe_contexto(self):
+        self.wf["name"] = "00 · Avisar falha pelo Hermes"
+        self.wf["nodes"][0]["type"] = "n8n-nodes-base.errorTrigger"
+        self.assertEqual(len(preparar(self.wf, self.ctx)["nodes"]), 3)
+
     def test_multiplas_saidas_preservam_seus_destinos(self):
         self.wf["connections"]["Início"]["main"].append([{"node": "Fim", "type": "main", "index": 1}])
         out = preparar(self.wf, self.ctx)
