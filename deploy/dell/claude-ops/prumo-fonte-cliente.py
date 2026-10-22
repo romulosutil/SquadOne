@@ -71,7 +71,8 @@ def main():
         codigo = args.revogar.read_text().strip()
         if not codigo:
             ap.error('arquivo de acesso vazio')
-        assert operacao('/operacao/acessos/revogar', {'hash':hashlib.sha256(codigo.encode()).hexdigest()}).get('revogado')
+        if not operacao('/operacao/acessos/revogar', {'hash':hashlib.sha256(codigo.encode()).hexdigest()}).get('revogado'):
+            raise RuntimeError('Servico nao confirmou a revogacao')
         print('Acesso revogado. Novas consultas e leituras privadas desse acesso foram bloqueadas.')
         return
     if not 1 <= args.dias <= 365:
@@ -94,7 +95,8 @@ def main():
     codigo = secrets.token_urlsafe(32)
     corpo = {'hash': hashlib.sha256(codigo.encode()).hexdigest(), 'empresa': empresa,
              'perfil': args.perfil, 'expira': time.time() + args.dias*86400}
-    assert operacao('/operacao/acessos', corpo).get('cadastrado')
+    if not operacao('/operacao/acessos', corpo).get('cadastrado'):
+        raise RuntimeError('Servico nao confirmou o cadastro')
     pasta = Path.home()/'.config/prumo-fonte/clientes'
     pasta.mkdir(parents=True, exist_ok=True, mode=0o700)
     arquivo = pasta/(empresa+'-'+args.perfil+'-'+str(int(time.time()))+'.txt')

@@ -53,4 +53,14 @@ class Homologacao(unittest.TestCase):
             self.assertEqual(cliente.validar_base(arquivo),base)
             self.assertEqual([p.name for p in Path(tmp).iterdir()],['base.json'])
 
+    def test_cli_revoga_sem_expor_codigo_ou_imprimir_segredo(self):
+        from unittest.mock import patch
+        import hashlib,io,contextlib
+        with tempfile.TemporaryDirectory() as tmp:
+            arquivo=Path(tmp)/'codigo.txt'; arquivo.write_text('segredo-ficticio')
+            with patch.object(cliente,'operacao',return_value={'revogado':True}) as operacao, patch('sys.argv',['cliente','--revogar',str(arquivo)]), contextlib.redirect_stdout(io.StringIO()) as saida:
+                cliente.main()
+            operacao.assert_called_once_with('/operacao/acessos/revogar',{'hash':hashlib.sha256(b'segredo-ficticio').hexdigest()})
+            self.assertNotIn('segredo-ficticio',saida.getvalue())
+
 if __name__=='__main__': unittest.main()

@@ -103,9 +103,11 @@ def main():
                 bloqueios.append(e.code==401); e.close()
         resultados.append({'caso':'revogacao-real','passou':all(bloqueios),'bloqueios':bloqueios})
     finally:
-        if cadastrado:
-            chamada('/operacao/acessos/revogar',{'hash':chave},token,False)
-        arquivo.unlink(missing_ok=True)
+        try:
+            if cadastrado:
+                chamada('/operacao/acessos/revogar',{'hash':chave},token,False)
+        finally:
+            arquivo.unlink(missing_ok=True)
         # Cleanup operational identities only; question fixtures follow normal 24h retention.
 
     w = api('GET','/workflows/yNLwUy5bdEmC4Qss')
