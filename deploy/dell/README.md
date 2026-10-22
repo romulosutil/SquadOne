@@ -24,6 +24,11 @@ reenviar pedidos. `diagnostico` contém só contagens de eventos, correlação e
 Um HTTP 202 não confirma recuperação nem cobertura completa. Aplicar com
 `python3 deploy/hermes/scripts/patch_bridge_historico.py` e reiniciar `hermes-gateway`.
 
+O adaptador da Evolution também consulta, somente para leitura, o mapa LID → telefone
+da sessão Hermes quando um evento chega sem telefone. O filtro fresco do CRM continua
+obrigatório; pessoas fora dele não são arquivadas nem entram no mapa durável de leads.
+Sem correlação válida, a captura permanece pendente para não adivinhar a identidade.
+
 ## Contagem e ritmo após a restrição de 21/10/2026
 
 A Central confere a proteção a cada 60 s, sem depender de painel aberto, e antes de reservar

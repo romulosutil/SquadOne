@@ -204,7 +204,8 @@ class Mapas:
     - `msg`: id da mensagem -> jid com telefone, também durável. O recibo traz o `keyId` da mensagem que foi lida.
     Teto de entradas: as mais antigas saem primeiro."""
 
-    def __init__(self, maximo: int = 5000, todos: bool = False, arquivo: Path | None = None):
+    def __init__(self, maximo: int = 5000, todos: bool = False, arquivo: Path | None = None,
+                 sessao_hermes: Path | None = None):
         self.lid: dict[str, str] = {}
         self.msg: dict[str, str] = {}
         self.maximo = maximo
@@ -212,7 +213,16 @@ class Mapas:
         # também lembra de quem não é lead. Em memória, com o mesmo teto. Desligado por padrão.
         self.todos = todos
         self.arquivo = arquivo
+        self.sessao_hermes = sessao_hermes
         self.carregar()
+
+    def da_sessao(self, lid: str) -> str:
+        """Só lê a correlação confirmada deste LID; o filtro de leads continua obrigatório."""
+        if self.sessao_hermes is None or not re.fullmatch(r'\d{5,30}', lid): return ''
+        try:
+            numero = str(json.loads((self.sessao_hermes / f'lid-mapping-{lid}_reverse.json').read_text(encoding='utf-8'))).split('@')[0]
+        except (OSError, ValueError, TypeError): return ''
+        return f'{numero}@s.whatsapp.net' if re.fullmatch(r'55\d{10,11}', numero) else ''
 
     def carregar(self):
         if self.arquivo is None: return
@@ -274,7 +284,7 @@ def jid_da_conversa(item: dict, mapas: "Mapas | None" = None) -> tuple[str, str,
     dominio = principal.partition("@")[2]
     if dominio == "lid":
         if mapas is not None:
-            achado = mapas.lid.get(lid) or mapas.msg.get(_id_da_mensagem(item))
+            achado = mapas.lid.get(lid) or mapas.msg.get(_id_da_mensagem(item)) or mapas.da_sessao(lid)
             if achado:
                 return achado, "", lid
         return "", "lid_sem_telefone", lid
@@ -874,10 +884,10 @@ class Adaptador:
     """Junta tradução, arquivos e contadores. `relogio` e `avisar` entram de fora nos testes."""
 
     def __init__(self, gravador: Gravador, relogio=time.time, avisar: Callable[[str], None] = avisar,
-                 instancia: str = INSTANCIA):
+                 instancia: str = INSTANCIA, sessao_hermes: Path | None = None):
         self.gravador, self.relogio, self.avisar, self.instancia = gravador, relogio, avisar, instancia
         self.vistos = Recentes()
-        self.mapas = Mapas(todos=os.environ.get("EVOLUTION_ENSAIO") == "1", arquivo=gravador.pasta / 'lid-telefone.json')
+        self.mapas = Mapas(todos=os.environ.get("EVOLUTION_ENSAIO") == "1", arquivo=gravador.pasta / 'lid-telefone.json', sessao_hermes=sessao_hermes)
         self.spool = gravador.pasta / 'entrada-pendente.json'
         self.formas: dict[str, int] = {}
         self.resumos_logados = 0
@@ -1229,7 +1239,7 @@ def main() -> int:
         print(f"Sem segredo em {ARQUIVO_SEGREDO}: crie com `openssl rand -hex 24 > {ARQUIVO_SEGREDO}; chmod 600 ...`.",
               file=sys.stderr)
         return 2
-    adaptador = Adaptador(Gravador())
+    adaptador = Adaptador(Gravador(), sessao_hermes=Path.home() / '.hermes/whatsapp/session')
     servidor = criar_servidor(adaptador, segredo)
     signal.signal(signal.SIGTERM, lambda *_: threading.Thread(target=servidor.shutdown, daemon=True).start())
     log(f"ouvindo {ENDERECO}:{PORTA}; pasta {PASTA}" + (f"; instância {INSTANCIA}" if INSTANCIA else ""))

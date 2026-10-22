@@ -363,6 +363,30 @@ def recibo_lid(key_id, status="READ", de_mim=True, lid=LID):
             "data": {"fromMe": de_mim, "instanceId": "x", "keyId": key_id, "remoteJid": f"{lid}@lid", "status": status}}
 
 
+class CorrelacaoHermesEvolution(unittest.TestCase):
+    def test_resposta_sem_telefone_usa_o_mapa_confirmado_da_sessao(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta=Path(tmp);lid='998877665544'
+            (pasta/f'lid-mapping-{lid}_reverse.json').write_text(json.dumps(LEAD))
+            mapas=ev.Mapas(sessao_hermes=pasta)
+            t=ev.traduzir(upsert(lid,dominio='lid'),LEADS,T0,ev.Recentes(),'prumo',mapas)
+            self.assertEqual(len(t.respostas),1)
+            self.assertEqual(t.respostas[0]['chave'],CHAVE)
+            self.assertEqual(mapas.lid[lid],LEAD+'@s.whatsapp.net')
+
+    def test_correlacao_nao_amplia_captura_pessoal_nem_aceita_caminho_arbitrario(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta=Path(tmp);lid='998877665544'
+            (pasta/f'lid-mapping-{lid}_reverse.json').write_text(json.dumps(OUTRO))
+            mapas=ev.Mapas(sessao_hermes=pasta)
+            t=ev.traduzir(upsert(lid,dominio='lid'),LEADS,T0,ev.Recentes(),'prumo',mapas)
+            self.assertFalse(t.respostas);self.assertFalse(t.linhas)
+            self.assertFalse(mapas.lid)
+            self.assertEqual(mapas.da_sessao('../creds'),'')
+            (pasta/f'lid-mapping-{lid}_reverse.json').write_text(json.dumps('invalido'))
+            self.assertEqual(mapas.da_sessao(lid),'')
+
+
 class RecibosEmLid(unittest.TestCase):
     """O recibo de leitura da Evolution não traz telefone: o adaptador lembra, só de lead, de onde veio o id."""
 
