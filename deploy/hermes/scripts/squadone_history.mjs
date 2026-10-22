@@ -13,7 +13,7 @@ export function chaveDoNumero(valor) {
 export function createSquadoneHistory({ home, session, getSocket, getContent, baixarAudio, agora = Date.now, arquivar }) {
   const pedidos = new Map()
   const validadeDoPedido = 10 * 60_000
-  const diagnostico = { eventos: 0, mensagens: 0, solicitadas: 0, semCorrelacao: 0, foraDaJanela: 0, semTexto: 0 }
+  const diagnostico = { eventos: 0, mensagens: 0, solicitadas: 0, semCorrelacao: 0, foraDaJanela: 0, semTexto: 0, semTextoPorFormato: {}, falhasAncoras: 0 }
   const audios = new Map()
   const pasta = path.join(home, '.local/state/whatsapp-observador')
   const segredo = path.join(home, '.config/claude-ops/whatsapp-observador-segredo')
@@ -55,6 +55,7 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
       for (const m of messages.slice(0, 5000)) {
         const chave = resolver(m.key), ts = Number(m.messageTimestamp)
         if (!lista.has(chave) || !m.key?.id || typeof m.key.fromMe !== 'boolean' || !Number.isFinite(ts) || ts < 1 || ts * 1000 > agora() + 300_000) continue
+        if (!textoDoHistorico(getContent(m) || {})) continue
         const item = { jid: m.key.remoteJid, id: String(m.key.id).slice(0, 200), fromMe: m.key.fromMe, ts }
         const anteriores = Array.isArray(dados[chave]) ? dados[chave] : []
         if (anteriores.some(a => a.id === item.id && a.jid === item.jid && a.fromMe === item.fromMe && a.ts === item.ts)) continue
@@ -67,7 +68,7 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
         fs.writeFileSync(tmp, JSON.stringify(dados), { mode: 0o600 })
         fs.renameSync(tmp, ancoras)
       }
-    } catch { /* Falha de metadados não interrompe a captura normal da conversa. */ }
+    } catch { diagnostico.falhasAncoras++ }
   }
   function jidDaSessao(chave) {
     const encontrados = new Set()
@@ -114,13 +115,22 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
       const ts = Number(m.messageTimestamp)
       if (!Number.isFinite(ts) || ts < 1 || ts * 1000 > agora() + 300_000 || !m.key?.id) continue
       const c = getContent(m) || {}
+      pedido.mensagensRecebidas = (pedido.mensagensRecebidas || 0) + 1
+      pedido.primeiraMensagemEm = Math.min(pedido.primeiraMensagemEm ?? ts, ts)
+      pedido.ultimaMensagemEm = Math.max(pedido.ultimaMensagemEm ?? ts, ts)
       if (c.audioMessage && m.key.id) {
         if (audios.size >= 50) audios.delete(audios.keys().next().value)
         audios.set(`${chave}:${m.key.id}`, { m, em: agora() })
         pedido.audios = [...(pedido.audios || []).filter((a) => a.id !== m.key.id), { id: m.key.id, segundos: Number(c.audioMessage.seconds) || 0 }].slice(-10)
       }
       const texto = textoDoHistorico(c).slice(0, 2000)
-      if (!texto) { diagnostico.semTexto++; continue }
+      if (!texto) {
+        diagnostico.semTexto++
+        pedido.mensagensSemTexto = (pedido.mensagensSemTexto || 0) + 1
+        const formato = c.protocolMessage ? 'protocolo' : Number.isInteger(m.messageStubType) && m.messageStubType >= 0 && m.messageStubType <= 2000 ? `stub-${m.messageStubType}` : 'sem-conteudo'
+        diagnostico.semTextoPorFormato[formato] = (diagnostico.semTextoPorFormato[formato] || 0) + 1
+        continue
+      }
       const lote = lotes.get(chave) || []
       if (lote.length >= 200) continue
       lote.push({ chave, ts, direcao: m.key.fromMe ? 'saida' : 'entrada', texto, id: String(m.key.id).slice(0, 200) })

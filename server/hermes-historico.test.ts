@@ -65,7 +65,7 @@ it('resolve o formato real da sessão, preserva saídas de outro aparelho e acei
     assert.equal(chamadas[0][1].remoteJid, jidReal, 'não usa o nono dígito que a sessão não reconhece')
     assert.equal(chaveDoNumero('551199990000:12@s.whatsapp.net'), chave)
     h.observar({ messages: [
-      { key: { remoteJid: '987654321@lid', id: 'saida-outro-aparelho', fromMe: true }, messageTimestamp: 1792238450 },
+      { key: { remoteJid: '987654321@lid', id: 'saida-outro-aparelho', fromMe: true }, messageTimestamp: 1792238450, message: { conversation: 'Mensagem da nossa conta' } },
       { key: { remoteJid: '123456@g.us', remoteJidAlt: jidReal, id: 'grupo-nao-e-lead', fromMe: false }, messageTimestamp: 1792238490 },
     ] })
     const gravado = JSON.parse(await fs.readFile(arquivo, 'utf8'))
@@ -78,6 +78,7 @@ it('resolve o formato real da sessão, preserva saídas de outro aparelho e acei
       { key: { remoteJid: '987654321@lid', id: 'grok-saida', fromMe: true }, messageTimestamp: 1792238401, message: { conversation: 'Retomando o assunto anterior' } },
       { key: { remoteJid: jidReal, id: 'menu', fromMe: false }, messageTimestamp: 1792238402, message: { listMessage: { description: 'Atendimento automático', footerText: 'Equipe virtual', buttonText: 'Escolha uma opção' } } },
       { key: { remoteJid: jidReal, id: 'sem-direcao' }, messageTimestamp: 1792238403, message: { conversation: 'Não presumir entrada' } },
+      { key: { remoteJid: jidReal, id: 'configuracao', fromMe: false }, messageTimestamp: 1792238404, message: { protocolMessage: { type: 3 } } },
     ] })
     assert.equal(lotes.length, 1)
     assert.deepEqual(lotes[0].map((m: any) => m.direcao), ['saida', 'entrada'])
@@ -86,6 +87,9 @@ it('resolve o formato real da sessão, preserva saídas de outro aparelho e acei
     const estado = res(); await h.consultar(req({ somenteConsultar: true }), estado)
     assert.equal(chamadas.length, 1, 'consultar resultado não envia outro pedido ao celular')
     assert.equal(estado.corpo.recebidas, 2)
-    assert.equal(estado.corpo.diagnostico.solicitadas, 2)
+    assert.equal(estado.corpo.mensagensRecebidas, 3)
+    assert.equal(estado.corpo.mensagensSemTexto, 1)
+    assert.equal(estado.corpo.diagnostico.solicitadas, 3)
+    assert.equal(estado.corpo.diagnostico.semTextoPorFormato.protocolo, 1)
   } finally { await fs.rm(home, { recursive: true, force: true }) }
 })
