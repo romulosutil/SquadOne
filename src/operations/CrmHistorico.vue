@@ -91,7 +91,7 @@ async function importar() {
         <template v-if="previa?.dados">
           <p><strong>{{ previa.dados.mensagens.length }} mensagens</strong> entre você ({{ previa.dados.dono }}) e {{ previa.dados.contato }}.</p>
           <p>De {{ data(previa.dados.mensagens[0]!.em) }} a {{ data(previa.dados.mensagens.at(-1)!.em) }}.</p>
-          <details class="dobra"><summary>Revisar mensagens antes de importar</summary><ol class="historico__previa"><li v-for="(m, i) in previa.dados.mensagens" :key="i"><strong>{{ m.direcao === 'saida' ? 'Você' : previa.dados.contato }}</strong> · {{ data(m.em) }}<p>{{ m.texto }}</p></li></ol></details>
+          <details class="dobra"><summary>Revisar mensagens antes de importar</summary><ol class="historico__previa"><li v-for="(m, i) in previa.dados.mensagens" :key="i"><strong>{{ m.direcao === 'saida' ? 'Nossa conta' : previa.dados.contato }}</strong> · {{ data(m.em) }}<p>{{ m.texto }}</p></li></ol></details>
           <label class="historico__confirmar"><input v-model="confirmar" type="checkbox">Confirmo que {{ previa.dados.contato }} é o contato de {{ lead.empresa }} e que identifiquei meu nome corretamente.</label>
           <button class="botao" type="submit" :disabled="!confirmar || importando">{{ importando ? 'Importando…' : 'Confirmar importação deste lead' }}</button>
         </template>

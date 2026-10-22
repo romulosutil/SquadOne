@@ -46,6 +46,11 @@ app.post('/squadone/historico', (req, res) => squadoneHistory().consultar(req, r
 """
     s = s.replace(rota, bloco + rota)
 s = s.replace('getContent: getMessageContent });', "getContent: getMessageContent, baixarAudio: (msg) => downloadMediaMessage(msg, 'buffer', {}, { logger, reuploadRequest: (m) => sock.updateMediaMessage(m) }) });")
+if '// squadone:historico-ancoras' not in s:
+    evento = "  sock.ev.on('messages.upsert', async ({ messages, type }) => {"
+    if s.count(evento) != 1:
+        raise SystemExit('Bridge incompatível: captura de âncoras não aplicada.')
+    s = s.replace(evento, evento + "\n    squadoneHistory().observar({ messages }); // squadone:historico-ancoras")
 if "app.post('/squadone/historico/audio'" not in s:
     s = s.replace("app.post('/squadone/historico',", "app.post('/squadone/historico/audio', (req, res) => squadoneHistory().audio(req, res));\napp.post('/squadone/historico',")
 if s != original:

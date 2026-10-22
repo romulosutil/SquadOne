@@ -1,5 +1,26 @@
 # Central de Operações no Dell
 
+## Retomada de 22/10/2026 e sessão independente do Grok
+
+Autorizada a retomada com 50% do esforço anterior: 5 primeiros contatos/dia,
+2/h e 30 min entre contatos, compartilhados entre executor, Central e Telegram.
+A proteção automática continua ativa. Estes limites não garantem ausência de bloqueio.
+
+O Grok usa o mesmo telefone em uma sessão própria do WhatsApp Web, numa VM sem
+acesso de administração disponível. As mensagens `fromMe=true` de qualquer aparelho
+são saídas da nossa conta; não comprovam autoria humana ou do Grok. Hermes e Evolution
+arquivam por ID/direção, evitando duplicar a mesma mensagem. Esta instalação não
+controla os dois ciclos diários do Grok nem garante o limite de envios dessa VM.
+
+O histórico dirigido preserva âncoras reais dos eventos de leads, inclusive saídas
+de outros aparelhos, e consulta o identificador confirmado pela sessão quando o
+telefone do CRM usa outra forma do nono dígito. Menus e rodapés de atendimento são
+lidos como texto, sem inferir humanidade pela ausência de `papel`. Grupos ficam fora.
+Retornos solicitados aguardam até 10 min; `somenteConsultar=true` lê o estado sem
+reenviar pedidos. `diagnostico` contém só contagens de eventos, correlação e janela.
+Um HTTP 202 não confirma recuperação nem cobertura completa. Aplicar com
+`python3 deploy/hermes/scripts/patch_bridge_historico.py` e reiniciar `hermes-gateway`.
+
 ## Contagem e ritmo após a restrição de 21/10/2026
 
 A Central confere a proteção a cada 60 s, sem depender de painel aberto, e antes de reservar

@@ -45,12 +45,12 @@ test('reserva: o lead do time sai com o texto do Balcão e entra no ritmo de tod
   try {
     assert.deepEqual((await m.reservar('site:a')).corpo, { reservado: true, texto: MSG });
     assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros['site:a'], { em: AGORA, por: 'time' });
-    // O segundo, logo depois: o intervalo de 15 min da Central vale para o time também.
-    assert.deepEqual((await m.reservar('site:b')).corpo, { reservado: false, motivo: 'intervalo', ate: new Date(AGORA + 15 * 60_000).toISOString() });
-    m.relogio.agora = AGORA + 15 * 60_000;
+    // O segundo, logo depois: o intervalo de 30 min da Central vale para o time também.
+    assert.deepEqual((await m.reservar('site:b')).corpo, { reservado: false, motivo: 'intervalo', ate: new Date(AGORA + 30 * 60_000).toISOString() });
+    m.relogio.agora = AGORA + 30 * 60_000;
     assert.equal((await m.reservar('site:b')).corpo.reservado, true);
     // O mesmo lead de novo: já tem o primeiro do dia.
-    m.relogio.agora = AGORA + 30 * 60_000;
+    m.relogio.agora = AGORA + 60 * 60_000;
     assert.equal((await m.reservar('site:a')).corpo.motivo, 'ja-tocado');
   } finally { await m.fechar(); }
 });
@@ -60,7 +60,7 @@ test('reserva: o toque da Central conta no ritmo do time e tira o lead dele', as
   try {
     await m.memoriaDaVenda.primeiroContato('site:b', 'central');
     assert.equal((await m.reservar('site:a')).corpo.motivo, 'intervalo');
-    m.relogio.agora = AGORA + 15 * 60_000;
+    m.relogio.agora = AGORA + 30 * 60_000;
     assert.equal((await m.reservar('site:b')).corpo.motivo, 'ja-tocado');
   } finally { await m.fechar(); }
 });
@@ -154,7 +154,7 @@ test('sem retrato não inventa avaliações nem envios; snapshot não expõe cam
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA).toISOString(), estado: 'pronto', setores: [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1, segredo: 'nao-sai' }], funil: [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167, numero: 'segredo' }], fila: [{ id: 'site:1', setor: 'Advocacia', numero: 'segredo', recibo: 'privado', nota: 80 }], apikey: 'nao-sai' }));
     const v = await lerFrente(dir, AGORA); assert.equal(v.estado, 'pronto');
     // O teto mostrado é o da trava de ritmo da Central, não uma cota do time.
-    assert.equal(v.limite, 10);
+    assert.equal(v.limite, 5);
     assert.deepEqual(v.setores, [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1 }]);
     assert.deepEqual(v.funil, [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167 }]);
     assert.doesNotMatch(JSON.stringify(v), /segredo|privado|nao-sai/);
@@ -171,7 +171,7 @@ test('painel calcula a coorte atual do CRM, ignora contador antigo e mantém pau
     const r = await fetch(`${m.base}/crm/frente`); const v = await r.json();
     assert.equal(v.ativo, false); assert.equal(v.estado, 'pausado'); assert.equal(v.respondidos, 1);
     assert.deepEqual(v.respostasHoje, { dia: '2026-10-19', enviados: 1, humanas: 1, robos: 0, semResposta: 0 });
-    assert.equal(v.intervaloMinutos, 15); assert.equal(v.porHora, 4); assert.equal(v.limite, 10);
+    assert.equal(v.intervaloMinutos, 30); assert.equal(v.porHora, 2); assert.equal(v.limite, 5);
     assert.equal((await lerFrente(m.dir, AGORA)).respostasHoje, null, 'sem CRM não inventa zero nem reutiliza contador antigo');
   } finally { await m.fechar(); }
 });

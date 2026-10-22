@@ -11,7 +11,7 @@
  * só-robô). Resposta, 2ª mensagem e follow-up de quem leu não contam: são conversa.
  *  - intervalo mínimo entre dois primeiros contatos;
  *  - teto por hora (janela móvel de 60 min);
- *  - teto por dia (dia de São Paulo). Após a restrição de 21/10/2026: 10 compartilhados, 4/h e 15 min.
+ *  - teto por dia (dia de São Paulo). Retomada de 22/10/2026 a 50%: 5 compartilhados, 2/h e 30 min.
  * E `pausadoAte`: depois de um aviso ou restrição do WhatsApp, nada sai até a data (editar e
  * fazer push; a Central se atualiza sozinha em até 10 min).
  *
@@ -46,10 +46,10 @@ export interface RegrasDoRitmo {
 }
 
 export const REGRAS_DO_RITMO: RegrasDoRitmo = {
-  // Após a restrição de 21/10: reduzir concentração e volume; não representa um limite seguro da Meta.
-  intervaloMs: 15 * 60_000,
-  porHora: 4,
-  tetosPorSemana: [10],
+  // Retomada de 22/10 com 50% do esforço anterior; não representa um limite seguro da Meta.
+  intervaloMs: 30 * 60_000,
+  porHora: 2,
+  tetosPorSemana: [5],
   // Data histórica preservada; o teto único não cresce com a idade do número.
   inicioDoNumero: '2026-10-16',
   pausadoAte: null,

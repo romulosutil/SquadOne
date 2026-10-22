@@ -103,9 +103,9 @@ describe('reservaDoTime: a janela e o ritmo da Central, para todos', () => {
     const sabado = reservaDoTime(base({ agora: Date.parse('2026-10-17T14:00:00Z') }))
     assert.equal(sabado.ok === false && sabado.motivo, 'fora-do-expediente')
   })
-  it('o toque da Central de 2 min atrás segura o intervalo de 15 min, com a hora em que libera', () => {
+  it('o toque da Central de 2 min atrás segura o intervalo de 30 min, com a hora em que libera', () => {
     const r = reservaDoTime(base({ primeiros: { outro: { em: AGORA - 2 * MIN } } }))
-    assert.deepEqual(r, { ok: false, motivo: 'intervalo', ate: AGORA + 13 * MIN })
+    assert.deepEqual(r, { ok: false, motivo: 'intervalo', ate: AGORA + 28 * MIN })
   })
   it('o retrato conta: 4 envios na última hora (de qualquer superfície) seguram a hora', () => {
     const leads = Array.from({ length: 4 }, (_, i) => lead(`e${i}`, { marcos: { enviado: new Date(AGORA - (59 - i * 15) * MIN).toISOString() } }))
@@ -128,7 +128,7 @@ describe('reservaDoTime: a janela e o ritmo da Central, para todos', () => {
     ['fora da fila do time', { frente: frente(true, {}) }, 'nao-e-do-time'],
     ['time pausado', { frente: frente(false, { L: 'pronto' }) }, 'nao-e-do-time'],
     ['o time já começou este envio', { frente: frente(true, { L: 'incerto' }) }, 'nao-e-do-time'],
-    ['o Rômulo já tocou neste lead hoje (há 15 min)', { primeiros: { L: { em: AGORA - 15 * MIN } } }, 'ja-tocado'],
+    ['a nossa conta já tocou neste lead hoje (há 30 min)', { primeiros: { L: { em: AGORA - 30 * MIN } } }, 'ja-tocado'],
     ['o gate barrou a mensagem', { mensagemAprovada: false }, 'mensagem-barrada'],
   ]
   for (const [nome, extra, motivo] of doLead) {
