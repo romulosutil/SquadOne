@@ -48,6 +48,41 @@ class Fonte(unittest.TestCase):
             self.assertIn('--ignore-rules', args)
             self.assertEqual(limpar.call_count, 2)
 
+    def test_base_rejeita_datas_impossiveis_futuras_e_campos_sem_conteudo(self):
+        original = json.loads((BASES/'vale-norte-demo.json').read_text())
+        import copy
+        for campo, valor in [('revisada','2026-02-30'), ('revisada','2999-01-01'),
+                             ('dono','  '), ('texto','\n'), ('perfis',[{}]),
+                             ('perfis',['vendedor','vendedor'])]:
+            base = copy.deepcopy(original); base['fichas'][0][campo] = valor
+            with self.subTest(campo=campo, valor=valor), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp)/'vale-norte-demo.json').write_text(json.dumps(base))
+                with self.assertRaises(ValueError):
+                    f.carregar_base('vale-norte-demo','vendedor',Path(tmp))
+
+    def test_hash_e_do_conteudo_sem_expor_fichas_restritas(self):
+        vendedor = f.carregar_base('vale-norte-demo','vendedor',BASES)
+        dono = f.carregar_base('vale-norte-demo','dono',BASES)
+        self.assertEqual(vendedor['versao'], dono['versao'])
+        self.assertRegex(vendedor['versao'], r'^[a-f0-9]{64}$')
+        self.assertNotIn('carteira', [x['id'] for x in vendedor['fichas']])
+        r = f.validar_resposta('{"tipo":"naosei","titulo":"Nao consta","linhas":[],"fontes":[]}', vendedor)
+        self.assertEqual(r['base_versao'], vendedor['versao'])
+
+    def test_falha_do_provedor_limpa_sessao_e_libera_trava(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(f, 'BASES', BASES), patch.object(f, 'PASTA', Path(tmp)/'vazio'), \
+                patch.object(f.hermes,'executar',side_effect=RuntimeError('indisponivel')), patch.object(f.hermes,'limpar_sessoes') as limpar:
+            with self.assertRaises(RuntimeError):
+                f.responder({'empresa':'vale-norte-demo','perfil':'vendedor','pergunta':'Qual regra?'})
+            self.assertFalse(f.TRAVA.locked())
+            self.assertEqual(limpar.call_count,2)
+
+    def test_atalho_de_base_rejeitado(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp)/'vale-norte-demo.json').symlink_to(BASES/'vale-norte-demo.json')
+            with self.assertRaises(ValueError):
+                f.carregar_base('vale-norte-demo','vendedor',Path(tmp))
+
 
 if __name__ == '__main__':
     unittest.main()

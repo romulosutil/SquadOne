@@ -60,15 +60,18 @@ def base(nome, nos, segundos=None, ligacoes=None, guardar_erro='none'):
                          'executionTimeout': 170}}
 
 
-def fonte(credencial, luna):
-    return base('PRUMO · Fonte com IA (Luna do Hermes)', [
+def fonte(credencial, luna, falha_id=None):
+    w = base('PRUMO · Fonte com IA (Luna do Hermes)', [
         http('Buscar próxima pergunta', '/operacao/reivindicar', credencial, 'POST', '{}'),
-        code('Separar pergunta', "return ($input.first().json.pedidos ?? []).map(p => ({json:p}));"),
+        code('Separar pergunta', "return ($input.first().json.pedidos ?? []).map(p => ({json:p,pairedItem:{item:0}}));"),
         http('Consultar base com Luna', '/fonte', luna, 'POST',
              '={{ JSON.stringify({empresa:$json.empresa,perfil:$json.perfil,pergunta:$json.pergunta}) }}', privado=True),
         http('Confirmar resposta salva', '/operacao/concluir', credencial, 'POST',
-             "={{ JSON.stringify({id:$('Separar pergunta').first().json.id,lease:$('Separar pergunta').first().json.lease,resposta:$json}) }}"),
+             "={{ JSON.stringify({id:$('Separar pergunta').item.json.id,lease:$('Separar pergunta').item.json.lease,resposta:$json}) }}"),
     ], segundos=30)
+    if falha_id:
+        w['settings']['errorWorkflow'] = falha_id
+    return w
 
 
 ORIGENS_JS = r'''
@@ -132,13 +135,44 @@ return [{json:{total:d.total},binary:{data:{data:Buffer.from(JSON.stringify(d),'
     return base('PRUMO · Medição de eventos', nos, ligacoes=ligacoes, guardar_erro='all')
 
 
+FALHA_JS = r"""
+const id = String($input.first().json.execution?.id ?? 'indisponivel').replace(/[^0-9]/g,'').slice(0,20) || 'indisponivel';
+const aviso = {titulo:'Fonte: consulta interrompida', origem:'n8n:Fonte',
+  texto:'A Fonte falhou na execucao ' + id + '. Verifique provedor, base e fila. A fila tenta novamente ate 3 vezes; nenhuma resposta foi inventada. Nao encaminhe perguntas ou credenciais no alerta.'};
+return [{json:{execucao:id},binary:{data:{data:Buffer.from(JSON.stringify(aviso),'utf8').toString('base64'),mimeType:'application/json',fileName:'fonte-falha.json'}}}];
+"""
+
+
+def falha_fonte():
+    trigger = {'id':'falha','name':'Falha da Fonte','type':'n8n-nodes-base.errorTrigger',
+               'typeVersion':1,'position':[0,0],'parameters':{}}
+    montar = code('Montar aviso sem pergunta', FALHA_JS)
+    gravar = {'id':'avisar','name':'Avisar operacao','type':'n8n-nodes-base.readWriteFile',
+              'typeVersion':1.1,'position':[800,0],'parameters':{'operation':'write','dataPropertyName':'data',
+              'fileName':"={{ '/home/node/.n8n-files/avisos/fonte-' + $execution.id + '.json' }}"}}
+    return {'name':'PRUMO · Fonte — falha sem dados','nodes':[trigger,montar,gravar],
+            'connections':{trigger['name']:{'main':[[destino(montar['name'])]]},
+                           montar['name']:{'main':[[destino(gravar['name'])]]}},
+            'settings':{'executionOrder':'v1','timezone':'America/Sao_Paulo',
+                        'saveDataErrorExecution':'none','saveDataSuccessExecution':'none',
+                        'saveManualExecutions':False,'saveExecutionProgress':False,'executionTimeout':30}}
+
+
 def instalar():
     from n8n import api, put
     pasta = Path.home() / '.config/claude-ops'
     credencial = (pasta / 'prumo-publico-cred').read_text().strip()
     luna = (pasta / 'luna-workflows-cred').read_text().strip()
     existentes = api('GET', '/workflows?limit=250')['data']
-    for w in [fonte(credencial, luna), metricas(credencial)]:
+    falha = falha_fonte()
+    antes_falha = next((e for e in existentes if e['name'] == falha['name']), None)
+    if antes_falha:
+        falha['id'] = antes_falha['id']
+        instalado = put(falha)
+    else:
+        instalado = api('POST', '/workflows', falha)
+    api('POST', '/workflows/' + instalado['id'] + '/activate')
+    for w in [fonte(credencial, luna, instalado['id']), metricas(credencial)]:
         antes = next((e for e in existentes if e['name'] == w['name']), None)
         if antes:
             w['id'] = antes['id']

@@ -35,9 +35,18 @@ ORIGEM_JS = "origem: ('n8n:' + $workflow.name).slice(0, 80)"
 def garantir_erro_salvo(body):
     """Todo fluxo publicado guarda a execução que FALHOU (saveDataErrorExecution "all"). Com "none" o
     "00 · Avisar falha pelo Hermes" dispara, mas não há execução para abrir: o fluxo fica cego (VIVO-9).
+    Fonte tem excecao de privacidade e alerta sanitizado, sem salvar payload.
     Sucesso pode ficar como o fluxo quiser. Devolve uma cópia; o dict do chamador não muda."""
     body = dict(body)
-    body["settings"] = {**(body.get("settings") or {}), "saveDataErrorExecution": "all"}
+    privados = {"PRUMO · Fonte com IA (Luna do Hermes)", "PRUMO · Fonte — falha sem dados"}
+    if body.get("name") in privados:
+        # Pergunta, resposta e lease nao entram no historico, nem em falhas.
+        # O errorWorkflow da Fonte grava somente um aviso operacional sanitizado.
+        body["settings"] = {**(body.get("settings") or {}), "saveDataErrorExecution": "none",
+                            "saveDataSuccessExecution": "none", "saveManualExecutions": False,
+                            "saveExecutionProgress": False}
+    else:
+        body["settings"] = {**(body.get("settings") or {}), "saveDataErrorExecution": "all"}
     return body
 
 
