@@ -42,6 +42,11 @@ const montar = (id: string, extra = {}) => {
 }
 
 describe('Ficha SPICED: confirmação humana e rascunho', () => {
+  it('orientação inicial apresenta os critérios comerciais novos sem exigir impacto financeiro', () => {
+    const {raiz,app}=montar('ui-criterios-iniciais')
+    try { const status=todos(raiz).find(n=>n.type==='p' && n.props.role==='status'); assert.ok(status); assert.match(texto(status),/necessidade, adequação da oferta, intenção, participantes da decisão e próximo passo aceito/); assert.doesNotMatch(texto(status),/dor, impacto|decisor confirmado/) }
+    finally {app.unmount()}
+  })
   for (const naoEnviado of [true, false]) it(`qualificação rejeitada ${naoEnviado ? 'com prova de não envio permite corrigir o mesmo ID' : 'sem prova de não envio bloqueia repetição'}`, async () => {
     const anterior = globalThis.fetch, chamadas: any[] = []
     globalThis.fetch = (async (_url, opcoes) => { chamadas.push(JSON.parse(String(opcoes?.body))); return new Response(JSON.stringify({ error: 'Confira a fonte', ...(naoEnviado ? { naoEnviado: true } : {}) }), { status: 400 }) }) as typeof fetch

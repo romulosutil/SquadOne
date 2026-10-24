@@ -160,7 +160,7 @@ async function salvar() {
 <template>
   <section class="crm-spiced" data-blueprint="BP-SPICED" aria-label="Qualificação comercial">
     <h3 class="crm-ficha__rotulo">Qualificação para a proposta</h3>
-    <p role="status">{{ prontaParaProposta ? 'Contexto confirmado para revisar uma proposta.' : 'Ainda falta confirmar: ' + lacunasQualificacao.join(', ') + '.' }}</p>
+    <p role="status">{{ !temNovaQualificacao ? 'Revisão comercial ainda não registrada. Confirme necessidade, adequação da oferta, intenção, participantes da decisão e próximo passo aceito, com fonte e evidência.' : prontaParaProposta ? 'Contexto confirmado para revisar uma proposta.' : 'Ainda falta confirmar: ' + lacunasQualificacao.join(', ') + '.' }}</p>
     <p class="crm-nota-pequena">{{ temNovaQualificacao ? 'A revisão comercial registrada governa a qualificação. O SPICED fica como detalhe histórico.' : 'Sem revisão comercial nova. O SPICED registrado continua como referência legada até você confirmar uma revisão abaixo.' }}</p>
     <p v-if="confirmadaQualificacao" class="crm-nota-pequena">Revisão {{ confirmadaQualificacao.id }} · confirmada em {{ confirmadaQualificacao.em }} · fonte: {{ confirmadaQualificacao.fonte }}</p>
     <div v-if="perguntaQualificacao && !prontaParaProposta" class="zona">
