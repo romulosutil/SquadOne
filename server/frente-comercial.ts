@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import express, { type Router } from 'express';
-import type { CrmVisao } from '../src/operations/types.ts';
+import type { CrmVisao, CrmLead } from '../src/operations/types.ts';
 import { frenteDosArquivos, primeirosDoTime, mensagemDoPrimeiroContato, reservaDoTime, type FrenteDoPrimeiro, type ReservaDoTime } from '../src/operations/primeiro-contato.ts';
 import { tetoDoDia, REGRAS_DO_RITMO } from '../src/operations/trava-de-ritmo.ts';
 import { respostasDoDia } from './respostas-do-dia.ts';
@@ -100,6 +100,7 @@ export interface DepsDaFrente {
   visao?: () => Promise<Pick<CrmVisao, 'estado' | 'leads'>>;
   agora?: () => number;
   rodada?: RodadaComercial;
+  bloqueioConversa?: (lead: CrmLead, leads: readonly CrmLead[]) => Promise<string | null>;
   saude?: () => Promise<'open' | SinalDaConta | null>;
   vigiar?: boolean;
 }
@@ -173,6 +174,10 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
       if (pausa) return void res.json({ reservado: false, motivo: 'pausa', ate: pausa.revisarApos, detalhe: pausa.detalhe });
       const frente = await lerFrenteDoPrimeiro(dataDir);
       const lead = visao.leads.find((l) => l.id === leadId);
+      if (lead && deps.bloqueioConversa) {
+        const motivo = await deps.bloqueioConversa(lead,visao.leads);
+        if (motivo) return void res.status(423).json({reservado:false,motivo:'responsavel',detalhe:motivo,ate:null});
+      }
       const texto = mensagemDoPrimeiroContato(lead);
       // O texto da fonte é conferido na reserva, junto com o destino e o retrato atual.
       const gate = lead && texto

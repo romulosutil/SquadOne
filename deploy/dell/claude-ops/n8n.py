@@ -50,6 +50,27 @@ def garantir_erro_salvo(body):
     return body
 
 
+def preparar_comercial_se_configurado(body):
+    """Opt-in fechado por arquivo: sem config explícita, nenhum workflow muda.
+
+    Config contém apenas endpoint e referência à credencial CRM já existente,
+    nunca o valor X-CRM. Só os dois construtores comerciais consultam o arquivo.
+    """
+    if body.get('name') not in ('08 · CRM: retrato e registros (Site antes da venda + PRUMO)', 'WhatsApp — resposta de lead (classifica)'):
+        return body
+    arquivo = Path.home() / '.config/claude-ops/workflow-comercial.json'
+    if not arquivo.exists():
+        return body
+    configuracao = json.loads(arquivo.read_text())
+    if not isinstance(configuracao, dict):
+        raise ValueError('Configuração comercial inválida.')
+    endpoint = configuracao.get('endpoint')
+    if not endpoint:
+        return body
+    from workflow_comercial import preparar as preparar_comercial
+    return preparar_comercial(body, endpoint=endpoint, credencial_crm=configuracao.get('credencial_crm'))
+
+
 def api(method, path, body=None):
     partes = path.strip("/").split("/")
     if method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
@@ -62,6 +83,7 @@ def api(method, path, body=None):
         from prumo_contexto import preparar as preparar_contexto, carregar as carregar_contexto, do_escopo
         if do_escopo(body):
             body = preparar_contexto(body, carregar_contexto())
+        body = preparar_comercial_se_configurado(body)
     if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}

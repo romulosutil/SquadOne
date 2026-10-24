@@ -1,3 +1,5 @@
+import { acaoInternaComercial } from '../src/operations/acao-interna-comercial.ts';
+import { montarResponsavelAtendimento } from './rotas-atendimento-comercial.ts';
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import https from "node:https";
@@ -459,6 +461,7 @@ export function createOperationsRouter(options: {
   store: OperationsProjectStore;
   readings: HermesReadingsStore;
   crm?: CrmStore;
+  visaoAtendimento?: () => ReturnType<CrmStore["visao"]>;
   /** Copiloto do PRUMO (server/copiloto.ts): null/ausente = desligado, e a Ficha esconde o bloco. */
   copiloto?: Copiloto | null;
   readAgenda: () => Promise<AgendaSummary>;
@@ -479,6 +482,7 @@ export function createOperationsRouter(options: {
   montarRevisaoDeResposta(router, options.crm);
   montarMensagemDaDecisao(router, { crm: options.crm, copiloto: options.copiloto });
   montarDecisoesComerciais(router, options.crm);
+  montarResponsavelAtendimento(router, options.crm);
 
   router.get("/overview", async (_req, res) => {
     const [tools, agenda, dell] = await Promise.all([
@@ -564,7 +568,7 @@ export function createOperationsRouter(options: {
     try {
       // no-cache (não no-store): o navegador revalida e o ETag devolve 304 quando nada mudou.
       res.setHeader("Cache-Control", "no-cache");
-      res.json(await options.crm.visao());
+      res.json(await (options.visaoAtendimento?.() ?? options.crm.visao()));
     } catch (error) {
       console.error("[operations] Falha ao ler o CRM:", error);
       res.status(500).json({ error: "Não foi possível ler o CRM agora." });
@@ -729,13 +733,14 @@ export function createOperationsRouter(options: {
   // do primeiro contato pela mesma janela e ritmo da Central.
   montarFrenteComercial(router, {
     rodada: criarRodadaComercial(path.join(options.dataDir, 'rodada-comercial.json')),
-    dataDir: options.dataDir, memoriaDaVenda, ...(options.crm ? { visao: () => options.crm!.visao(), vigiar: options.vigiarProspeccao === true, saude: saudeDaContaWhatsapp } : {}),
+    dataDir: options.dataDir, memoriaDaVenda, ...(options.crm ? { visao: () => options.crm!.visao(), bloqueioConversa: (lead,leads) => options.crm!.bloqueioDaConversa(lead,leads), vigiar: options.vigiarProspeccao === true, saude: saudeDaContaWhatsapp } : {}),
   });
   // A Central resolve uma ação: { chave, como } (enviada | pulada | recusa), ou o formato de 16/10
   // ({ chave, pulou }) de uma aba aberta antes da atualização. Por onde é sempre "central": o
   // Telegram grava pelo vendedor, no mesmo processo.
   router.post("/crm/venda", express.json({ limit: "4kb" }), async (req, res) => {
     const { chave, pulou, como } = (req.body ?? {}) as { chave?: unknown; pulou?: unknown; como?: unknown };
+    if (typeof chave === 'string' && (como === 'enviada' || pulou === false) && acaoInternaComercial({chave,tipo:'combinado',interna:true,conferirHistorico:true,revisao:true})) return void res.status(409).json({error:'Esta é uma tarefa interna; confira e registre a decisão na ficha. Não é um envio.'});
     const comoFoi: ComoResolveu | null = como === "enviada" || como === "pulada" || como === "recusa" ? como
       : typeof pulou === "boolean" ? (pulou ? "pulada" : "enviada") : null;
     if (typeof chave !== "string" || !chave.trim() || chave.length > MAX_CHAVE || !comoFoi) {
@@ -790,6 +795,7 @@ export function createOperationsRouter(options: {
       || typeof tipo !== "string" || !TIPOS_DA_ANOTACAO_DE_VENDA.has(tipo) || !chave.startsWith(`${produto}:${id}|`)) {
       return void res.status(400).json({ error: "Diga a ação, o lead e o que anotar." });
     }
+    if (typeof chave === 'string' && acaoInternaComercial({chave,tipo:'combinado',interna:true,conferirHistorico:true,revisao:true})) return void res.status(409).json({error:'Tarefa interna não confirma envio de mensagem.'});
     if (texto !== undefined && (typeof texto !== "string" || texto.length > 1000)) {
       return void res.status(400).json({ error: "O resumo deve ter no máximo 1000 caracteres." });
     }

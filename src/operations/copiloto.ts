@@ -1,6 +1,6 @@
 // Copiloto do PRUMO, fase 1 em sombra (15/10/2026): acompanha o lead do "respondeu" até a
 // proposta. Funil real em 15/10: 221 envios, 5 interesses, 0 propostas; o gargalo é do
-// interesse até a proposta. A proposta exige dor, impacto e decisor confirmados pelo Rômulo. O copiloto
+// interesse até a proposta. A qualificação confirmada governa; negociação e contratação são do Rômulo. O copiloto
 // sugere, na Ficha, a próxima mensagem, o que oferecer e o rascunho dos itens da proposta.
 // NUNCA envia nada: o Rômulo copia e manda pelo WhatsApp, como sempre.
 //
@@ -24,7 +24,9 @@ import {
 import type { AchadoDoRaioX, CrmLead, CrmTipoDeResposta } from './types'
 import { textoParaOModelo, type PapelDaMensagem } from './marcadores-da-conversa'
 import { DIAS_DO_BLOG_PARADO, type SinaisDoSite } from '../../server/sinais-do-site.ts'
-import { lerSpiced, qualificadoParaProposta, type Spiced } from './spiced'
+import { lerSpiced, lacunasDoSpiced, qualificadoParaProposta, type Spiced } from './spiced'
+import { camposFaltantesQualificacao, qualificacaoComercialAtual, temQualificacaoComercial, proximaPerguntaQualificacao, ROTULOS_QUALIFICACAO, PREFIXO_QUALIFICACAO_COMERCIAL, type PerguntaQualificacao } from './qualificacao-comercial'
+import { cicloDoLead, PREFIXO_CICLO } from './ciclo-comercial'
 import { ehTipoAarr } from './aarr'
 
 // ------------------------------------------------------------------ onde o copiloto vale
@@ -33,7 +35,7 @@ import { ehTipoAarr } from './aarr'
 export const PASSOS_DO_COPILOTO: IdDoPasso[] = ['resposta', 'segunda', 'conversa', 'mapa', 'proposta']
 
 export type LeadDoCopiloto = LeadDaJornada & Pick<CrmLead, 'id' | 'empresa' | 'nicho' | 'cidade' | 'subEtapa' | 'eventos'>
-  & Partial<Pick<CrmLead, 'diasNaEtapa' | 'leitura' | 'abordagem' | 'sinais' | 'spiced'>>
+  & Partial<Pick<CrmLead, 'diasNaEtapa' | 'leitura' | 'abordagem' | 'sinais' | 'spiced' | 'qualificacaoComercial'>>
 
 export function copilotoServe(lead: LeadDaJornada): boolean {
   return PASSOS_DO_COPILOTO.includes(passoAtual(lead))
@@ -85,9 +87,31 @@ export interface ItemDoCardapioNoDossie {
   precoParaOCliente: string
 }
 
+export interface ResumoComercialNoDossie {
+  versao: 1
+  autoridade: 'qualificacao-nova' | 'spiced-legado' | 'sem-revisao'
+  qualificacao: {
+    estado: 'ausente' | 'invalida' | 'parcial' | 'suficiente' | 'sem-interesse' | 'inadequada'
+    confirmacaoHumana: boolean
+    ofertaId?: string
+    intencao?: string
+    camposConfirmados: { necessidade: boolean; adequacao: boolean; intencao: boolean; decisao: boolean; proximoPasso: boolean }
+    lacunas: string[]
+    proximaPergunta?: PerguntaQualificacao
+  }
+  ciclo: {
+    estado: 'ausente' | 'revisar' | 'rascunho' | 'proposta-enviada' | 'aceite' | 'condicao' | 'cobranca-pendente' | 'recebimento'
+    marcosConfirmados: string[]
+    exigeHumano: boolean
+  }
+  /** Identificador opaco para cache; não valida fatos, autoria, valores nem pagamentos. */
+  revisaoContexto: string
+}
+
 export interface DossieDoLead {
   /** Qualificação confirmada pelo operador; sugestões nunca entram aqui. */
   spiced?: Spiced
+  comercial?: ResumoComercialNoDossie
   lead: {
     id: string
     funil: Funil
@@ -193,7 +217,50 @@ const corta = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 
  * da colinha, o texto do Raio-X e o cardápio. Mesma entrada, mesmo dossiê (o servidor guarda a
  * sugestão pelo hash dele).
  */
+/** Browser-safe e deliberadamente sem autoridade comercial: só invalida o cache. */
+function fingerprintDoContexto(texto: string): string {
+  let a = 0x811c9dc5, b = 0x9e3779b9
+  for (let i = 0; i < texto.length; i++) {
+    a = Math.imul(a ^ texto.charCodeAt(i), 0x01000193)
+    b = Math.imul(b ^ texto.charCodeAt(i), 0x85ebca6b)
+  }
+  return [a, b].map(n => (n >>> 0).toString(16).padStart(8, '0')).join('')
+}
+function marcadorComercial(texto: string): boolean {
+  return [PREFIXO_QUALIFICACAO_COMERCIAL.trimEnd(), PREFIXO_CICLO.trimEnd(), '[responsavel-conversa-v2]'].some(p => texto.trimStart().startsWith(p))
+}
+export function assinaturaDoContextoComercial(lead: LeadDoCopiloto): string {
+  const marcadores = (lead.eventos ?? []).filter(e => e.tipo === 'nota' && e.origem === 'manual' && marcadorComercial(e.registroTexto ?? e.texto ?? ''))
+    .map(e => [e.origem, e.tipo, e.em, e.registroTexto ?? e.texto ?? ''])
+  // Inclusive nota inválida ou correção: mudar conteúdo no mesmo índice não reutiliza o preparo anterior.
+  return 'comercial-v1:' + fingerprintDoContexto(JSON.stringify([marcadores, lead.qualificacaoComercial ?? null]))
+}
+export function resumoComercialParaContexto(lead: LeadDoCopiloto): ResumoComercialNoDossie {
+  const nova = temQualificacaoComercial(lead) || (lead.eventos ?? []).some(e => e.tipo === 'nota' && e.origem === 'manual' && (e.registroTexto ?? e.texto ?? '').trimStart().startsWith(PREFIXO_QUALIFICACAO_COMERCIAL.trimEnd())), q = qualificacaoComercialAtual(lead), s = nova ? null : lerSpiced(lead.spiced)
+  const faltantes = camposFaltantesQualificacao(q), campos = new Set(faltantes)
+  const estado = nova ? !q ? 'invalida' : q.intencao === 'sem-interesse' ? 'sem-interesse' : q.adequacao.estado === 'inadequada' ? 'inadequada' : faltantes.length ? 'parcial' : 'suficiente'
+    : s ? qualificadoParaProposta(lead) ? 'suficiente' : 'parcial' : 'ausente'
+  const lacunas = nova || !s ? faltantes.map(c => ROTULOS_QUALIFICACAO[c]) : lacunasDoSpiced(lead)
+  const perguntaBruta = nova && !q ? { campo: 'evidencia' as const, alvo: 'operador' as const, texto: 'Confira a revisão comercial inválida na fonte antes de preparar uma mensagem.' } : nova || !s ? proximaPerguntaQualificacao(lead) : estado === 'parcial'
+    ? { campo: 'evidencia' as const, alvo: 'operador' as const, texto: 'Confira a revisão comercial na ficha antes de escolher a próxima pergunta ao cliente.' } : null
+  // A descrição do combinado pode conter condições/valores privados: o modelo recebe só a pergunta canônica.
+  const pergunta = perguntaBruta?.campo === 'proximoPasso' ? { ...perguntaBruta, texto: 'Qual próximo passo faz sentido combinarmos?' } : perguntaBruta
+  const ciclo = cicloDoLead(lead), temCiclo = ciclo.historico.length > 0 || ciclo.problemas.length > 0
+    || (lead.eventos ?? []).some(e => e.tipo === 'nota' && e.origem === 'manual' && (e.registroTexto ?? e.texto ?? '').trimStart().startsWith(PREFIXO_CICLO.trimEnd()))
+  const estadoCiclo = ciclo.problemas.length ? 'revisar' : ciclo.cobrancas.some(c => c.saldo > 0) ? 'cobranca-pendente'
+    : ciclo.pagamentos.length ? 'recebimento' : ciclo.cobrancas.length ? 'cobranca-pendente' : ciclo.condicoes.length ? 'condicao'
+    : ciclo.aceites.length ? 'aceite' : ciclo.envios.length ? 'proposta-enviada' : ciclo.propostas.length ? 'rascunho' : temCiclo ? 'revisar' : 'ausente'
+  return { versao: 1, autoridade: nova ? 'qualificacao-nova' : s ? 'spiced-legado' : 'sem-revisao',
+    qualificacao: { estado, confirmacaoHumana: !!(nova ? q : s), ...(q?.adequacao.oferta ? { ofertaId: q.adequacao.oferta } : {}), ...(q ? { intencao: q.intencao } : {}),
+      camposConfirmados: nova ? { necessidade: !!q && !campos.has('necessidade'), adequacao: !!q && !campos.has('adequacao'), intencao: !!q && !campos.has('intencao'), decisao: !!q && !campos.has('decisao'), proximoPasso: !!q && !campos.has('proximoPasso') }
+        : { necessidade: !!s?.dor, adequacao: false, intencao: false, decisao: s?.decisao.decisor_confirmado === 'sim', proximoPasso: false },
+      lacunas, ...(pergunta ? { proximaPergunta: pergunta } : {}) },
+    ciclo: { estado: estadoCiclo, marcosConfirmados: [...new Set(ciclo.eventos.map(e => e.tipo))].sort(), exigeHumano: temCiclo },
+    revisaoContexto: assinaturaDoContextoComercial(lead) }
+}
+
 export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: string, conversa?: readonly MensagemParaODossie[] } = {}): DossieDoLead {
+  const comercial = resumoComercialParaContexto(lead)
   const conversa = (extra.conversa ?? [])
     .slice(-MAX_MENSAGENS_NO_DOSSIE)
     // O áudio que ninguém ouviu vai dito com todas as letras (17/10/2026, a Baobá: o modelo leu "[áudio]"
@@ -213,7 +280,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
     .map((o) => ({ fala: o.fala, respostaPronta: preencher(o.resposta.texto, lead) }))
   const historico = [...lead.eventos]
     // Confirmações comerciais ficam na Ficha. Valores, quantidades e referências de recibo nunca vão ao modelo.
-    .filter(e => !ehTipoAarr(e.tipo) && !(e.registroTexto ?? e.texto ?? '').startsWith('[ciclo-comercial-v1]') && !(e.registroTexto ?? e.texto ?? '').startsWith('[qualificacao-comercial-v1]'))
+    .filter(e => !ehTipoAarr(e.tipo) && !['proposta', 'proposta_desfeita'].includes(e.tipo) && !marcadorComercial(e.registroTexto ?? e.texto ?? '') && !(comercial.autoridade === 'qualificacao-nova' && e.tipo === 'spiced'))
     .sort((a, b) => a.em.localeCompare(b.em))
     .slice(-MAX_EVENTOS_NO_DOSSIE)
     .map((e) => ({ em: e.em, oQue: e.rotulo, ...(e.texto ? { texto: corta(textoParaOModelo(e.texto, mascarar), MAX_TEXTO_DE_EVENTO) } : {}) }))
@@ -222,10 +289,11 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
   const proprias = funil === 'iris' || funil === 'estampa'
   const sinaisDoSite = sinaisParaODossie(lead.sinais)
   const textoSpiced = (texto: string) => textoParaOModelo(texto, mascarar)
-  const s = lead.spiced
+  const s = comercial.autoridade === 'qualificacao-nova' ? undefined : lerSpiced(lead.spiced) ?? undefined
   // Só o impacto pode conter um valor literal dito pelo lead; mascara os demais trechos normalmente.
   const impacto = s?.impacto.split(/(R\s*\$\s*-?\d[\d.,]*)/gi).map(t => /^R\s*\$/i.test(t) ? t : textoSpiced(t)).join('')
   return {
+    comercial,
     ...(s ? { spiced: { situacao: textoSpiced(s.situacao), dor: textoSpiced(s.dor), impacto: impacto!,
       evento_critico: { fato: textoSpiced(s.evento_critico.fato), data: s.evento_critico.data },
       decisao: { decisor_confirmado: s.decisao.decisor_confirmado, quem: textoSpiced(s.decisao.quem), como_paga: textoSpiced(s.decisao.como_paga) } } } : {}),
@@ -252,7 +320,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
     ...(lead.resposta ? { resposta: { tipo: lead.resposta.tipo, trecho: textoParaOModelo(lead.resposta.trecho, mascarar), ...(lead.resposta.em ? { em: lead.resposta.em } : {}) } } : {}),
     ...(conversa.length ? { conversa } : {}),
     historico,
-    ...(lead.proposta ? { proposta: lead.proposta } : {}),
+    ...(lead.proposta ? { proposta: { em: lead.proposta.em, data: lead.proposta.data } } : {}),
     objecoes,
     raioX: {
       ...(urlRaioX ? { url: urlRaioX } : {}),
@@ -313,9 +381,16 @@ export function promptDoCopiloto(dossie: DossieDoLead): string {
   return [
     'Você é o copiloto de vendas do PRUMO. O Rômulo atende sozinho os leads pelo WhatsApp e te pede,',
     'para UM lead, a próxima mensagem, o que oferecer e o rascunho dos itens da proposta. Você não envia',
-    'nada: ele lê, decide e manda. Proposta só com dor, impacto e decisor confirmado como sim no SPICED',
-    'confirmado do dossiê. Um "gostei" não qualifica. Se faltar, proponha uma ligação de 10 minutos',
-    'e perguntas SPIN para descobrir o problema, a consequência e quem decide.',
+    'nada: ele lê, decide e manda. O resumo "comercial" distingue fatos humanos confirmados de lacunas.',
+    'A revisão de qualificação nova governa, mesmo parcial ou inválida; SPICED é somente fallback legado.',
+    'Um "gostei", identidade ou permissão para material não confirma intenção de compra.',
+    'Sugira somente UMA pergunta faltante: a proximaPergunta canônica, quando o alvo for cliente.',
+    'Se o alvo for operador, a conferência é interna: não transforme isso em mensagem ao cliente.',
+    'Não exija impacto financeiro, reunião ou um decisor único; participantes podem decidir em grupo.',
+    'Preço, negociação, proposta final, escopo contratado, documento, cobrança e pagamento são de Rômulo.',
+    'Os agentes podem interpretar e preparar rascunhos; nunca confirmar fatos, notas, aceite, envio ou recebimento.',
+    'Ciclo presente ou qualificação inválida, negativa ou inadequada exige conferência humana, sem nova oferta.',
+    'O identificador revisaoContexto serve só ao cache: não comprova autoria, qualificação nem pagamento.',
     '',
     'Tom de voz:',
     ...TOM_DE_VOZ.map((t) => `- ${t}`),
@@ -323,9 +398,10 @@ export function promptDoCopiloto(dossie: DossieDoLead): string {
     'Regras da oferta (a ordem importa):',
     ...REGRAS_DA_OFERTA.map((r, i) => `${i + 1}. ${r}`),
     '',
-    'O campo "oferta" do dossiê já aplica essas regras a este lead: siga-o. Não ofereça o que está em',
-    '"naoOferecer". O que está em "aConfirmar" vira pergunta na mensagem ou item de "falta_saber".',
-    'O passo atual e o próximo passo vêm da jornada; a mensagem deve tirar o lead do passo atual.',
+    'Sem revisão nova, o campo "oferta" aplica as regras da jornada. Não ofereça o que está em "naoOferecer".',
+    'Com revisão nova, a ofertaId do resumo comercial governa; jornada e oferta antigas são só contexto legado.',
+    'O que está em "aConfirmar" não é fato confirmado. Use a pergunta canônica, uma lacuna por vez.',
+    'Sem revisão nova, a jornada orienta o passo. Com revisão nova ou ciclo, siga o resumo comercial e suas lacunas; não ressuscite uma etapa antiga.',
     'A "resposta" é o trecho que o n8n guardou da última mensagem do lead; o histórico traz as notas do',
     'Rômulo. Quando há "conversa", são as últimas mensagens de verdade (lead e Rômulo): é por ela que se',
     'sabe em que ponto a conversa está; não repita o que o Rômulo já mandou e responda ao que o lead disse',
@@ -548,7 +624,9 @@ export function precosProibidos(mensagem: string, permitidos: readonly string[] 
  * fato". Não recusa (o modelo pode fazer uma conta honesta), mas o Rômulo vê antes de copiar.
  */
 export function numerosForaDoDossie(mensagem: string, dossie: DossieDoLead): string[] {
-  const base = JSON.stringify(dossie).replace(/(\d)\.(\d{3})/g, '$1$2')
+  // Versão/fingerprint de cache nunca são evidência numérica da empresa ou da contratação.
+  const { comercial: _comercial, ...fatos } = dossie
+  const base = JSON.stringify(fatos).replace(/(\d)\.(\d{3})/g, '$1$2')
   const numeros = (mensagem.match(/\d+(?:[.,]\d+)*/g) ?? []).map((n) => n.replace(/\.(\d{3})/g, '$1'))
   return [...new Set(numeros)].filter((n) => !new RegExp(`(^|\\D)${n.replace(/[.,]/g, '[.,]')}(\\D|$)`).test(base))
 }
@@ -615,8 +693,9 @@ export function lerSaidaDoCopiloto(texto: string, dossie: DossieDoLead): Leitura
   if (j.spiced && !spiced) avisos.push('SPICED sem citação verificável: confirme a qualificação na conversa.')
   // Robô e recepção não compram: proposta e preço para eles é falar com a pessoa errada.
   let itensFinais = itens
-  if (!qualificadoParaProposta(dossie)) {
-    if (itens.length) avisos.push('Proposta aguarda dor, impacto e decisor confirmados pelo Rômulo.')
+  const fluxoHumano = dossie.comercial?.autoridade === 'qualificacao-nova' || dossie.comercial?.ciclo.exigeHumano === true
+  if (fluxoHumano || !qualificadoParaProposta(dossie)) {
+    if (itens.length) avisos.push(fluxoHumano ? 'A proposta versionada, suas condições e o ciclo comercial exigem revisão de Rômulo.' : 'Proposta aguarda a qualificação legada confirmada pelo Rômulo.')
     itensFinais = []
   }
   if (momento && (momento.quem === 'recepcao' || momento.quem === 'robo')) {

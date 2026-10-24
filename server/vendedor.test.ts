@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ESPERA_DO_AVISO_MS, conferirDoAviso, limparAbertos, rodapeDeFora, textoDoAviso, toqueNoAviso, type AvisoAberto, type DoDia } from "./vendedor.ts";
+import { ESPERA_DO_AVISO_MS, MAX_AVISOS_POR_DIA, decidir, estadoNovo, botoesDoAviso, criarVendedor, conferirDoAviso, limparAbertos, rodapeDeFora, textoDoAviso, toqueNoAviso, type AvisoAberto, type DoDia } from "./vendedor.ts";
 import type { Resolvida } from "./venda-do-dia.ts";
-import type { AcaoDeVenda } from "../src/operations/proxima-venda.ts";
+import { filaDeVenda, type AcaoDeVenda } from "../src/operations/proxima-venda.ts";
+import type { CrmLead, CrmVisao } from "../src/operations/types.ts";
+import { acaoInternaComercial } from "../src/operations/acao-interna-comercial.ts";
+import { criarMemoriaDaVenda, type MemoriaDaVenda } from "./venda-do-dia.ts";
+import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 // AC-06 (17/10/2026): a Central e o Telegram numa fila só. Regras puras, em tabela; a cola com o
 // arquivo do dia e o Telegram é exercitada em jornadas-de-venda.test.ts (com o retrato de verdade).
@@ -135,3 +141,98 @@ describe("vendedor: o gate de envio sobre o rascunho", () => {
     assert.ok(textoDoAviso(acao(), [], "marca sem preencher: {NOME}").includes("⚠ Confira antes de enviar: marca sem preencher: {NOME}."));
   });
 });
+
+
+describe("vendedor: passagem comercial interna sem confirmação de envio", () => {
+  const interna = (sufixo = "negociacao-humana"): AcaoDeVenda => ({
+    chave: `site:qa|${sufixo}`, leadId: "site:qa", empresa: "Empresa QA", produto: "site", tipo: "combinado", titulo: "Rômulo: conduza a conversa",
+    contexto: "Conferência comercial", porque: "Pedido de preço", tatica: "Abra a ficha para conferir", primeiroContato: false, quente: true,
+    rascunho: "RASCUNHO_ANTIGO_PRIVADO", link: { rotulo: "Mensagem antiga", url: "https://wa.me/5511999999999?text=antigo" }, anota: "proposta",
+  })
+  const cliente = (id: string, preco = true): CrmLead => ({
+    id: `site:${id}`, chave: id, produto: "site", empresa: id, etapa: "contato", sinal: "em-conversa", subEtapa: "Respondeu",
+    marcos: { enviado: "2026-10-13T13:00:00Z", respondeu: new Date(T).toISOString() }, eventos: [], links: { whatsapp: "https://wa.me/5511999999999" },
+    resposta: { tipo: "neutra", trecho: preco ? "Quanto custa?" : "Obrigado", em: new Date(T).toISOString() },
+  } as CrmLead)
+  const visao = (...leads: CrmLead[]): CrmVisao => ({ estado: "ok", leads, hoje: [{ id: "resposta", titulo: "Responder", explicacao: "", itens: leads.map(l => ({ leadId: l.id, acao: "Responder", detalhe: "", ordem: 1, links: [] })) }] } as unknown as CrmVisao)
+
+  it("negociação, qualificação, ciclo e revisão oferecem só Central/Pular, mesmo com rascunho antigo", () => {
+    for (const sufixo of ["negociacao-humana", "qualificacao-comercial", "ciclo-comercial", "revisao", "atendimento-comercial"]) {
+      const a = { ...interna(sufixo), ...(sufixo === "revisao" ? { revisao: true } : {}), ...(sufixo === "atendimento-comercial" ? { interna: true } : {}) }
+      const botoes = botoesDoAviso(a, "token-qa", "https://central.test/")
+      assert.deepEqual(botoes.map(l => l.map(b => b.texto)), [["Abrir Central"], ["Pular"]])
+      assert.doesNotMatch(JSON.stringify(botoes), /wa\.me|enviei/)
+      assert.match(JSON.stringify(botoes), /central\.test\/crm/)
+      assert.equal(conferirDoAviso(a, "https://wa.me/5511999990000"), null)
+      const texto = textoDoAviso(a, [])
+      assert.doesNotMatch(texto, /RASCUNHO_ANTIGO_PRIVADO|Mensagem pronta|Sem texto pronto: escreva à mão/)
+      assert.match(texto, /Encaminhamento interno/)
+    }
+    assert.deepEqual(botoesDoAviso(interna(), "token-qa").map(l => l.map(b => b.texto)), [["Pular"]])
+  })
+  it("combinado legítimo mantém abertura do WhatsApp e confirmação explícita de envio", () => {
+    const a = { ...interna(), chave: "site:qa|proximo-passo|2026-10-14" }
+    assert.equal(acaoInternaComercial(a), false)
+    const botoes = botoesDoAviso(a, "token-qa", "https://central.test")
+    assert.ok(botoes.flat().some(b => b.texto === "✓ Enviei"))
+    assert.match(JSON.stringify(botoes), /wa\.me/)
+  })
+  it("toque puro rejeita Enviei atrasado sem converter tarefa interna em envio", () => {
+    for (const tipo of [undefined, "combinado"] as const) {
+      const a = aberto("site:qa|ciclo-comercial", T, { tipo, anota: "proposta" })
+      assert.equal(toqueNoAviso(a, "enviei", dia()).tipo, "bloqueado")
+      assert.deepEqual(toqueNoAviso(a, "pular", dia()), { tipo: "seguir", como: "pulada", anotar: false })
+    }
+    assert.equal(toqueNoAviso(aberto("site:qa|atendimento-comercial", T, { tipo: "combinado", interna: true }), "enviei", dia()).tipo, "bloqueado")
+  })
+  it("pedido comercial quente ultrapassa aviso aberto e teto sem reavisar a mesma chave", () => {
+    const v = visao(cliente("primeiro"), cliente("segundo")), f = filaDeVenda(v, { primeiroLiberado: false, agora: T })
+    assert.equal(f.filter(a => acaoInternaComercial(a) && a.quente).length, 2)
+    const chave = f[0].chave, e = { ...estadoNovo(T), avisosHoje: MAX_AVISOS_POR_DIA, avisados: [chave], abertos: [aberto(chave, T, { tipo: "combinado", interna: true })] }
+    const r = decidir(v, e, T, undefined, dia())
+    assert.equal(r.decisao.tipo, "avisar")
+    if (r.decisao.tipo !== "avisar") return
+    assert.equal(r.decisao.acao.leadId, "site:segundo")
+    const vistos = { ...r.estado, avisados: [...r.estado.avisados, r.decisao.acao.chave] }
+    assert.notEqual(decidir(v, vistos, T + min, undefined, dia()).decisao.tipo, "avisar")
+  })
+  it("passagem quente tem prioridade sobre uma resposta comum sem relaxar o silêncio noturno", () => {
+    const v = visao(cliente("comum", false), cliente("comercial"))
+    const r = decidir(v, estadoNovo(T), T, undefined, dia())
+    assert.equal(r.decisao.tipo, "avisar")
+    if (r.decisao.tipo === "avisar") assert.equal(r.decisao.acao.leadId, "site:comercial")
+    const noite = Date.parse("2026-10-15T02:00:00Z")
+    assert.equal(decidir(v, estadoNovo(noite), noite, undefined, dia()).decisao.tipo, "nada")
+  })
+  it("callback persistido Enviei interno não altera arquivo, contadores, CRM ou memória do dia", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vendedor-interno-"))
+    const arquivo = join(dir, "vendedor.json"), e = { ...estadoNovo(T), enviadosHoje: 7, avisados: ["site:qa|atendimento-comercial"], abertos: [aberto("site:qa|atendimento-comercial", T, { token: "antigo", tipo: "combinado", interna: true, anota: "proposta" })] }
+    await writeFile(arquivo, JSON.stringify(e))
+    let registros = 0, leituraDia = 0, resolucoes = 0, avisos = 0
+    const memoria = { ler: async () => { leituraDia++; throw new Error("Não deve ler") }, resolver: async () => { resolucoes++ } } as unknown as MemoriaDaVenda
+    const vendedor = criarVendedor({ arquivoDeEstado: arquivo, agora: () => T, vendaDoDia: memoria, lerVisao: async () => visao(cliente("qa")), enviar: async () => { avisos++ }, registrar: async () => { registros++ } })
+    try {
+      const antes = await readFile(arquivo, "utf8"), resposta = await vendedor.tocar("antigo", "enviei")
+      assert.match(resposta.curto, /interno/)
+      assert.equal(await readFile(arquivo, "utf8"), antes)
+      assert.equal(registros, 0); assert.equal(leituraDia, 0); assert.equal(resolucoes, 0); assert.equal(avisos, 0)
+    } finally { vendedor.parar(); await rm(dir, { recursive: true, force: true }) }
+  })
+  it("voltas sucessivas anunciam o encaminhamento uma só vez e conservam a flag após reiniciar", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vendedor-handoff-")), arquivo = join(dir, "vendedor.json"), v = visao(cliente("qa"))
+    const memoria = criarMemoriaDaVenda(join(dir, "dia.json"), () => T)
+    let avisos = 0, registros = 0
+    const deps = { arquivoDeEstado: arquivo, agora: () => T, vendaDoDia: memoria, lerVisao: async () => v, enviar: async (_texto: string, botoes: import("./telegram.ts").Botao[][]) => { avisos++; assert.doesNotMatch(JSON.stringify(botoes), /wa\.me|enviei/) }, registrar: async () => { registros++ }, origemCentral: "https://central.test" }
+    const vendedor = criarVendedor(deps)
+    let reiniciado: ReturnType<typeof criarVendedor> | undefined
+    try {
+      assert.equal((await vendedor.volta()).tipo, "avisar")
+      await vendedor.volta()
+      const estado = JSON.parse(await readFile(arquivo, "utf8"))
+      assert.equal(estado.abertos[0].interna, true)
+      assert.equal(estado.abertos[0].anota, undefined)
+      reiniciado = criarVendedor(deps); await reiniciado.volta()
+      assert.equal(avisos, 1); assert.equal(registros, 0); assert.equal(estado.enviadosHoje, 0)
+    } finally { vendedor.parar(); reiniciado?.parar(); await rm(dir, { recursive: true, force: true }) }
+  })
+})

@@ -1,0 +1,58 @@
+<script setup lang="ts">
+import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import type { CrmLead } from './types'
+import { textoResponsavelConversa, type ProjecaoResponsavel } from './responsavel-conversa'
+const props=defineProps<{lead:CrmLead;disponivel:boolean}>()
+const emit=defineEmits<{registrado:[]}>()
+const projecao=ref<ProjecaoResponsavel|null>(null), bloqueio=ref<string|null>(null)
+const erro=ref(''), recado=ref(''), ocupado=ref(false), incerto=ref(false)
+let relogio:ReturnType<typeof setInterval>|undefined
+const tentativaId=ref('')
+async function atualizar() {
+  const id=props.lead.id
+  try {
+    const r=await fetch('/api/operations/crm/atendimento/responsavel?leadId='+encodeURIComponent(id))
+    const v=await r.json()
+    if (!r.ok) throw new Error(v.error ?? 'Responsabilidade indisponível.')
+    if (props.lead.id!==id) return
+    projecao.value=v.projecao;bloqueio.value=v.bloqueio
+    if (incerto.value && projecao.value?.registro?.id===tentativaId.value && projecao.value?.estado==='definido' && !bloqueio.value?.includes('aguardando')) incerto.value=false
+  } catch(e) { if(props.lead.id===id) {projecao.value=null;erro.value=e instanceof Error?e.message:'Falha na leitura.'} }
+}
+async function assumir(responsavel:'romulo'|'time') {
+  const atual=projecao.value
+  if(!atual?.identidade||atual.estado==='bloqueado'||ocupado.value||incerto.value) return
+  const lead=props.lead
+  ocupado.value=true;incerto.value=true;erro.value='';recado.value=''
+  const nota={v:2 as const,id:crypto.randomUUID(),...atual.identidade,responsavel,data:new Date().toISOString(),motivo:responsavel==='romulo'?'Assumir negociação e atendimento.':'Devolver ao time para análise e rascunhos no piloto.',humano:true as const,anterior:atual.registro?.id??null}
+  tentativaId.value=nota.id
+  try {
+    const r=await fetch('/api/operations/crm/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produto:lead.produto,id:lead.chave,tipo:'nota',texto:textoResponsavelConversa(nota),data:''})})
+    const v=await r.json()
+    if(props.lead.id!==lead.id) return
+    if(!r.ok) {incerto.value=v.naoEnviado!==true;throw new Error(v.error??'Resultado não confirmado.')}
+    incerto.value=true;recado.value='Recebido. Aguarde a confirmação na fonte antes de outra troca.';emit('registrado');await atualizar()
+  } catch(e) {if(props.lead.id===lead.id) erro.value=e instanceof Error?e.message:'Resultado desconhecido. Confira a fonte antes de repetir.'}
+  finally {if(props.lead.id===lead.id) ocupado.value=false}
+}
+onMounted(()=>{void atualizar();relogio=setInterval(()=>{void atualizar()},15000)})
+onBeforeUnmount(()=>clearInterval(relogio))
+watch(()=>props.lead.id,()=>{projecao.value=null;recado.value='';erro.value='';incerto.value=false;ocupado.value=false;tentativaId.value='';void atualizar()})
+</script>
+<template>
+  <section class="crm-ficha__secao" aria-label="Responsável pelo atendimento">
+    <h3>Responsável pelo atendimento</h3>
+    <p>{{ projecao?.motivo ?? 'Conferindo a fonte…' }}</p>
+    <p v-if="bloqueio" class="recado">{{ bloqueio }}</p>
+    <p class="texto-2 texto-pequeno">Neste piloto, o time analisa e prepara rascunhos. Negociação, proposta final, contrato e pagamento ficam com você.</p>
+    <div class="crm-ficha__acoes">
+      <button type="button" class="botao botao--primario" :disabled="!disponivel||!projecao?.identidade||projecao.estado==='bloqueado'||bloqueio?.includes('aguardando')||bloqueio?.startsWith('Responsabilidade anterior')||ocupado||incerto||projecao.registro?.responsavel==='romulo'" @click="assumir('romulo')">Assumir conversa</button>
+      <button type="button" class="botao botao--leve" :disabled="!disponivel||!projecao?.identidade||projecao.estado==='bloqueado'||bloqueio?.includes('aguardando')||bloqueio?.startsWith('Responsabilidade anterior')||ocupado||incerto||projecao.registro?.responsavel==='time'" @click="assumir('time')">Devolver para rascunhos</button>
+    </div>
+    <p v-if="recado" role="status">{{ recado }}</p><p v-if="erro" role="alert">{{ erro }}</p>
+    <div v-if="lead.atendimentoComercial" class="recado">
+      <strong>{{ lead.atendimentoComercial.titulo }}</strong><p>{{ lead.atendimentoComercial.motivo }}</p>
+      <p v-if="lead.atendimentoComercial.texto">{{ lead.atendimentoComercial.alvo==='cliente'?'Rascunho para conferir: ':'' }}{{ lead.atendimentoComercial.texto }}</p>
+    </div>
+  </section>
+</template>

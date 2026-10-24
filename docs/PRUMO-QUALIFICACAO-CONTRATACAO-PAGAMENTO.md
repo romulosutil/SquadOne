@@ -71,6 +71,8 @@ Erro explicitamente rejeitado antes de qualquer tentativa permite corrigir o ras
 
 O journal fica por padrão ao lado do retrato, em crm-registro-comercial-journal.json, com arquivo privado, escrita por substituição e trava de processo. Não contém texto comercial. Na instalação atual há um processo de operações serializado por oportunidade; não apresentar isso como transação financeira distribuída entre múltiplos servidores.
 
-## Limites e próxima fase
+## Integração com n8n e agentes
 
-Sem mudança visual da cena, sem prospecção em massa, sem reativar Grok ou caçadores, sem contato com clientes. O endurecimento do limite no gerador do n8n está no repositório; o fluxo ativo continua preservado, pois a API já rejeita notas acima do limite antes de chamá-lo. Consolidação de workflows, rotina de avisos e sincronização de catálogo entre agentes pertencem às próximas fases.
+A fase seguinte conecta os critérios ao contexto dos agentes e à entrada durável do n8n, em modo assistido. O escritório permanece preservado. O CRM continua sendo a fonte humana de proposta, aceite e recebimento. A situação publicada e as verificações estão em `PRUMO-INTEGRACAO-COMERCIAL-N8N-AGENTES-2026-10-23.md`.
+
+Assinatura, Pix, banco, emissão fiscal e gateway continuam fora da integração. Sincronizar todo o catálogo e consolidar os demais workflows permanecem trabalhos posteriores. O Grok externo continua sob o procedimento manual informado pelo usuário.

@@ -144,6 +144,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import quote
 
+_eventos_spec = importlib.util.spec_from_file_location('observador_eventos_comerciais', Path(__file__).with_name('eventos_comerciais.py'))
+eventos_comerciais = importlib.util.module_from_spec(_eventos_spec)
+_eventos_spec.loader.exec_module(eventos_comerciais)
+
 try:  # no Dell sempre existe; no PC (testes) não: a trava vira no-op
     import fcntl
 except ImportError:  # pragma: no cover — Windows
@@ -1376,6 +1380,15 @@ class Observador:
                 log(f"lote só de áudio sem ouvinte de {mascarar(chave)}: fica com a instância que o recebeu")
                 continue
             pronta = {"chave": chave, "mensagens": c["mensagens"]}
+            # Só metadados da linha JSONL integral desta conta; não usa texto cortado do modelo.
+            # `ultima` é o instante real de recepção, já preservado na fila durável.
+            if self.conversa.origem == 'prumo':
+                comercial = eventos_comerciais.envelopes_prumo(chave, self.conversa.linhas_de(chave),
+                    c.get('ids'), iso_utc(c['ultima']), origem=self.conversa.origem)
+                if comercial['eventos']:
+                    pronta['envelopesComerciais'] = comercial['eventos']
+                if comercial['ignorados']:
+                    log('envelope comercial ignorado:', comercial['motivo'], 'quantidade', comercial['ignorados'])
             # Contexto (17/10/2026): sem a pergunta do Rômulo, o "sim" a "posso mandar o vídeo?" virava interesse.
             try:
                 contexto = contexto_da_conversa(self.conversa.linhas_de(chave), c.get("ids", []),

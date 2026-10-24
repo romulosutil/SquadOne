@@ -1,3 +1,6 @@
+import { AtendimentoComercial, criarLeitorFonteAtendimento } from './server/atendimento-comercial.ts';
+import { EntradaAtendimentoComercialDuravel } from './server/entrada-atendimento-comercial.ts';
+import { entradaTecnicaAtendimento } from './server/rotas-atendimento-comercial.ts';
 import express from "express";
 import path from "path";
 import fsp from "fs/promises";
@@ -348,6 +351,13 @@ async function startServer() {
     operationsConfig = await readOperationsConfig(configPath);
   }
 
+  let crmDoAtendimento: CrmStore | undefined;
+  let receberAtendimento: ((valor: unknown) => Promise<{novo:boolean;registro:{chave:string}}>) | undefined;
+  if (squadOneMode === 'operations') app.use(entradaTecnicaAtendimento({
+    autenticar: valor => crmDoAtendimento?.autenticarAtendimento(valor) ?? Promise.resolve(false),
+    receber: valor => receberAtendimento?.(valor) ?? Promise.resolve(null),
+  }));
+
   // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
   // deixa nem o index.html vazar para quem nao e o dono.
   app.use(porteiroDeIp());
@@ -400,6 +410,30 @@ async function startServer() {
     const readings = new HermesReadingsStore(operationsDataDir);
     // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
     const crm = new CrmStore(configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory));
+    crmDoAtendimento = crm;
+    const inboxComercial = new EntradaAtendimentoComercialDuravel(path.join(operationsDataDir,'atendimento-comercial-inbox.json'));
+    await inboxComercial.recuperarInterrompidos();
+    const atendimento = new AtendimentoComercial({inbox:inboxComercial,lerFonte:criarLeitorFonteAtendimento(crm.config.conversas ?? path.join(os.homedir(),'.local/share/whatsapp-conversas')),visao:()=>crm.visao(new Date())});
+    receberAtendimento = valor => atendimento.receber(valor);
+    let atendimentoEmCurso = false;
+    const conferirAtendimento = async () => {
+      if(atendimentoEmCurso) return;
+      atendimentoEmCurso=true;
+      try { await atendimento.atualizar(); } catch { console.warn('[atendimento] conferência pendente; nenhum envio autorizado.'); }
+      finally {atendimentoEmCurso=false;}
+    };
+    const relogioAtendimento = setInterval(()=>{void conferirAtendimento()},30000);relogioAtendimento.unref();
+    paradores.push(()=>clearInterval(relogioAtendimento));
+    void conferirAtendimento();
+    const visaoAtendimento = async () => {
+      const v = await crm.visao();
+      const pendencias = await atendimento.listarPendencias(v);
+      return {...v,leads:await Promise.all(v.leads.map(async l=>{
+        const p=pendencias.find(p=>p.leadIds.includes(l.id));if(!p)return l;
+        const bloqueio=await crm.bloqueioDaConversa(l,v.leads);
+        return {...l,atendimentoComercial:bloqueio ? {id:p.id,tipo:'handoff',titulo:'Conferir atendimento com Rômulo',motivo:bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash} : {id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,alvo:p.alvo,texto:p.texto ?? p.orientacao,estado:p.estado,contextoHash:p.contextoHash}};
+      }))};
+    };
     // Sinais do site de um lead (17/10/2026): lidos sob demanda pela Ficha (POST /crm/sinais), com cache
     // em disco; a visão do CRM só usa o que já foi lido. SQUADONE_SINAIS_DO_SITE=false desliga.
     let sinaisDoSite: LeitorDeSinais | undefined;
@@ -477,6 +511,7 @@ async function startServer() {
       readAgenda,
       dataDir: operationsDataDir,
       memoriaDaVenda,
+      visaoAtendimento,
       vigiarProspeccao: true,
       uso: usoDaCentral,
       assistente: assistenteDoProcesso,
@@ -492,7 +527,7 @@ async function startServer() {
         const c = configDeTelegram;
         const cop = copiloto;
         vendedorDoProcesso = criarVendedor({
-          lerVisao: () => crm.visao(),
+          lerVisao: visaoAtendimento,
           // A mensagem do copiloto (que leu a conversa) entra no aviso no lugar do texto pronto.
           ...(cop ? {
             copiloto: {

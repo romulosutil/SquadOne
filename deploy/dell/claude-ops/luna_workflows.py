@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Inferência restrita para o n8n: Luna pelo Hermes, sem ferramenta de escrita.
 
-Não é uma API de agente: só aceita dois contratos fixos, não aceita modelo,
-ferramenta, comando, arquivo ou sessão do cliente. Escuta a ponte privada Docker.
+Não é uma API de agente: inferência tem dois contratos fixos, sem modelo,
+ferramenta, comando, arquivo ou sessão do cliente. A rota comercial separada
+repassa somente eventos à entrada loopback autenticada; não chama inferência.
+Escuta a ponte privada Docker.
 """
 import datetime
 import hmac
@@ -14,6 +16,8 @@ import re
 import signal
 import subprocess
 import threading
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 BASE = Path.home() / '.local/share/claude-ops/luna-workflows'
@@ -22,6 +26,41 @@ BIN = str(Path.home() / '.local/bin/hermes')
 MODELO = 'gpt-6-luna-900k'
 TRAVA = threading.Lock()
 ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+DESTINO_EVENTO_COMERCIAL = 'http://127.0.0.1:9120/api/operations/crm/atendimento/evento'
+MAX_EVENTO_COMERCIAL = 8 * 1024
+
+
+class _SemRedirectComercial(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *_args, **_kwargs):
+        return None
+
+
+def encaminhar_evento_comercial(corpo, segredo, abrir=None):
+    """Repasse fechado: destino fixo, sem modelo, origem sintética, redirect ou retry."""
+    pedido = urllib.request.Request(DESTINO_EVENTO_COMERCIAL, data=corpo, method='POST',
+        headers={'Content-Type': 'application/json', 'X-CRM': segredo})
+    abrir = abrir or urllib.request.build_opener(_SemRedirectComercial()).open
+    try:
+        try:
+            resposta = abrir(pedido, timeout=3)
+        except urllib.error.HTTPError as erro:
+            resposta = erro
+        with resposta:
+            status = resposta.code
+            dados = resposta.read(4097)
+        if len(dados) > 4096:
+            return 503, {'ok': False, 'persistido': False, 'erro': 'Recibo comercial inválido'}
+        if status != 202:
+            return status if 400 <= status <= 599 else 502, {'ok': False, 'persistido': False, 'erro': 'Evento comercial não confirmado pela Central'}
+        recibo = json.loads(dados)
+        if not isinstance(recibo, dict) or recibo.get('ok') is not True or recibo.get('persistido') is not True or recibo.get('estado') not in ('pendente', 'repetido'):
+            return 503, {'ok': False, 'persistido': False, 'erro': 'Recibo comercial inválido'}
+        seguro = {'ok': True, 'persistido': True, 'estado': recibo['estado']}
+        if isinstance(recibo.get('chave'), str) and len(recibo['chave']) <= 200:
+            seguro['chave'] = recibo['chave']
+        return 202, seguro
+    except Exception:
+        return 503, {'ok': False, 'persistido': False, 'erro': 'Entrada comercial indisponível'}
 
 
 def validar_pedido(dado):
@@ -138,6 +177,8 @@ class Servidor(BaseHTTPRequestHandler):
 
     def do_POST(self):
         self.connection.settimeout(10)
+        if self.path == '/comercial/evento':
+            return self.evento_comercial()
         segredo = (Path.home() / '.config/claude-ops/luna-workflows-token').read_text().strip()
         ip = ipaddress.ip_address(self.client_address[0])
         rede = ipaddress.ip_network(os.environ.get('LUNA_REDE_N8N', '172.23.0.0/16'))
@@ -163,6 +204,29 @@ class Servidor(BaseHTTPRequestHandler):
         except Exception:
             return self.responder(503, {'erro': 'Luna indisponível; a busca não foi concluída'})
         self.responder(200, resposta)
+
+    def evento_comercial(self):
+        """Autenticação técnica exclusiva; não concede autorização para ação humana."""
+        self.connection.settimeout(5)
+        try:
+            ip = ipaddress.ip_address(self.client_address[0])
+            rede = ipaddress.ip_network(os.environ.get('LUNA_REDE_N8N', '172.23.0.0/16'))
+            segredo = (Path.home() / '.config/claude-ops/crm-segredo').read_text().strip()
+        except (OSError, ValueError):
+            return self.responder(503, {'erro': 'Entrada comercial indisponível'})
+        if not (ip.is_loopback or ip in rede) or not segredo or not hmac.compare_digest(self.headers.get('X-CRM', '').encode('utf-8'), segredo.encode('utf-8')):
+            return self.responder(403, {'erro': 'Acesso negado'})
+        try:
+            tamanho = int(self.headers.get('Content-Length', '0'))
+            if self.headers.get('Transfer-Encoding') or not 0 < tamanho <= MAX_EVENTO_COMERCIAL:
+                raise ValueError('Tamanho inválido')
+            corpo = self.rfile.read(tamanho)
+            if len(corpo) != tamanho or not isinstance(json.loads(corpo), dict):
+                raise ValueError('Envelope inválido')
+        except (ValueError, OSError):
+            return self.responder(400, {'erro': 'Envelope comercial inválido'})
+        codigo, recibo = encaminhar_evento_comercial(corpo, segredo)
+        return self.responder(codigo, recibo)
 
 
 if __name__ == '__main__':

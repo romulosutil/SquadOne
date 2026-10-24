@@ -40,6 +40,7 @@ import { dadosDaVenda } from "./telegram-entrada.ts";
 import type { MemoriaDaVenda, Resolvida, VendaDoDia } from "./venda-do-dia.ts";
 import { conferirMensagem, resumoDosProblemas, type ResultadoDoGate, type TipoDeMensagem } from "./gate-de-envio.ts";
 import { criarEmSerie } from "./em-serie.ts";
+import { acaoInternaComercial } from "../src/operations/acao-interna-comercial.ts";
 
 export const ESPERA_DO_AVISO_MS = 30 * 60_000;
 /**
@@ -59,6 +60,8 @@ export const ESPERA_DO_COPILOTO_MS = 4 * 60_000;
 
 export interface AvisoAberto {
   conferirHistorico?: boolean;
+  revisao?: boolean;
+  interna?: boolean;
   chave: string;
   token: string;
   em: number;
@@ -197,23 +200,31 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   const fila = filaDeVenda(visao, {
     primeiroLiberado: !pausaPrimeiros && noExpedienteDeVenda(agora) && ritmo.motivo === null, agora, ...(sugestoes ? { sugestoes } : {}), ...(doTime ? { primeirosDoTime: doTime } : {}),
   }, new Set(estado.pulados))
-    .map((a) => comHistoricoConferido(a, porId.get(a.leadId)));
+    // O ato interno já exige conferência humana e não oferece envio; não perde prioridade por faltar histórico.
+    .map((a) => acaoInternaComercial(a) ? a : comHistoricoConferido(a, porId.get(a.leadId)));
   const { ficam, fechados } = limparAbertos(estado.abertos, new Set(fila.map((a) => a.chave)), resolvidas, agora);
   estado.abertos = ficam;
   for (const a of fechados.expirados) if (!estado.pulados.includes(a.chave)) estado.pulados.push(a.chave);
   const avisados = new Set(estado.avisados);
   // Passado o teto só o "quero ver" quente ainda avisa (ver MAX_AVISOS_POR_DIA).
   const noTeto = estado.avisosHoje >= MAX_AVISOS_POR_DIA;
-  const novas = fila.filter((a) => !avisados.has(a.chave) && (!noTeto || (a.tipo === "responder" && a.quente)));
+  const urgente = (a: AcaoDeVenda) => a.quente && (a.tipo === "responder" || acaoInternaComercial(a));
+  const novas = fila.filter((a) => !avisados.has(a.chave) && (!noTeto || urgente(a)));
   if (!novas.length) return { decisao: { tipo: "nada", motivo: noTeto ? "teto-do-dia" : "fila-vazia" }, estado, fechados };
   // Um aviso aberto por vez, menos o "quero ver" que acabou de chegar: `quente` vem da fila (proxima-venda.ts)
   // e vale para o interesse E para a licença (pedeMaterial), que até 17/10 era gravada como interesse.
-  const proxima = estado.abertos.length ? novas.find((a) => a.tipo === "responder" && a.quente) : novas[0];
+  // Pedido comercial que já exige Rômulo não espera outro aviso nem geração do copiloto.
+  const proxima = novas.find(a => a.quente && acaoInternaComercial(a))
+    ?? (estado.abertos.length ? novas.find(urgente) : novas[0]);
   if (!proxima) return { decisao: { tipo: "nada", motivo: "esperando-toque" }, estado, fechados };
   return { decisao: { tipo: "avisar", acao: proxima, depois: fila.filter((a) => a.chave !== proxima.chave) }, estado, fechados };
 }
 
+const avisoInternoComercial = (a: Pick<AvisoAberto, 'chave' | 'tipo' | 'conferirHistorico' | 'revisao' | 'interna'>) =>
+  acaoInternaComercial({ ...a, tipo: a.tipo ?? 'combinado' });
+
 export type Toque =
+  | { tipo: "bloqueado"; curto: string }
   | { tipo: "ja-feito"; curto: string; rodape: string }
   | { tipo: "seguir"; como: "enviada" | "pulada" | "recusa"; anotar: boolean };
 
@@ -224,7 +235,8 @@ export type Toque =
  * Pulado lá e "Enviei" aqui: ele mandou mesmo, vale o Enviei (a última decisão vale). A anotação é
  * uma por chave + tipo no dia: já saiu pela Central no toque do link, o "Enviei" não a repete.
  */
-export function toqueNoAviso(aberto: Pick<AvisoAberto, "chave" | "em" | "anota" | "tipo">, acao: "enviei" | "pular", doDia?: DoDia | null): Toque {
+export function toqueNoAviso(aberto: Pick<AvisoAberto, "chave" | "em" | "anota" | "tipo" | "conferirHistorico" | "revisao" | "interna">, acao: "enviei" | "pular", doDia?: DoDia | null): Toque {
+  if (acao === "enviei" && avisoInternoComercial(aberto)) return { tipo: "bloqueado", curto: "Este aviso é interno. Abra a Central para conduzir; nenhum envio foi registrado." };
   const r = doDia?.resolvidas[aberto.chave];
   const porFora = r && r.em >= aberto.em && r.por !== "telegram" && r.por !== "expirou" ? r : undefined;
   if (porFora && (porFora.como !== "pulada" || acao === "pular")) {
@@ -371,7 +383,7 @@ const MAX_RASCUNHO = 2500;
  * do lead bloqueia nos dois (mandar para a pessoa errada não é questão de estilo). Sem rascunho, nada a conferir.
  */
 export function conferirDoAviso(acao: AcaoDeVenda, whatsappDoRegistro?: string): ResultadoDoGate | null {
-  if (!acao.rascunho) return null;
+  if (acaoInternaComercial(acao) || !acao.rascunho) return null;
   const tipo: TipoDeMensagem = acao.tipo === "primeiro" ? "primeiro"
     : acao.tipo === "followup" ? (acao.primeiroContato ? "reenvio" : "followup")
     : acao.tipo === "mandar-proposta" ? "proposta"
@@ -396,7 +408,9 @@ export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[], 
     "",
     `${acao.copiloto?.momento?.passo ? "Agora" : "Como"}: ${acao.tatica}`,
   ];
-  if (acao.rascunho) {
+  if (acaoInternaComercial(acao)) {
+    linhas.push("", "Encaminhamento interno: abra a Central para revisar. Este aviso não confirma contato, proposta ou recebimento.");
+  } else if (acao.rascunho) {
     const r = acao.rascunho.length > MAX_RASCUNHO ? `${acao.rascunho.slice(0, MAX_RASCUNHO)}…` : acao.rascunho;
     const titulo = acao.copiloto
       ? `Sugestão do copiloto, que leu a conversa (revise antes de enviar):${acao.copiloto.porque ? `\n${acao.copiloto.porque}` : ""}`
@@ -413,6 +427,11 @@ export function textoDoAviso(acao: AcaoDeVenda, depois: readonly AcaoDeVenda[], 
 
 export function botoesDoAviso(acao: AcaoDeVenda, token: string, origemCentral?: string): Botao[][] {
   const linhas: Botao[][] = [];
+  if (acaoInternaComercial(acao)) {
+    if (origemCentral) linhas.push([{ texto: "Abrir Central", url: `${origemCentral.replace(/\/$/, "")}/crm?lead=${encodeURIComponent(acao.leadId)}` }]);
+    linhas.push([{ texto: "Pular", dados: dadosDaVenda(token, "pular") }]);
+    return linhas;
+  }
   if (acao.conferirHistorico) return origemCentral ? [[{ texto: 'Conferir histórico e decidir', url: `${origemCentral.replace(/\/$/, '')}/crm?lead=${encodeURIComponent(acao.leadId)}` }]] : [];
   // O desfecho (OT-06): o toque principal é marcar a recusa; o agradecimento no WhatsApp é opcional.
   const desfecho = acao.tipo === "desfecho";
@@ -622,12 +641,15 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
           return { tipo: "nada", motivo: "mensagem-barrada" };
         }
       }
+      const interna = acaoInternaComercial(decisao.acao);
       const token = randomBytes(6).toString("hex");
       const texto = textoDoAviso(decisao.acao, decisao.depois, gate && !gate.ok ? resumoDosProblemas(gate.problemas) : undefined);
       const mensagens = await deps.enviar(texto, botoesDoAviso(decisao.acao, token, deps.origemCentral));
       const novoAberto: AvisoAberto = {
         chave: decisao.acao.chave, token, em: agora, leadId: decisao.acao.leadId, primeiroContato: decisao.acao.primeiroContato,
-        produto: decisao.acao.produto, texto, ...(decisao.acao.anota ? { anota: decisao.acao.anota } : {}), ...(decisao.acao.textoDoRegistro ? { textoDoRegistro: decisao.acao.textoDoRegistro } : {}),
+        produto: decisao.acao.produto, texto, ...(!interna && decisao.acao.anota ? { anota: decisao.acao.anota } : {}), ...(!interna && decisao.acao.textoDoRegistro ? { textoDoRegistro: decisao.acao.textoDoRegistro } : {}),
+        ...(interna ? { interna: true } : {}),
+        ...(decisao.acao.revisao ? { revisao: true } : {}),
         tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}),
         ...(decisao.acao.conferirHistorico ? { conferirHistorico: true } : {}),
         ...(Array.isArray(mensagens) && mensagens.length ? { mensagens } : {}),
@@ -652,6 +674,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     const estado = await lerEstado();
     const aberto = estado.abertos.find((a) => a.token === token);
     if (!aberto) return { curto: "Este aviso já fechou." };
+    if (acao === "enviei" && avisoInternoComercial(aberto)) return { curto: "Este aviso é interno. Abra a Central para conduzir; nenhum envio foi registrado." };
     if (aberto.conferirHistorico && acao === 'enviei') return { curto: 'Confira o histórico na Ficha antes de escolher a retomada.' };
     let doDia: VendaDoDia;
     try {
@@ -660,8 +683,9 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       console.warn(`[vendedor] toque adiado: o dia do servidor não foi lido (${err instanceof Error ? err.message : String(err)})`);
       return { curto: "Não consegui ler o dia agora. Toque de novo em instantes." };
     }
-    estado.abertos = estado.abertos.filter((a) => a.token !== token);
     const toque = toqueNoAviso(aberto, acao, doDia);
+    if (toque.tipo === "bloqueado") return { curto: toque.curto };
+    estado.abertos = estado.abertos.filter((a) => a.token !== token);
     if (toque.tipo === "ja-feito") {
       // A Central resolveu antes deste toque: fecha a mensagem, sem anotar nem resolver de novo.
       await gravarEstado(estado);

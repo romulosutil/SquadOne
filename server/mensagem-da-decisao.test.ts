@@ -9,12 +9,14 @@ import { hashDoContexto } from '../src/operations/revisao-resposta.ts'
 import { procedimentoDaDecisao } from '../src/office/procedimento-da-decisao.ts'
 import { acaoDoLead } from '../src/operations/proxima-venda.ts'
 import { resumirConversa } from './conversa-do-lead.ts'
+import { qualificacaoComercialVazia, PREFIXO_QUALIFICACAO_COMERCIAL } from '../src/operations/qualificacao-comercial.ts'
+import { PREFIXO_CICLO } from '../src/operations/ciclo-comercial.ts'
 
 const lead = (extra: Partial<CrmLead> = {}) => ({ id: 'site:qa', chave: 'qa', produto: 'site', empresa: 'Cliente QA', nicho: 'clínica', cidade: 'Vitória', etapa: 'contato', sinal: 'em-conversa', subEtapa: 'Respondeu', marcos: {}, eventos: [], links: { whatsapp: 'https://wa.me/5511999999999' }, notas: 0, conversa: { mensagens: 2, ultimaEntrada: new Date().toISOString(), ultima: { direcao: 'entrada', em: new Date().toISOString(), trecho: 'Como funciona?', papel: undefined } }, resposta: { tipo: 'neutra', trecho: 'Como funciona?' }, ...extra }) as CrmLead
 const hojeDoCliente = (cliente: CrmLead): CrmVisao['hoje'] => [{ id: 'resposta', titulo: 'Responder', explicacao: '', itens: [{ leadId: cliente.id, acao: 'Responder no WhatsApp', detalhe: '', ordem: 1, links: cliente.links.segunda ? [{ rotulo: 'Mensagem', url: cliente.links.segunda }] : [] }] }]
-async function servidor(cliente: CrmLead, copiloto?: Pick<Copiloto, 'ler' | 'sugerir'>, reler?: () => CrmLead) {
+async function servidor(cliente: CrmLead, copiloto?: Pick<Copiloto, 'ler' | 'sugerir'>, reler?: () => CrmLead, fonte: Partial<CrmVisao> = {}) {
   const app = express(); app.use(express.json())
-  montarMensagemDaDecisao(app, { crm: { visao: async () => ({ estado: 'ok', leads: [reler ? reler() : cliente], hoje: hojeDoCliente(cliente) }) as unknown as CrmVisao }, copiloto })
+  montarMensagemDaDecisao(app, { crm: { visao: async () => ({ estado: 'ok', leads: [reler ? reler() : cliente], hoje: hojeDoCliente(cliente), ...fonte }) as unknown as CrmVisao }, copiloto })
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(r => server.once('listening', r))
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/crm/decisao/mensagem`
   return { pedir: async (campos = {}) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ produto: cliente.produto, id: cliente.id, contextoHash: await hashDoContexto(cliente), ...campos }) }), fechar: () => new Promise<void>(r => server.close(() => r())) }
@@ -84,4 +86,43 @@ test('trechos recentes preservam autores, ordem e limite; recepção supera clas
   assert.equal(procedimentoDaDecisao(lead({ conversa, resposta: { tipo: 'bot', trecho: '[Bot] Aguarde' } })).tipo, 'recepcao')
   const longa = resumirConversa(Array.from({ length: 9 }, (_, i) => ({ direcao: 'entrada' as const, em: `2026-10-20T12:0${i}:00Z`, texto: 'x'.repeat(500) })))!
   assert.equal(longa.recentes?.length, 6); assert.equal(longa.recentes?.[0].trecho.length, 280)
+})
+
+
+test('ações comerciais internas não leem cache nem geram modelo, rascunho ou link', async () => {
+  const em = '2026-10-23T15:00:00Z'
+  const nota = (texto: string) => ({ tipo: 'nota', origem: 'manual' as const, em, rotulo: 'Nota', fonte: 'aba CRM', texto })
+  const q = { ...qualificacaoComercialVazia(Date.parse(em)), id: 'qualificacao-qa', fonte: 'WhatsApp 23/10', evidencia: 'Contexto conferido' }
+  const casos = [
+    lead({ resposta: { tipo: 'neutra', trecho: 'Quanto custa?' } }),
+    lead({ eventos: [nota(PREFIXO_QUALIFICACAO_COMERCIAL + JSON.stringify(q))] }),
+    lead({ eventos: [nota(PREFIXO_QUALIFICACAO_COMERCIAL + '{invalida')] }),
+    lead({ eventos: [nota(PREFIXO_QUALIFICACAO_COMERCIAL + JSON.stringify({ ...q, intencao: 'sem-interesse' }))] }),
+    lead({ eventos: [nota(PREFIXO_QUALIFICACAO_COMERCIAL + JSON.stringify({ ...q, adequacao: { estado: 'inadequada', oferta: '', motivo: 'Não atende' } }))] }),
+    lead({ eventos: [nota(PREFIXO_CICLO + JSON.stringify({ v: 1, id: 'proposta-qa', tipo: 'proposta', data: '2026-10-23', humano: true, referencia: 'Proposta QA', ofertaId: 'respondido', versao: 1 }))] }),
+    lead({ eventos: [nota(PREFIXO_CICLO + '{invalido')] }),
+    lead({ revisaoComercial: 'Conferir histórico antes de retomar' }),
+  ]
+  for (const cliente of casos) {
+    let leituras = 0, geracoes = 0
+    const api = await servidor(cliente, { ler: async () => { leituras++; throw new Error('Não pode ler cache') }, sugerir: async () => { geracoes++; throw new Error('Não pode gerar modelo') } })
+    try {
+      const r = await api.pedir(), p = await r.json()
+      assert.equal(r.status, 200); assert.equal(p.mensagem, null); assert.equal(p.podeAbrir, false); assert.equal(p.origem, null)
+      assert.equal(leituras, 0); assert.equal(geracoes, 0)
+    } finally { await api.fechar() }
+  }
+})
+test('mudança de fonte durante leitura do cache também impede reaproveitar uma mensagem', async () => {
+  const cliente = lead(), quando = new Date().toISOString()
+  const sugestao = { quando, sugestao: { mensagem: 'Mensagem que ficou antiga', porque: '', ofertas: [], proposta: { itens: [] }, faltaSaber: [] } } as unknown as SugestaoNaFicha
+  let mudou = false, geracoes = 0
+  const api = await servidor(cliente, { ler: async () => { mudou = true; return sugestao }, sugerir: async () => { geracoes++; return sugestao } }, () => mudou ? { ...cliente, eventos: [{ tipo: 'nota', origem: 'manual', em: quando, rotulo: 'Nota', fonte: 'aba CRM', texto: PREFIXO_QUALIFICACAO_COMERCIAL + '{revisao-invalida' }] } : cliente)
+  try { assert.equal((await api.pedir()).status, 409); assert.equal(geracoes, 0) } finally { await api.fechar() }
+})
+test('falha de leitura posterior ao retrato impede usar a sugestão antiga', async () => {
+  let chamadas = 0
+  const cliente = lead(), api = await servidor(cliente, { ler: async () => { chamadas++; return null }, sugerir: async () => { chamadas++; throw new Error('Não deve gerar') } }, undefined,
+    { geradoEm: '2026-10-23T15:00:00Z', ultimaFalha: { em: '2026-10-23T15:05:00Z', erro: 'Fonte indisponível' } })
+  try { assert.equal((await api.pedir()).status, 503); assert.equal(chamadas, 0) } finally { await api.fechar() }
 })

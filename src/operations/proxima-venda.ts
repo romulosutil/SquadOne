@@ -1,3 +1,4 @@
+import { acaoInternaComercial } from './acao-interna-comercial'
 /**
  * PURO: a próxima venda (16/10/2026). Uma fila só, na ordem de quem está mais perto de comprar, com
  * a mensagem já escrita para o Rômulo só revisar e mandar. Usada pelas "Conversas para você"
@@ -56,6 +57,7 @@ export type TipoDeEnvioAnotado = 'segunda_enviada' | 'followup_enviado' | 'plus_
 export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou' | 'cadencia_enviada' | 'indicacao_pedida'
 
 export interface AcaoDeVenda {
+  interna?: boolean
   conferirHistorico?: boolean
   /**
    * É uma revisão comercial (a do lead com `revisaoComercial` e a "conversa sem retorno há 7 dias"), não
@@ -598,11 +600,12 @@ export const prioridadeDaAcao = (a: Pick<AcaoDeVenda, 'tipo' | 'revisao'>): numb
  */
 export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | undefined, ctx: ContextoDaVenda, pulados: ReadonlySet<string> = new Set()): AcaoDeVenda[] {
   if (!visao) return []
-  const elegiveis = (ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads)
-    .filter((l) => !contatoPausado(l))
+  const escopo = ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads
+  const elegiveis = escopo.filter((l) => !contatoPausado(l))
   const revisaoDeQualificacao = (l: CrmLead) => { const q = qualificacaoComercialAtual(l, ctx.agora); return q?.intencao === 'sem-interesse' || q?.adequacao.estado === 'inadequada' }
+  const atendimentos = escopo.filter(l=>l.atendimentoComercial);
   const revisoes = elegiveis.filter((l) => l.revisaoComercial || revisaoDeQualificacao(l))
-  const leads = elegiveis.filter((l) => !l.revisaoComercial && !revisaoDeQualificacao(l))
+  const leads = elegiveis.filter((l) => !l.atendimentoComercial && !l.revisaoComercial && !revisaoDeQualificacao(l))
   const porId = new Map(leads.map((l) => [l.id, l] as [string, CrmLead]))
   const grupos = new Map(visao.hoje.map((g) => [g.id, g] as [CrmGrupoHojeId, CrmGrupoHoje]))
   const fila: AcaoDeVenda[] = revisoes.map((l) => ({
@@ -611,6 +614,9 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     tatica: revisaoDeQualificacao(l) ? 'Confira a revisão e registre o encaminhamento interno. Não insistir nem enviar outra oferta por este cartão.' : 'Confira o último combinado e salve espera, próximo passo ou encerramento. A revisão não envia mensagem.',
     contexto: 'Revisão comercial', primeiroContato: false, quente: false, conferirHistorico: true, revisao: true,
   }))
+  fila.unshift(...atendimentos.map(l=>({chave:`${l.id}|${l.atendimentoComercial!.id}|atendimento-comercial`,leadId:l.id,empresa:l.empresa,produto:l.produto,tipo:'combinado' as const,interna:true,
+    titulo:l.atendimentoComercial!.titulo,contexto:'Atendimento comercial assistido',porque:l.atendimentoComercial!.motivo,
+    tatica:'Abra a ficha, confira a fonte e assuma a conversa quando houver negociação. Rascunhos exigem sua revisão.',primeiroContato:false,quente:l.atendimentoComercial!.tipo==='handoff'})))
   fila.push(...leads.flatMap(l => { const a = acaoDaCadencia(l, ctx); return a ? [a] : [] }))
   if (ctx.agora !== undefined) for (const l of leads) {
     if (l.etapa === 'perdido' || ['negativa', 'exclusao'].includes(l.resposta?.tipo ?? '') || (l.proximoPasso?.data && l.proximoPasso.data > new Date(ctx.agora - 10800_000).toISOString().slice(0, 10))) continue
@@ -692,6 +698,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
  * envio sozinha: se levar o link, a conversa mostra e o CRM conta.
  */
 function comAConversa(acao: AcaoDeVenda, lead: CrmLead | undefined, ctx: ContextoDaVenda): AcaoDeVenda {
+  if (acaoInternaComercial(acao)) return acao
   if (!lead || acao.primeiroContato || acao.conferirHistorico) return acao
   const conversa = linhaDaConversa(lead, ctx.agora)
   const sugestao = COM_COPILOTO.has(acao.tipo) ? ctx.sugestoes?.get(lead.id) : undefined

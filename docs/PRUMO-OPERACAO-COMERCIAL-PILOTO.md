@@ -24,7 +24,7 @@ Perguntar uma coisa de cada vez e aproveitar o que já foi respondido. Não exig
 | Decisão | Quem participa, o que precisa ser comparado e como chegarão à decisão estão esclarecidos. | Presumir que o nome no WhatsApp é o decisor. |
 | Próximo passo | Ação compreensível e responsável; quando depender do cliente, registrar seu aceite da ação/data. | Pedido nosso sem resposta ou tarefa interna vencida. |
 
-Guardar o fato e a referência da mensagem; separar interpretação e dúvida. Enquanto não houver estrutura própria para os cinco itens, registrar nota legível na aba CRM, sem inventar campos confirmados nem uma base paralela:
+Guardar o fato e a referência da mensagem; separar interpretação e dúvida. Use o formulário de qualificação da ficha para os cinco itens e sua evidência. O exemplo legível abaixo serve para organizar a conferência, sem inventar campos confirmados nem uma base paralela:
 
 ```text
 Qualificação do piloto — oferta: {oferta}
@@ -38,11 +38,11 @@ Evidência: {referência das mensagens; sem senhas ou dados bancários}
 
 Impacto pode ser qualitativo: por exemplo, o cliente relata ter de explicar as mesmas informações várias vezes. Não inventar economia, receita perdida, urgência ou orçamento. Se o cliente ainda não conhece o efeito do problema, registrar a lacuna e perguntar somente se isso ajudar a escolher a entrega.
 
-### Divergência atual com o SPICED
+### Regra implementada de qualificação
 
-`src/operations/spiced.ts` exige **dor, impacto e decisor confirmado** para `qualificadoParaProposta`. Não exige todos os demais campos preenchidos, nem impacto em reais. `mandar-proposta.ts` e `proxima-venda.ts` usam esse gate; a lacuna pode transformar a ação em convite para uma ligação.
+A ficha registra a revisão humana estruturada de necessidade, adequação, intenção, participantes/processo de decisão e próximo passo aceito, com fonte e evidência. A nota nova governa inclusive quando parcial, negativa ou inválida. O SPICED permanece apenas como compatibilidade de oportunidades ainda sem revisão nova. Não exigir impacto financeiro, reunião nem um único decisor. Os agentes recebem somente o resumo dos critérios e a pergunta faltante; notas privadas e referências de documentos não são copiadas ao contexto comercial do modelo.
 
-O novo plano trabalha com informação suficiente para recomendar escopo e conduzir a decisão. Ainda falta uma regra implementada que relacione necessidade, adequação, intenção, decisão e próximo passo ao gate atual. Não preencher impacto com uma frase inventada ou “não sei” apenas para liberar um botão. Registrar as evidências reais no SPICED quando existirem; caso contrário, atribuir a Rômulo a decisão interna sobre o escopo e a informação faltante. O formulário manual do ciclo comercial não deve ser usado como atalho para apresentar uma nova proposta sem contexto. Condições históricas realmente oferecidas continuam registráveis como fatos, sem serem tratadas como nova recomendação qualificada.
+O atendimento assistido usa o mesmo formulário e os marcos versionados. A classificação técnica do n8n nunca preenche uma revisão humana nem confirma aceite ou pagamento. Veja `PRUMO-INTEGRACAO-COMERCIAL-N8N-AGENTES-2026-10-23.md` para publicação e limites.
 
 ## Sequência de uma oportunidade
 

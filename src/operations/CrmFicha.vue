@@ -5,6 +5,7 @@ import CrmAprendizado from './CrmAprendizado.vue'
 import CrmSpiced from './CrmSpiced.vue'
 import CrmReceita from './CrmReceita.vue'
 import CrmCicloComercial from './CrmCicloComercial.vue'
+import CrmAtendimento from './CrmAtendimento.vue'
 import { temQualificacaoComercial } from './qualificacao-comercial'
 import { cicloDoLead } from './ciclo-comercial'
 import CrmConfirmarPasso from './CrmConfirmarPasso.vue'
@@ -676,6 +677,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       </details>
     </div>
 
+    <CrmAtendimento :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
     <CrmSpiced :lead="lead" :disponivel="disponivel" :sugestao="lida?.spiced" @registrado="emit('registrado')" />
     <details class="crm-ficha__secao dobra" :open="cicloDoLead(lead).historico.length > 0">
       <summary>Proposta, contrato e pagamento</summary>

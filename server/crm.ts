@@ -1,3 +1,5 @@
+import { PREFIXO_RESPONSAVEL, lerResponsavelConversa, textoResponsavelConversa, projetarResponsavelConversa, validarSucessaoResponsavel, identidadeDaConversa } from '../src/operations/responsavel-conversa.ts';
+import { timingSafeEqual } from 'node:crypto';
 import fs from "node:fs/promises";
 import { PREFIXO_QUALIFICACAO_COMERCIAL, lerNotaQualificacaoComercial, textoDaQualificacaoComercial, projetarQualificacaoComercial, qualificacaoComercialAtual, temQualificacaoComercial, type QualificacaoComercial } from '../src/operations/qualificacao-comercial.ts';
 import { PREFIXO_CICLO, lerEventoCiclo, textoEventoCiclo, cicloDoLead } from '../src/operations/ciclo-comercial.ts';
@@ -110,7 +112,7 @@ export const MINUTOS_ATE_RETRATO_VELHO = 30;
 /** Pastas mudam de lugar pelo site-pastas depois do Balcão (de hora em hora): folga antes de chamar de divergência. */
 const FOLGA_DAS_PASTAS_MS = 2 * 60 * 60 * 1000;
 
-const ehNotaComercial = (v: unknown): v is string => typeof v === 'string' && (v.startsWith(PREFIXO_CICLO) || v.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL));
+const ehNotaComercial = (v: unknown): v is string => typeof v === 'string' && (v.startsWith(PREFIXO_CICLO) || v.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL) || v.startsWith(PREFIXO_RESPONSAVEL));
 const DIA_MS = 24 * 60 * 60 * 1000;
 const FUSO_SP_MS = 3 * 60 * 60 * 1000; // São Paulo sem horário de verão desde 2019
 
@@ -534,6 +536,7 @@ export interface CrmLink {
 }
 
 export interface CrmLead {
+  atendimentoComercial?: {id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string};
   aarr?: ReceitaDoLead;
   revisaoComercial?: string;
   demoProtegida?: string;
@@ -1035,10 +1038,11 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     em: new Date(r.em).toISOString(),
     origem: "manual" as const,
     fonte: TIPOS_DE_ENVIO.has(r.tipo) ? "aba CRM (anotado ao tocar no link na Central)" : "aba CRM (registrado na Central)",
-    ...((r.tipo === 'nota' && (r.texto.startsWith(PREFIXO_CICLO) || r.texto.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL))) || ['spiced', 'cadencia_enviada'].includes(r.tipo) || ehTipoAarr(r.tipo) || (r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto)) ? { registroTexto: r.texto } : {}),
+    ...((r.tipo === 'nota' && (r.texto.startsWith(PREFIXO_CICLO) || r.texto.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL) || r.texto.startsWith(PREFIXO_RESPONSAVEL))) || ['spiced', 'cadencia_enviada'].includes(r.tipo) || ehTipoAarr(r.tipo) || (r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto)) ? { registroTexto: r.texto } : {}),
     ...(ehTipoAarr(r.tipo) ? { texto: resumoDoRegistroAarr(r.tipo, lerRegistroAarr(r.tipo, r.texto)!) }
       : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_CICLO) ? { texto: `Ciclo comercial: ${lerEventoCiclo(r.texto)?.tipo ?? 'registro inválido'}` }
       : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL) ? { texto: 'Revisão humana da qualificação comercial.' }
+      : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_RESPONSAVEL) ? { texto:'Responsável pelo atendimento confirmado na Central.' }
       : r.tipo === 'spiced' ? { texto: 'Qualificação comercial confirmada pelo Rômulo.' }
       : r.tipo === 'cadencia_enviada' ? { texto: lerRegistroCadencia(r.texto)?.tipo === 'conversa' ? 'Retomada da conversa confirmada.' : lerRegistroCadencia(r.texto)?.degrau === 'dia-3' ? 'Último retorno da proposta confirmado.' : 'Primeiro retorno da proposta confirmado.' }
       : r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto) ? { texto: 'Follow-up confirmado pelo Rômulo.' }
@@ -2309,6 +2313,11 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
     if (!ciclo && !q) throw new RegistroInvalido('Nota comercial inválida: confira campos, confirmação humana e datas reais.');
     estruturada = ciclo ? textoEventoCiclo(ciclo, agora.getTime()) : textoDaQualificacaoComercial(q!, agora.getTime());
   }
+  if (tipo === 'nota' && bruto.startsWith('[responsavel-conversa-')) {
+    const nota = lerResponsavelConversa(corpo.texto, agora.getTime());
+    if (!nota) throw new RegistroInvalido('Registro de responsável inválido.');
+    estruturada = textoResponsavelConversa(nota, agora.getTime());
+  }
   const textoSeguro = estruturada ?? (aarr ? JSON.stringify(aarr) : tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : tipo === 'cadencia_enviada' ? JSON.stringify(lerRegistroCadencia(corpo.texto)) : bruto);
   if (tipo === "nota" && !textoSeguro) throw new RegistroInvalido("Escreva a nota.");
   let data = typeof corpo.data === "string" ? corpo.data.trim() : "";
@@ -2510,6 +2519,8 @@ function chaveComercialDoRegistro(registro: { tipo: string; texto: string }, opo
   const ciclo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora) : null;
   const q = registro.tipo === 'nota' ? lerNotaQualificacaoComercial(registro.texto, agora) : null;
   const aarr = ehTipoAarr(registro.tipo) ? lerRegistroAarr(registro.tipo, registro.texto, agora) : null;
+  const dono = registro.tipo === 'nota' ? lerResponsavelConversa(registro.texto, agora) : null;
+  if (dono) return { oportunidade: `conversa:${dono.conta}:${dono.conversa}`, id: dono.id, hash: hashCanonicoComercial(dono) };
   if (!ciclo && !q && !aarr) return undefined;
   const hash = hashCanonicoComercial(ciclo ?? q ?? { tipo: registro.tipo, registro: aarr });
   return { oportunidade, id: ciclo?.id ?? q?.id ?? `legado-${hash}-${ocorrencia}`, hash };
@@ -2545,6 +2556,29 @@ export class CrmStore {
       if (error?.code === "ENOENT" || error?.code === "EACCES") return undefined;
       throw error;
     }
+  }
+
+  /** Credencial técnica limitada à inbox. Nunca autentica um fato humano. */
+  async autenticarAtendimento(valor: unknown): Promise<boolean> {
+    const segredo = await this.segredo();
+    if (!segredo || typeof valor !== 'string') return false;
+    const a = Buffer.from(segredo), b = Buffer.from(valor);
+    return a.length === b.length && timingSafeEqual(a,b);
+  }
+
+  /** Veto por conversa, inclusive enquanto o append humano aguarda projeção real. */
+  async bloqueioDaConversa(lead: CrmLead, leads: readonly CrmLead[], agora = Date.now()): Promise<string | null> {
+    const identidade = identidadeDaConversa(lead);
+    if (!identidade) return 'Conversa sem identidade suportada.';
+    const fatos: FatoComercialNaFonte[] = leads.flatMap(l => l.eventos.flatMap(e => {
+      const nota = e.origem === 'manual' && e.tipo === 'nota' ? lerResponsavelConversa(e.registroTexto ?? e.texto ?? '', agora) : null;
+      return nota && Date.parse(e.em) <= agora ? [{ oportunidade:`conversa:${nota.conta}:${nota.conversa}`, id:nota.id, hash:hashCanonicoComercial(nota), em:e.em }] : [];
+    }));
+    const journal = await this.journalComercial.reconciliar({origem:'aba-crm',registros:fatos},new Date(agora));
+    if (journal.some(r => r.oportunidade === `conversa:prumo:${identidade.conversa}` && r.estado !== 'projetado')) return 'Troca de responsável aguardando confirmação na fonte.';
+    if (journal.some(r => r.oportunidade === `conversa:prumo:${identidade.conversa}` && !fatos.some(f => f.id === r.id && f.hash === r.hash))) return 'Responsabilidade anterior ausente da fonte atual; confira o retrato.';
+    const atual = projetarResponsavelConversa(lead,leads,agora);
+    return atual.estado === 'bloqueado' ? atual.motivo : atual.registro?.responsavel === 'romulo' ? atual.motivo : null;
   }
 
   private async disponibilidade(): Promise<{ disponivel: boolean; motivo?: string }> {
@@ -2659,7 +2693,8 @@ export class CrmStore {
     const registro = validarRegistro(entrada, agora);
     if (ehTipoAarr(registro.tipo) || registro.tipo === 'nota' && ehNotaComercial(registro.texto)) {
       // Serializar por lead protege dois cliques/abas, inclusive desfazer e corrigir em sequência.
-      const chave = `${registro.produto}:${registro.id}`;
+      const dono = registro.tipo === 'nota' ? lerResponsavelConversa(registro.texto, agora.getTime()) : null;
+      const chave = dono ? `conversa:${dono.conta}:${dono.conversa}` : `${registro.produto}:${registro.id}`;
       const anterior = this.aarrEmCurso.get(chave);
       if (anterior) { await anterior.catch(() => undefined); return this.registrar(entrada, agora) }
       const resposta = this.gravar(registro, agora);
@@ -2704,6 +2739,20 @@ export class CrmStore {
     const visao = await this.visao(agora);
     const lead = visao.leads.find((item) => item.id === `${registro.produto}:${registro.id}`);
     if (!lead) throw new RegistroInvalido("Lead não encontrado no retrato atual do CRM.");
+    const dono = registro.tipo === 'nota' ? lerResponsavelConversa(registro.texto, agora.getTime()) : null;
+    if (dono) {
+      const conhecida = (await this.journalComercial.listar()).filter(r=>r.oportunidade===`conversa:${dono.conta}:${dono.conversa}` && r.estado==='projetado');
+      const notasFonte = visao.leads.flatMap(l=>l.eventos.flatMap(e=>{
+        const n=e.tipo==='nota'&&e.origem==='manual'&&Date.parse(e.em)<=agora.getTime()?lerResponsavelConversa(e.registroTexto??e.texto??'',agora.getTime()):null;
+        return n ? [{id:n.id,hash:hashCanonicoComercial(n)}] : [];
+      }));
+      if(conhecida.some(r=>!notasFonte.some(n=>n.id===r.id&&n.hash===r.hash))) throw new RegistroInvalido('Responsabilidade anterior ausente da fonte atual. Releia o retrato antes de trocar o responsável.');
+      const projecao = projetarResponsavelConversa(lead, visao.leads, agora.getTime());
+      if (projecao.registro?.id !== dono.id) {
+        try { validarSucessaoResponsavel(dono, projecao, agora.getTime()); }
+        catch (e) { throw new RegistroInvalido(e instanceof Error ? e.message : 'Responsável mudou.'); }
+      }
+    }
     const cicloNovo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora.getTime()) : null;
     if (cicloNovo) {
       try {
@@ -2781,9 +2830,10 @@ export class CrmStore {
     }
     if (chaveComercial) {
       const contagensLegadas = new Map<string, number>();
-      const fonte: FatoComercialNaFonte[] = [...lead.eventos].sort((a,b) => Date.parse(a.em) - Date.parse(b.em)).flatMap(e => {
+      const fonte: FatoComercialNaFonte[] = [...(dono ? visao.leads.flatMap(l => l.eventos) : lead.eventos)].sort((a,b) => Date.parse(a.em) - Date.parse(b.em)).flatMap(e => {
         if (e.origem !== 'manual' || !Number.isFinite(Date.parse(e.em)) || Date.parse(e.em) > agora.getTime()) return [];
         let c = chaveComercialDoRegistro({ tipo: e.tipo, texto: e.registroTexto ?? e.texto ?? '' }, lead.id, agora.getTime());
+        if (dono && c?.oportunidade !== chaveComercial!.oportunidade) return [];
         if (c && ehTipoAarr(e.tipo)) { const n = contagensLegadas.get(c.hash) ?? 0; contagensLegadas.set(c.hash, n + 1); c = chaveComercialDoRegistro({ tipo:e.tipo, texto:e.registroTexto ?? e.texto ?? '' },lead.id,agora.getTime(),n); }
         return c ? [{ ...c, em: e.em }] : [];
       });

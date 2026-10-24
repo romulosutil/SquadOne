@@ -144,6 +144,7 @@ export interface AchadoDoRaioX {
 }
 
 export interface CrmLead {
+  atendimentoComercial?: { id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string };
   /** Instrumentação comercial explicitamente confirmada na aba CRM; nunca Finanças ou receita inferida. */
   aarr?: import('./aarr').ReceitaDoLead
   revisaoComercial?: string

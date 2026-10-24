@@ -2,10 +2,12 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   PASSOS_DO_COPILOTO, PRECOS_ABERTOS, copilotoServe, itensDaProposta, lerSaidaDoCopiloto, lerSugestaoSpiced, mascarar, montarDossie, numerosForaDoDossie,
-  precosProibidos, promptDoCopiloto, textoDaProposta, textoDoRaioX, sinaisParaODossie, REGRAS_DOS_SINAIS, type LeadDoCopiloto,
+  precosProibidos, promptDoCopiloto, textoDaProposta, textoDoRaioX, sinaisParaODossie, REGRAS_DOS_SINAIS, assinaturaDoContextoComercial, type LeadDoCopiloto,
 } from './operations/copiloto.ts'
 import { SEM_FONTE, type SinaisDoSite } from '../server/sinais-do-site.ts'
 import { spicedVazio } from './operations/spiced.ts'
+import { qualificacaoComercialVazia, PREFIXO_QUALIFICACAO_COMERCIAL, type QualificacaoComercial } from './operations/qualificacao-comercial.ts'
+import { PREFIXO_CICLO } from './operations/ciclo-comercial.ts'
 
 const lead = (extra: Partial<LeadDoCopiloto> = {}): LeadDoCopiloto => ({
   id: 'ChIJabc', produto: 'site', empresa: 'Desentupidora Estrela', nicho: 'desentupidora', cidade: 'Vitória', subEtapa: 'Respondeu',
@@ -346,5 +348,123 @@ describe('copiloto: o rascunho da proposta', () => {
     const [i] = itensDaProposta({ proposta: { itens: [{ id: 'iris', porque: 'clínica' }] } })
     assert.equal(i.nome, 'Iris')
     assert.equal(i.preco, undefined)
+  })
+})
+
+
+describe('copiloto: resumo comercial confirmado, sem condições privadas nem inferência de fatos', () => {
+  const em = '2026-10-23T15:00:00.000Z'
+  const q = (extra: Partial<QualificacaoComercial> = {}): QualificacaoComercial => ({
+    ...qualificacaoComercialVazia(Date.parse(em)), id: 'qualificacao-qa', necessidade: 'Organizar pedidos',
+    adequacao: { estado: 'confirmada', oferta: 'respondido', motivo: 'Atende ao pedido' }, intencao: 'avaliar',
+    decisao: 'Os dois sócios comparam juntos e respondem por aqui',
+    proximoPasso: { descricao: 'Conferir o escopo', aceito: true }, fonte: 'WhatsApp 23/10', evidencia: 'Queremos avaliar com os sócios.', ...extra,
+  })
+  const nota = (texto: string, quando = em) => ({ tipo: 'nota', origem: 'manual' as const, em: quando, rotulo: 'Nota', fonte: 'aba CRM', texto })
+  const notaQ = (valor: QualificacaoComercial, quando = em) => nota(PREFIXO_QUALIFICACAO_COMERCIAL + JSON.stringify(valor), quando)
+  const legado = { ...spicedVazio(), dor: 'Dor antiga', impacto: 'Impacto antigo', decisao: { decisor_confirmado: 'sim' as const, quem: 'Uma pessoa antiga', como_paga: '' } }
+  it('nova revisão suficiente aceita decisão em grupo e governa sem impacto ou SPICED antigo', () => {
+    const l = lead({ eventos: [{ ...nota('DOR_LEGADA_PRIVADA_qa'), tipo: 'spiced' }, notaQ(q())], spiced: legado }), antes = JSON.stringify(l), d = montarDossie(l)
+    assert.equal(d.comercial!.autoridade, 'qualificacao-nova')
+    assert.equal(d.comercial!.qualificacao.estado, 'suficiente')
+    assert.equal(d.comercial!.qualificacao.confirmacaoHumana, true)
+    assert.equal(d.comercial!.qualificacao.camposConfirmados.decisao, true)
+    assert.deepEqual(d.comercial!.qualificacao.lacunas, [])
+    assert.equal(d.spiced, undefined)
+    assert.equal(JSON.stringify(l), antes)
+    assert.doesNotMatch(JSON.stringify(d), /Dor antiga|Uma pessoa antiga|DOR_LEGADA_PRIVADA_qa/)
+  })
+  it('só a primeira lacuna canônica é sugerida; a confirmação segue com o humano', () => {
+    const valor = q({ necessidade: '', decisao: '' }), d = montarDossie(lead({ eventos: [notaQ(valor)] }))
+    assert.equal(d.comercial!.qualificacao.estado, 'parcial')
+    assert.equal(d.comercial!.qualificacao.proximaPergunta?.campo, 'necessidade')
+    assert.equal(d.comercial!.qualificacao.proximaPergunta?.alvo, 'cliente')
+    assert.equal(d.comercial!.qualificacao.camposConfirmados.necessidade, false)
+    assert.equal(d.comercial!.qualificacao.lacunas.length, 2)
+  })
+  it('nota nova inválida não recupera qualificação antiga e exige revisão do operador', () => {
+    const l = lead({ eventos: [notaQ(q()), nota(PREFIXO_QUALIFICACAO_COMERCIAL + '{invalida', '2026-10-23T15:01:00Z')], spiced: legado })
+    const d = montarDossie(l)
+    assert.equal(d.comercial!.autoridade, 'qualificacao-nova')
+    assert.equal(d.comercial!.qualificacao.estado, 'invalida')
+    assert.equal(d.comercial!.qualificacao.confirmacaoHumana, false)
+    assert.equal(d.comercial!.qualificacao.proximaPergunta?.alvo, 'operador')
+    assert.equal(d.spiced, undefined)
+  })
+  it('sem nota nova preserva fallback SPICED; nota de automação não confirma fatos humanos', () => {
+    const d = montarDossie(lead({ spiced: legado }))
+    assert.equal(d.comercial!.autoridade, 'spiced-legado')
+    assert.equal(d.comercial!.qualificacao.estado, 'suficiente')
+    assert.equal(d.spiced?.dor, legado.dor)
+    const sem = montarDossie(lead({ eventos: [{ ...notaQ(q()), origem: 'conversa' as any }] }))
+    assert.equal(sem.comercial!.autoridade, 'sem-revisao')
+    assert.equal(sem.comercial!.qualificacao.confirmacaoHumana, false)
+  })
+  it('condições, evidências e referência do próximo passo não atravessam o resumo ou o prompt', () => {
+    const d = montarDossie(lead({ eventos: [notaQ(q({
+      fonte: 'RECIBO_PRIVADO_qa', evidencia: 'R$ 98.765,43 na CONTA_PRIVADA_qa',
+      proximoPasso: { descricao: 'Pagar R$ 98.765,43 no RECIBO_PRIVADO_qa', aceito: false },
+    }))] }))
+    const texto = promptDoCopiloto(d)
+    assert.doesNotMatch(texto, /98\.765,43|RECIBO_PRIVADO_qa|CONTA_PRIVADA_qa|qualificacao-comercial-v1/)
+    assert.equal(d.comercial!.qualificacao.proximaPergunta?.texto, 'Qual próximo passo faz sentido combinarmos?')
+  })
+  it('ciclo leva apenas marcos estruturais, inclusive correção e notas inválidas', () => {
+    const proposta = { v: 1, id: 'proposta-qa', tipo: 'proposta', data: '2026-10-23', humano: true, referencia: 'DOC_PRIVADO_qa', ofertaId: 'respondido', versao: 1, valor: 9876543, mensalidade: 7654321, escopo: 'CONTA_PRIVADA_qa' }
+    const base = lead({ eventos: [nota(PREFIXO_CICLO + JSON.stringify(proposta))] }), d = montarDossie(base)
+    assert.equal(d.comercial!.ciclo.estado, 'rascunho')
+    assert.equal(d.comercial!.ciclo.exigeHumano, true)
+    assert.deepEqual(d.comercial!.ciclo.marcosConfirmados, ['proposta'])
+    assert.doesNotMatch(promptDoCopiloto(d), /9876543|7654321|DOC_PRIVADO_qa|CONTA_PRIVADA_qa|ciclo-comercial-v1/)
+    const correcao = { v: 1, id: 'correcao-qa', tipo: 'correcao', data: '2026-10-23', humano: true, referencia: 'CORRECAO_PRIVADA_qa', vinculo: 'proposta-qa', evidencia: 'Corrigido pelo operador' }
+    const corrigido = montarDossie({ ...base, eventos: [...base.eventos, nota(PREFIXO_CICLO + JSON.stringify(correcao), '2026-10-23T15:01:00Z')] })
+    assert.equal(corrigido.comercial!.ciclo.estado, 'revisar')
+    assert.deepEqual(corrigido.comercial!.ciclo.marcosConfirmados, [])
+    assert.notEqual(corrigido.comercial!.revisaoContexto, d.comercial!.revisaoContexto)
+    const invalido = montarDossie(lead({ eventos: [nota(PREFIXO_CICLO + '{invalido DOC_PRIVADO_qa')] }))
+    assert.equal(invalido.comercial!.ciclo.estado, 'revisar')
+    assert.equal(invalido.comercial!.ciclo.exigeHumano, true)
+    assert.doesNotMatch(JSON.stringify(invalido), /DOC_PRIVADO_qa/)
+  })
+  it('editar nota inválida no mesmo índice/data invalida o hash sem expor seu conteúdo', () => {
+    const a = lead({ eventos: [nota(PREFIXO_QUALIFICACAO_COMERCIAL + '{SEGREDO_A')] })
+    const b = lead({ eventos: [nota(PREFIXO_QUALIFICACAO_COMERCIAL + '{SEGREDO_B')] })
+    assert.notEqual(assinaturaDoContextoComercial(a), assinaturaDoContextoComercial(b))
+    assert.notEqual(JSON.stringify(montarDossie(a)), JSON.stringify(montarDossie(b)))
+    assert.doesNotMatch(promptDoCopiloto(montarDossie(b)), /SEGREDO_A|SEGREDO_B/)
+    assert.match(assinaturaDoContextoComercial(a), /^comercial-v1:[0-9a-f]{16}$/)
+  })
+  it('o prompt não força reunião/impacto e identifica fonte, lacunas e passagem humana', () => {
+    const p = promptDoCopiloto(montarDossie(lead({ eventos: [notaQ(q())] })))
+    assert.match(p, /UMA pergunta faltante/)
+    assert.match(p, /Não exija impacto financeiro, reunião ou um decisor único/)
+    assert.match(p, /nunca confirmar fatos, notas, aceite, envio ou recebimento/)
+    assert.match(p, /Preço, negociação, proposta final/)
+    assert.doesNotMatch(p, /proponha uma ligação de 10 minutos|Proposta só com dor, impacto/)
+  })
+  it('texto de proposta legada não leva condição privada ao modelo; data observada continua no contexto', () => {
+    const d = montarDossie(lead({ proposta: { em, data: '2026-10-23' }, eventos: [{ ...nota('Proposta R$ 98.765,43 DOC_PRIVADO_qa'), tipo: 'proposta' }] }))
+    assert.doesNotMatch(promptDoCopiloto(d), /98\.765,43|DOC_PRIVADO_qa/)
+    assert.equal(d.proposta?.data, '2026-10-23')
+  })
+  it('responsável da conversa invalida contexto sem expor JSON bruto ou telefone ao modelo', () => {
+    const base = lead(), marcado = lead({ eventos: [{ ...nota('Conversa assumida pelo operador'), registroTexto: '[responsavel-conversa-v2] ' + JSON.stringify({ telefone: '5511998877665', registro: 'OWNER_PRIVADO_qa' }) }] })
+    const d = montarDossie(marcado)
+    assert.doesNotMatch(JSON.stringify(d), /5511998877665|OWNER_PRIVADO_qa|responsavel-conversa-v2|telefone/)
+    assert.notEqual(assinaturaDoContextoComercial(marcado), assinaturaDoContextoComercial(base))
+  })
+  it('fingerprint e versão do resumo não comprovam números citados pelo modelo', () => {
+    const d = montarDossie(lead())
+    d.comercial!.revisaoContexto = 'comercial-v1:77777777'
+    assert.deepEqual(numerosForaDoDossie('Atendem há 77777777 anos?', d), ['77777777'])
+  })
+  it('resumo suficiente não autoriza itens finais do modelo nem altera fatos da fonte', () => {
+    const l = lead({ eventos: [notaQ(q())] }), antes = JSON.stringify(l)
+    const r = lerSaidaDoCopiloto(JSON.stringify({ mensagem: 'Qual próximo passo você prefere?', ofertas: [], proposta: { itens: [{ id: 'respondido', porque: 'Modelo sugeriu' }] } }), montarDossie(l))
+    assert.equal(r.ok, true)
+    if (!r.ok) return
+    assert.deepEqual(r.sugestao.proposta.itens, [])
+    assert.ok(r.avisos.some(a => a.includes('Rômulo')))
+    assert.equal(JSON.stringify(l), antes)
   })
 })

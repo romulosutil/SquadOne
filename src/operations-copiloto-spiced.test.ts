@@ -84,7 +84,9 @@ describe('SPICED do copiloto continua sugestão citada', () => {
   })
   it('prompt pede descoberta, citação e confirmação humana antes da proposta', () => {
     const p = promptDoCopiloto(dossie)
-    assert.match(p, /dor, impacto e decisor confirmado/)
+    assert.match(p, /A revisão de qualificação nova governa/)
+    assert.match(p, /UMA pergunta faltante/)
+    assert.match(p, /Não exija impacto financeiro, reunião ou um decisor único/)
     assert.match(p, /SUGESTÃO para confirmação humana/)
     assert.match(p, /trecho literal/)
     assert.doesNotMatch(p, /24 h depois de cada/)

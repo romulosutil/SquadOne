@@ -1,3 +1,4 @@
+import { assinaturaDoContextoComercial } from '../src/operations/copiloto.ts';
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -466,7 +467,7 @@ export function criarCopiloto(deps: DepsDoCopiloto): Copiloto {
   // eventos, vale o hash de antes; a releitura periódica pega o que não deixa rastro (o Raio-X que apareceu).
   const vistos = new Map<string, { assinatura: string; hash: string; raioX: DossieDoLead["raioX"]["situacao"]; em: number }>();
   const assinaturaDoLead = (lead: CrmLead) =>
-    [lead.conversa?.ultimaEntrada ?? "", lead.conversa?.ultima?.em ?? "", lead.etapa, lead.subEtapa, lead.eventos.length].join("|");
+    [lead.conversa?.ultimaEntrada ?? "", lead.conversa?.ultima?.em ?? "", lead.etapa, lead.subEtapa, lead.eventos.length, assinaturaDoContextoComercial(lead)].join("|");
   async function hashDoLead(lead: CrmLead): Promise<{ hash: string; raioX: DossieDoLead["raioX"]["situacao"] }> {
     const chave = chaveDoLead(lead.produto, lead.id);
     const assinatura = assinaturaDoLead(lead);
