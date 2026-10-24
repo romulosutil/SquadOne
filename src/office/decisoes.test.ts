@@ -5,6 +5,7 @@ import { notaDoAprendizado } from '../operations/aprendizado-comercial.ts'
 import type { CrmLead } from '../operations/types.ts'
 import type { AcaoDeVenda } from '../operations/proxima-venda.ts'
 import { procedimentoDaDecisao } from './procedimento-da-decisao.ts'
+import { VERSAO_CLASSIFICACAO_RESPOSTA } from '../operations/classificacao-resposta.ts'
 
 const agora = Date.parse('2026-10-21T15:00:00-03:00')
 const lead = (id: string, campos: Partial<CrmLead> = {}): CrmLead => ({ id, empresa: id, produto: 'site', etapa: 'contato', marcos: {}, links: {}, eventos: [], ...campos }) as CrmLead
@@ -175,7 +176,7 @@ test('interesse comercial não vira pedido de material por ter um modelo de mens
   const cliente: CrmLead & { classificacaoResposta?: { materialSolicitado: boolean } } = {
     ...lead('preco', { resposta: { tipo: 'interesse', trecho: 'Qual o valor?' }, links: { segunda: 'https://wa.me/5511999990000?text=Modelo' },
       conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em, ultima: { direcao: 'saida', em: '2026-10-21T15:05:00Z', trecho: 'Expliquei as condições.' } } }),
-    classificacaoResposta: { materialSolicitado: false },
+    classificacaoResposta: { versao: VERSAO_CLASSIFICACAO_RESPOSTA, classe: 'interesse', motivo: 'Perguntou o preço', houveRespostaHumana: true, materialSolicitado: false, revisar: false, leituraConfirmada: false },
   }
   assert.equal(respostaJaAtendida(cliente), true)
   assert.equal(decisoesDoEscritorio([cliente], [], agora)[0].estado, 'acompanhando')
@@ -191,14 +192,12 @@ test('retorno posterior, mensagem recebida e saída histórica não são uma nov
 })
 
 
-type LeadComLeitura = CrmLead & { classificacaoResposta?: {
-  classe?: string; evidencia?: { em?: string }; revisar?: boolean; houveRespostaHumana?: boolean; materialSolicitado?: boolean
-} }
+type LeadComLeitura = CrmLead
 function conversaAutomatica(campos: Partial<CrmLead> = {}): LeadComLeitura {
   const em = '2026-10-21T15:00:00Z'
   return { ...lead('automatico', { resposta: { tipo: 'bot', trecho: 'Mensagem automática: atendimento indisponível', em },
     conversa: { ...resposta!, ultimaEntrada: em, entradas: { gente: 1, recepcao: 0, robo: 0 }, ultima: { direcao: 'entrada', em, trecho: 'Mensagem automática: atendimento indisponível' } }, ...campos }),
-    classificacaoResposta: { classe: 'robo', evidencia: { em }, revisar: false, houveRespostaHumana: false, materialSolicitado: false } }
+    classificacaoResposta: { versao: VERSAO_CLASSIFICACAO_RESPOSTA, classe: 'robo', motivo: 'Resposta automática confirmada', evidencia: { trecho: 'Mensagem automática: atendimento indisponível', em }, revisar: false, houveRespostaHumana: false, materialSolicitado: false, leituraConfirmada: false } }
 }
 
 test('robô confirmado na entrada atual vai para acompanhamento, preservando histórico e sem ação de contato', () => {
@@ -225,7 +224,7 @@ test('marcador de robô reconhecido pelo procedimento também retira abordagem a
 test('rótulo antigo, evidência sem data ou leitura que pede revisão não escondem uma decisão', () => {
   const base = conversaAutomatica()
   const leituras = [undefined, { ...base.classificacaoResposta!, evidencia: undefined },
-    { ...base.classificacaoResposta!, evidencia: { em: '2026-10-20T15:00:00Z' } },
+    { ...base.classificacaoResposta!, evidencia: { trecho: 'Resposta automática anterior', em: '2026-10-20T15:00:00Z' } },
     { ...base.classificacaoResposta!, revisar: true }, { ...base.classificacaoResposta!, houveRespostaHumana: true }]
   for (const classificacaoResposta of leituras) {
     const cliente = { ...base, classificacaoResposta }
