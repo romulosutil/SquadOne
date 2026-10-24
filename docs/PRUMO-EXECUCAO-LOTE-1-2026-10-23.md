@@ -28,3 +28,13 @@ Kelisson/ControEco: preservar a oferta histórica de tráfego a R$ 500/mês e co
 Permanecem em aberto: publicação atômica do retrato CRM, reconciliação de ofertas efetivamente enviadas, extração/registro de compromissos em texto livre, alinhamento do gate SPICED com a qualificação do piloto, catálogo versionado e implementação das fases de resposta/automação. Não houve reativação de caçadores, aumento de limites ou autorização nova de envio automático.
 
 O encerramento deste lote não significa conclusão das fases 0–5 nem primeira venda realizada. Proposta, contratação e recebimento continuam separados.
+
+## Publicação conferida
+
+Commit de código `748e242` publicado na main e construído pelo atualizador existente do Dell em 23/10/2026. Serviço ativo e marcador de versão construída coincidente. Tipos e build Linux aprovados; 3.695 testes da worktree Linux aprovados. O backup do build anterior está no ambiente privado do Dell.
+
+Após o rollout, as 29 alterações anteriores do checkout Dell permaneceram byte a byte idênticas no patch de comparação. O inventário n8n permaneceu em 21 workflows, 18 ativos. Nenhum workflow foi modificado por este lote.
+
+Conferência manual no navegador após publicação: cenário e seis personagens presentes; quadros Minhas decisões e Decisões dos agentes abrem e fecham; personagem Carla abre o canal direto; retorno à sala funciona. Não foi submetido comando nem mensagem. Conferência visual realizada no desktop; não foi alegada emulação mobile nesta rodada sem alteração de layout. Capturas antes/depois guardadas nos artefatos locais do chat.
+
+Grafo AST atualizado no Dell após a publicação, conforme orientação do repositório.
