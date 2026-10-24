@@ -88,7 +88,7 @@ export function conferirFonteAtendimento(evento: EventoAtendimentoComercial, fon
     let v: unknown
     try { v=JSON.parse(linha) } catch { return falha('invalida','Fonte privada contém registro ilegível; confira a captura original.') }
     if (!objeto(v)) return falha('invalida','Fonte privada contém registro inválido; confira a captura original.')
-    const tuple=mensagemDaCaptura(v),origemPermitida=prova?.ativa?['prumo','pessoal','hermes-historico'].includes(String(v.origem)):v.origem==='prumo'
+    const tuple=mensagemDaCaptura(v),origemPermitida=prova?.ativa?['prumo','pessoal','hermes-historico','hermes-historico-transcrito'].includes(String(v.origem)):v.origem==='prumo'
     if(tuple&&origemPermitida&&Date.parse(tuple.ocorridoEm)<=agora){
       const verificada=!prova?.ativa||conferirIdentidadeCaptura(tuple,prova,agora).estado==='verificada'
       if(v.direcao==='saida'&&verificada)saidasEm.push(tuple.ocorridoEm)
@@ -100,7 +100,7 @@ export function conferirFonteAtendimento(evento: EventoAtendimentoComercial, fon
   if (!candidatas.length) return falha(prova?.ativa?'invalida':'ausente','Mensagem original ainda não está disponível na fonte privada.')
   if (candidatas.length !== 1) return falha('invalida','Identidade repetida na fonte privada; confira a captura original.')
   const m=candidatas[0]
-  if ((!prova?.ativa&&m.origem!=='prumo') || prova?.ativa&&!['prumo','pessoal','hermes-historico'].includes(String(m.origem)) || m.em !== evento.ocorridoEm || typeof m.texto !== 'string'
+  if ((!prova?.ativa&&m.origem!=='prumo') || prova?.ativa&&!['prumo','pessoal','hermes-historico','hermes-historico-transcrito'].includes(String(m.origem)) || m.em !== evento.ocorridoEm || typeof m.texto !== 'string'
     || createHash('sha256').update(m.texto,'utf8').digest('hex') !== evento.conteudoHash) return falha('invalida','Integridade da mensagem original divergente; nenhuma resposta foi preparada.')
   if(prova?.ativa){
     const tuple=mensagemDaCaptura(m)
@@ -145,7 +145,7 @@ export class AtendimentoComercial {
           try{raw=JSON.parse(linha)}catch{c.invalidos++;problema(ref,'registro-invalido',ligados);continue}
           if(!objeto(raw)){c.invalidos++;problema(ref,'registro-invalido',ligados);continue}
           if(raw.direcao!=='entrada')continue
-          if(!['prumo','pessoal','hermes-historico'].includes(String(raw.origem))){c.ignorados++;continue}
+          if(!['prumo','pessoal','hermes-historico','hermes-historico-transcrito'].includes(String(raw.origem))){c.ignorados++;continue}
           c.entradas++
           if(typeof raw.id!=='string'||!raw.id){c.semId++;problema(ref,'sem-id',ligados);continue}
           const tuple=mensagemDaCaptura(raw)

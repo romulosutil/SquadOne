@@ -51,7 +51,7 @@ test('sem config preserva conferência legada e não reconcilia capturas pessoai
   assert.equal(conferirFonteAtendimento(e,{...fonte,jsonl:JSON.stringify(raw())},AGORA).estado,'invalida')
 })
 
-for(const origem of ['pessoal','prumo','hermes-historico'])test(`prova exata permite conta Prumo sem reescrever origem literal ${origem}`,async t=>{
+for(const origem of ['pessoal','prumo','hermes-historico','hermes-historico-transcrito'])test(`prova exata permite conta Prumo sem reescrever origem literal ${origem}`,async t=>{
   const f=await fixture(t),m=raw({origem,texto:'  Olá çã 😀\n  '});await f.escreverRaw([m]);await f.escreverProvas([prova(m)])
   const antes=await fs.readFile(path.join(f.capturas,CONVERSA+'.jsonl'),'utf8')
   const r=conferirFonteAtendimento(evento(m),await f.lerFonte(evento(m)),AGORA)
