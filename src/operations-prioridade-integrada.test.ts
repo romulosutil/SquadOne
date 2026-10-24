@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
+import {computed,ref,shallowRef} from 'vue'
 import express from 'express'
 import type {AddressInfo} from 'node:net'
 import type {CrmLead,CrmVisao} from './operations/types.ts'
@@ -57,4 +58,29 @@ test('urgência pertence só ao evento atual confirmado, nunca ao backfill hist�
 test('pausa com tarefa continua visível internamente sem competir como preparação ou urgência',()=>{
  const {atual}=casos(),pausado={...atual,eventos:[{tipo:'nota',origem:'manual' as const,em:EM,rotulo:'Pausa',fonte:'CRM',texto:notaDoAprendizado({fato:'Aguardar',hipotese:'Responderá quando puder',teste:'Esperar',resultado:'em-teste',pausarAteResposta:true})}]}
  const a=fila([pausado])[0]!,d=decisoesDoEscritorio([pausado],[a],AGORA)[0]!,p=procedimentoDaDecisao(pausado,new Date(AGORA));assert.equal(d.estado,'agora');assert.equal(a.interna,true);assert.equal(a.quente,false);assert.equal(a.link,undefined);assert.equal(p.tipo,'interno');assert.match(p.passos.join(' '),/Aguardar/);assert.deepEqual(destaquesComerciais([pausado],AGORA),[])
+})
+
+
+test('retrato congelado preserva ordem, títulos e restrições em fila e decisões',()=>{
+ const congelar=<T>(valor:T):T=>{if(valor&&typeof valor==='object'){for(const filho of Object.values(valor))congelar(filho);Object.freeze(valor)}return valor}
+ const {atual,historico,material,espera}=casos(),v=congelar(visao([material,espera,historico,atual])),antes=JSON.stringify(v)
+ const a=filaDeVenda(v,{primeiroLiberado:false,agora:AGORA}),d=decisoesDoEscritorio(v.leads,a,AGORA)
+ assert.deepEqual(a.map(x=>x.leadId),[atual.id,historico.id,material.id,espera.id])
+ assert.deepEqual(d.filter(x=>x.estado==='agora').map(x=>x.lead.id),a.map(x=>x.leadId))
+ assert.equal(a[0].titulo,atual.atendimentoComercial!.titulo);assert.equal(a.find(x=>x.leadId===espera.id)?.quente,false)
+ assert.equal(JSON.stringify(v),antes)
+})
+
+test('troca integral do retrato e relógio recalculam tarefa, identidade e urgência sem cache de permissão',()=>{
+ const {atual,historico}=casos(),fonte=shallowRef(visao([historico,atual])),agora=ref(AGORA)
+ const acoes=computed(()=>filaDeVenda(fonte.value,{primeiroLiberado:false,agora:agora.value}))
+ const decisoes=computed(()=>decisoesDoEscritorio(fonte.value.leads,acoes.value,agora.value))
+ assert.equal(acoes.value[0].leadId,atual.id);assert.equal(acoes.value[0].quente,true)
+ agora.value+=16*60000;assert.equal(acoes.value.find(a=>a.leadId===atual.id)?.quente,false)
+ const em=new Date(agora.value-60000).toISOString(),novo={...atual,resposta:{...atual.resposta!,em},conversa:{...atual.conversa!,ultimaEntrada:em,ultima:{...atual.conversa!.ultima,em},sinaisComerciais:resumirSinaisComerciais([{em,direcao:'entrada',texto:'Quanto fica?'}],agora.value)},atendimentoComercial:{...atual.atendimentoComercial!,id:'tarefa-renovada',titulo:'Conferir nova condição',identidade:'sem-prova' as const,ocorridoEm:em}}
+ fonte.value=visao([historico,novo]);assert.equal(acoes.value.find(a=>a.leadId===atual.id)?.quente,false)
+ assert.match(acoes.value.find(a=>a.leadId===atual.id)!.chave,/tarefa-renovada/);assert.equal(decisoes.value.find(d=>d.lead.id===atual.id)?.motivo,'Conferir nova condição')
+ fonte.value=visao([historico,{...novo,atendimentoComercial:{...novo.atendimentoComercial,identidade:'confirmada'}}])
+ assert.equal(acoes.value[0].leadId,atual.id);assert.equal(acoes.value[0].quente,true)
+ assert.equal(acoes.value[0].link,undefined);assert.equal(acoes.value[0].rascunho,undefined)
 })

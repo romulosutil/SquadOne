@@ -1,4 +1,4 @@
-import { compararPlanosComerciais, conferenciaComercialInterna, planoComercialDoLead, temContextoPrioridadeComercial } from '../operations/prioridade-comercial'
+import { compararPlanosComerciais, planoPedeConferenciaInterna, planoComercialDoLead, temContextoPrioridadeComercial } from '../operations/prioridade-comercial'
 import type { CrmLead } from '../operations/types'
 import { prioridadeDaAcao, PRIORIDADE_DA_FILA, type AcaoDeVenda } from '../operations/proxima-venda'
 import { conversasParaConduzir, type ConversaParaVoce } from '../operations/conversas-para-conduzir'
@@ -84,9 +84,9 @@ export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly 
   const comAcaoAlemDaResposta = new Set(acoes.filter(a => !a.primeiroContato && a.tipo !== 'responder').map(a => a.leadId))
   for (const acao of acoes) if (!acao.primeiroContato && !porAcao.has(acao.leadId)) porAcao.set(acao.leadId, acao)
   const ordem = new Map([...new Set([...porAcao.keys(), ...conversas.map(c => c.lead.id)])].map((id, i) => [id, i]))
-  const prioridade = (d: Decisao) => d.lead.atendimentoComercial ? planoComercialDoLead(d.lead,agora).ordem/10 : porConversa.get(d.lead.id)?.prioridade ?? observadas.get(d.lead.id)?.prioridade ?? (d.acao ? prioridadeDaAcao(d.acao) : undefined) ?? PRIORIDADE_DA_FILA.combinado
+  const prioridade = (d: Decisao) => d.lead.atendimentoComercial ? planosComerciais.get(d.lead.id)!.ordem/10 : porConversa.get(d.lead.id)?.prioridade ?? observadas.get(d.lead.id)?.prioridade ?? (d.acao ? prioridadeDaAcao(d.acao) : undefined) ?? PRIORIDADE_DA_FILA.combinado
   return leads.flatMap((lead): Decisao[] => {
-    if(lead.atendimentoComercial||conferenciaComercialInterna(lead,agora)) return [{lead,estado:'agora',motivo:lead.atendimentoComercial?.titulo??planosComerciais.get(lead.id)!.acao,acao:porAcao.get(lead.id)??null}]
+    if(lead.atendimentoComercial||planoPedeConferenciaInterna(planosComerciais.get(lead.id)!)) return [{lead,estado:'agora',motivo:lead.atendimentoComercial?.titulo??planosComerciais.get(lead.id)!.acao,acao:porAcao.get(lead.id)??null}]
     const atendida = respostaJaAtendida(lead)
     const candidata = porAcao.get(lead.id) ?? null
     const materialPendente = materialSolicitadoPendente(lead)

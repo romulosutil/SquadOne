@@ -32,16 +32,17 @@ export function planoComercialDoLead(lead:LeadParaPrioridadeComercial,agora:numb
  const entrada=Math.max(0,...entradas.map(e=>instante(e,agora))),saida=Math.max(instante(resumo?.ultimaSaidaEm,agora),instante(lead.conversa?.ultimaSaida,agora),lead.conversa?.ultima.direcao==='saida'?instante(lead.conversa.ultima.em,agora):0)
  const emEntrada=entrada?new Date(entrada).toISOString():null
  const atual=lead.classificacaoResposta??classificarResposta(lead,undefined,agora)
- const nova=temQualificacaoComercial(lead,agora),q=qualificacaoComercialAtual(lead,agora),ciclo=cicloDoLead(lead,agora)
- const att=lead.atendimentoComercial,retomada=revisaoRetomadaDoLead(lead,agora),passo=lead.proximoPasso
+ const att=lead.atendimentoComercial,passo=lead.proximoPasso
  const devolver=(grupo:PlanoPrioridadeComercial['grupo'],ordem:number,acao:string,resultado:string,fonte:PlanoPrioridadeComercial['evidencia']['fonte'],tipo:string,em:string|null,estado:PlanoPrioridadeComercial['evidencia']['estado']='atual',destaque=false):PlanoPrioridadeComercial=>({grupo,nivel:ordem<20?1:ordem<30?2:ordem<50?3:ordem<80?4:5,ordem,acao,resultado,evidencia:{fonte,tipo,estado},em:emValido(em,agora),destaque:destaque&&!!emValido(em,agora),urgente:false,contatoAutorizado:false})
  const restricao=resumo?.restricao&&instante(resumo.restricao.em,agora)?resumo.restricao:null
  if(['ganho','perdido'].includes(lead.etapa)||['negativa','exclusao'].includes(lead.resposta?.tipo??'')||['recusa','exclusao'].includes(atual.classe)||restricao)
   return devolver('encerrado',90,'Preservar o desfecho e a restrição de contato','Histórico e restrição preservados; nenhuma nova abordagem.','restricao',restricao?.tipo??atual.classe,restricao?.em??emEntrada)
+ const retomada=revisaoRetomadaDoLead(lead,agora)
  const registrado=instante(passo?.registradoEm,agora),passoVigente=!!passo?.texto&&(!registrado||registrado>=entrada)
  const futuro=passoVigente&&/^\d{4}-\d{2}-\d{2}$/.test(passo!.data)&&passo!.data>diaEmSP(new Date(agora))
  if(contatoPausado(lead)||futuro||passoVigente&&intencaoDoPasso(passo!.texto)==='espera'||retomada?.atual&&['aguardar','nao-priorizar'].includes(retomada.grupo))
   return devolver('aguardar',80,'Aguardar a resposta ou a condição combinada','Espera preservada; revisão interna não autoriza retomada.','restricao','espera',passo?.registradoEm??retomada?.em??emEntrada)
+ const q=qualificacaoComercialAtual(lead,agora)
  if(q?.intencao==='sem-interesse'||q?.adequacao.estado==='inadequada')
   return devolver('conferir',65,'Conferir a restrição comercial registrada','Revisão humana negativa preservada, sem rascunho de contato.','qualificacao-humana',q.intencao==='sem-interesse'?'sem-interesse':'inadequada',q.em)
  const fortes=(resumo?.sinais??[]).filter(s=>sinalForte(s)&&instante(s.em,agora)).sort((a,b)=>Date.parse(b.em)-Date.parse(a.em))
@@ -52,6 +53,7 @@ export function planoComercialDoLead(lead:LeadParaPrioridadeComercial,agora:numb
  const forte=fortes[0]??((precoContextual||sinalAtual==='proposta'||sinalAtual==='fechar')&&emSinalAtual?{tipo:sinalAtual==='fechar'?'contratar':sinalAtual as 'preco'|'proposta',em:emSinalAtual,autoria:'nao-confirmada' as const}:undefined)
  const ultima=lead.conversa?.ultima,papel=ultima?.direcao==='entrada'?papelDaMensagem(ultima.trecho,ultima.papel):undefined,audio=ultima?.direcao==='entrada'?audioDaMensagem(ultima.trecho):null
  const roboAtual=atual.classe==='robo'||papel==='robo'
+ const nova=temQualificacaoComercial(lead,agora)
  const contextoPendente=!!forte&&!q||!!att&&att.identidade!=='confirmada'||nova&&!q||!!lead.revisaoComercial||!!retomada&&!retomada.atual||resumo?.conteudoPendente||!!audio&&!audio.transcricao||papel==='recepcao'
  if(roboAtual)return devolver('conferir',70,'Conferir o canal e a autoria da resposta','Resposta automática não tratada como intenção de compra.','classificacao-atual','robo',emEntrada,'pendente')
  // Só a data original do mesmo evento confirmado sustenta urgência; receber backfill não conta.
@@ -64,6 +66,7 @@ export function planoComercialDoLead(lead:LeadParaPrioridadeComercial,agora:numb
   if(forte)return devolver('conferir',20,'Conferir condições já discutidas e preparar decisão, sem novo envio','Condições e contexto conferidos por Rômulo; nenhuma retomada presumida.','sinal-recebido',forte.tipo,forte.em,'historica',true)
   return devolver('conferir',60,'Resolver contexto antes de preparar qualquer contato','Identidade, fonte e pendência conferidas na ficha.','atendimento',nova&&!q?'qualificacao-invalida':att?.identidade??'contexto-pendente',att?.ocorridoEm??emEntrada,'pendente')
  }
+ const ciclo=cicloDoLead(lead,agora)
  const notasCiclo=lead.eventos.filter(e=>e.tipo==='nota'&&e.origem==='manual'&&(e.registroTexto??e.texto??'').startsWith(PREFIXO_CICLO)&&instante(e.em,agora)).sort((a,b)=>Date.parse(b.em)-Date.parse(a.em))
  if(ciclo.historico.length||ciclo.problemas.length||notasCiclo.length){
   const temFatos=!!ciclo.eventos.length,em=notasCiclo[0]?.em??emEntrada
@@ -88,7 +91,10 @@ export function temContextoPrioridadeComercial(lead:LeadParaPrioridadeComercial,
 }
 /** Indício histórico/pendente destacado exige apenas preparação interna, mesmo sem tarefa derivada. */
 export function conferenciaComercialInterna(lead:LeadParaPrioridadeComercial,agora:number):boolean {
- const p=planoComercialDoLead(lead,agora)
+ return planoPedeConferenciaInterna(planoComercialDoLead(lead,agora))
+}
+/** Reutiliza o plano da MESMA execução; não guarda permissão ou urgência entre leituras. */
+export function planoPedeConferenciaInterna(p:PlanoPrioridadeComercial):boolean {
  return p.destaque&&p.grupo==='conferir'&&p.evidencia.fonte==='sinal-recebido'
 }
 /** A mesma ordem em API, fila e escritório; desempate nunca usa recebidoEm do backfill. */

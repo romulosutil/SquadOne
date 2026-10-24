@@ -1,4 +1,4 @@
-import { compararPlanosComerciais, conferenciaComercialInterna, planoComercialDoLead, temContextoPrioridadeComercial } from './prioridade-comercial'
+import { compararPlanosComerciais, planoPedeConferenciaInterna, planoComercialDoLead, temContextoPrioridadeComercial } from './prioridade-comercial'
 import { acaoInternaComercial } from './acao-interna-comercial'
 /**
  * PURO: a próxima venda (16/10/2026). Uma fila só, na ordem de quem está mais perto de comprar, com
@@ -609,7 +609,7 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
   const agoraDaPrioridade=ctx.agora??Date.now()
   const planosComerciais=new Map(escopo.map(l=>[l.id,planoComercialDoLead(l,agoraDaPrioridade)]))
   const prioridadeCompartilhada=escopo.some(l=>temContextoPrioridadeComercial(l,agoraDaPrioridade))
-  const atendimentos = escopo.filter(l=>l.atendimentoComercial||conferenciaComercialInterna(l,agoraDaPrioridade));
+  const atendimentos = escopo.filter(l=>l.atendimentoComercial||planoPedeConferenciaInterna(planosComerciais.get(l.id)!));
   const internosComerciais=new Set(atendimentos.map(l=>l.id))
   const revisoes = elegiveis.filter((l) => l.revisaoComercial || revisaoDeQualificacao(l))
   const leads = elegiveis.filter((l) => !internosComerciais.has(l.id) && !l.revisaoComercial && !revisaoDeQualificacao(l))

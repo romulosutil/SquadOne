@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import GameMap from '../components/GameMap.vue'
 import Sheet from '../components/Sheet.vue'
 import SalaComando from '../office/SalaComando.vue'
@@ -28,7 +28,8 @@ const ag = useAgentes()
 const { roster } = ag
 const { overview, resumo } = useOverview()
 const agora = ref(Date.now())
-const visaoDoCrm = ref<CrmVisao | null>(null)
+// O GET substitui o retrato inteiro; não transformar milhares de eventos imutáveis em proxies.
+const visaoDoCrm = shallowRef<CrmVisao | null>(null)
 const erroDoCrm = ref('')
 const resolvidas = ref<Resolvidas>({})
 const timeLido = ref<TimeLido | null>(null)
