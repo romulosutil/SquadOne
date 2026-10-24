@@ -461,8 +461,10 @@ def papel_da_mensagem(texto) -> str | None:
 
 
 def so_marcador_de_audio(texto) -> bool:
-    """'[áudio]' ou '[áudio 27s]' sem nada depois: um áudio que ninguém ouviu."""
-    return bool(RE_SO_AUDIO.fullmatch(str(texto or "").strip()))
+    """Marcador sem transcrição, inclusive o formato legado do histórico."""
+    t = str(texto or "").strip()
+    return t == "[áudio não transcrito]" or bool(RE_SO_AUDIO.fullmatch(t))
+
 
 
 def texto_com_transcricao(marcador: str, transcricao: str) -> str:
