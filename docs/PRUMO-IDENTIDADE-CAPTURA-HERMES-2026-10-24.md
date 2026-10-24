@@ -53,3 +53,17 @@ Backups e logs privados: `~/.cache/mel-work/fase-identidade-20261024T125227Z/`. 
 ### Reversão
 
 Não apagar provas, inbox ou JSONL. Desligar apenas os novos pontos de captura/restaurar as cópias anteriores sob backup, conservando as pendências. Restaurar código da Central por versão e rebuild verificados. Não apagar `obrigatoria.json` para contornar falha de identidade; sem prova, seguir com atendimento manual e conferência interna. Nenhuma reversão reativa Grok, campanhas, caçadores ou envio automático.
+
+## Publicação e aceite técnico
+
+Implementação `9db7f6a`, complemento de origem transcrita `bbc322f`, aplicados pelo atualizador do Dell. Suíte final Linux **3.987/3.987**, zero falhas/pulados; mais 13 testes da captura Hermes e 156 Python (captura/adaptador/entrega/remendo), todos aprovados. Build e tipagem passaram. Graphify atualizado no Dell por AST.
+
+Cinco artefatos instalados (incluindo a bridge gerada), conferidos com as fontes/saída validadas; gateway Hermes e adaptador reiniciados ociosos e ativos, com Hermes conectado. A verificação de ociosidade usa `active_agents`, `gateway_busy` e o registro real de execuções vazio: no código desta versão, `active_sessions` do painel conta sessões com atividade nos últimos 300 segundos, sem significar trabalho em execução. Não editar ou apagar esse registro para liberar reinício.
+
+Conferência real da cobertura: 116 arquivos, **174 entradas originais**, todas na inbox; segunda passagem produziu zero novos registros e reconheceu os mesmos174. Zero conflitos, IDs faltantes entre capturas de transporte, oportunidades ausentes ou falhas de leitura. Cinco entradas manuais de print, sem ID original, ficaram fora da ingestão automática e identificadas como ignoradas. As174 entradas históricas não possuem prova de conta contemporânea e permanecem para revisão interna; não foram promovidas a fatos humanos ou a autorização de novo contato. Não foi fabricada uma prova de produção para simular a primeira captura futura.
+
+Na interface real, Estampa Cor aparece em Resolver contexto e na ficha, com a restrição explícita de que a tarefa interna não autoriza envio. A ficha mostra174 registros históricos para conferência. Cena, personagens, câmera e navegação do escritório preservados; captura de tela registrada na área de artefatos da execução. Nenhum botão de assumir, salvar, enviar ou confirmar fato comercial foi acionado.
+
+O prefixo original de cada um dos116 históricos continua byte a byte igual ao manifesto inicial. Um arquivo recebeu três linhas de saída pelos coletores durante o trabalho, sem alterar seu conteúdo anterior. Arquivos de posição/fila/log naturalmente avançaram; não são prova de reescrita de conversa. Os31 arquivos preexistentes do clone Dell permaneceram byte a byte; registros da aba CRM humana também permaneceram intactos. Workflows continuam21/18 ativos, com estados individuais conservados. Nenhum envio de WhatsApp ao cliente ou marco comercial foi executado nesta validação.
+
+Evidências privadas finais: `validacao-publicada-final.json`, `historico-e-capturas-reais-sanitizado.json`, `cobertura-publicada-sanitizada.json`, `fullsuite-final.log` e logs de geração/instalação no diretório da fase. Uma futura mensagem sem identidade, PN explícito ou conteúdo comprovável continua coberta pela revisão interna; isso evita sumiço sem diminuir a exigência de comprovação.

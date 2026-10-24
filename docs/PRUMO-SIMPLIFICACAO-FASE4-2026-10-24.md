@@ -40,3 +40,7 @@ Publicação estreita em quatro workflows: classificador 22→18 nós principais
 A leitura real do endpoint publicado retornou 1.874 chaves no formato esperado. Amostra anterior de 3.519 ms; posterior de 5.664 ms durante verificação/Graphify. São amostras únicas sob cargas diferentes, sem conclusão de desempenho e sem economia alegada. A aderência futura do Hermes às instruções não foi avaliada por nova conversa ou teste de ferramentas; comprovar arquivo instalado e reinício não é uma prova de isolamento técnico.
 
 Central respondeu normalmente após a publicação. Nenhum arquivo de servidor, componente, cena, câmera, personagem ou navegação foi alterado neste lote. O piloto continua assistido, com proposta, contrato e pagamento humanos. A Fase 4 permanece aberta para os lotes delimitados acima.
+
+## Complemento — identificação dos coletores concluída
+
+O lote seguinte publicou prova operacional por captura Hermes/Evolution e reconciliação independente dos envelopes, conservando o histórico.174 respostas antigas foram incluídas como revisão interna, sem atribuição retroativa de identidade. Aceite e limites em [identidade da captura](PRUMO-IDENTIDADE-CAPTURA-HERMES-2026-10-24.md). Índice completo, redução das quatro leituras e os demais itens abertos da Fase4 continuam separados desta correção.
