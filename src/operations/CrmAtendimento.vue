@@ -8,6 +8,16 @@ const projecao=ref<ProjecaoResponsavel|null>(null), bloqueio=ref<string|null>(nu
 const erro=ref(''), recado=ref(''), ocupado=ref(false), incerto=ref(false)
 let relogio:ReturnType<typeof setInterval>|undefined
 const tentativaId=ref('')
+const cobertura=ref<{modo:string;estado:string;entradas:number;semProva:number;conflitos:number;semId:number;semOportunidade:number;falhasLeitura:number}|null>(null)
+const erroCobertura=ref('')
+async function atualizarCobertura() {
+  try {
+    const r=await fetch('/api/operations/crm/atendimento/cobertura',{cache:'no-store',signal:AbortSignal.timeout(8000)})
+    if(!r.ok) throw new Error('Cobertura temporariamente indisponível.')
+    const v=await r.json();if(!v.cobertura)throw new Error('Cobertura ainda não conferida.')
+    cobertura.value=v.cobertura;erroCobertura.value=''
+  } catch {cobertura.value=null;erroCobertura.value='Não foi possível conferir a cobertura das capturas. Isso não confirma ausência de respostas.'}
+}
 async function atualizar() {
   const id=props.lead.id
   try {
@@ -35,7 +45,7 @@ async function assumir(responsavel:'romulo'|'time') {
   } catch(e) {if(props.lead.id===lead.id) erro.value=e instanceof Error?e.message:'Resultado desconhecido. Confira a fonte antes de repetir.'}
   finally {if(props.lead.id===lead.id) ocupado.value=false}
 }
-onMounted(()=>{void atualizar();relogio=setInterval(()=>{void atualizar()},15000)})
+onMounted(()=>{void atualizar();void atualizarCobertura();relogio=setInterval(()=>{void atualizar();void atualizarCobertura()},15000)})
 onBeforeUnmount(()=>clearInterval(relogio))
 watch(()=>props.lead.id,()=>{projecao.value=null;recado.value='';erro.value='';incerto.value=false;ocupado.value=false;tentativaId.value='';void atualizar()})
 </script>
@@ -54,5 +64,13 @@ watch(()=>props.lead.id,()=>{projecao.value=null;recado.value='';erro.value='';i
       <strong>{{ lead.atendimentoComercial.titulo }}</strong><p>{{ lead.atendimentoComercial.motivo }}</p>
       <p v-if="lead.atendimentoComercial.texto">{{ lead.atendimentoComercial.alvo==='cliente'?'Rascunho para conferir: ':'' }}{{ lead.atendimentoComercial.texto }}</p>
     </div>
+    <div v-if="cobertura?.modo==='identidade'" class="recado" aria-label="Conferência das capturas">
+      <strong>Conferência das capturas</strong>
+      <p>{{ cobertura.entradas }} registros de resposta conferidos no histórico. {{ cobertura.semProva + cobertura.conflitos }} ocorrências pedem revisão de identidade.</p>
+      <p v-if="cobertura.semId || cobertura.semOportunidade">{{ cobertura.semId }} registros sem ID original · {{ cobertura.semOportunidade }} sem oportunidade associada. Permanecem na conferência interna.</p>
+      <p v-if="cobertura.falhasLeitura || cobertura.estado==='indisponivel'">Há fontes indisponíveis. Confira o WhatsApp antes de concluir que o atendimento está em dia.</p>
+      <p class="texto-2 texto-pequeno">Identidade não comprovada gera revisão interna. Não libera contato com o cliente.</p>
+    </div>
+    <p v-if="erroCobertura" role="status">{{ erroCobertura }}</p>
   </section>
 </template>

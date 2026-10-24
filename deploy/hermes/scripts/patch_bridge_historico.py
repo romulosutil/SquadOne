@@ -51,6 +51,12 @@ if '// squadone:historico-ancoras' not in s:
     if s.count(evento) != 1:
         raise SystemExit('Bridge incompatível: captura de âncoras não aplicada.')
     s = s.replace(evento, evento + "\n    squadoneHistory().observar({ messages }); // squadone:historico-ancoras")
+if '// squadone:identidade-captura' not in s:
+    evento = "  sock.ev.on('messages.upsert', async ({ messages, type }) => {"
+    if s.count(evento) != 1:
+        raise SystemExit('Bridge incompatível: identidade de captura não aplicada.')
+    # Constante local por startSocket: evento tardio de socket antigo não usa o atual.
+    s = s.replace(evento, "  const squadoneSocketDaCaptura = sock; // squadone:identidade-captura\n" + evento)
 if "app.post('/squadone/historico/audio'" not in s:
     s = s.replace("app.post('/squadone/historico',", "app.post('/squadone/historico/audio', (req, res) => squadoneHistory().audio(req, res));\napp.post('/squadone/historico',")
 if s != original:
@@ -67,6 +73,7 @@ if s != original:
     print('Bridge atualizada; backup:', backup)
 else:
     print('Leitura dirigida já instalada.')
+shutil.copy2(Path(__file__).with_name('identidade_captura.mjs'), pasta / 'identidade_captura.mjs')
 shutil.copy2(Path(__file__).with_name('squadone_history.mjs'), pasta / 'squadone_history.mjs')
 destino = home / '.local/bin/squadone-historico-arquivar'
 shutil.copy2(Path(__file__).with_name('squadone-historico-arquivar.py'), destino)

@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { registrarProvaHermes } from './identidade_captura.mjs'
 
 export function chaveDoNumero(valor) {
   let d = String(valor || '').split('@')[0].split(':')[0].replace(/\D/g, '')
@@ -198,5 +199,5 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
       return res.json({ base64: dados.toString('base64'), mimetype: c?.mimetype || 'audio/ogg' })
     } catch { return res.status(503).json({ error: 'Não foi possível baixar este áudio.' }) }
   }
-  return { receber, consultar, audio, observar }
+  return { receber, consultar, audio, observar, registrarIdentidade: params => registrarProvaHermes({...params,home,socketAtual:getSocket,agora:agora()}) }
 }

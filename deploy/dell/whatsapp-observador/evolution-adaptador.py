@@ -82,6 +82,21 @@ except ImportError:  # Windows: a trava de threads permanece; produção usa flo
     fcntl = None
 
 HOME = Path.home()
+PASTA_IDENTIDADES = HOME / '.local/share/whatsapp-identidades'
+_IDENTIDADE_CAPTURA = None
+
+
+def identidade_captura():
+    """Helper irmão instalado junto; sem rede ou acesso ao texto de outros coletores."""
+    global _IDENTIDADE_CAPTURA
+    if _IDENTIDADE_CAPTURA is None:
+        spec = importlib.util.spec_from_file_location('identidade_captura_evolution', Path(__file__).with_name('identidade_captura.py'))
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        _IDENTIDADE_CAPTURA = modulo
+    return _IDENTIDADE_CAPTURA
+
+
 PASTA = Path(os.environ.get("EVOLUTION_PASTA", HOME / ".local/state/whatsapp-observador-prumo"))
 ARQUIVO_SEGREDO = Path(os.environ.get("EVOLUTION_SEGREDO", HOME / ".config/claude-ops/evolution-adaptador-segredo"))
 PORTA = int(os.environ.get("EVOLUTION_PORTA", "9131"))
@@ -884,8 +899,10 @@ class Adaptador:
     """Junta tradução, arquivos e contadores. `relogio` e `avisar` entram de fora nos testes."""
 
     def __init__(self, gravador: Gravador, relogio=time.time, avisar: Callable[[str], None] = avisar,
-                 instancia: str = INSTANCIA, sessao_hermes: Path | None = None):
+                 instancia: str = INSTANCIA, sessao_hermes: Path | None = None,
+                 pasta_identidades: Path = PASTA_IDENTIDADES):
         self.gravador, self.relogio, self.avisar, self.instancia = gravador, relogio, avisar, instancia
+        self.pasta_identidades = pasta_identidades
         self.vistos = Recentes()
         self.mapas = Mapas(todos=os.environ.get("EVOLUTION_ENSAIO") == "1", arquivo=gravador.pasta / 'lid-telefone.json', sessao_hermes=sessao_hermes)
         self.spool = gravador.pasta / 'entrada-pendente.json'
@@ -910,11 +927,11 @@ class Adaptador:
                 self._rejeicao_logada = agora
                 log(f"pedido recusado ({codigo}); total por código: {self.rejeitados}")
 
-    def receber(self, corpo) -> Traducao:
+    def receber(self, corpo, *, autenticado: bool = False) -> Traducao:
         with self.trava:
             with trava_privada(self.gravador.pasta / '.entrada-trava'):
                 try:
-                    t = self._receber(corpo); self.erro_entrada = None
+                    t = self._receber(corpo, autenticado=autenticado); self.erro_entrada = None
                     return t
                 except Exception:
                     self.erro_entrada = 'persistencia_indisponivel'
@@ -961,15 +978,28 @@ class Adaptador:
         chave = hashlib.sha256(json.dumps(identidade).encode()).hexdigest()
         return chave, {'event': evento, 'instance': instancia, 'data': limpo}
 
-    def _capturar(self, corpo, agora):
+    def _capturar(self, corpo, agora, contexto_identidade=None):
         evento = normalizar_evento(corpo.get('event')) if isinstance(corpo, dict) else ''
         if evento not in ('MESSAGES_UPSERT','MESSAGES_UPDATE','SEND_MESSAGE') or (self.instancia and corpo.get('instance') != self.instancia):
-            return traduzir(corpo, self.gravador.leads(), agora, self.vistos, self.instancia, self.mapas)
+            t = traduzir(corpo, self.gravador.leads(), agora, self.vistos, self.instancia, self.mapas)
+            if contexto_identidade is not None:
+                identidade_captura().registrar_provas(contexto_identidade, t, pasta=self.pasta_identidades)
+            return t
         estado = self._estado(); self.mapas.carregar()
         leads = self.gravador.leads()
         ignorados = {}
-        for item in itens_de(corpo.get('data')):
-            minimo = self._minimo(evento, item, corpo.get('instance', ''), agora)
+        itens = list(itens_de(corpo.get('data')))
+        minimos = [(item, self._minimo(evento, item, corpo.get('instance', ''), agora)) for item in itens]
+        # Duas versões contraditórias no mesmo webhook não elegem uma prova.
+        versoes, ambiguos = {}, set()
+        for _, minimo in minimos:
+            if minimo is None: continue
+            _, compacto = minimo
+            key = compacto['data']['key']; ident = (key.get('id'), key.get('fromMe'))
+            valor = json.dumps(compacto, ensure_ascii=True, sort_keys=True)
+            if ident in versoes and versoes[ident] != valor: ambiguos.add(ident)
+            versoes[ident] = valor
+        for item, minimo in minimos:
             if minimo is None:
                 t = traduzir({**corpo, 'data': item}, leads, agora, Recentes(), self.instancia, self.mapas)
                 if t.linhas or t.respostas or t.enviadas:
@@ -978,6 +1008,15 @@ class Adaptador:
                 continue
             chave, compacto = minimo
             jid, _, lid = jid_da_conversa(compacto['data'], self.mapas)
+            if contexto_identidade is not None:
+                key = compacto['data']['key']
+                contexto_item = dict(contexto_identidade)
+                contexto_item['horarioOriginalValido'] = identidade_captura().timestamp_original_valido(item.get('messageTimestamp'), contexto_item['capturadoEm'])
+                contexto_item['ambigua'] = (key.get('id'), key.get('fromMe')) in ambiguos
+                contexto_item.update(idOriginal=key.get('id'), direcao='saida' if key['fromMe'] else 'entrada',
+                    ocorridoEm=identidade_captura().iso_utc(compacto['data']['messageTimestamp']),
+                    conversaBR10=identidade_captura().chave_br10_do_evento(item))
+                compacto['_identidade_captura'] = contexto_item
             if leads is not None and jid and chave_do_numero(jid.split('@')[0]) not in leads:
                 ignorados['nao_e_lead'] = ignorados.get('nao_e_lead', 0) + 1
                 if chave in estado['pendentes']:
@@ -991,7 +1030,21 @@ class Adaptador:
                             estado['concluidos'] = (estado['concluidos'] + [antiga])[-20000:]
                 continue
             if chave in estado['concluidos'] or chave in estado['pendentes']:
+                if contexto_identidade is not None:
+                    # Dedupe do raw não apaga evidência de uma conta diferente.
+                    # Deriva novamente as rows do MESMO gerador, sem escrever raw.
+                    prova_t = traduzir(compacto, leads, agora, Recentes(), self.instancia, self.mapas)
+                    if prova_t.respostas or prova_t.enviadas:
+                        identidade_captura().registrar_provas(compacto['_identidade_captura'], prova_t, pasta=self.pasta_identidades)
                 if chave in estado['pendentes']:
+                    if contexto_identidade is not None:
+                        registro_antigo = estado['pendentes'][chave]['corpo']
+                        contextos = registro_antigo.setdefault('_identidades_captura', [registro_antigo['_identidade_captura']] if '_identidade_captura' in registro_antigo else [])
+                        novo_contexto = compacto['_identidade_captura']
+                        vinculos = ('contaHash', 'estado', 'horarioOriginalValido', 'ambigua', 'conversaBR10', 'idOriginal', 'direcao', 'ocorridoEm')
+                        if not any(all(c.get(k) == novo_contexto.get(k) for k in vinculos) for c in contextos):
+                            if len(contextos) >= 8: raise OSError('limite de identidades da captura')
+                            contextos.append(novo_contexto)
                     antiga = estado['pendentes'][chave]['corpo']['data']['key']
                     for campo in ('remoteJidAlt','senderPn','participantAlt'):
                         if campo in compacto['data']['key']: antiga[campo] = compacto['data']['key'][campo]
@@ -1035,6 +1088,12 @@ class Adaptador:
             t = t._replace(linhas=[{**i, '_adaptador_id': chave, **({'ts': item['messageTimestamp']} if i.get('event') == 'ignored' else {})} for i in t.linhas],
                            respostas=[{**i, '_adaptador_id': chave, **({'audio': item['_audio']} if '_audio' in item else {})} for i in t.respostas],
                            enviadas=tuple({**i, '_adaptador_id': chave} for i in t.enviadas))
+            # O spool só é consumido depois da prova derivada das MESMAS rows do gerador.
+            # O contexto guardado pertence à captura autenticada, nunca à identidade atual.
+            for contexto in corpo.get('_identidades_captura', [corpo['_identidade_captura']] if '_identidade_captura' in corpo else []):
+                contagens = identidade_captura().registrar_provas(contexto, t, pasta=self.pasta_identidades)
+                if contagens:
+                    log('identidade de captura:', json.dumps(contagens, sort_keys=True))
             self.gravador.escrever(t, duravel=True)
             del estado['pendentes'][chave]
             estado['concluidos'] = (estado['concluidos'] + [chave])[-20000:]
@@ -1057,13 +1116,17 @@ class Adaptador:
                     self.erro_entrada = 'persistencia_indisponivel'
                     raise
 
-    def _receber(self, corpo) -> Traducao:
+    def _receber(self, corpo, *, autenticado: bool = False) -> Traducao:
         agora = self.relogio()
         evento = normalizar_evento(corpo.get("event")) if isinstance(corpo, dict) else "?"
         self.contadores["eventos"][evento] = self.contadores["eventos"].get(evento, 0) + 1
         self.ultimo_evento = agora
         self._registrar_forma(corpo, evento)
-        t = self._capturar(corpo, agora)
+        contexto_identidade = None
+        if evento in ('MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE') and (self.pasta_identidades / 'config.json').exists():
+            lib_identidade = identidade_captura()
+            contexto_identidade = lib_identidade.contexto_captura(corpo, lib_identidade.iso_captura(agora), lib_identidade.carregar_config(self.pasta_identidades), autenticado=autenticado)
+        t = self._capturar(corpo, agora, contexto_identidade)
         for resumo in t.resumos:
             # Os primeiros ficam no journal (ensaio do formato real); depois só o contador de recibos.
             if self.resumos_logados < RESUMOS_MAX:
@@ -1186,7 +1249,7 @@ def fazer_handler(adaptador: Adaptador, segredo: str):
                 self.close_connection = True
                 return self._responder(400, {"erro": "json"})
             try:
-                t = adaptador.receber(corpo)
+                t = adaptador.receber(corpo, autenticado=True)
             except Exception as e:  # Sem confirmação de persistência/entrega: o remetente deve reentregar.
                 log("erro ao tratar o webhook:", type(e).__name__)
                 return self._responder(503, {"ok": False, "erro": "persistencia_indisponivel"})

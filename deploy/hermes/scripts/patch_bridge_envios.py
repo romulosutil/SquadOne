@@ -112,7 +112,7 @@ try {
       if (st && chave && cache.chaves.has(chave)) {
         const c = getMessageContent(msg) || {};
         const legenda = (m) => String(m?.caption || '').trim();
-        const texto = String(
+        const texto = Array.from(String(
           c.conversation ?? c.extendedTextMessage?.text
           ?? (c.imageMessage ? ('[imagem] ' + legenda(c.imageMessage)).trim()
             : c.videoMessage ? ('[vídeo] ' + legenda(c.videoMessage)).trim()
@@ -121,8 +121,10 @@ try {
             : c.stickerMessage ? '[figurinha]'
             : c.contactMessage || c.contactsArrayMessage ? '[contato]'
             : c.locationMessage ? '[localização]' : '')
-        ).slice(0, 2000);
-        fs.appendFileSync(path.join(pasta, 'enviadas.jsonl'),
+        )).slice(0, 2000).join('');
+        // Prova vem do socket deste callback; falha não altera a captura bruta.
+      if (typeof squadoneHistory === 'function' && typeof squadoneSocketDaCaptura !== 'undefined') squadoneHistory().registrarIdentidade?.({ socket: squadoneSocketDaCaptura, identidadeMe: state.creds.me?.id, identidadePublica: state.creds.signedIdentityKey?.public, chave, destinatarioAlternativo: msg.key?.remoteJidAlt, destinatario: String(chatId).endsWith('@s.whatsapp.net') ? chatId : String(msg.key?.remoteJidAlt || ''), ts: Number(msg.messageTimestamp), texto, id, direcao: 'saida' });
+      fs.appendFileSync(path.join(pasta, 'enviadas.jsonl'),
           JSON.stringify({ chave, ts, texto, ...(id ? { id } : {}) }) + '\\n', { mode: 0o600 });
       }
     } catch {}
@@ -188,7 +190,7 @@ try {
   if (st && chave && cache.chaves.has(chave)) {
     const c = getMessageContent(msg) || {};
     const legenda = (m) => String(m?.caption || '').trim();
-    const texto = String(
+    const texto = Array.from(String(
       c.conversation ?? c.extendedTextMessage?.text
       ?? c.buttonsResponseMessage?.selectedDisplayText ?? c.templateButtonReplyMessage?.selectedDisplayText
       ?? c.listResponseMessage?.title
@@ -199,10 +201,12 @@ try {
         : c.stickerMessage ? '[figurinha]'
         : c.contactMessage || c.contactsArrayMessage ? '[contato]'
         : c.locationMessage ? '[localização]' : '')
-    ).slice(0, 1000);
+    )).slice(0, 1000).join('');
     if (texto) {
       // id (16/10/2026): a conversa do lead em disco deduplica por ele (o mesmo chip também chega pela Evolution).
       const id = String(msg.key?.id || '');
+      // Prova vem do socket deste callback; falha não altera a captura bruta.
+      if (typeof squadoneHistory === 'function' && typeof squadoneSocketDaCaptura !== 'undefined') squadoneHistory().registrarIdentidade?.({ socket: squadoneSocketDaCaptura, identidadeMe: state.creds.me?.id, identidadePublica: state.creds.signedIdentityKey?.public, chave, destinatarioAlternativo: msg.key?.remoteJidAlt, destinatario: String(chatId).endsWith('@s.whatsapp.net') ? chatId : String(msg.key?.remoteJidAlt || ''), ts: Number(msg.messageTimestamp), texto, id, direcao: 'entrada' });
       fs.appendFileSync(path.join(pasta, 'respostas.jsonl'),
         JSON.stringify({ chave, ts: Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000), texto, ...(id ? { id } : {}) }) + '\\n',
         { mode: 0o600 });

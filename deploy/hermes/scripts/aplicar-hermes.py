@@ -201,7 +201,7 @@ BRIDGE_JS = HERMES / "hermes-agent/scripts/whatsapp-bridge/bridge.js"
 MARCAS_DA_BRIDGE = {
     "patch_bridge_envios.py": ("squadone:envios", "squadone:recibos", "squadone:respostas"),
     # A rota POST /squadone/historico, que a Central chama em /api/operations/crm/historico.
-    "patch_bridge_historico.py": ("squadone:historico",),
+    "patch_bridge_historico.py": ("squadone:historico", "squadone:identidade-captura"),
 }
 
 

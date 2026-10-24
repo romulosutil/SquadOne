@@ -43,6 +43,7 @@
      "reiniciar": "whatsapp-observador whatsapp-observador-prumo"},
     {"repo": "deploy/dell/whatsapp-observador/eventos_comerciais.py", "instalado": "~/.local/bin/", "modo": "644",
      "reiniciar": "whatsapp-observador whatsapp-observador-prumo"},
+    {"repo": "deploy/dell/whatsapp-observador/identidade_captura.py", "instalado": "~/.local/bin/", "modo": "644", "reiniciar": "evolution-adaptador"},
     {"repo": "deploy/dell/whatsapp-observador/evolution-adaptador.p?", "instalado": "~/.local/bin/",
      "reiniciar": "evolution-adaptador"},
     {"repo": "deploy/dell/evolution/docker-compose.yml", "instalado": "~/workspace/evolution/"},
@@ -86,6 +87,7 @@
     {"repo": "deploy/hermes/scripts/graphify_projetos.py", "instalado": "~/.local/bin/graphify-projetos"},
     {"repo": "deploy/hermes/scripts/validate-dell-operations.sh", "instalado": "~/.local/bin/dell-validate"},
     {"repo": "deploy/hermes/scripts/squadone-historico-arquivar.py", "instalado": "~/.local/bin/squadone-historico-arquivar", "modo": "700"},
+    {"repo": "deploy/hermes/scripts/identidade_captura.mjs", "instalado": "~/.hermes/hermes-agent/scripts/whatsapp-bridge/identidade_captura.mjs", "via": "aplicar-hermes", "reiniciar": "hermes-gateway.service"},
     {"repo": "deploy/hermes/scripts/squadone_history.mjs", "instalado": "~/.hermes/hermes-agent/scripts/whatsapp-bridge/squadone_history.mjs", "via": "aplicar-hermes", "reiniciar": "hermes-gateway.service"},
     {"repo": "deploy/hermes/scripts/asmr_coleta_gate.py", "instalado": "~/.hermes/scripts/", "via": "aplicar-hermes"},
     {"repo": "deploy/hermes/scripts/sites_e_pendencias.py", "instalado": "~/.local/bin/sites-e-pendencias"}

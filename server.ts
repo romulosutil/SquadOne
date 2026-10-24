@@ -1,4 +1,5 @@
-import { AtendimentoComercial, criarLeitorFonteAtendimento } from './server/atendimento-comercial.ts';
+import { AtendimentoComercial, criarLeitorFonteAtendimento, criarInventarioCapturasAtendimento } from './server/atendimento-comercial.ts';
+import { criarLeitorIdentidadeCaptura } from './server/identidade-captura.ts';
 import { EntradaAtendimentoComercialDuravel } from './server/entrada-atendimento-comercial.ts';
 import { entradaTecnicaAtendimento } from './server/rotas-atendimento-comercial.ts';
 import express from "express";
@@ -413,13 +414,17 @@ async function startServer() {
     crmDoAtendimento = crm;
     const inboxComercial = new EntradaAtendimentoComercialDuravel(path.join(operationsDataDir,'atendimento-comercial-inbox.json'));
     await inboxComercial.recuperarInterrompidos();
-    const atendimento = new AtendimentoComercial({inbox:inboxComercial,lerFonte:criarLeitorFonteAtendimento(crm.config.conversas ?? path.join(os.homedir(),'.local/share/whatsapp-conversas')),visao:()=>crm.visao(new Date())});
+    const pastaCapturas = crm.config.conversas ?? path.join(os.homedir(),'.local/share/whatsapp-conversas');
+    const lerIdentidadeCaptura = criarLeitorIdentidadeCaptura();
+    const atendimento = new AtendimentoComercial({inbox:inboxComercial,
+      lerFonte:criarLeitorFonteAtendimento(pastaCapturas,lerIdentidadeCaptura),lerIdentidade:lerIdentidadeCaptura,
+      inventariarCapturas:criarInventarioCapturasAtendimento(pastaCapturas,lerIdentidadeCaptura),visao:()=>crm.visao(new Date())});
     receberAtendimento = valor => atendimento.receber(valor);
     let atendimentoEmCurso = false;
     const conferirAtendimento = async () => {
       if(atendimentoEmCurso) return;
       atendimentoEmCurso=true;
-      try { await atendimento.atualizar(); } catch { console.warn('[atendimento] conferência pendente; nenhum envio autorizado.'); }
+      try { await atendimento.reconciliarCapturas(); await atendimento.atualizar(); } catch { console.warn('[atendimento] conferência pendente; nenhum envio autorizado.'); }
       finally {atendimentoEmCurso=false;}
     };
     const relogioAtendimento = setInterval(()=>{void conferirAtendimento()},30000);relogioAtendimento.unref();
@@ -434,6 +439,14 @@ async function startServer() {
         return {...l,atendimentoComercial:bloqueio ? {id:p.id,tipo:'handoff',titulo:'Conferir atendimento com Rômulo',motivo:bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash} : {id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,alvo:p.alvo,texto:p.texto ?? p.orientacao,estado:p.estado,contextoHash:p.contextoHash}};
       }))};
     };
+    // Só leitura sob o mesmo porteiro das APIs da Central; sem identidade/contatos na resposta.
+    app.get('/api/operations/crm/atendimento/cobertura', async (_req,res) => {
+      res.set('Cache-Control','no-store');
+      try {
+        const pendencias = await atendimento.listarPendencias();
+        res.json({cobertura:atendimento.cobertura(),pendenciasSemOportunidade:pendencias.filter(p=>!p.leadIds.length).map(p=>({id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,estado:p.estado,contextoHash:p.contextoHash}))});
+      } catch {res.status(503).json({cobertura:atendimento.cobertura(),error:'Cobertura de atendimento indisponível; nenhuma ação de contato foi autorizada.'});}
+    });
     // Sinais do site de um lead (17/10/2026): lidos sob demanda pela Ficha (POST /crm/sinais), com cache
     // em disco; a visão do CRM só usa o que já foi lido. SQUADONE_SINAIS_DO_SITE=false desliga.
     let sinaisDoSite: LeitorDeSinais | undefined;

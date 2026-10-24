@@ -30,3 +30,26 @@ Uma eventual prova deve ser persistida antes do encaminhamento de um novo envelo
 ## Fallback operacional
 
 Sem prova suficiente, manter a mensagem disponível para revisão na ficha, identificando a limitação de origem/conta. Não gerar novo envio ao cliente, retomar negociação, presumir interesse ou confirmar um marco humano. Contexto compartilhado, rascunho e aviso interno não equivalem a contratação ou pagamento.
+## Correção implementada — 24/10/2026
+
+O diagnóstico acima registra a situação anterior e a proposta inicial de sessão. A implementação adotada comprova a própria observação: Hermes vincula a captura ao socket fechado no callback, ao `me.id` compatível e à chave **pública** dessa sessão; Evolution preserva o `sender` do webhook já autenticado, derivado de `client.user.id` pelo código instalado. A Evolution não expõe fingerprint público de sessão; a garantia é declarada como `webhook-evolution`, sem inventar assinatura criptográfica WhatsApp ou fingerprint.
+
+Provas privadas em `~/.local/share/whatsapp-identidades/<BR10>.jsonl` conservam coletor, hash da conta, garantia, sessão quando disponível, horário de captura e tuple exata de ID original, direção, horário da mensagem e hash do texto efetivamente arquivado. Não guardam texto, telefone, token ou corpo completo do webhook. O `config.json` ancora a conta Prumo conferida e a vigência; `obrigatoria.json` impede que perda da configuração retorne ao caminho legado após reinício. O histórico original não é reescrito.
+
+Identidade da conta e correlação da conversa são verificações diferentes. Prova automática exige PN brasileiro explícito no próprio evento e correspondência com BR10; mapa LID legado sem vínculo à conta não é prova. Número estrangeiro que colide na chave, PN alternativo contraditório, socket antigo, conta diferente ou conteúdo divergente não são aceitos silenciosamente. Captura bruta permanece disponível para conferência. Provas operacionais de outra conta são conservadas separadamente; a mesma tuple em contas diferentes bloqueia a associação.
+
+O backend reconcilia periodicamente as entradas originais dos coletores e do histórico recuperado com a inbox durável, independentemente do observador que venceu ou da emissão do envelope n8n. IDs e horários originais são conservados; recebidoEm não cria identidade nova. Sem prova, a entrada permanece como passagem **interna**, sem rascunho ou nova abordagem. Sem ID não se fabrica mensagem: a lacuna aparece na cobertura. Prints/importações fora do escopo são contados separadamente, sem promover evidência manual a captura autenticada.
+
+A prova precisa coincidir com a linha original. Duplicatas e ordem de chegada não mudam o contexto; nova sessão, conta, tuple ou conflito invalidam a sugestão. Saída só encerra pendência quando comprovada na mesma conta e confirmada na projeção atual do CRM. Nenhum evento técnico confirma qualificação humana, proposta, aceite, contrato ou pagamento.
+
+A ficha existente recebeu uma leitura de cobertura (contagens, ausência de prova/ID/oportunidade e indisponibilidade), mantendo intactos cena, personagens, câmera e navegação do escritório. A API de cobertura não expõe contato, texto ou ID original. O backlog anterior sem prova continua desconhecido; não foi promovido com a identidade atual.
+
+### Validação antes de publicar
+
+Suíte completa Linux: 3.986 testes, zero falhas/pulados; tipagem e build aprovados. Captura: 13 testes JS (incluindo os blocos reais da bridge), 25 novos Python, 94 do adaptador, 25 de entrega durável e 12 do remendo, todos aprovados no Linux. A bridge real foi copiada para HOME privado, regenerada, verificada sintaticamente e reaplicada para provar idempotência; nenhum listener de WhatsApp foi iniciado nesse teste.
+
+Backups e logs privados: `~/.cache/mel-work/fase-identidade-20261024T125227Z/`. As validações usam fixtures; nenhuma prova fictícia deve ser instalada na área operacional ou usada para atestar uma mensagem histórica real. Instalação e conferência de produção serão registradas abaixo.
+
+### Reversão
+
+Não apagar provas, inbox ou JSONL. Desligar apenas os novos pontos de captura/restaurar as cópias anteriores sob backup, conservando as pendências. Restaurar código da Central por versão e rebuild verificados. Não apagar `obrigatoria.json` para contornar falha de identidade; sem prova, seguir com atendimento manual e conferência interna. Nenhuma reversão reativa Grok, campanhas, caçadores ou envio automático.
