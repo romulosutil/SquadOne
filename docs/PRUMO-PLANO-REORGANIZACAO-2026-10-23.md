@@ -315,3 +315,9 @@ Diagnóstico completo e evidências sanitizadas foram entregues no chat. Baselin
 A implementação assistida da fase3 foi publicada: envelopes de respostas do observador, deduplicação/entrada durável, contexto comercial dos agentes, uma pergunta faltante ou passagem humana, responsabilidade por conversa e controles na ficha existente. Somente CRM08 e classificador receberam deltas; o escritório e os estados dos21 workflows foram preservados.
 
 Detalhes e evidências: `PRUMO-INTEGRACAO-COMERCIAL-N8N-AGENTES-2026-10-23.md`. Suíte final Linux3.964/3.964, tipagem/build e162 testes Python aprovados. O piloto segue sem novas respostas autônomas e sem reativar Grok/caçadores. Os critérios de aceite com3–5 conversas reais, aviso efetivamente recebido e contratação/pagamento continuam pendentes de uso real; os testes técnicos não os encerram.
+
+## Homologação técnica do piloto — 24/10/2026
+
+Três contextos reais passaram pelo transporte e controlador publicados: ControEco, Casa do Bordado e TPrint. O vendedor gerou dois avisos internos automáticos sem repetição; o terceiro caso foi suprimido por atendimento posterior confirmado. Um controle adicional, Estampa Cor, foi bloqueado por origem pessoal. Rômulo confirmou recebimento e abertura do link no celular após nova tentativa. Nenhuma mudança no escritório, liberação de primeiros contatos ou mensagem de WhatsApp a clientes.
+
+O resultado fecha o teste técnico de registro, deduplicação, fila e aviso. A qualificação, a tomada de responsabilidade e a contratação/pagamento continuam dependendo do atendimento e de evidências reais. Detalhes e pendências estão em `PRUMO-HOMOLOGACAO-PILOTO-2026-10-24.md`.
