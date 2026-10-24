@@ -18,7 +18,7 @@ Validação na worktree Linux: 3.705 testes aprovados, zero falhas; tipos e comp
 
 O áudio da ESTAMPARIA SP de 23/10 às 18h02min59s já tinha transcrição preservada de 62 segundos. A leitura existente indica recusa no momento, outras prioridades e mudança de instalações; não há pedido de proposta ou retomada combinada. O CRM consultado apresenta Perdido, e não foi encontrada resposta posterior preservada após o áudio. Não foi feita nova transcrição, recuperação de histórico, alteração do CRM ou contato. A informação corrige a pendência relatada pelo VENDAS; a base dele continua separada.
 
-Permanece pendente esclarecer com Rômulo se os R$ 500/mês oferecidos a Kelisson cobrem apenas gestão de tráfego ou também anúncios. Até essa confirmação, a condição não é completada por suposição nem enviada ao cliente.
+Rômulo confirmou neste chat que os R$ 500/mês oferecidos a Kelisson cobrem somente gestão do tráfego; a verba dos anúncios é paga à parte pelo cliente. A condição foi registrada como uma nota interna na aba CRM pela API existente, com marcador [condicao-confirmada-romulo-20261023-gestao-kelisson]. Houve um único registro, conferido no retrato da fonte e na API; a etapa permaneceu Contato. Não se marcou proposta, aceite, contratação ou pagamento e nenhuma mensagem foi enviada. Mensalidade do site, valor da verba e escopo completo continuam a confirmar; não são completados por suposição.
 
 ## Publicação conferida
 
