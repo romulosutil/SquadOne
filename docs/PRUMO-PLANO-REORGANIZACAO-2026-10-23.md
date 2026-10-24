@@ -331,3 +331,7 @@ O resultado fecha o teste técnico de registro, deduplicação, fila e aviso. A 
 Implementação versionada do contexto fresco compartilhado dos três workflows WhatsApp, pausa de nova coleta Jev, identificação correta Luna no Caçador, métricas privadas de inferência e atualização dos papéis do Hermes existente no SSH `mel`. Verificação/publicação: `PRUMO-SIMPLIFICACAO-FASE4-2026-10-24.md`; matriz: `PRUMO-RESPONSABILIDADES-FASE4-2026-10-24.md`.
 
 A Fase 4 não está integralmente encerrada: quatro Sheets ainda são lidos por chamada; índice completo/invalidação, observabilidade adicional e identidade de captura Hermes/Evolution exigem lotes próprios. O escritório permanece preservado e o piloto segue assistido, sem ampliar envios.
+
+## Estado consolidado ao encerrar a implantação — 24/10/2026
+
+Os registros de cada lote acima descrevem seu estado naquele momento. Para o aceite atual de todas as fases, consultar [Reorganização comercial — estado de execução](PRUMO-ENCERRAMENTO-TECNICO-2026-10-24.md). Os lotes seguintes concluíram contexto em lote, publicação atômica, identidade de captura, garantias de criação na agenda e prioridade comercial compartilhada, preservando o escritório. A suíte integrada final tem 4.095 casos aprovados, sem ignorados. A primeira venda, a comprovação de atendimento natural e a expansão da aquisição continuam sujeitas aos critérios comerciais reais registrados na matriz; os checkboxes originais não são prova desses resultados.

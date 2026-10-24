@@ -56,3 +56,18 @@ Backups, exports, manifests e provas sanitizadas permanecem na pasta privada do 
 ## Garantias de agenda e Telegram
 
 O [lote de garantias](PRUMO-AGENDA-TELEGRAM-GARANTIAS-2026-10-24.md) acrescenta identidade de pedido, reserva durável por calendário, timeout e replay protegido. Status e conferência leem as reservas sem reenviar. A revisão independente e a suíte integrada Linux de 4.093 casos passaram; tipagem/build também. Ajuste legado e alterações externas do Google continuam fora da trava de criação, com limites explícitos. Não houve criação de reunião, convite ou mensagem real para testar.
+
+## Encerramento da implantação e conferência visual
+
+Os lotes `79dfb45` (agenda/Telegram) e `d67da88` (custo da fila) também foram publicados e construídos no Dell. Em conferência final, a versão construída correspondeu à fonte, o atualizador terminou com sucesso e `squadone-operations`, `publicador-crm.path`, `hermes-gateway` e `luna-workflows` estavam ativos. O índice AST do Dell foi atualizado após o último lote de código.
+
+- Suíte integrada final Linux: **4.095 testes aprovados, zero falhas e zero ignorados**; tipagem e compilação aprovadas. Os 97 testes Python relacionados ao contexto, guardas e publicação também passaram.
+- O endpoint de garantias da agenda respondeu 200; pedido sem identidade válida foi rejeitado com 400 antes do modelo. Nenhum evento do Calendar, convite ou envio real foi criado para a validação. A proteção de criação não abrange todas as alterações legadas ou escritores externos.
+- A conferência final repetiu a preservação de 21 workflows/16 ativos, registros humanos, prefixos dos 116 históricos e outros 30 arquivos preexistentes. Os fluxos 05 e 06 continuam pausados; histórico e funil legado permanecem disponíveis.
+- Com o mesmo retrato de 3.525 leads e a mesma sequência de 12 instantes, o tempo mediano do cálculo caiu de **2.050 ms para 798 ms**, com resultados exatamente iguais para fila, conversas, decisões e destaques. Não foi introduzido cache de permissão ou urgência.
+- Na interface publicada, foram abertos o destaque, a ficha, a etapa de próxima ação e o retorno à fila. O caso mostra responsável Rômulo, ação interna sem novo envio, evidência com data original e resultado esperado. O adiamento já existente continua visível e não foi desfeito.
+- O escritório preserva os seis personagens, cenário, navegação e quadros. A visualização de 390 × 844 foi inspecionada em viewport de navegador; isso não equivale a teste de interação em aparelho físico. Capturas de comprovação permanecem nos artefatos locais da execução.
+
+A preparação prioritária é ControEco/Kelisson, baseada em discussão histórica concreta de preço e sócios, sem presumir interesse atual. A minuta privada separa os R$ 500/mês de gestão da verba de mídia, preserva a implantação do site condicionada ao pacote e deixa a mensalidade do site como não combinada. Comece e Roda Mais permanecem em espera; Favarato requer conferência interna do material antes de qualquer ação; recusa continua impedindo nova abordagem.
+
+A implantação técnica do piloto assistido está concluída. O próximo resultado comercial depende de Rômulo completar e aprovar as condições da proposta e de uma abertura real do cliente. Aceite, contrato, cobrança e pagamento só avançam com evidência correspondente. A expansão da aquisição permanece condicionada à capacidade e ao atendimento/fechamento comprovados; não é liberada para preencher o aceite do plano.
