@@ -142,3 +142,8 @@ matriz ou para a revisão externa.
 - Entrega futura dos avisos e carregamento das instruções propostas: exigem verificação posterior à instalação autorizada, preservando serviços e pausas existentes.
 
 A Fase 4 continua aberta para simplificação e medição dos executores. Esta revisão organiza seus limites sem tratar uma mudança de documentação como economia comprovada, qualificação humana ou venda.
+## Instalação controlada conferida
+
+As quatro instruções Hermes foram instaladas pelo lote `fd089b8`, com comparação byte a byte e backup prévio. O gateway foi reiniciado somente após `active_agents=0`, `active_sessions=0` e `gateway_busy=false`; retornou ativo. Configuração, memória, cron, ferramentas e navegador não foram alterados. As referências acima a preparação descrevem a etapa de auditoria; a instalação dos arquivos já está concluída. Aderência do agente em uma conversa futura e isolamento técnico permanecem avaliações distintas.
+
+A nova coleta Jev foi efetivamente pausada e conferida na versão ativa: quatro nós desabilitados, sem aresta de entrada, Gemini principal preservado. A tabela histórica foi conservada. Detalhes do lote e limites em [simplificação da Fase 4](PRUMO-SIMPLIFICACAO-FASE4-2026-10-24.md).

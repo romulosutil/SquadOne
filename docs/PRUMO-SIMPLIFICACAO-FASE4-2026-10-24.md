@@ -23,8 +23,20 @@ Não reativar primeiros contatos pausados, caçadores desativados ou Grok. Não 
 
 49 testes Python aprovados no Dell: 11 contexto, 12 Luna/ponte, 3 papéis/opt-in, 7 comercial e 16 confiabilidade. Compilação Python aprovada. Os novos testes usam dublês; não consomem modelos nem gravam fatos comerciais. Não houve mudança em servidor/UI, portanto a suíte de aplicação e o build já aprovados no lote anterior não foram repetidos.
 
-Publicação e homologação no engine serão registradas abaixo após conferência real. Backups privados e resumos ficam em `~/.cache/mel-work/fase4-simplificacao-20261024T120444Z/`; fontes brutas não são publicadas.
+Backups privados e resumos ficam em `~/.cache/mel-work/fase4-simplificacao-20261024T120444Z/`; fontes brutas não são publicadas.
 
 ## Reversão
 
 Conservar filas, mensagens e dados. Restaurar os quatro exports imediatamente anteriores, por ID e estado ativo original; desabilitar o opt-in da simplificação antes de regenerar. Restaurar os sete instalados anteriores e remover somente os dois novos módulos após retirar o hook. Para retomar Jev, exigir decisão explícita e avaliação da amostra; restaurar todo o estado antigo não é justificativa para retomar o experimento inadvertidamente. Configuração, sessões e cron Hermes não são objeto desta reversão.
+
+## Publicado e conferido
+
+Commit de implementação `fd089b8`, publicado na main e aplicado pelo atualizador do Dell. Nove arquivos instalados conferidos byte a byte; opt-in local criado em modo 0600. Luna e gateway Hermes reiniciados após comprovação de ociosidade; ambos ativos, assim como Central e os dois observadores. Não executar o aplicador global do Hermes: este lote instala somente SOUL e três skills, sem alterar config, memória, cron ou ferramentas.
+
+Homologação isolada no engine n8n: três workflows temporários autenticados fizeram somente as quatro leituras e o consumidor original. Dois casos sem número elegível voltaram “sem lead” com contexto completo; o terceiro preservou 1.874 chaves. Os três temporários foram removidos, zero falhas de limpeza. A mesma lista foi preservada antes/depois dessa homologação. Nenhum modelo ou nó de escrita foi conectado nos temporários.
+
+Publicação estreita em quatro workflows: classificador 22→18 nós principais, conversa 9→5, números 8→4 e Caçador 9→9, com nomes Luna corrigidos. O subfluxo com organização canônica contém oito nós; a contagem menor no pai não significa menos trabalho de leitura. Todos com versão ativa correspondente à salva. Inventário final 21 workflows/18 ativos, estados individuais preservados; os outros 17 permaneceram intactos. Os 31 arquivos preexistentes do clone Dell permaneceram byte a byte.
+
+A leitura real do endpoint publicado retornou 1.874 chaves no formato esperado. Amostra anterior de 3.519 ms; posterior de 5.664 ms durante verificação/Graphify. São amostras únicas sob cargas diferentes, sem conclusão de desempenho e sem economia alegada. A aderência futura do Hermes às instruções não foi avaliada por nova conversa ou teste de ferramentas; comprovar arquivo instalado e reinício não é uma prova de isolamento técnico.
+
+Central respondeu normalmente após a publicação. Nenhum arquivo de servidor, componente, cena, câmera, personagem ou navegação foi alterado neste lote. O piloto continua assistido, com proposta, contrato e pagamento humanos. A Fase 4 permanece aberta para os lotes delimitados acima.
