@@ -13,6 +13,7 @@ import path from "node:path";
 import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, saidasDaConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
 import { pedeMaterial, textoParaATela } from "../src/operations/marcadores-da-conversa.ts";
 import { quemRespondeu } from '../src/operations/resultados.ts';
+import { classificarResposta, respostaParaAcompanhamento, ROTULOS_DA_CLASSIFICACAO, type ClassificacaoDaResposta } from '../src/operations/classificacao-resposta.ts';
 import { achadosDoRecibo, lerPastasDosLeads, type AchadoDoRaioX, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
 import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
 import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
@@ -579,6 +580,8 @@ export interface CrmLead {
    * link já saiu. Ausente = nenhuma mensagem guardada (antes de 16/10, ou ninguém escreveu desde então).
    */
   conversa?: ResumoDaConversa;
+  classificacaoResposta?: ClassificacaoDaResposta;
+  respostaFonte?: CrmResposta;
   acervo: boolean;
   proximoPasso?: { texto: string; data: string; registradoEm: string };
   proposta?: { em: string; data: string };
@@ -2147,6 +2150,19 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   }
   const contagens = contagemVazia();
   for (const lead of leads) {
+    const mensagens = contexto.conversas?.get(chaveDoNumero(lead.links.whatsapp));
+    const leitura = classificarResposta(lead, mensagens, agora);
+    lead.classificacaoResposta = leitura;
+    // Sem conversa, não reescrever a interpretação legada: a insuficiência fica explícita na leitura.
+    const efetiva = mensagens?.length ? respostaParaAcompanhamento(lead.resposta, leitura) : lead.resposta;
+    if (efetiva !== lead.resposta) {
+      lead.respostaFonte = lead.resposta;
+      lead.resposta = efetiva;
+      if (lead.etapa === 'contato' && !lead.subEtapa.startsWith('Conversa sem retorno') && ['respondeu', 'respondeu-prumo', 'em-conversa'].includes(lead.sinal)) {
+        lead.subEtapa = `Respondeu no WhatsApp: ${ROTULOS_DA_CLASSIFICACAO[leitura.classe]}`;
+      }
+    }
+    if (mensagens?.length && !leitura.materialSolicitado && leitura.classe !== 'interesse') delete lead.interesseParado;
     const revisao = revisaoDaClassificacao(lead);
     lead.aarr = aarrDoLead(lead, agora);
     const proximoFuturo = lead.proximoPasso?.data && lead.proximoPasso.data > new Date(agora - 3 * 3600_000).toISOString().slice(0, 10);

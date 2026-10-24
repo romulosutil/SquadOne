@@ -189,6 +189,9 @@ export interface CrmLead {
    * por último, o quê, e quando o link saiu numa mensagem nossa. Ausente = nada guardado deste lead.
    */
   conversa?: CrmResumoDaConversa
+  /** Leitura contextual separada da classificação histórica; não confirma compra nem reabre desfechos. */
+  classificacaoResposta?: import('./classificacao-resposta').ClassificacaoDaResposta
+  respostaFonte?: CrmResposta
   acervo: boolean
   proximoPasso?: { texto: string; data: string; registradoEm: string }
   proposta?: { em: string; data: string }

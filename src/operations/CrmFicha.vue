@@ -6,6 +6,9 @@ import CrmSpiced from './CrmSpiced.vue'
 import CrmReceita from './CrmReceita.vue'
 import CrmConfirmarPasso from './CrmConfirmarPasso.vue'
 import CrmHistorico from './CrmHistorico.vue'
+import { planoDoLead } from './bi-operacao'
+import CrmRetomadasRevisadas from './CrmRetomadasRevisadas.vue'
+import { classificarResposta, ROTULOS_DA_CLASSIFICACAO } from './classificacao-resposta'
 import CrmRevisarClassificacao from './CrmRevisarClassificacao.vue'
 import AcompanhamentoObservado from '../office/AcompanhamentoObservado.vue'
 import { precisaConferirHistorico } from './historico-comercial'
@@ -68,6 +71,7 @@ const emit = defineEmits<{
 }>()
 
 const titulo = ref<HTMLHeadingElement | null>(null)
+const significadoResposta = computed(() => props.lead.classificacaoResposta ?? classificarResposta(props.lead))
 // Copiloto: a Ficha só LÊ a sugestão guardada (para a proposta e o "Agora"). A aba Copiloto saiu em
 // 17/10/2026 (fase 2 da RULES 28): a sugestão mora no painel do Assistente, num cartão com o preço do
 // cardápio, e o automático segue alimentando a Próxima venda e o Telegram.
@@ -186,6 +190,7 @@ const primeiroDaFicha = computed(() => primeiroContatoDaFicha(props.lead, {
 const acaoDaFila = computed(() => (props.visao?.estado === 'ok'
   ? acaoDaFicha(props.visao, props.lead, Date.now(), primeiroDaFicha.value, sugestaoDaFila.value)
   : null))
+const planoBi = computed(() => planoDoLead(props.lead))
 const agora = computed(() => historicoPendente.value && !contatoEmPausa.value ? { frase: 'Confira a conversa antes de decidir a retomada.', citaOProximo: false } : agoraDaFicha(props.lead, acaoDaFila.value))
 const passoConfirmavel = computed(() => !contatoEmPausa.value && !historicoPendente.value && acaoDaFila.value?.rascunho && acaoDaFila.value.textoDoRegistro && ['cadencia_enviada', 'followup_enviado', 'indicacao_pedida'].includes(acaoDaFila.value.anota ?? '') ? acaoDaFila.value : null)
 
@@ -566,8 +571,11 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       <h3 id="crm-ficha-agora" class="crm-ficha__rotulo">Agora</h3>
       <template v-if="!editando">
         <!-- Uma frase só (AC-12): a mesma do cartão da Próxima venda (fraseDaAcao), ou por que não há nada. -->
-        <p class="crm-ficha__acao">{{ agora.frase }}</p>
-        <p v-if="agora.como" class="crm-ficha__prazo">Como: {{ agora.como }}</p>
+        <p class="crm-ficha__acao">{{ planoBi.acao }}</p>
+        <p class="crm-ficha__prazo"><strong>Evidência:</strong> {{ planoBi.evidencia }}</p>
+        <p class="crm-ficha__prazo"><strong>Responsável:</strong> {{ planoBi.responsavel }} · {{ planoBi.prazo }}</p>
+        <p v-if="planoBi.condicao" class="crm-ficha__prazo"><strong>Antes de agir:</strong> {{ planoBi.condicao }}</p>
+        <p class="crm-ficha__prazo"><strong>Resultado esperado:</strong> {{ planoBi.resultado }}</p>
         <p class="crm-ficha__prazo">
           <template v-if="lead.proximoPasso?.texto && !agora.citaOProximo">Próximo passo salvo: “{{ lead.proximoPasso.texto }}”<template v-if="prazo.texto">, {{ prazo.texto }}</template></template>
           <span v-if="prazo.atrasado" class="selo selo--erro">atrasado</span>
@@ -665,6 +673,16 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
         </ul>
       </details>
     </div>
+
+    <CrmRetomadasRevisadas :leads="[lead]" />
+
+    <section class="crm-ficha__secao" aria-label="Significado da resposta">
+      <h3>{{ ROTULOS_DA_CLASSIFICACAO[significadoResposta.classe] }}</h3>
+      <p>{{ significadoResposta.motivo }}</p>
+      <p v-if="significadoResposta.evidencia?.perguntaAnterior" class="crm-muted">Pergunta anterior da nossa conta: {{ significadoResposta.evidencia.perguntaAnterior }}</p>
+      <blockquote v-if="significadoResposta.evidencia" class="crm-resposta__trecho">{{ significadoResposta.evidencia.trecho }}</blockquote>
+      <p v-if="lead.respostaFonte" class="crm-muted">Classificação original preservada: {{ ROTULO_DA_RESPOSTA[lead.respostaFonte.tipo] }}. A leitura contextual corrige o acompanhamento; não altera o registro original.</p>
+    </section>
 
     <!-- A conversa de verdade (16/10/2026), como o observador guardou; sem ela, a última resposta classificada. -->
     <details v-if="lead.resposta || conversa.length" class="crm-ficha__secao dobra" :open="historicoPendente && !contatoEmPausa">
