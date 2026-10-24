@@ -27,3 +27,9 @@ Código do lote em `faf251a`, publicado na main e confirmado como versão constr
 A integração continua na worktree gerenciada deste chat: `C:/Users/sutil/.codex/worktrees/prumo-reorganizacao-comercial/SquadOne`. O checkout original do PC contém trabalho anterior e não deve substituir integralmente a produção. O plano, baseline e registros também foram copiados para docs do checkout original para consulta.
 
 Fases restantes seguem abertas. A correção de atomicidade do retrato n8n exige lote próprio; o fluxo de contratação e recebimento encontrado em desenvolvimento ainda exige integração e homologação. Este lote não representa contratação ou venda.
+
+## Confirmação posterior de Rômulo — mensalidade do site
+
+Em resposta à pergunta sobre a mensalidade oferecida a Kelisson, Rômulo confirmou que nenhum valor foi combinado. A mensalidade permanece em aberto, sem preço padrão aplicado e sem assumir gratuidade. Mantém-se a confirmação anterior: R$ 500/mês somente de gestão de tráfego, com anúncios pagos à parte pelo cliente. O valor do site será definido antes de fechar a proposta completa.
+
+A confirmação é registrada como nota interna no CRM com marcador [condicao-confirmada-romulo-20261023-site-kelisson-em-aberto], preservando os registros anteriores e sem marcar proposta, aceite, contratação ou pagamento. Nenhuma mensagem ao cliente é enviada por este registro.
