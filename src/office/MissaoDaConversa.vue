@@ -12,10 +12,12 @@ import { agoraDaFicha, type AcaoDeVenda } from '../operations/proxima-venda'
 import { whatsappParaRevisao, hashDoContexto } from '../operations/revisao-resposta'
 import { nomesDasOfertas, type EstadoDaDecisao } from './decisoes'
 import { procedimentoDaDecisao, type MensagemDaDecisao } from './procedimento-da-decisao'
+import { planoDoLead } from '../operations/bi-operacao'
 
 const props = defineProps<{ lead: CrmLead; agente?: Pessoa; disponivel: boolean; registroDisponivel?: boolean; motivo: string; acao?: AcaoDeVenda | null; estado?: EstadoDaDecisao }>()
 const emit = defineEmits<{ ficha: [id: string]; registrado: []; interagiu: []; ocupado: [valor: boolean]; fila: [] }>()
 const procedimento = computed(() => procedimentoDaDecisao(props.lead))
+const plano = computed(() => planoDoLead(props.lead))
 const preparo = ref<MensagemDaDecisao | null>(null), preparando = ref(false), erroDoPreparo = ref('')
 const acaoEfetiva = computed(() => preparo.value ? preparo.value.acao : props.acao)
 const mensagem = computed(() => procedimento.value.tipo === 'interno' ? '' : preparo.value?.mensagem ?? '')
@@ -45,13 +47,14 @@ function acompanharEnvio() { saidaAoAbrir.value = props.lead.conversa?.ultimaSai
 const contexto = () => JSON.stringify([props.lead.etapa, props.lead.resposta, props.lead.conversa, props.lead.eventos, props.lead.proximoPasso, props.lead.proposta, props.lead.links, props.lead.atendimentoComercial, props.acao?.chave, props.acao?.rascunho])
 const contextoRevisado = ref(contexto())
 const mudou = computed(() => contextoRevisado.value !== contexto())
-const linkDaAcao = computed(() => props.disponivel && props.estado !== 'encerrada' && procedimento.value.tipo !== 'interno' && preparo.value?.podeAbrir && !mudou.value ? whatsappParaRevisao(props.lead.links.whatsapp, mensagem.value) : '')
+const linkDaAcao = computed(() => plano.value.tipo === 'agir' && props.disponivel && props.estado !== 'encerrada' && procedimento.value.tipo !== 'interno' && preparo.value?.podeAbrir && !mudou.value ? whatsappParaRevisao(props.lead.links.whatsapp, mensagem.value) : '')
 const registroDisponivel = computed(() => props.disponivel && props.registroDisponivel !== false && props.estado !== 'encerrada')
 function mudarOcupado(valor: boolean) { ocupado.value = valor; emit('ocupado', valor) }
 function revisarContexto() { contextoRevisado.value = contexto(); abriu.value = false; passo.value = 1; preparo.value = null; void prepararMensagem() }
 let controleDoPreparo: AbortController | undefined
 let validadeDoPreparo: ReturnType<typeof setTimeout> | undefined
 async function prepararMensagem() {
+  if (plano.value.tipo !== 'agir') return
   controleDoPreparo?.abort()
   const controle = new AbortController(); controleDoPreparo = controle
   preparando.value = true; erroDoPreparo.value = ''
@@ -90,10 +93,10 @@ watch(() => props.estado, (estado, anterior) => { if (anterior === 'agora' && es
     </section>
 
     <section v-if="passo === 2" class="missao-conversa__secao" aria-label="Decidir e agir">
-      <div class="missao-conversa__objetivo"><span class="sobretitulo">2 · Agir</span><h3>{{ agora.frase }}</h3><p v-if="agora.como">{{ agora.como }}</p></div>
+      <div class="missao-conversa__objetivo"><span class="sobretitulo">2 · {{ plano.tipo === 'aguardar' ? 'Aguardar' : plano.tipo === 'conferir' ? 'Resolver contexto' : 'Agir' }} · {{ plano.responsavel }}</span><h3>{{ plano.acao }}</h3><p><strong>Quando:</strong> {{ plano.prazo }}</p><p><strong>Evidência:</strong> {{ plano.evidencia }}</p><p v-if="plano.condicao"><strong>Antes de agir:</strong> {{ plano.condicao }}</p><p><strong>Resultado esperado:</strong> {{ plano.resultado }}</p><p v-if="preparo?.proximaAcao && !mudou"><strong>Orientação da resposta preparada:</strong> {{ agora.frase }}</p></div>
       <ContextoDaDecisao :lead="lead" />
       <div v-if="preparo?.leitura && !mudou" class="missao-conversa__leitura"><strong>Como a conversa foi interpretada</strong><p>{{ preparo.leitura }}</p><p class="texto-2 texto-pequeno">Confira esta interpretação com os trechos acima antes de enviar.</p></div>
-      <template v-if="estado === 'agora' || procedimento.tipo === 'robo'">
+      <template v-if="plano.tipo === 'agir' && (estado === 'agora' || procedimento.tipo === 'robo')">
         <p v-if="procedimento.tipo === 'robo'" class="recado">Só use o pedido de encaminhamento se o menu não indicar outro procedimento. Se já estiver na fila de atendimento, aguarde. A retomada é conferida na ficha.</p>
         <p v-if="preparo?.motivo" class="recado">{{ preparo.motivo }}</p>
         <div v-if="mensagem && !mudou" class="missao-conversa__rascunho"><span class="sobretitulo">{{ preparo?.origem === 'copiloto' ? 'Resposta preparada com a conversa' : 'Mensagem padrão · confira se cabe nesta conversa' }}</span><p>{{ mensagem }}</p></div>
@@ -105,7 +108,7 @@ watch(() => props.estado, (estado, anterior) => { if (anterior === 'agora' && es
         </div>
         <p v-if="procedimento.tipo !== 'interno'" class="texto-2 texto-pequeno">Envie pelo WhatsApp. O time acompanha o texto que realmente sair, incluindo suas edições, assim que a integração o capturar.</p>
       </template>
-      <button v-else type="button" class="botao botao--primario" @click="passo = 3">Ver acompanhamento →</button>
+      <button v-else type="button" class="botao botao--primario" @click="plano.tipo === 'conferir' ? emit('ficha', lead.id) : passo = 3">{{ plano.tipo === 'conferir' ? 'Conferir contexto na ficha →' : 'Ver acompanhamento →' }}</button>
       <button type="button" class="botao botao--leve" :disabled="ocupado" @click="passo = 3">Acompanhar conversa →</button>
     </section>
 
