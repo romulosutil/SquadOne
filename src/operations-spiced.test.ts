@@ -10,7 +10,7 @@ const qualificado = (): Spiced => ({ ...spicedVazio(), dor: 'perde pedidos no Wh
 function lead(produto: CrmProduto): CrmLead {
   return { id: `${produto}:teste`, chave: 'teste', produto, empresa: 'Empresa exemplo', etapa: 'contato', sinal: 'respondeu',
     nicho: 'teste', cidade: 'Vitória', respostaNova: true, marcos: { segundaEnviada: '2026-10-19T12:00:00Z' },
-    resposta: { tipo: 'interesse', trecho: 'gostei, quanto fica?', em: '2026-10-19T14:00:00Z' },
+    resposta: { tipo: 'interesse', trecho: 'gostei', em: '2026-10-19T14:00:00Z' },
     links: { whatsapp: 'https://wa.me/5527999990000' }, plus: produto === 'plus' ? { oferta: 'site', fixo: false, descricao: '' } : undefined,
   } as CrmLead
 }

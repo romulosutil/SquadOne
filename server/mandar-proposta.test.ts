@@ -53,7 +53,6 @@ const respondeu = (tipo: string, trecho: string, haHoras: number) => ({
 describe("fila de venda: 'mandar a proposta' depois do 'gostei'", () => {
   const casos: Array<{ caso: string; site: Record<string, string>; registros?: Array<Record<string, string>>; entra: boolean }> = [
     { caso: "'gostei' depois do link", site: respondeu("interesse", "gostei muito, como faz?", 2), registros: [LINK], entra: true },
-    { caso: "'quanto fica?' classificado como neutra depois do link", site: respondeu("neutra", "quanto fica?", 2), registros: [LINK], entra: true },
     { caso: "interesse ANTES do link (o 'pode mandar' que levou ao link)", site: respondeu("interesse", "pode mandar", 28), registros: [LINK], entra: false },
     { caso: "neutra sem pergunta de preço depois do link", site: respondeu("neutra", "vou ver com meu sócio", 2), registros: [LINK], entra: false },
     { caso: "negativa depois do link", site: respondeu("negativa", "não tenho interesse", 2), registros: [LINK], entra: false },
@@ -80,6 +79,20 @@ describe("fila de venda: 'mandar a proposta' depois do 'gostei'", () => {
       assert.equal(fila.some((x) => x.tipo === "responder" && x.leadId === a.leadId), false);
     });
   }
+
+  it("'quanto fica?' classificado como neutra pede condução humana, mesmo com SPICED confirmado", () => {
+    const v = visaoCom(respondeu("neutra", "quanto fica?", 2), [LINK]);
+    const fila = filaDeVenda(v, { primeiroLiberado: true, agora: AGORA.getTime() });
+    const a = fila.find(x => x.chave.endsWith("|negociacao-humana"));
+    assert.ok(a);
+    assert.match(a.titulo, /Rômulo: responda ao pedido de preço/);
+    assert.equal(a.link, undefined);
+    assert.equal(a.rascunho, undefined);
+    assert.equal(a.anota, undefined);
+    assert.doesNotMatch(a.tatica, /10 minutos|Marque/);
+    assert.equal(fila.some(x => x.tipo === "mandar-proposta"), false);
+    assert.equal(fila.some(x => x.tipo === "responder" && x.leadId === a.leadId), false);
+  });
 
   it("entra logo depois do 'responder': antes do combinado do mesmo dia", () => {
     const v = visaoCom(respondeu("interesse", "gostei", 2),

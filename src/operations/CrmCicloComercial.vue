@@ -254,7 +254,7 @@ async function copiar(condicoes = false) {
 .crm-ciclo { display: grid; gap: var(--esp-2); }
 .crm-ciclo__etapas { display: flex; flex-wrap: wrap; gap: var(--esp-2); padding-left: var(--esp-4); }
 .crm-ciclo__etapas li { margin-right: var(--esp-3); }
-.crm-ciclo__previa { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: 1px solid var(--borda); border-radius: var(--raio); }
+.crm-ciclo__previa { display: grid; gap: var(--esp-2); padding: var(--esp-3); border: 1px solid var(--borda); border-radius: var(--raio-controle); }
 .crm-ciclo .crm-ciclo__check { display: flex; align-items: start; gap: var(--esp-2); }
 .crm-ciclo__check input { width: auto; }
 .crm-ciclo small { display: block; }

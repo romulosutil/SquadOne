@@ -32,7 +32,7 @@ const ultima = { direcao: 'saida' as const, em: MATERIAL, trecho: '[vídeo]' }
 type Resposta = { tipo: NonNullable<CrmLead['resposta']>['tipo']; trecho: string }
 
 /** O lead como o servidor o monta, SEM segundaEnviada onde a linha não tem 2ª mensagem: o material é a mídia vista na conversa. */
-function lead(l: Linha, resposta: Resposta | null = { tipo: 'interesse', trecho: 'gostei, quanto fica?' }, comMaterial = true): CrmLead {
+function lead(l: Linha, resposta: Resposta | null = { tipo: 'interesse', trecho: 'gostei' }, comMaterial = true): CrmLead {
   return {
     id: `${l.produto}:teste`, chave: 'teste', produto: l.produto, empresa: 'Empresa exemplo', etapa: 'contato', sinal: 'respondeu',
     nicho: 'teste', cidade: 'Vitória', respostaNova: true,
@@ -78,6 +78,29 @@ describe('SPICED nas cinco linhas com o marco real do material', () => {
   }
 })
 
+describe('pedido de preço segue ao humano nas cinco linhas, separado do gate legado', () => {
+  for (const l of LINHAS) {
+    for (const completo of [false, true]) {
+      it(`${l.nome}: preço com SPICED ${completo ? 'completo' : 'incompleto'} não exige reunião nem oferta automática`, () => {
+        for (const tipo of ['interesse', 'neutra'] as const) {
+          const x = { ...lead(l, { tipo, trecho: 'Qual o valor?' }), spiced: spiced(completo ? 7 : 0, 'nao-sei') }
+          // Os helpers legados continuam exigindo qualificação; a fila separa a condução humana.
+          assert.equal(qualificadoParaProposta(x), completo)
+          assert.equal(Boolean(propostaDeUmToque(x)), completo)
+          const f = fila(x), acao = f.find(a => a.chave.endsWith('|negociacao-humana'))
+          assert.ok(acao, `${l.nome}: ${tipo}`)
+          assert.match(acao.titulo, /Rômulo: responda ao pedido de preço/)
+          assert.equal(acao.link, undefined)
+          assert.equal(acao.rascunho, undefined)
+          assert.equal(acao.anota, undefined)
+          assert.doesNotMatch(acao.tatica, /10 minutos|Marque/)
+          assert.equal(f.some(a => a.tipo === 'mandar-proposta'), false)
+        }
+      })
+    }
+  }
+})
+
 describe('o marco do material', () => {
   it('é o último entre a 2ª mensagem anotada e o link ou a mídia vista na conversa', () => {
     const ms = (v: string) => Date.parse(v)
@@ -109,15 +132,18 @@ describe('o marco do material', () => {
     }
   })
 
-  it('Iris e Estamparia SEM material: só a pergunta de preço depois do convite pede a qualificação, nunca a proposta', () => {
+  it('Iris e Estamparia SEM material: pergunta de preço vai ao humano, com proposta ainda atrás da qualificação', () => {
     for (const l of LINHAS.filter((x) => x.materialPor === 'conversa')) {
       const x = lead(l, { tipo: 'neutra', trecho: 'Qual o valor?' }, false)
       assert.equal(indicouInteresseDepoisDoLink(x), true, l.nome)
       const f = fila(x)
-      assert.match(f[0]?.titulo ?? '', /Marque 10 minutos/, l.nome)
+      assert.match(f[0]?.titulo ?? '', /Rômulo: responda ao pedido de preço/, l.nome)
+      assert.equal(f[0].link, undefined)
+      assert.equal(f[0].rascunho, undefined)
+      assert.equal(f[0].anota, undefined)
       assert.equal(f.some((a) => a.tipo === 'mandar-proposta'), false)
       assert.equal(propostaDeUmToque(x), null)
-      // com tudo confirmado, a proposta sai (preço só do cardápio)
+      // O helper legado continua elegível com tudo confirmado; a fila permanece uma passagem humana.
       assert.equal(Boolean(propostaDeUmToque({ ...x, spiced: spiced(7, 'nao') })), true, l.nome)
       // a licença que traz o preço no texto não conta; a resposta antes do convite também não
       assert.equal(indicouInteresseDepoisDoLink(lead(l, { tipo: 'licenca', trecho: 'pode mandar, quanto custa?' }, false)), false)
