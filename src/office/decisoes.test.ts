@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { decisoesDoEscritorio, novaRespostaEnviada, proximaDecisaoPorPrioridade } from './decisoes.ts'
+import { decisoesDoEscritorio, novaRespostaEnviada, proximaDecisaoPorPrioridade, respostaJaAtendida } from './decisoes.ts'
 import { notaDoAprendizado } from '../operations/aprendizado-comercial.ts'
 import type { CrmLead } from '../operations/types.ts'
 import type { AcaoDeVenda } from '../operations/proxima-venda.ts'
@@ -107,13 +107,78 @@ test('planejar retorno futuro move para acompanhamento; resposta posterior recup
   assert.equal(decisoesDoEscritorio([novo], [{ ...acao('plano'), tipo: 'responder' }], agora)[0].estado, 'agora')
 })
 
-test('nova saída observada aciona avanço mesmo com outra tarefa ainda ativa no cliente', () => {
+test('saída de texto é observada sem presumir conclusão nem trocar automaticamente de cliente', () => {
   const antes = lead('a', { conversa: resposta })
   const depois = { ...antes, conversa: { ...resposta!, ultimaSaida: '2026-10-21T15:05:00Z', ultima: { direcao: 'saida' as const, em: '2026-10-21T15:05:00Z', trecho: 'Expliquei como funciona.' } } }
-  assert.equal(novaRespostaEnviada(antes, depois), true)
+  assert.equal(respostaJaAtendida(depois), true, 'o envio observado dispensa novo registro manual')
+  assert.equal(novaRespostaEnviada(antes, depois), false, 'enviar texto não comprova concluir o trabalho')
+  const promessa = { ...depois, conversa: { ...depois.conversa, ultima: { ...depois.conversa.ultima, trecho: 'Vou preparar imagens e enviar depois.' } } }
+  assert.equal(novaRespostaEnviada(antes, promessa), false)
+  const confirmouMensagem = { ...promessa, eventos: [{ tipo: 'nota', origem: 'manual' as const, em: '2026-10-21T15:05:00Z', texto: '[Envio confirmado pelo operador · 2026-10-21]\nVou preparar imagens e enviar depois.', rotulo: 'Nota', fonte: 'planilha' }] }
+  assert.equal(novaRespostaEnviada(antes, confirmouMensagem), false, 'confirmar o envio de texto não comprova entrega de material')
   assert.equal(novaRespostaEnviada(depois, { ...depois }), false, 'releitura do mesmo envio não avança outra vez')
   assert.equal(novaRespostaEnviada(antes, { ...depois, id: 'b' }), false, 'abrir outro cliente com envio antigo não avança')
   assert.equal(novaRespostaEnviada(undefined, depois), false)
+})
+
+test('material solicitado mantém decisão aberta mesmo sem link pronto ou ação na fila de Vendas', () => {
+  const antes = lead('material', { resposta: { tipo: 'licenca', trecho: 'Pode mandar as imagens' }, conversa: resposta })
+  const depois = { ...antes, conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em, ultimaSaida: '2026-10-21T15:05:00Z', ultima: { direcao: 'saida' as const, em: '2026-10-21T15:05:00Z', trecho: 'Vou preparar imagens e enviar depois.' } } }
+  assert.equal(respostaJaAtendida(depois), false)
+  assert.equal(novaRespostaEnviada(antes, depois), false)
+  const [decisao] = decisoesDoEscritorio([depois], [], agora)
+  assert.equal(decisao.estado, 'agora')
+  assert.equal(decisao.motivo, 'Material solicitado ainda não enviado')
+  assert.equal(decisao.acao, null, 'não inventa mensagem ou ação de contato')
+  const confirmado = { ...depois, eventos: [{ tipo: 'nota', origem: 'manual' as const, em: '2026-10-21T15:06:00Z', texto: '[Envio confirmado pelo operador · 2026-10-21]\nAvisei que prepararia o material.', rotulo: 'Nota', fonte: 'planilha' }] }
+  assert.equal(respostaJaAtendida(confirmado), false, 'confirmar mensagem não confirma o material solicitado')
+})
+
+test('entrega de material observada permite avanço sem exigir confirmação manual do envio', () => {
+  const antes = lead('material', { resposta: { tipo: 'licenca', trecho: 'Pode enviar' }, conversa: resposta })
+  const em = '2026-10-21T15:05:00Z'
+  const depois = { ...antes, conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em, ultimaSaida: em, linkEm: em, ultima: { direcao: 'saida' as const, em, trecho: '[imagem]' } } }
+  assert.equal(respostaJaAtendida(depois), true)
+  assert.equal(novaRespostaEnviada(antes, depois), true)
+  assert.equal(decisoesDoEscritorio([depois], [{ ...acao('material'), tipo: 'responder' }], agora)[0].estado, 'acompanhando')
+  assert.equal(novaRespostaEnviada(depois, { ...depois }), false)
+  const semMarcadorDaConversa = { ...depois, marcos: { segundaEnviada: em }, conversa: { ...depois.conversa, linkEm: undefined } }
+  assert.equal(novaRespostaEnviada(antes, semMarcadorDaConversa), true, 'marco confirmado da fonte também evidencia entrega')
+})
+
+test('envio posterior não conclui compromisso ativo e uma entrega antiga não comprova a nova saída', () => {
+  const antes = lead('material', { conversa: resposta })
+  const em = '2026-10-21T15:05:00Z'
+  const depois = { ...antes, conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em, ultimaSaida: em, linkEm: em, ultima: { direcao: 'saida' as const, em, trecho: '[imagem]' } } }
+  for (const data of ['2026-10-20', '2026-10-21', '2026-10-25']) {
+    const comCompromisso = { ...depois, proximoPasso: { texto: 'Revisar internamente condições da proposta', data, registradoEm: '2026-10-21T14:00:00Z' } }
+    assert.equal(novaRespostaEnviada(antes, comCompromisso), false, `próximo passo ativo em ${data} não foi concluído pelo envio`)
+    if (data <= '2026-10-21') assert.equal(decisoesDoEscritorio([comCompromisso], [], agora)[0].estado, 'agora')
+  }
+  const antiga = { ...depois, conversa: { ...depois.conversa, linkEm: '2026-10-21T14:00:00Z' } }
+  assert.equal(novaRespostaEnviada(antes, antiga), false)
+  const novaEntrada = { ...depois, conversa: { ...depois.conversa, ultimaEntrada: '2026-10-21T15:06:00Z', ultima: { direcao: 'entrada' as const, em: '2026-10-21T15:06:00Z', trecho: 'E as condições?' } } }
+  assert.equal(novaRespostaEnviada(antes, novaEntrada), false)
+})
+
+test('material ainda pendente respeita pausa, recusa e encerramento', () => {
+  const pausa = notaDoAprendizado({ fato: 'Pediu prazo', hipotese: 'Está avaliando', teste: 'Esperar retorno', resultado: 'em-teste', pausarAteResposta: true })
+  const material = lead('material', { resposta: { tipo: 'licenca', trecho: 'Pode mandar' }, conversa: resposta })
+  const pausado = { ...material, eventos: [{ tipo: 'nota', origem: 'manual' as const, em: '2026-10-21T15:05:00Z', texto: pausa, rotulo: 'Nota', fonte: 'planilha' }] }
+  assert.equal(decisoesDoEscritorio([pausado], [], agora)[0].estado, 'acompanhando')
+  const recusou = { ...material, resposta: { tipo: 'negativa' as const, trecho: 'Não quero mais' } }
+  assert.equal(decisoesDoEscritorio([recusou], [], agora)[0].estado, 'acompanhando')
+  assert.equal(decisoesDoEscritorio([{ ...material, etapa: 'perdido' }], [], agora)[0].estado, 'encerrada')
+})
+
+test('interesse comercial não vira pedido de material por ter um modelo de mensagem disponível', () => {
+  const cliente: CrmLead & { classificacaoResposta?: { materialSolicitado: boolean } } = {
+    ...lead('preco', { resposta: { tipo: 'interesse', trecho: 'Qual o valor?' }, links: { segunda: 'https://wa.me/5511999990000?text=Modelo' },
+      conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em, ultima: { direcao: 'saida', em: '2026-10-21T15:05:00Z', trecho: 'Expliquei as condições.' } } }),
+    classificacaoResposta: { materialSolicitado: false },
+  }
+  assert.equal(respostaJaAtendida(cliente), true)
+  assert.equal(decisoesDoEscritorio([cliente], [], agora)[0].estado, 'acompanhando')
 })
 
 test('retorno posterior, mensagem recebida e saída histórica não são uma nova resposta enviada', () => {

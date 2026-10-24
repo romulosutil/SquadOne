@@ -14,25 +14,46 @@ export interface Decisao {
 }
 export const nomesDasOfertas = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', plus: 'Plus', estampa: 'Estamparia' } as const
 
-/** Confirmação real ou saída observada atende a resposta anterior; uma entrada posterior reabre. */
-export function respostaJaAtendida(lead: CrmLead): boolean {
+const instante = (em?: string) => Date.parse(em ?? '') || 0
+
+function ultimaEntrada(lead: CrmLead): number {
   const c = lead.conversa
-  const entrada = Math.max(Date.parse(c?.ultimaEntrada ?? '') || 0, c?.ultima.direcao === 'entrada' ? Date.parse(c.ultima.em) || 0 : 0, Date.parse(ultimoRetornoRegistrado(lead)?.registradoEm ?? '') || 0)
-  const envios = lead.eventos.filter(e => e.origem === 'manual' && /^\[Envio confirmado pelo operador · \d{4}-\d{2}-\d{2}\]\r?\n\S/.test(e.texto ?? '')).map(e => Date.parse(e.em) || 0)
-  const saida = Math.max(c?.ultima.direcao === 'saida' ? Date.parse(c.ultima.em) || 0 : 0, Date.parse(c?.ultimaSaida ?? '') || 0, ...envios)
-  return saida > entrada && saida > 0
+  return Math.max(instante(c?.ultimaEntrada), c?.ultima.direcao === 'entrada' ? instante(c.ultima.em) : 0, instante(ultimoRetornoRegistrado(lead)?.registradoEm))
+}
+
+function ultimaSaida(lead: CrmLead): number {
+  const c = lead.conversa
+  return Math.max(instante(c?.ultimaSaida), c?.ultima.direcao === 'saida' ? instante(c.ultima.em) : 0)
+}
+
+function ultimoEnvioConfirmado(lead: CrmLead): number {
+  return Math.max(0, ...lead.eventos.filter(e => e.origem === 'manual' && /^\[Envio confirmado pelo operador · \d{4}-\d{2}-\d{2}\]\r?\n\S/.test(e.texto ?? '')).map(e => instante(e.em)))
+}
+
+/** Leitores que já fornecem a interpretação podem complementar o contrato; a fonte legada continua suficiente. */
+function materialSolicitadoPendente(lead: CrmLead & { classificacaoResposta?: { materialSolicitado: boolean } }): boolean {
+  const solicitado = lead.classificacaoResposta?.materialSolicitado
+    ?? (lead.resposta?.tipo === 'licenca' || lead.resposta?.tipo === 'interesse' && !!lead.links.segunda)
+  return solicitado && !instante(lead.marcos.segundaEnviada) && !instante(lead.conversa?.linkEm)
+}
+
+/** Uma saída responde à entrada anterior, mas não comprova a entrega de material nem conclui um próximo passo. */
+export function respostaJaAtendida(lead: CrmLead): boolean {
+  const saida = Math.max(ultimaSaida(lead), ultimoEnvioConfirmado(lead))
+  return !materialSolicitadoPendente(lead) && saida > ultimaEntrada(lead) && saida > 0
 }
 
 export function proximaDecisaoPorPrioridade(decisoes: readonly Decisao[], atualId?: string): Decisao | null {
   return decisoes.find(d => d.estado === 'agora' && d.lead.id !== atualId) ?? null
 }
 
-/** Só uma nova saída do cliente aberto aciona o avanço; reler uma mensagem antiga não aciona. */
+/** Avança apenas com evidência de entrega e sem compromisso ativo; texto enviado sozinho não comprova conclusão. */
 export function novaRespostaEnviada(antes: CrmLead | undefined, depois: CrmLead | undefined): boolean {
   if (!antes || !depois || antes.id !== depois.id || antes.produto !== depois.produto) return false
-  const saida = (lead: CrmLead) => Math.max(Date.parse(lead.conversa?.ultimaSaida ?? '') || 0,
-    lead.conversa?.ultima.direcao === 'saida' ? Date.parse(lead.conversa.ultima.em) || 0 : 0)
-  return saida(depois) > saida(antes) && respostaJaAtendida(depois)
+  if (depois.proximoPasso?.texto.trim() || !respostaJaAtendida(depois)) return false
+  const anterior = ultimaSaida(antes), atual = ultimaSaida(depois)
+  const entrega = Math.max(instante(depois.conversa?.linkEm), instante(depois.marcos.segundaEnviada))
+  return atual > anterior && entrega > Math.max(anterior, ultimaEntrada(depois)) && entrega <= atual
 }
 
 /** Uma linha por cliente. A ordem de Vendas e as proteções de contato continuam valendo. */
@@ -47,13 +68,13 @@ export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly 
   return leads.flatMap((lead): Decisao[] => {
     const atendida = respostaJaAtendida(lead)
     const candidata = porAcao.get(lead.id) ?? null
-    const materialPendente = ['interesse', 'licenca'].includes(lead.resposta?.tipo ?? '') && !!lead.links.segunda && !lead.marcos.segundaEnviada && !lead.conversa?.linkEm
-    const acao = atendida && !materialPendente && candidata?.tipo === 'responder' ? null : candidata
+    const materialPendente = materialSolicitadoPendente(lead)
+    const acao = atendida && candidata?.tipo === 'responder' ? null : candidata
     const conversa = atendida && porConversa.get(lead.id)?.rotulo === 'Resposta recebida' ? undefined : porConversa.get(lead.id)
     if (lead.etapa === 'ganho' || lead.etapa === 'perdido') return [{ lead, estado: 'encerrada', motivo: lead.etapa === 'ganho' ? 'Venda ganha' : 'Conversa encerrada', acao: null }]
     const esperaPlanejada = planoFuturoEmEspera(lead, new Date(agora))
     const protegido = contatoPausado(lead) || esperaPlanejada || lead.resposta?.tipo === 'negativa' || lead.resposta?.tipo === 'exclusao'
-    if ((!protegido || acao?.tipo === 'desfecho') && (acao || conversa)) return [{ lead, estado: 'agora', motivo: conversa?.rotulo ?? acao!.titulo, acao }]
+    if ((!protegido || acao?.tipo === 'desfecho') && (acao || conversa || materialPendente)) return [{ lead, estado: 'agora', motivo: materialPendente ? 'Material solicitado ainda não enviado' : conversa?.rotulo ?? acao!.titulo, acao }]
     const temConversa = lead.etapa === 'contato' || lead.etapa === 'proposta' || !!lead.conversa || !!lead.proximoPasso
     if (!temConversa) return []
     return [{ lead, estado: 'acompanhando', motivo: protegido ? 'Contato em espera' : procedimentoDaDecisao(lead, new Date(agora)).tipo === 'robo' ? 'Só o robô respondeu · conferir atendimento humano' : lead.proximoPasso?.texto ? 'Próximo passo definido' : 'Aguardando retorno', acao: null }]
