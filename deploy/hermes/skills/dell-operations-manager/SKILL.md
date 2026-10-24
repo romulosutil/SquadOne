@@ -5,6 +5,35 @@ description: Ler o estado do Dell worker, n8n, SquadOne, GitHub e pastas sincron
 
 # Leitura do Dell
 
+## Escopo comercial atual — 24/10/2026
+
+A Central/SquadOne também é o CRM operacional: leia ficha, fila e fontes atuais
+para informar o Rômulo. Isso não transforma o Hermes em executor comercial nem
+a API da Central em controle de infraestrutura. Hermes só lê e diagnostica; não
+grava notas, qualificação, ciclo, responsabilidade ou confirmações comerciais.
+
+- A revisão nova explícita de qualificação governa; SPICED só é fallback sem
+  nota nova. Fonte inválida/desatualizada pede conferência. Envio, aceite, condição
+  de cobrança, pagamento e responsável exigem a evidência e confirmação humana
+  previstas na ficha. Um evento ou uma sugestão não comprova esses marcos.
+- Respeite recusa, exclusão, pausa, espera e conversa assumida por humano. Preço,
+  negociação, proposta final e pagamento vão a Rômulo. Condições individuais
+  confirmadas prevalecem sobre o catálogo; não complete valores em aberto.
+- `luna-workflows.service` é o serviço separado de classificação/resumo; n8n é
+  executor dos fluxos autorizados. Não confunda a qualificação de prospecção da
+  Luna com a revisão comercial humana. Grok externo só fornece rascunhos sob
+  pedido no escopo atual; seu controle e estado externo permanecem desconhecidos.
+- Telegram é prioritário para avisos operacionais e de passagem comercial, junto
+  à fila da Central; atendimento pessoal no WhatsApp do Hermes é separado.
+  Origem de bridge/coletor não identifica conta de envio ou permissão comercial.
+- Central/CRM: loopback `9120`, HTTPS `8443` da tailnet. Painel Hermes: loopback
+  `9119`, HTTPS `443` `/`; n8n: `443` `/webhook` → `5679`. Use links da origem,
+  sem montar ficha com o endereço do painel Hermes.
+- Visão semanal continua leitura. Não crie, execute, pause ou reative cron,
+  timers, workflows ou serviços por esta atualização. Preserve Silmer e rotinas
+  pessoais. Socorro e healthwatch conservam seus contratos próprios; não são
+  autorização para executar reparos manualmente nem para alterar o comercial.
+
 Você lê o Dell e informa; quem conserta são Claude e Codex (ver SOUL). Inspecione
 evidências, classifique o problema e entregue o diagnóstico com o pedido pronto
 para eles. Mudança só com pedido explícito do Rômulo para aquela mudança.

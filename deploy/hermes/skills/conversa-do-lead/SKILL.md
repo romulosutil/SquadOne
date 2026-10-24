@@ -5,6 +5,44 @@ description: Ler a conversa de WhatsApp de um lead (Site antes da venda, PRUMO, 
 
 # Conversa do lead
 
+## Escopo comercial atual — 24/10/2026
+
+Esta seção rege o atendimento comercial quando houver divergência com a descrição
+histórica abaixo. Antes de sugerir uma ação, leia a conversa e a projeção atual da
+ficha na Central/SquadOne, que também é o CRM operacional. Os registros na aba CRM
+existente são a fonte dos fatos confirmados; não crie uma base ou memória paralela.
+
+1. Confira a revisão `[qualificacao-comercial-v1]`, o ciclo `[ciclo-comercial-v1]`,
+   a responsabilidade `[responsavel-conversa-v2]` e a tarefa `atendimentoComercial`
+   quando presentes. Nota nova explícita governa; SPICED só é fallback sem nota
+   nova. Nota nova inválida significa revisar a fonte, sem recuperar uma anterior
+   como se fosse atual. Não interprete sozinho o JSON como confirmação humana.
+2. Separe necessidade, adequação, intenção, participantes/processo de decisão e
+   próximo passo aceito das interpretações e lacunas. Quando houver abertura,
+   sugira uma pergunta faltante por vez. Não exija impacto financeiro, reunião ou
+   um decisor único; decisão com sócios pode estar suficientemente esclarecida.
+3. Pedido de preço, proposta, contratação, negociação ou pagamento vai a Rômulo,
+   mesmo com qualificação incompleta. A proposta final depende do contexto e das
+   confirmações da ficha. Hermes não marca envio, aceite, cobrança, pagamento ou
+   responsabilidade e não atribui esses fatos a um modelo.
+4. Preserve condições individualizadas confirmadas antes do catálogo. Campo em
+   aberto continua desconhecido; divergência ou preço incompleto pede revisão
+   humana. Não invente implantação, mensalidade zero, desconto, escopo ou resultado.
+5. Recusa, exclusão, pausa, espera e conversa assumida por humano exigem preservar
+   a restrição. Nesses casos, ofereça orientação interna, sem novo rascunho de
+   contato ou agradecimento automático. Nossa última saída não cria nova abertura;
+   permissão para material não é intenção de compra. Confira a entrega observada
+   antes de sugerir reenviar o que já saiu.
+6. Origem do coletor não identifica conta emissora nem concede permissão de envio.
+   Telegram e fila da Central entregam o aviso de passagem, nunca uma mensagem ao
+   cliente. Links de ficha vêm da origem e da Central HTTPS `8443`, não do painel
+   Hermes `9119`. Sem link verificável, informe a falta em vez de montar um.
+
+Hermes permanece em leitura e diagnóstico. Luna do n8n é serviço separado; n8n é
+executor dos fluxos autorizados; Grok externo fica em rascunhos sob pedido e sem
+controle técnico presumido. Esta skill não escreve notas/estados nem muda tarefas,
+rotinas pessoais, cron da Visão semanal ou serviços da Silmer.
+
 Desde 16/10/2026 (pedido do Rômulo: o "em contato" não mostrava o que estava
 acontecendo, e a etapa era adivinhada pelo trecho de 200 caracteres da planilha)
 o observador do WhatsApp grava a conversa de cada **lead**, nas duas direções.

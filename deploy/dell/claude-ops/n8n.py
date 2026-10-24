@@ -71,11 +71,29 @@ def preparar_comercial_se_configurado(body):
     return preparar_comercial(body, endpoint=endpoint, credencial_crm=configuracao.get('credencial_crm'))
 
 
+def preparar_simplificacao_se_configurado(body):
+    """Opt-in local versionado por contrato; não liga fluxo nem nova autonomia."""
+    arquivo = Path.home() / '.config/claude-ops/workflow-contexto-whatsapp.json'
+    if not arquivo.exists():
+        return body
+    config = json.loads(arquivo.read_text())
+    if not isinstance(config, dict) or set(config) != {'v', 'contextoFresco', 'pausarJev'} or type(config['v']) is not int or config['v'] != 1 or type(config['contextoFresco']) is not bool or type(config['pausarJev']) is not bool:
+        raise ValueError('Configuração de simplificação WhatsApp inválida.')
+    if config['contextoFresco']:
+        from workflow_contexto_whatsapp import preparar
+        body = preparar(body)
+    if config['pausarJev']:
+        from workflow_papeis import pausar_sombra
+        body = pausar_sombra(body)
+    return body
+
+
 def api(method, path, body=None):
     partes = path.strip("/").split("/")
     if method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
         from workflow_confiabilidade import preparar
         body = garantir_erro_salvo(preparar(body))
+        body = preparar_simplificacao_se_configurado(body)
         cred_luna = Path.home() / '.config/claude-ops/luna-workflows-cred'
         if cred_luna.exists():
             from workflow_luna import usar_luna

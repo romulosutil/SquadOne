@@ -5,6 +5,35 @@ description: Onde cada coisa do Rômulo roda (PC e celular, nuvem, Dell, externo
 
 # Mapa do ecossistema
 
+## Escopo comercial atual — 24/10/2026
+
+Para a operação comercial, esta seção atualiza os papéis históricos deste mapa:
+
+| Componente | Executa | Decisão e registro |
+|---|---|---|
+| Hermes secretário | Leitura, diagnóstico e síntese ao Rômulo | Não escreve CRM nem assume negociação; Visão semanal continua somente leitura |
+| Central/SquadOne | CRM, ficha, fila de atendimento, agenda e controles | Projeta fonte e confirmações humanas; qualificação/ciclo/responsabilidade têm evidência própria |
+| n8n do Dell | Transporte e execução de fluxos autorizados | Não confirma compra por classificação nem substitui decisão humana |
+| Luna de `luna-workflows.service` | Classificação e resumo nos contratos restritos | Serviço separado do secretário; não envia a lead nem confirma qualificação comercial humana |
+| Gemini + Jev no classificador | Gemini classifica; novas comparações Jev serão pausadas no lote técnico | Amostra existente continua disponível; Jev não decide nem confirma compra |
+| VENDAS/Grok externo | Rascunhos sob pedido no escopo atual | Estado e pausa externos não verificados/controlados por Hermes ou Central |
+| Rômulo | Negociação, condições, proposta final e atendimento humano | Confirma fatos e marcos no CRM após conferir a fonte |
+| Telegram existente | Aviso prioritário de pendência e passagem, com acesso à Central | Aviso recebido não é envio a cliente ou contratação |
+
+A revisão comercial nova explícita governa a oportunidade; SPICED é fallback sem
+nota nova. Invalidade pede revisão. Não converter interpretação do modelo, tarefa,
+clique ou origem do coletor em confirmação de qualificação, ciclo ou responsável.
+Preserve condições individuais confirmadas antes do catálogo, lacunas em aberto,
+pausas, recusas, espera e responsabilidade humana. Preço, contrato e pagamento vão
+a Rômulo; permissão para material não é compra nem autorização de negociação.
+
+Roteamento conferido na tailnet em 24/10: HTTPS `443` `/` → painel Hermes `9119`,
+`/webhook` → n8n `5679`; HTTPS `8443` `/` → Central/CRM `9120`. A ficha vem dos dados
+da origem com a base da Central, sem criar links usando o painel Hermes. Endereço
+do coletor não identifica a conta emissora do WhatsApp. Não há autorização nova
+para enviar, mudar canais, pausar/reativar tarefas ou mexer em serviços pessoais,
+Silmer, timers ou cron. As seções históricas seguintes não comprovam estado atual.
+
 Vem do design "Estrutura do SquadOne" (24/09/2026), conferido no Dell em
 25/09/2026, atualizado em 28/09/2026 com a perda do PC, em 29/09/2026 com o
 que entrou no Dell nesse dia, em 05/10/2026 com o PC novo e em 11/10/2026 com a

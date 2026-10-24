@@ -321,3 +321,9 @@ Detalhes e evidências: `PRUMO-INTEGRACAO-COMERCIAL-N8N-AGENTES-2026-10-23.md`. 
 Três contextos reais passaram pelo transporte e controlador publicados: ControEco, Casa do Bordado e TPrint. O vendedor gerou dois avisos internos automáticos sem repetição; o terceiro caso foi suprimido por atendimento posterior confirmado. Um controle adicional, Estampa Cor, foi bloqueado por origem pessoal. Rômulo confirmou recebimento e abertura do link no celular após nova tentativa. Nenhuma mudança no escritório, liberação de primeiros contatos ou mensagem de WhatsApp a clientes.
 
 O resultado fecha o teste técnico de registro, deduplicação, fila e aviso. A qualificação, a tomada de responsabilidade e a contratação/pagamento continuam dependendo do atendimento e de evidências reais. Detalhes e pendências estão em `PRUMO-HOMOLOGACAO-PILOTO-2026-10-24.md`.
+
+## Primeiro lote da Fase 4 — 24/10/2026
+
+Implementação versionada do contexto fresco compartilhado dos três workflows WhatsApp, pausa de nova coleta Jev, identificação correta Luna no Caçador, métricas privadas de inferência e atualização dos papéis do Hermes existente no SSH `mel`. Verificação/publicação: `PRUMO-SIMPLIFICACAO-FASE4-2026-10-24.md`; matriz: `PRUMO-RESPONSABILIDADES-FASE4-2026-10-24.md`.
+
+A Fase 4 não está integralmente encerrada: quatro Sheets ainda são lidos por chamada; índice completo/invalidação, observabilidade adicional e identidade de captura Hermes/Evolution exigem lotes próprios. O escritório permanece preservado e o piloto segue assistido, sem ampliar envios.
