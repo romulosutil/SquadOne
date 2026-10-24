@@ -147,3 +147,7 @@ A Fase 4 continua aberta para simplificação e medição dos executores. Esta r
 As quatro instruções Hermes foram instaladas pelo lote `fd089b8`, com comparação byte a byte e backup prévio. O gateway foi reiniciado somente após `active_agents=0`, `active_sessions=0` e `gateway_busy=false`; retornou ativo. Configuração, memória, cron, ferramentas e navegador não foram alterados. As referências acima a preparação descrevem a etapa de auditoria; a instalação dos arquivos já está concluída. Aderência do agente em uma conversa futura e isolamento técnico permanecem avaliações distintas.
 
 A nova coleta Jev foi efetivamente pausada e conferida na versão ativa: quatro nós desabilitados, sem aresta de entrada, Gemini principal preservado. A tabela histórica foi conservada. Detalhes do lote e limites em [simplificação da Fase 4](PRUMO-SIMPLIFICACAO-FASE4-2026-10-24.md).
+
+## Continuidade operacional — Fase 4B
+
+A [Fase 4B](PRUMO-OPERACAO-ASSISTIDA-FASE4B-2026-10-24.md) concretiza a consulta do Hermes à Central por um leitor GET local, com frescor explícito, qualificação/ciclo/responsável/atendimento atuais e encaminhamento interno. A consulta não confirma fatos comerciais. A Central continua como fonte da fila e dos prazos; o acompanhamento legado do n8n deixa de concorrer com esses contratos durante a pausa do piloto. Instalação e estado ativo são comprovados no registro do lote; instruções não constituem isolamento técnico de todas as ferramentas do gateway.

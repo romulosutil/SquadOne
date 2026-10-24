@@ -118,6 +118,7 @@ import { iniciarCopilotoAutomatico, lerRaioXDoDisco, prepararCopiloto } from "./
 import { criarLeitorDeSinais, type LeitorDeSinais } from "./server/sinais-do-site-leitor.ts";
 import { prepararAssistente, type Assistente } from "./server/assistente.ts";
 import { prepararConsultaAoHermes } from "./server/hermes-consulta.ts";
+import { montarLeituraComercial } from "./server/leitura-comercial.ts";
 import { criarRotasDeFinancas, explicacaoIaLigada, iniciarLeituraDiaria, prepararFinancas, type EstadoDasFinancas } from "./server/financas/rotas.ts";
 import { FinancasIndisponiveis } from "./server/financas/banco.ts";
 import { anotarGasto, depoisDeEscrever } from "./server/financas/servico.ts";
@@ -439,6 +440,9 @@ async function startServer() {
         return {...l,atendimentoComercial:bloqueio ? {id:p.id,tipo:'handoff',titulo:'Conferir atendimento com Rômulo',motivo:bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash} : {id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,alvo:p.alvo,texto:p.texto ?? p.orientacao,estado:p.estado,contextoHash:p.contextoHash}};
       }))};
     };
+    montarLeituraComercial(app, {visao:visaoAtendimento,
+      bloqueioConversa:(lead,leads)=>crm.bloqueioDaConversa(lead,leads),
+      origemCentral:(process.env.SQUADONE_ORIGEM_CENTRAL ?? '').trim() || undefined});
     // Só leitura sob o mesmo porteiro das APIs da Central; sem identidade/contatos na resposta.
     app.get('/api/operations/crm/atendimento/cobertura', async (_req,res) => {
       res.set('Cache-Control','no-store');
@@ -503,7 +507,7 @@ async function startServer() {
       ai,
       criarHermes: ({ tetoDia }) => prepararConsultaAoHermes(process.env, operationsDataDir, { tetoDia }),
       fontes: {
-        visao: () => crm.visao(),
+        visao: visaoAtendimento,
         roster: readRoster,
         conversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas),
         agenda: readAgenda,

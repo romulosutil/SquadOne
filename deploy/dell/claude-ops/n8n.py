@@ -2,6 +2,10 @@
 
 A chave de operações fica em ~/.config/claude-ops/n8n-api-key (600). O Hermes
 usa outra chave, só de leitura: ele é o secretário, não o operador.
+
+workflow-operacao.json é uma pausa reversível no cliente Python: reserva
+ID/nome e histórico sem mudar o grafo. UI e API administrativa direta do n8n
+não passam por esta guarda; ela não é uma ACL universal.
 """
 import json
 import urllib.error
@@ -89,6 +93,21 @@ def preparar_simplificacao_se_configurado(body):
 
 
 def api(method, path, body=None):
+    method = method.upper()
+    # A política opt-in é relida antes de hooks e rede: configuração inválida
+    # nunca permite uma mutação parcial. GET continua disponível para diagnóstico.
+    if method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+        operacao = Path.home() / '.config/claude-ops/workflow-operacao.json'
+        if operacao.exists():
+            from workflow_operacao import conferir_pedido, validar_config
+            try:
+                config_operacao = validar_config(json.loads(operacao.read_text(encoding='utf-8')))
+            except (ValueError, UnicodeError) as erro:
+                raise ValueError('Configuração de operação ilegível; nenhuma mutação realizada.') from erro
+            bloqueio = conferir_pedido(method, path, body, config=config_operacao)
+            if bloqueio is not None:
+                print('Ativação pausada pela política operacional:', bloqueio['motivo'])
+                return bloqueio
     partes = path.strip("/").split("/")
     if method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
         from workflow_confiabilidade import preparar

@@ -44,3 +44,7 @@ Central respondeu normalmente após a publicação. Nenhum arquivo de servidor, 
 ## Complemento — identificação dos coletores concluída
 
 O lote seguinte publicou prova operacional por captura Hermes/Evolution e reconciliação independente dos envelopes, conservando o histórico.174 respostas antigas foram incluídas como revisão interna, sem atribuição retroativa de identidade. Aceite e limites em [identidade da captura](PRUMO-IDENTIDADE-CAPTURA-HERMES-2026-10-24.md). Índice completo, redução das quatro leituras e os demais itens abertos da Fase4 continuam separados desta correção.
+
+## Continuidade — Fase 4B
+
+A [operação assistida da Fase 4B](PRUMO-OPERACAO-ASSISTIDA-FASE4B-2026-10-24.md) retira a decisão duplicada do acompanhamento legado durante o piloto, protege sua pausa nos publicadores e dá ao secretário Hermes uma consulta à projeção atual da Central. A homologação foi concluída; o documento registra a implantação e seus limites separadamente. Não há cache novo, fusão de webhooks ou alteração da cena do escritório.

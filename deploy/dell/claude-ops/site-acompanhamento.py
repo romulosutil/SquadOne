@@ -48,6 +48,10 @@ Uso: python3 site-acompanhamento.py              publica e ativa somente 05; pre
      python3 site-acompanhamento.py --testar-regra   a regra da pausa no node, sem n8n nem planilha
      python3 site-acompanhamento.py --simular    cópia do 06 com as abas reais: o que pausaria, sem gravar nada
      python3 site-acompanhamento.py --resumo-backlog [--enviar]   o resumo do acervo (--enviar põe na fila)
+
+Pausa operacional opt-in: n8n.py consulta workflow-operacao.json antes da
+publicação/ativação. O conteúdo e histórico do 05 são preservados; este script
+não remove a pausa nem afirma ativação quando a política a recusou.
 """
 import copy
 import importlib.util
@@ -416,8 +420,9 @@ def funil(erro):
 
 def publicar(wf):
     wid = sv.criar_ou_trocar(wf)
-    api("POST", f"/workflows/{wid}/activate")
-    print(wf["name"], "->", wid, f"({len(wf['nodes'])} nós, ativo)")
+    resultado = api("POST", f"/workflows/{wid}/activate")
+    estado = 'pausado pela política operacional' if resultado.get('desligado') else 'ativo' if resultado.get('active') is True else 'ativação sem confirmação'
+    print(wf["name"], "->", wid, f"({len(wf['nodes'])} nós, {estado})")
     return wid
 
 
