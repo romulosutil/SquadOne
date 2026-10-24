@@ -194,6 +194,7 @@ const PERGUNTA_DEPOIS_DO_LINK: Record<CrmProduto, (empresa: string) => string> =
 
 /** Um dia depois da 2ª mensagem (link, demo ou Raio-X) sem resposta dele: perguntar o que achou. */
 function acaoDepoisDoLink(lead: CrmLead, agora: number | undefined): AcaoDeVenda | null {
+  if (temQualificacaoComercial(lead, agora)) return null
   if (agora === undefined || lead.etapa !== 'contato' || !lead.links.whatsapp) return null
   if (lead.proximoPasso?.data && lead.proximoPasso.data > new Date(agora - 3 * 3600_000).toISOString().slice(0, 10)) return null
   const segunda = Date.parse(lead.marcos.segundaEnviada ?? '')
@@ -287,7 +288,7 @@ function acaoMandarProposta(lead: CrmLead, momento?: MomentoDaVenda): AcaoDeVend
 }
 
 function acaoDaCadencia(lead: CrmLead, ctx: ContextoDaVenda): AcaoDeVenda | null {
-  if (cicloDoLead(lead, ctx.agora).historico.length) return null
+  if (temQualificacaoComercial(lead, ctx.agora) || cicloDoLead(lead, ctx.agora).historico.length) return null
   if (ctx.agora === undefined) return null
   const c = cadenciaDoLead(lead, ctx.agora)
   if (!c || (c.estado !== 'tocar' && c.estado !== 'revisar')) return null
@@ -599,14 +600,15 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
   if (!visao) return []
   const elegiveis = (ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads)
     .filter((l) => !contatoPausado(l))
-  const revisoes = elegiveis.filter((l) => l.revisaoComercial)
-  const leads = elegiveis.filter((l) => !l.revisaoComercial)
+  const revisaoDeQualificacao = (l: CrmLead) => { const q = qualificacaoComercialAtual(l, ctx.agora); return q?.intencao === 'sem-interesse' || q?.adequacao.estado === 'inadequada' }
+  const revisoes = elegiveis.filter((l) => l.revisaoComercial || revisaoDeQualificacao(l))
+  const leads = elegiveis.filter((l) => !l.revisaoComercial && !revisaoDeQualificacao(l))
   const porId = new Map(leads.map((l) => [l.id, l] as [string, CrmLead]))
   const grupos = new Map(visao.hoje.map((g) => [g.id, g] as [CrmGrupoHojeId, CrmGrupoHoje]))
   const fila: AcaoDeVenda[] = revisoes.map((l) => ({
     chave: `${l.id}|revisao`, leadId: l.id, empresa: l.empresa, produto: l.produto, tipo: 'combinado',
-    titulo: 'Revisar o contexto antes de encerrar ou retomar', porque: l.revisaoComercial!,
-    tatica: 'Confira o último combinado e salve espera, próximo passo ou encerramento. A revisão não envia mensagem.',
+    titulo: revisaoDeQualificacao(l) ? 'Revisar a qualificação sem retomar contato' : 'Revisar o contexto antes de encerrar ou retomar', porque: l.revisaoComercial ?? 'A revisão humana informa desinteresse ou oferta inadequada. Isso suspende as sugestões antigas de retomada.',
+    tatica: revisaoDeQualificacao(l) ? 'Confira a revisão e registre o encaminhamento interno. Não insistir nem enviar outra oferta por este cartão.' : 'Confira o último combinado e salve espera, próximo passo ou encerramento. A revisão não envia mensagem.',
     contexto: 'Revisão comercial', primeiroContato: false, quente: false, conferirHistorico: true, revisao: true,
   }))
   fila.push(...leads.flatMap(l => { const a = acaoDaCadencia(l, ctx); return a ? [a] : [] }))

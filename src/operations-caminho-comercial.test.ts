@@ -24,3 +24,13 @@ test('preço neutro sem classificação nova também chega ao humano, robô e ne
 test('qualificação negativa ou inadequada não vira recomendação de preparar proposta',()=>{
  for(const caso of ['sem-interesse','inadequada']) {const l=lead();l.qualificacaoComercial={...qualificacaoComercialVazia(agora),id:'q-002',fonte:'WhatsApp',evidencia:'Agora não.',intencao:caso==='sem-interesse'?'sem-interesse':'avaliar',adequacao:{estado:caso==='inadequada'?'inadequada':'pendente',oferta:'',motivo:'Não atende'}};assert.equal(filaDeVenda({leads:[l],hoje:[]},{primeiroLiberado:false,agora}).some(a=>/Prepare a proposta|conduza a negociação|pedido de preço/.test(a.titulo)),false)}
 })
+
+test('revisão humana negativa bloqueia todos os caminhos legados de retomada, não só proposta',()=>{
+ for(const caso of ['sem-interesse','inadequada']) {
+  const l=lead();l.qualificacaoComercial={...qualificacaoComercialVazia(agora),id:'q-negativa',fonte:'WhatsApp',evidencia:'Não é para mim.',intencao:caso==='sem-interesse'?'sem-interesse':'avaliar',adequacao:{estado:caso==='inadequada'?'inadequada':'pendente',oferta:'',motivo:'Não atende'}}
+  l.proposta={em:'2026-10-21T15:00:00Z',data:'2026-10-21'};l.marcos.segundaEnviada='2026-10-21T14:00:00Z'
+  const fila=filaDeVenda({leads:[l],hoje:[{id:'resposta',titulo:'',explicacao:'',itens:[{leadId:l.id,acao:'Responder',detalhe:'',ordem:0,links:[]}]}]},{primeiroLiberado:false,agora})
+  assert.equal(fila.length,1);assert.match(fila[0].titulo,/sem retomar contato/);assert.equal(fila[0].revisao,true)
+  assert.equal(fila[0].link,undefined);assert.equal(fila[0].rascunho,undefined);assert.equal(fila[0].anota,undefined)
+ }
+})
