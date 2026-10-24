@@ -1,3 +1,5 @@
+import { temQualificacaoComercial, lacunasDaQualificacaoComercial, qualificadoComercialmenteParaProposta, type EntradaQualificacaoComercial } from './qualificacao-comercial'
+
 /** Qualificação confirmada pelo operador. Sugestões do copiloto têm outro contrato e nunca entram aqui. */
 export interface Spiced {
   situacao: string
@@ -53,13 +55,15 @@ export function lerRegistroSpiced(texto: unknown): Spiced | null {
   try { return lerSpiced(JSON.parse(texto)) } catch { return null }
 }
 
-type LeadQualificado = { spiced?: Spiced }
+type LeadQualificado = EntradaQualificacaoComercial & { spiced?: Spiced }
 
-export function lacunasDoSpiced(lead: LeadQualificado): string[] {
+export function lacunasDoSpiced(lead: LeadQualificado, agora = Date.now()): string[] {
+  if (temQualificacaoComercial(lead,agora)) return lacunasDaQualificacaoComercial(lead,agora)
   const s = lerSpiced(lead.spiced)
   return [!s?.dor && 'dor', !s?.impacto && 'impacto', s?.decisao.decisor_confirmado !== 'sim' && 'decisor confirmado'].filter((v): v is string => Boolean(v))
 }
 
-export function qualificadoParaProposta(lead: LeadQualificado): boolean {
-  return lacunasDoSpiced(lead).length === 0
+export function qualificadoParaProposta(lead: LeadQualificado, agora = Date.now()): boolean {
+  if (temQualificacaoComercial(lead,agora)) return qualificadoComercialmenteParaProposta(lead,agora)
+  return lacunasDoSpiced(lead,agora).length === 0
 }

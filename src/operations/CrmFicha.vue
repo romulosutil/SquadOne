@@ -4,6 +4,9 @@ import CrmJornada from './CrmJornada.vue'
 import CrmAprendizado from './CrmAprendizado.vue'
 import CrmSpiced from './CrmSpiced.vue'
 import CrmReceita from './CrmReceita.vue'
+import CrmCicloComercial from './CrmCicloComercial.vue'
+import { temQualificacaoComercial } from './qualificacao-comercial'
+import { cicloDoLead } from './ciclo-comercial'
 import CrmConfirmarPasso from './CrmConfirmarPasso.vue'
 import CrmHistorico from './CrmHistorico.vue'
 import { planoDoLead } from './bi-operacao'
@@ -559,8 +562,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       </p>
     </header>
 
-    <CrmSpiced :lead="lead" :disponivel="disponivel" :sugestao="lida?.spiced" @registrado="emit('registrado')" />
-    <CrmReceita :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
+
 
     <CrmRevisarClassificacao v-if="lead.revisaoComercial || lead.etapa === 'perdido' || lead.etapa === 'ganho'" :key="lead.id" :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
 
@@ -674,6 +676,16 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       </details>
     </div>
 
+    <CrmSpiced :lead="lead" :disponivel="disponivel" :sugestao="lida?.spiced" @registrado="emit('registrado')" />
+    <details class="crm-ficha__secao dobra" :open="cicloDoLead(lead).historico.length > 0">
+      <summary>Proposta, contrato e pagamento</summary>
+      <CrmCicloComercial :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
+    </details>
+    <details class="crm-ficha__secao dobra"><summary>Receita e registros anteriores</summary>
+      <CrmReceita :lead="lead" :disponivel="disponivel && !cicloDoLead(lead).historico.length" @registrado="emit('registrado')" />
+      <p v-if="cicloDoLead(lead).historico.length" class="crm-muted">Novos recebimentos e correções desta negociação são registrados no caminho comercial acima.</p>
+    </details>
+
     <CrmRetomadasRevisadas :leads="[lead]" />
 
     <section class="crm-ficha__secao" aria-label="Significado da resposta">
@@ -731,7 +743,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       <ul v-if="desfecho.marcados.length" class="crm-ficha__marcados">
         <li v-for="m in desfecho.marcados" :key="m.id">
           <span>{{ m.texto }}</span>
-          <button v-if="m.desfazer" class="botao botao--leve" type="button" :disabled="!disponivel || salvando !== null" @click="marcarDesfecho(m.desfazer.tipo)">
+          <button v-if="m.desfazer && !(m.desfazer.tipo === 'proposta_desfeita' && cicloDoLead(lead).historico.length)" class="botao botao--leve" type="button" :disabled="!disponivel || salvando !== null" @click="marcarDesfecho(m.desfazer.tipo)">
             {{ salvando === m.desfazer.tipo ? 'Desfazendo…' : m.desfazer.rotulo }}
           </button>
         </li>
@@ -741,7 +753,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
           {{ salvando === 'ganhou' ? 'Marcando…' : confirmandoGanho ? `Confirmar o ganho: ${lead.empresa}` : 'Ganhou' }}
         </button>
         <button v-if="desfecho.perder" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="abrirEscolha('perda')">Perdeu</button>
-        <button v-if="desfecho.proposta" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="abrirEscolha('proposta')">Proposta enviada</button>
+        <button v-if="desfecho.proposta && !temQualificacaoComercial(lead) && !cicloDoLead(lead).historico.length" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="abrirEscolha('proposta')">Proposta enviada</button>
       </div>
       <p v-if="confirmandoGanho" class="crm-muted" role="status">Toque de novo para confirmar. O lead sai do funil como Ganho.</p>
       <div v-if="escolhendoPerda" class="crm-form" role="group" aria-labelledby="crm-ficha-perdeu">

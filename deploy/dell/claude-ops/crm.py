@@ -165,6 +165,8 @@ if (!['site', 'prumo', 'iris', 'estampa', 'plus'].includes(b.produto)) return re
 const id = txt(b.id, 200);
 if (!/^[A-Za-z0-9_-]{3,200}$/.test(id)) return recusa('Lead inválido.');
 if (!TIPOS.includes(b.tipo)) return recusa('Tipo de registro inválido.');
+// Notas estruturadas precisam chegar inteiras: nunca cortar um JSON até parecer outro fato.
+if (b.tipo === 'nota' && (typeof b.texto !== 'string' || b.texto.length > 1000)) return recusa('Nota deve ser texto de até 1000 caracteres; nada foi cortado ou gravado.');
 let texto = txt(b.texto, 1000);
 let data = txt(b.data, 10);
 const AARR = ['valor_proposta','pagamento_confirmado','receita_desfeita','origem','motivo_perda','retencao_3m','indicacao_pedida','indicacao_recebida'];

@@ -213,7 +213,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
     .map((o) => ({ fala: o.fala, respostaPronta: preencher(o.resposta.texto, lead) }))
   const historico = [...lead.eventos]
     // Confirmações comerciais ficam na Ficha. Valores, quantidades e referências de recibo nunca vão ao modelo.
-    .filter(e => !ehTipoAarr(e.tipo))
+    .filter(e => !ehTipoAarr(e.tipo) && !(e.registroTexto ?? e.texto ?? '').startsWith('[ciclo-comercial-v1]') && !(e.registroTexto ?? e.texto ?? '').startsWith('[qualificacao-comercial-v1]'))
     .sort((a, b) => a.em.localeCompare(b.em))
     .slice(-MAX_EVENTOS_NO_DOSSIE)
     .map((e) => ({ em: e.em, oQue: e.rotulo, ...(e.texto ? { texto: corta(textoParaOModelo(e.texto, mascarar), MAX_TEXTO_DE_EVENTO) } : {}) }))

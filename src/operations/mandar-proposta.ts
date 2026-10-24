@@ -23,6 +23,7 @@ import type { SugestaoDoCopiloto } from './copiloto'
 import { funilDoLead, passoAtual, type LeadDaJornada } from './jornada'
 import { pedeMaterial } from './marcadores-da-conversa'
 import type { CrmLead } from './types'
+import { temQualificacaoComercial } from './qualificacao-comercial'
 import { qualificadoParaProposta } from './spiced'
 import { textoDasFaixasIris, PRECOS_CANONICOS_IRIS } from './precos-iris'
 
@@ -177,6 +178,8 @@ export function soPrecosDoCardapio(texto: string, funil?: string): boolean {
  * Iris e estamparias recebem rascunho com condições por completar, sem valores de outro produto.
  */
 export function propostaDeUmToque(lead: LeadDaProposta, sugestao?: Pick<SugestaoDoCopiloto, 'proposta'> | null): PropostaDeUmToque | null {
+  // A negociação estruturada tem sua própria versão/valores revisados; não repor preço do catálogo.
+  if (temQualificacaoComercial(lead)) return null
   if (!cabeProposta(lead)) return null
   const funil = funilDoLead(lead)
   const doCopiloto = sugestao && (funil === 'site' || funil === 'prumo') ? rascunhoDaProposta(lead.empresa, sugestao) : ''

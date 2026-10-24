@@ -647,9 +647,9 @@ export function createOperationsRouter(options: {
   // Também a anotação da Próxima venda (/crm/venda/anotar): o mesmo POST à aba CRM, a mesma resposta.
   function responderErroDoRegistro(res: express.Response, error: unknown) {
     if (error instanceof RegistroInvalido) {
-      res.status(400).json({ error: error.message });
+      res.status(400).json({ error: error.message, ...(error.naoEnviado ? { naoEnviado: true } : {}) });
     } else if (error instanceof RegistroIndisponivel) {
-      res.status(503).json({ error: error.message, configuracao: true });
+      res.status(503).json({ error: error.message, configuracao: true, naoEnviado: true });
     } else if (error instanceof RegistroFalhou) {
       console.warn(`[operations] Registro do CRM recusado pelo n8n (${error.status ?? "sem resposta"}): ${error.message}`);
       res.status(502).json({ error: error.message, n8nFalhou: true });

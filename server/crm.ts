@@ -1,4 +1,9 @@
 import fs from "node:fs/promises";
+import { PREFIXO_QUALIFICACAO_COMERCIAL, lerNotaQualificacaoComercial, textoDaQualificacaoComercial, projetarQualificacaoComercial, qualificacaoComercialAtual, temQualificacaoComercial, type QualificacaoComercial } from '../src/operations/qualificacao-comercial.ts';
+import { PREFIXO_CICLO, lerEventoCiclo, textoEventoCiclo, cicloDoLead } from '../src/operations/ciclo-comercial.ts';
+import { RegistroComercialDuravel, hashCanonicoComercial, type ChaveComercial, type FatoComercialNaFonte } from './registro-comercial-duravel.ts';
+import { validarTransicaoDoCicloComercial } from './ciclo-comercial.ts';
+import { qualificadoParaProposta } from '../src/operations/spiced.ts';
 import { lerRegistroSpiced, type Spiced } from '../src/operations/spiced.ts';
 import { cadenciaDoLead, cadenciaJaConfirmada, lerRegistroCadencia } from '../src/operations/cadencia.ts';
 import { lerRegistroFollowup } from '../src/operations/followup-experimento.ts';
@@ -105,6 +110,7 @@ export const MINUTOS_ATE_RETRATO_VELHO = 30;
 /** Pastas mudam de lugar pelo site-pastas depois do Balcão (de hora em hora): folga antes de chamar de divergência. */
 const FOLGA_DAS_PASTAS_MS = 2 * 60 * 60 * 1000;
 
+const ehNotaComercial = (v: unknown): v is string => typeof v === 'string' && (v.startsWith(PREFIXO_CICLO) || v.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL));
 const DIA_MS = 24 * 60 * 60 * 1000;
 const FUSO_SP_MS = 3 * 60 * 60 * 1000; // São Paulo sem horário de verão desde 2019
 
@@ -333,7 +339,7 @@ export function elegiveisDaColuna(valor: string): string | undefined {
 /** Acesso tolerante: cabeçalho renomeado, com acento ou ausente não derruba nada. */
 function leitor<T extends Record<string, Coluna>>(colunas: T, linha: Record<string, unknown>) {
   const porNome = new Map<string, string>();
-  for (const [chave, valor] of Object.entries(linha)) porNome.set(normalizarCabecalho(chave), texto(valor));
+  for (const [chave, valor] of Object.entries(linha)) porNome.set(normalizarCabecalho(chave), normalizarCabecalho(chave) === 'texto' && ehNotaComercial(valor) ? valor : texto(valor));
   return (campo: keyof T): string => {
     for (const nome of colunas[campo].nomes) {
       const valor = porNome.get(nome);
@@ -393,7 +399,7 @@ function lerFonte(valor: unknown, nome: string): CrmFonte {
     .map((linha) => {
       const spiced = Object.entries(linha).some(([k, v]) => normalizarCabecalho(k) === 'tipo' && v === 'spiced');
       return Object.fromEntries(Object.entries(linha).slice(0, 80).map(([k, v]) => [texto(k, 80),
-        spiced && normalizarCabecalho(k) === 'texto' && !lerRegistroSpiced(v) ? '' : texto(v)]));
+        normalizarCabecalho(k) === 'texto' && ehNotaComercial(v) ? v : spiced && normalizarCabecalho(k) === 'texto' && !lerRegistroSpiced(v) ? '' : texto(v)]));
     });
   const colunas = Array.isArray(bruto.colunas)
     ? bruto.colunas.filter((c): c is string => typeof c === "string").map((c) => texto(c, 80))
@@ -586,6 +592,7 @@ export interface CrmLead {
   proximoPasso?: { texto: string; data: string; registradoEm: string };
   proposta?: { em: string; data: string };
   spiced?: Spiced;
+  qualificacaoComercial?: QualificacaoComercial;
   /** Site: o `site-demos-limpeza` apagou o projeto na Vercel; sem link de demo nem segunda mensagem até republicar. */
   demoApagadoEm?: string;
   /** Site, demo sob pedido (14/10/2026): o botão "Gerar demo" foi tocado e o gerador ainda não publicou. */
@@ -767,7 +774,7 @@ function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
     if (tipo === 'spiced' && !lerRegistroSpiced(c("texto"))) continue;
     if (tipo === 'cadencia_enviada' && !lerRegistroCadencia(c("texto"))) continue;
     if (ehTipoAarr(tipo) && !lerRegistroAarr(tipo, c("texto"))) continue;
-    lista.push({ em, tipo, texto: tipo === 'spiced' ? c("texto") : texto(c("texto"), 1000), data: c("data") });
+    lista.push({ em, tipo, texto: tipo === 'spiced' || ehNotaComercial(c("texto")) ? c("texto") : texto(c("texto"), 1000), data: c("data") });
     mapa.set(chave, lista);
   }
   for (const lista of mapa.values()) lista.sort((a, b) => a.em - b.em);
@@ -1028,8 +1035,10 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
     em: new Date(r.em).toISOString(),
     origem: "manual" as const,
     fonte: TIPOS_DE_ENVIO.has(r.tipo) ? "aba CRM (anotado ao tocar no link na Central)" : "aba CRM (registrado na Central)",
-    ...(['spiced', 'cadencia_enviada'].includes(r.tipo) || ehTipoAarr(r.tipo) || (r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto)) ? { registroTexto: r.texto } : {}),
+    ...((r.tipo === 'nota' && (r.texto.startsWith(PREFIXO_CICLO) || r.texto.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL))) || ['spiced', 'cadencia_enviada'].includes(r.tipo) || ehTipoAarr(r.tipo) || (r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto)) ? { registroTexto: r.texto } : {}),
     ...(ehTipoAarr(r.tipo) ? { texto: resumoDoRegistroAarr(r.tipo, lerRegistroAarr(r.tipo, r.texto)!) }
+      : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_CICLO) ? { texto: `Ciclo comercial: ${lerEventoCiclo(r.texto)?.tipo ?? 'registro inválido'}` }
+      : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL) ? { texto: 'Revisão humana da qualificação comercial.' }
       : r.tipo === 'spiced' ? { texto: 'Qualificação comercial confirmada pelo Rômulo.' }
       : r.tipo === 'cadencia_enviada' ? { texto: lerRegistroCadencia(r.texto)?.tipo === 'conversa' ? 'Retomada da conversa confirmada.' : lerRegistroCadencia(r.texto)?.degrau === 'dia-3' ? 'Último retorno da proposta confirmado.' : 'Primeiro retorno da proposta confirmado.' }
       : r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto) ? { texto: 'Follow-up confirmado pelo Rômulo.' }
@@ -2111,6 +2120,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   // planilha já trazia uma, para a ficha não mostrar dois números.
   const taxas = taxasDeInteressePorNicho(leads, agora);
   for (const lead of leads) {
+    lead.qualificacaoComercial = projetarQualificacaoComercial(lead, agora);
     const confirmados = (registros.get(lead.id) ?? []).filter(r => r.tipo === 'spiced' && r.em <= agora);
     for (const r of confirmados) {
       const s = lerRegistroSpiced(r.texto);
@@ -2174,7 +2184,8 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
       delete lead.motivoPerda; delete lead.perdaManual; delete lead.ganhoManual; delete lead.diasParaSair;
       lead.followupHoje = false; lead.respostaNova = false; delete lead.interesseParado;
     }
-    const cadencia = cadenciaDoLead(lead, agora);
+    const ciclo = cicloDoLead(lead, agora);
+    const cadencia = ciclo.historico.length ? undefined : cadenciaDoLead(lead, agora);
     if (cadencia?.estado === 'expirar') {
       lead.etapa = 'perdido'; lead.sinal = 'esfriou'; lead.motivoPerda = 'proposta-sem-retorno';
       lead.subEtapa = 'Proposta sem retorno'; lead.desde = new Date(cadencia.base + 10 * DIA_MS).toISOString();
@@ -2186,6 +2197,17 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
       lead.respostaNova = false;
       lead.followupHoje = false;
       delete lead.interesseParado;
+    }
+    if (ciclo.envios.length && !lead.perdaManual && !['recusou','recusou-pasta','sem-interesse','descartado'].includes(lead.sinal) && !['negativa','exclusao'].includes(lead.resposta?.tipo ?? '')) {
+      const envio = ciclo.envios.at(-1)!;
+      const em = lead.eventos.find(e => lerEventoCiclo(e.registroTexto ?? e.texto ?? '', agora)?.id === envio.id)?.em ?? `${envio.data}T12:00:00-03:00`;
+      lead.proposta = { em, data: envio.data };
+      if (lead.etapa !== 'ganho') {
+        lead.etapa = 'proposta'; lead.sinal = 'proposta';
+        lead.subEtapa = ciclo.recebido ? 'Recebimento confirmado · confira saldo e entrega' : ciclo.aceites.length ? 'Aceite registrado · conferir cobrança e pagamento' : 'Proposta enviada · aguardando decisão';
+        delete lead.motivoPerda; delete lead.diasParaSair;
+      }
+      lead.followupHoje = false;
     }
     contagens[lead.etapa].total += 1;
     contagens[lead.etapa][lead.produto] += 1;
@@ -2239,7 +2261,7 @@ export interface CrmRegistroEntrada {
 }
 
 export class RegistroInvalido extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly naoEnviado = true) {
     super(message);
     this.name = "RegistroInvalido";
   }
@@ -2280,7 +2302,14 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   const aarr = ehTipoAarr(tipo) ? lerRegistroAarr(tipo, corpo.texto, agora.getTime()) : undefined;
   if (ehTipoAarr(tipo) && (!aarr || !registroCompativelComLead({ produto, ...(produto === 'plus' ? { plus: undefined } : {}) }, aarr) && produto !== 'plus')) throw new RegistroInvalido('Registro comercial inválido: confira catálogo, referência e datas reais até hoje.');
   // Texto vai como está: o n8n grava com cellFormat RAW, então "=..." fica texto e nunca vira fórmula.
-  const textoSeguro = aarr ? JSON.stringify(aarr) : tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : tipo === 'cadencia_enviada' ? JSON.stringify(lerRegistroCadencia(corpo.texto)) : bruto;
+  let estruturada: string | undefined;
+  if (tipo === 'nota' && typeof corpo.texto === 'string' && (corpo.texto.trim().startsWith('[ciclo-comercial-v1]') || corpo.texto.trim().startsWith('[qualificacao-comercial-v1]'))) {
+    const ciclo = lerEventoCiclo(corpo.texto, agora.getTime());
+    const q = lerNotaQualificacaoComercial(corpo.texto, agora.getTime());
+    if (!ciclo && !q) throw new RegistroInvalido('Nota comercial inválida: confira campos, confirmação humana e datas reais.');
+    estruturada = ciclo ? textoEventoCiclo(ciclo, agora.getTime()) : textoDaQualificacaoComercial(q!, agora.getTime());
+  }
+  const textoSeguro = estruturada ?? (aarr ? JSON.stringify(aarr) : tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : tipo === 'cadencia_enviada' ? JSON.stringify(lerRegistroCadencia(corpo.texto)) : bruto);
   if (tipo === "nota" && !textoSeguro) throw new RegistroInvalido("Escreva a nota.");
   let data = typeof corpo.data === "string" ? corpo.data.trim() : "";
   if (aarr) data = 'data' in aarr ? aarr.data : '';
@@ -2302,6 +2331,7 @@ export interface ConfigDoCrm {
   entregasPrumo?: string;
   /** A pasta das conversas que o observador grava (WHATSAPP_CONVERSAS_DIR); ausente = a visão sem conversa. */
   conversas?: string;
+  journalComercial?: string;
 }
 
 function ehLoopback(url: URL): boolean {
@@ -2432,6 +2462,7 @@ export interface RespostaDoRegistro {
   em: string;
   /** O mesmo envio já tinha sido anotado há menos de JANELA_DE_REPETICAO_MS: nada foi gravado de novo. */
   repetido?: true;
+  estado?: 'aguardando_projecao' | 'projetado';
 }
 
 /** Em contato e já falou com a gente: onde a 2ª mensagem faz sentido (o mesmo critério do cálculo). */
@@ -2475,9 +2506,18 @@ export function envioRecenteNoLead(lead: Pick<CrmLead, "eventos">, tipo: CrmTipo
   return lead.eventos.find((e) => e.tipo === tipo && e.origem === "manual" && Math.abs(agora - Date.parse(e.em)) < JANELA_DE_REPETICAO_MS)?.em;
 }
 
+function chaveComercialDoRegistro(registro: { tipo: string; texto: string }, oportunidade: string, agora: number, ocorrencia = 0): ChaveComercial | undefined {
+  const ciclo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora) : null;
+  const q = registro.tipo === 'nota' ? lerNotaQualificacaoComercial(registro.texto, agora) : null;
+  const aarr = ehTipoAarr(registro.tipo) ? lerRegistroAarr(registro.tipo, registro.texto, agora) : null;
+  if (!ciclo && !q && !aarr) return undefined;
+  const hash = hashCanonicoComercial(ciclo ?? q ?? { tipo: registro.tipo, registro: aarr });
+  return { oportunidade, id: ciclo?.id ?? q?.id ?? `legado-${hash}-${ocorrencia}`, hash };
+}
+
 export class CrmStore {
   private readonly aarrEmCurso = new Map<string, Promise<RespostaDoRegistro>>();
-  private readonly aarrConfirmados = new Map<string, CrmEvento[]>();
+  private readonly journalComercial: RegistroComercialDuravel;
   private readonly cadenciasConfirmadas = new Map<string, Promise<RespostaDoRegistro>>();
   /**
    * Envios anotados por este processo há pouco, por produto:id:tipo. O retrato leva segundos para
@@ -2492,7 +2532,9 @@ export class CrmStore {
    */
   sinaisDoSite?: () => ReadonlyMap<string, { url: string; sinais: SinaisDoSite }>;
 
-  constructor(readonly config: ConfigDoCrm, private readonly fetcher: typeof fetch = fetch) {}
+  constructor(readonly config: ConfigDoCrm, private readonly fetcher: typeof fetch = fetch) {
+    this.journalComercial = new RegistroComercialDuravel(config.journalComercial ?? path.join(path.dirname(config.retrato), 'crm-registro-comercial-journal.json'));
+  }
 
   private async segredo(): Promise<string | undefined> {
     if (!this.config.segredoArquivo) return undefined;
@@ -2615,7 +2657,7 @@ export class CrmStore {
    */
   async registrar(entrada: unknown, agora = new Date()): Promise<RespostaDoRegistro> {
     const registro = validarRegistro(entrada, agora);
-    if (ehTipoAarr(registro.tipo)) {
+    if (ehTipoAarr(registro.tipo) || registro.tipo === 'nota' && ehNotaComercial(registro.texto)) {
       // Serializar por lead protege dois cliques/abas, inclusive desfazer e corrigir em sequência.
       const chave = `${registro.produto}:${registro.id}`;
       const anterior = this.aarrEmCurso.get(chave);
@@ -2662,9 +2704,20 @@ export class CrmStore {
     const visao = await this.visao(agora);
     const lead = visao.leads.find((item) => item.id === `${registro.produto}:${registro.id}`);
     if (!lead) throw new RegistroInvalido("Lead não encontrado no retrato atual do CRM.");
+    const cicloNovo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora.getTime()) : null;
+    if (cicloNovo) {
+      try {
+        const transicao = validarTransicaoDoCicloComercial(lead, cicloNovo, agora);
+        if (transicao !== 'duplicado' && ['proposta_enviada', 'aceite'].includes(cicloNovo.tipo)) {
+          if (!qualificadoParaProposta(lead, agora.getTime())) throw new Error('Complete a qualificação confirmada antes do envio final ou aceite.');
+          const proposta = cicloDoLead(lead, agora.getTime()).propostas.find(p => p.id === cicloNovo.vinculo);
+          const q = qualificacaoComercialAtual(lead, agora.getTime());
+          if (temQualificacaoComercial(lead, agora.getTime()) && q?.adequacao.oferta !== proposta?.ofertaId) throw new Error('A oferta da proposta deve corresponder à qualificação aprovada.');
+        }
+      } catch (erro) { throw new RegistroInvalido(erro instanceof Error ? erro.message : 'Transição comercial inválida.'); }
+    }
     if (ehTipoAarr(registro.tipo)) {
-      const confirmados = this.aarrConfirmados.get(lead.id) ?? [];
-      lead.eventos = [...lead.eventos, ...confirmados.filter(c => !lead.eventos.some(e => e.tipo === c.tipo && e.em === c.em && (e.registroTexto ?? e.texto) === c.registroTexto))];
+      if (['valor_proposta','pagamento_confirmado','receita_desfeita'].includes(registro.tipo) && cicloDoLead(lead, agora.getTime()).historico.length) throw new RegistroInvalido('Esta negociação usa o ciclo comercial: registre recebimento ou correção no painel correspondente.');
       const meta = lerRegistroAarr(registro.tipo, registro.texto, agora.getTime())!;
       if (!registroCompativelComLead(lead, meta)) throw new RegistroInvalido('Essa condição não pertence à oferta deste lead.');
       const atual = aarrDoLead(lead, agora.getTime());
@@ -2707,6 +2760,7 @@ export class CrmStore {
     }
     if (registro.tipo === "plus_respondeu" && lead.etapa !== "contato") throw new RegistroInvalido("Só quem está Em contato pode ter respondido.");
     conferirEnvio(registro.tipo, lead);
+    if (['proposta','proposta_desfeita'].includes(registro.tipo) && (temQualificacaoComercial(lead, agora.getTime()) || cicloDoLead(lead, agora.getTime()).historico.length)) throw new RegistroInvalido('Esta negociação usa a proposta versionada: confirme envio ou correção no caminho comercial.');
     if (registro.tipo === "proposta" && lead.etapa === "proposta") throw new RegistroInvalido("Este lead já está em Proposta.");
     if (registro.tipo === "proposta_desfeita" && lead.etapa !== "proposta") throw new RegistroInvalido("Este lead não está em Proposta.");
     if (registro.tipo === "sem_contato" && (lead.etapa === "ganho" || lead.etapa === "perdido")) throw new RegistroInvalido("Este lead já está encerrado.");
@@ -2720,6 +2774,29 @@ export class CrmStore {
     }
     const segredo = await this.segredo();
     if (!this.config.registroUrl || !segredo) throw new RegistroIndisponivel((await this.disponibilidade()).motivo ?? "Registro indisponível.");
+    let chaveComercial = chaveComercialDoRegistro(registro, lead.id, agora.getTime());
+    if (chaveComercial && ehTipoAarr(registro.tipo)) {
+      const ocorrencias = lead.eventos.filter(e => e.origem === 'manual' && chaveComercialDoRegistro({tipo:e.tipo,texto:e.registroTexto ?? e.texto ?? ''},lead.id,agora.getTime())?.hash === chaveComercial!.hash).length;
+      chaveComercial = chaveComercialDoRegistro(registro, lead.id, agora.getTime(), ocorrencias);
+    }
+    if (chaveComercial) {
+      const contagensLegadas = new Map<string, number>();
+      const fonte: FatoComercialNaFonte[] = [...lead.eventos].sort((a,b) => Date.parse(a.em) - Date.parse(b.em)).flatMap(e => {
+        if (e.origem !== 'manual' || !Number.isFinite(Date.parse(e.em)) || Date.parse(e.em) > agora.getTime()) return [];
+        let c = chaveComercialDoRegistro({ tipo: e.tipo, texto: e.registroTexto ?? e.texto ?? '' }, lead.id, agora.getTime());
+        if (c && ehTipoAarr(e.tipo)) { const n = contagensLegadas.get(c.hash) ?? 0; contagensLegadas.set(c.hash, n + 1); c = chaveComercialDoRegistro({ tipo:e.tipo, texto:e.registroTexto ?? e.texto ?? '' },lead.id,agora.getTime(),n); }
+        return c ? [{ ...c, em: e.em }] : [];
+      });
+      try {
+        await this.journalComercial.reconciliar({ origem: 'aba-crm', registros: fonte }, agora);
+        const reserva = await this.journalComercial.reservar({ ...chaveComercial, tentativaEm: agora.toISOString() });
+        if (!reserva.criada) {
+          if (reserva.registro.estado === 'pendente' || reserva.registro.estado === 'ambiguo') throw new Error('Gravação anterior sem confirmação. Aguarde a projeção na fonte antes de repetir.');
+          if (reserva.registro.estado === 'projetado' && !fonte.some(f => f.id === chaveComercial.id && f.hash === chaveComercial.hash)) throw new Error('O registro anterior está ausente da fonte atual. Confira o retrato antes de continuar.');
+          return { ok: true, em: reserva.registro.fonteEm ?? reserva.registro.ackEm ?? agora.toISOString(), repetido: true, estado: reserva.registro.estado };
+        }
+      } catch (erro) { throw new RegistroInvalido(erro instanceof Error ? erro.message : 'Gravação comercial bloqueada.', false); }
+    }
     let resposta: Response;
     try {
       resposta = await this.fetcher(this.config.registroUrl, {
@@ -2729,19 +2806,24 @@ export class CrmStore {
         signal: AbortSignal.timeout(20_000),
       });
     } catch {
-      throw new RegistroFalhou("O n8n não respondeu. Nada foi confirmado na planilha.", null);
+      if (chaveComercial) await this.journalComercial.marcarAmbiguo(chaveComercial);
+      throw new RegistroFalhou(chaveComercial ? 'O n8n não confirmou o resultado. Aguarde a fonte; não repita a operação.' : 'O n8n não respondeu. Nada foi confirmado na planilha.', null);
     }
     const corpo = await resposta.json().catch(() => ({})) as Record<string, unknown>;
+    if (chaveComercial && (!resposta.ok || corpo.ok !== true)) await this.journalComercial.marcarAmbiguo(chaveComercial);
     if (resposta.status === 401 || resposta.status === 403) throw new RegistroFalhou("O n8n recusou o segredo do registro.", resposta.status);
     if (resposta.status === 404) throw new RegistroFalhou("O fluxo 08 · CRM não está ativo no n8n.", resposta.status);
     if (!resposta.ok || corpo.ok !== true) {
       throw new RegistroFalhou(typeof corpo.erro === "string" ? corpo.erro.slice(0, 200) : `O n8n não gravou (HTTP ${resposta.status}).`, resposta.status);
     }
+    if (chaveComercial && (typeof corpo.em !== 'string' || !Number.isFinite(Date.parse(corpo.em)) || Date.parse(corpo.em) > agora.getTime() + 60_000)) {
+      await this.journalComercial.marcarAmbiguo(chaveComercial);
+      throw new RegistroFalhou('O retorno não trouxe uma confirmação datada válida. Aguarde a fonte antes de continuar.', resposta.status);
+    }
     const em = typeof corpo.em === "string" ? corpo.em : agora.toISOString();
-    if (ehTipoAarr(registro.tipo)) {
-      const recentes = this.aarrConfirmados.get(lead.id) ?? [];
-      recentes.push({ tipo: registro.tipo, em, texto: registro.texto, registroTexto: registro.texto, origem: 'manual', rotulo: 'Confirmado na aba CRM', fonte: 'aba CRM' });
-      this.aarrConfirmados.set(lead.id, recentes);
+    if (chaveComercial) {
+      await this.journalComercial.confirmar({ ...chaveComercial, em });
+      return { ok: true, em, estado: 'aguardando_projecao' };
     }
     return { ok: true, em };
   }

@@ -1,4 +1,5 @@
 /** AARRR comercial: confirmações humanas na aba CRM. Não lê Finanças nem infere receita de “ganhou”. */
+import { cicloDoLead, lerEventoCiclo, referenciaNormalCiclo } from './ciclo-comercial'
 import { mensalidadeIrisCentavos } from './precos-iris'
 import { dataRealDoSpiced, qualificadoParaProposta } from './spiced'
 import { pedeMaterial } from './marcadores-da-conversa'
@@ -16,7 +17,7 @@ export type MotivoPerdaAarr = typeof MOTIVOS_PERDA_AARR[number]
 /** `sem-origem` e `sem-motivo`: o registro não traz o dado. Nunca se infere o canal nem a razão da perda. */
 export type CanalAarr = OrigemAarr | 'sem-origem'
 export type MotivoAgregadoAarr = MotivoPerdaAarr | 'sem-motivo'
-export type OfertaReceita = 'encontrado' | 'respondido' | 'anuncios' | 'anuncios-duas' | 'redes' | 'fonte' | 'fonte-em-dia' | 'iris'
+export type OfertaReceita = 'encontrado' | 'respondido' | 'anuncios' | 'anuncios-duas' | 'redes' | 'fonte' | 'fonte-em-dia' | 'iris' | 'estampa' | 'pacote'
 export type ComponenteReceita = 'implantacao' | 'mensalidade' | 'parcela-1' | 'parcela-2'
 export interface OpcaoReceita {
   id: string; rotulo: string; oferta: OfertaReceita; componente: ComponenteReceita
@@ -149,6 +150,20 @@ export function aarrDoLead(lead: Pick<CrmLead, 'eventos' | 'produto'> & Partial<
       if (!lista.some(p => referenciaNormal(p.referencia) === referenciaNormal(indicacao.referencia))) lista.push({ ...indicacao, em: e.em })
     }
   }
+  // Valores humanos do ciclo são preservados; não passam pela tabela do legado.
+  const ciclo = cicloDoLead(lead, agora)
+  for (const p of ciclo.pagamentos) {
+    const evento = lead.eventos.find(e => lerEventoCiclo(e.registroTexto ?? e.texto, agora)?.id === p.id)
+    r.pagamentos.push({ versao: 1, oferta: p.ofertaId, componente: p.componente === 'mensal' ? 'mensalidade' : 'implantacao',
+      valor_centavos: p.valor, referencia: p.referencia, data: p.data, em: evento?.em ?? `${p.data}T12:00:00-03:00`, chave: `ciclo:${p.id}` })
+  }
+  // Só a versão enviada representa valor de proposta; rascunhos não entram no funil.
+  const enviadas = ciclo.propostas.filter(p => ciclo.envios.some(e => e.vinculo === p.id))
+    .filter(p => !ciclo.propostas.some(n => referenciaNormalCiclo(n.referencia) === referenciaNormalCiclo(p.referencia) && n.versao! > p.versao! && ciclo.envios.some(e => e.vinculo === n.id)))
+  for (const p of enviadas) for (const [componente, valor] of [['implantacao', p.valor], ['mensalidade', p.mensalidade]] as const) {
+    if (valor === undefined) continue
+    r.propostas.push({ versao: 1, oferta: p.ofertaId!, componente, valor_centavos: valor, referencia: `ciclo:${p.id}`, data: p.data, em: `${p.data}T12:00:00-03:00` })
+  }
   return r
 }
 export function resumoDoRegistroAarr(tipo: TipoAarr, v: RegistroAarr): string {
@@ -171,7 +186,7 @@ export function contratosMensais(lead: Pick<CrmLead, 'eventos' | 'produto'> & Pa
     const recibos = r.pagamentos.filter(p => p.oferta === oferta && p.componente === 'mensalidade').sort((a, b) => a.data.localeCompare(b.data))
     const inicio = recibos[0]!.data
     const retencao = r.retencoes.find(p => p.referencia === oferta && p.inicio === inicio)
-    return { referencia: oferta, oferta, inicio, terceiroMes: terceiroMes(inicio), valorCentavos: recibos.at(-1)!.valor_centavos, retencao }
+    return { referencia: oferta, oferta, inicio, terceiroMes: terceiroMes(inicio), valorCentavos: (() => { const ciclo = cicloDoLead(lead, agora); const p = ciclo.pagamentos.filter(p => p.ofertaId === oferta && p.componente === 'mensal').at(-1); return p ? ciclo.propostas.find(v => v.id === p.propostaId)!.mensalidade! : recibos.at(-1)!.valor_centavos })(), retencao }
   })
 }
 export interface LinhaDeCanal {

@@ -29,6 +29,9 @@
  * (decisão de 16/10/2026: semi-automático; a API não oficial ficou de fora pelo risco de banimento
  * do número que é também o do Hermes).
  */
+import { objecoesNoTexto } from './colinha'
+import { cicloDoLead } from './ciclo-comercial'
+import { temQualificacaoComercial, qualificacaoComercialAtual, proximaPerguntaQualificacao, devePassarAoRomulo } from './qualificacao-comercial'
 import { diaEmSP } from './retomadas'
 import { ultimaRespostaDeGente } from './resultados'
 import { proximoDaJornada } from './jornada'
@@ -227,6 +230,24 @@ function acaoDepoisDoLink(lead: CrmLead, agora: number | undefined): AcaoDeVenda
  */
 function acaoMandarProposta(lead: CrmLead, momento?: MomentoDaVenda): AcaoDeVenda | null {
   if (momento?.quem === 'recepcao' || momento?.quem === 'robo') return null
+  const qAtual = qualificacaoComercialAtual(lead)
+  if (qAtual?.intencao === 'sem-interesse' || qAtual?.adequacao.estado === 'inadequada') return null
+  const precoExplicito = !['bot','negativa','exclusao','licenca'].includes(lead.resposta?.tipo ?? '') && !['robo','recusa','exclusao'].includes(lead.classificacaoResposta?.classe ?? '') && objecoesNoTexto(lead.resposta?.trecho).some(o => o.id === 'quanto-custa')
+  if (precoExplicito && !['ganho','perdido'].includes(lead.etapa) && !['negativa','exclusao'].includes(lead.resposta?.tipo ?? '')) return {
+    chave: `${lead.id}|negociacao-humana`, leadId: lead.id, empresa: lead.empresa, produto: lead.produto, tipo: 'combinado',
+    titulo: `Rômulo: responda ao pedido de preço de ${lead.empresa}`, contexto: 'Pedido comercial explícito', porque: 'Pergunta de preço pede condução humana mesmo com lacunas de qualificação.',
+    tatica: 'Confira a conversa, confirme a oferta e o próximo passo. Prepare a proposta no caminho comercial com valores aprovados.', primeiroContato: false, quente: true }
+  if (temQualificacaoComercial(lead)) {
+    if (['ganho','perdido'].includes(lead.etapa) || ['negativa','exclusao'].includes(lead.resposta?.tipo ?? '')) return null
+    const pergunta = proximaPerguntaQualificacao(lead)
+    if (!pergunta && !qualificadoParaProposta(lead)) return null
+    const humana = devePassarAoRomulo(lead) || lead.classificacaoResposta?.classe === 'interesse'
+    return { chave: `${lead.id}|qualificacao-comercial`, leadId: lead.id, empresa: lead.empresa, produto: lead.produto,
+      tipo: 'combinado', titulo: humana ? `Rômulo: conduza a negociação de ${lead.empresa}` : pergunta ? `Complete a qualificação de ${lead.empresa}` : `Prepare a proposta de ${lead.empresa}`,
+      contexto: 'Qualificação comercial', porque: pergunta ? `Falta confirmar: ${pergunta.campo}.` : 'Necessidade, oferta, intenção, decisão e próximo passo conferidos.',
+      tatica: pergunta ? pergunta.texto : 'Abra o caminho comercial e prepare os valores e o escopo desta proposta para revisão.', primeiroContato: false, quente: humana }
+  }
+
   if (indicouInteresseDepoisDoLink(lead) && !qualificadoParaProposta(lead)) {
     const lacunas = lacunasDoSpiced(lead)
     const perguntas = [
@@ -266,6 +287,7 @@ function acaoMandarProposta(lead: CrmLead, momento?: MomentoDaVenda): AcaoDeVend
 }
 
 function acaoDaCadencia(lead: CrmLead, ctx: ContextoDaVenda): AcaoDeVenda | null {
+  if (cicloDoLead(lead, ctx.agora).historico.length) return null
   if (ctx.agora === undefined) return null
   const c = cadenciaDoLead(lead, ctx.agora)
   if (!c || (c.estado !== 'tocar' && c.estado !== 'revisar')) return null
@@ -606,6 +628,14 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     return a ? [a] : []
   })
   const propostas = leads.flatMap((l) => {
+    const ciclo = cicloDoLead(l, ctx.agora)
+    if (ciclo.historico.length && !['negativa','exclusao'].includes(l.resposta?.tipo ?? '') && !l.perdaManual) {
+      const pendente = ciclo.cobrancas.find(c => c.saldo > 0)
+      const titulo = ciclo.problemas.length ? 'Revise os registros comerciais' : pendente ? 'Confira o recebimento e o saldo da cobrança' : !ciclo.envios.length ? 'Revise a proposta antes de enviar' : !ciclo.aceites.length ? 'Acompanhe a decisão e registre o aceite com documento' : !ciclo.condicoes.length ? 'Defina a condição de cobrança contratada' : !ciclo.cobrancas.length ? 'Confira o gatilho antes de registrar a cobrança' : 'Confira a entrega e a próxima competência'
+      return [{ chave: `${l.id}|ciclo-comercial`, leadId: l.id, empresa: l.empresa, produto: l.produto, tipo: 'combinado' as const,
+        titulo, contexto: 'Proposta, contrato e pagamento', porque: pendente ? `Saldo: ${(pendente.saldo / 100).toLocaleString('pt-BR', {style:'currency',currency:'BRL'})}.` : 'Os marcos dependem de confirmação humana e fonte registrada.',
+        tatica: 'Abra o caminho comercial na ficha. Confira o documento e as condições antes de avançar.', primeiroContato: false, quente: !!pendente }]
+    }
     const a = acaoMandarProposta(l, ctx.sugestoes?.get(l.id)?.momento)
     return a ? [a] : []
   })

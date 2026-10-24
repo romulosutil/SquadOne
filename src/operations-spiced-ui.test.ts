@@ -11,7 +11,7 @@ import { spicedVazio } from './operations/spiced.ts'
 // Renderizador Vue em memória: sem navegador, disco de cliente ou serviço real.
 const arquivo = fileURLToPath(new URL('./operations/CrmSpiced.vue', import.meta.url))
 const { descriptor } = parse(await fs.readFile(arquivo, 'utf8'))
-const script = compileScript(descriptor, { id: 'spiced-ui-test', inlineTemplate: true })
+const script = compileScript(descriptor, { id: 'spiced-ui-test', inlineTemplate: true, templateOptions: { compilerOptions: { hoistStatic: false } } })
 const bundle = await build({ stdin: { contents: `${script.content}\nexport { createRenderer, nextTick } from 'vue'`, sourcefile: 'CrmSpiced.ts', resolveDir: path.dirname(arquivo), loader: 'ts' }, bundle: true, write: false, platform: 'node', format: 'esm', define: { 'process.env.NODE_ENV': '"test"' } })
 const pasta = await fs.mkdtemp(path.join(os.tmpdir(), 'spiced-ui-'))
 const modulo = path.join(pasta, 'componente.mjs')
@@ -20,7 +20,7 @@ const runtime = await import(pathToFileURL(modulo).href)
 const documentAnterior = globalThis.Document
 if (!documentAnterior) (globalThis as any).Document = class Document {}
 if (!globalThis.ShadowRoot) (globalThis as any).ShadowRoot = class ShadowRoot {}
-const novo = (type: string, text = '') => ({ type, text, tagName: type.toUpperCase(), children: [] as any[], props: {} as Record<string, any>, parent: null as any,
+const novo = (type: string, text = '') => ({ type, text, checked: false, tagName: type.toUpperCase(), children: [] as any[], props: {} as Record<string, any>, parent: null as any,
   addEventListener() {}, removeEventListener() {}, getRootNode() { return { activeElement: null } }, get options(): any[] { return this.children },
 })
 const renderer = runtime.createRenderer({
@@ -33,7 +33,7 @@ const renderer = runtime.createRenderer({
 })
 const todos = (n: any): any[] => [n, ...n.children.flatMap(todos)]
 const texto = (n: any): string => n.text + n.children.map(texto).join('')
-const lead = (id: string) => ({ id, chave: id, produto: 'site', spiced: spicedVazio() })
+const lead = (id: string) => ({ id, chave: id, produto: 'site', eventos: [], spiced: spicedVazio() })
 const montar = (id: string, extra = {}) => {
   const raiz = novo('root')
   const app = renderer.createApp(runtime.default, { lead: lead(id), disponivel: true, ...extra })
@@ -42,6 +42,29 @@ const montar = (id: string, extra = {}) => {
 }
 
 describe('Ficha SPICED: confirmação humana e rascunho', () => {
+  for (const naoEnviado of [true, false]) it(`qualificação rejeitada ${naoEnviado ? 'com prova de não envio permite corrigir o mesmo ID' : 'sem prova de não envio bloqueia repetição'}`, async () => {
+    const anterior = globalThis.fetch, chamadas: any[] = []
+    globalThis.fetch = (async (_url, opcoes) => { chamadas.push(JSON.parse(String(opcoes?.body))); return new Response(JSON.stringify({ error: 'Confira a fonte', ...(naoEnviado ? { naoEnviado: true } : {}) }), { status: 400 }) }) as typeof fetch
+    const { raiz, app } = montar(`ui-qualificacao-rejeitada-${naoEnviado}`)
+    const campo = (rotulo: string) => {
+      const l = todos(raiz).find(n => n.type === 'label' && texto(n).trimStart().startsWith(rotulo)); assert.ok(l, rotulo)
+      return l.children.find((n: any) => ['INPUT','TEXTAREA','SELECT'].includes(n.tagName))
+    }
+    const submit = async () => { const f = todos(raiz).find(n => n.type === 'form'); await f.props.onSubmit({ preventDefault() {} }); await runtime.nextTick() }
+    try {
+      campo('Fonte:').props['onUpdate:modelValue']('Conversa fictícia conferida')
+      campo('Trecho real').props['onUpdate:modelValue']('Avalia a solução')
+      campo('Conferi os fatos').props['onUpdate:modelValue'](true); await runtime.nextTick(); await submit()
+      assert.equal(chamadas.length, 1)
+      if (naoEnviado) {
+        assert.match(texto(raiz), /Registro não enviado/); assert.equal(campo('Fonte:').disabled, false); assert.equal(campo('Conferi os fatos').checked, false)
+        campo('Trecho real').props['onUpdate:modelValue']('Trecho corrigido'); await submit(); assert.equal(chamadas.length, 1)
+        campo('Conferi os fatos').props['onUpdate:modelValue'](true); await runtime.nextTick(); await submit()
+        const a = JSON.parse(chamadas[0].texto.slice(chamadas[0].texto.indexOf('{'))), b = JSON.parse(chamadas[1].texto.slice(chamadas[1].texto.indexOf('{')))
+        assert.equal(a.id, b.id); assert.equal(b.evidencia, 'Trecho corrigido')
+      } else { assert.match(texto(raiz), /Resultado da gravação não confirmado/); assert.equal(campo('Fonte:').disabled, true); await submit(); assert.equal(chamadas.length, 1) }
+    } finally { app.unmount(); globalThis.fetch = anterior }
+  })
   it('ler sugestão e editar não grava; confirmar sugestões grava uma vez, sem liberar confirmado otimista', async () => {
     const anterior = globalThis.fetch
     const chamadas: unknown[] = []
