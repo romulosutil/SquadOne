@@ -90,3 +90,13 @@ test('arquivo de proteção ilegível falha fechado e uma reconexão não apaga 
     await assert.rejects(m.protecao.configurar(true));
   } finally { await m.fechar(); }
 });
+
+test('rodada substitui só a pausa proporcional; desconexão continua bloqueando', async () => {
+ const m = await montar();
+ try {
+  const p = criarProtecaoProspeccao({ dir:m.dir, agora:() => m.estado.agora, visao:async () => m.estado.visao, saude:async () => m.estado.saude, avaliarSilencio:false });
+  assert.equal(await p.verificar(),null);
+  m.estado.saude='desconectado';
+  assert.equal((await p.verificar())?.motivo,'desconectado');
+ } finally { await m.fechar(); }
+});

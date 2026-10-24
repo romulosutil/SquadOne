@@ -27,6 +27,7 @@ const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estamp
 const TIPOS_DA_ANOTACAO_DE_VENDA: ReadonlySet<string> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado", "proposta", "recusou", "cadencia_enviada", "indicacao_pedida"]);
 import { lerStatusDoDell } from "./dell-status.ts";
 import { lerPrimeirosDoTime, montarFrenteComercial } from "./frente-comercial.ts";
+import { criarRodadaComercial } from "./rodada-comercial.ts";
 import { lerPausaAutomatica, saudeDaContaWhatsapp } from "./protecao-prospeccao.ts";
 
 export type SquadOneMode = "app" | "operations";
@@ -727,6 +728,7 @@ export function createOperationsRouter(options: {
   // O time comercial (deploy/dell/frente-comercial.py, desligado por padrão): estado, pausa e a reserva
   // do primeiro contato pela mesma janela e ritmo da Central.
   montarFrenteComercial(router, {
+    rodada: criarRodadaComercial(path.join(options.dataDir, 'rodada-comercial.json')),
     dataDir: options.dataDir, memoriaDaVenda, ...(options.crm ? { visao: () => options.crm!.visao(), vigiar: options.vigiarProspeccao === true, saude: saudeDaContaWhatsapp } : {}),
   });
   // A Central resolve uma ação: { chave, como } (enviada | pulada | recusa), ou o formato de 16/10

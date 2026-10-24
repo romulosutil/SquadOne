@@ -56,7 +56,7 @@ export class RetomadaRecusada extends Error {}
 /** Uma fila de escrita para pausa, ativação e reserva não apagarem a decisão uma da outra. */
 export function criarProtecaoProspeccao(deps: { dir: string; agora: () => number;
   visao?: () => Promise<Pick<CrmVisao, 'estado' | 'leads'>>;
-  saude?: () => Promise<'open' | SinalDaConta | null> }) {
+  saude?: () => Promise<'open' | SinalDaConta | null>; avaliarSilencio?: boolean }) {
   let fila: Promise<unknown> = Promise.resolve();
   function exclusivo<T>(f: () => Promise<T>): Promise<T> {
     const atual = fila.then(f); fila = atual.catch(() => undefined); return atual;
@@ -71,7 +71,7 @@ export function criarProtecaoProspeccao(deps: { dir: string; agora: () => number
     const saude = sinal ?? (!revisando ? await sinalPendente() : undefined) ?? (deps.saude ? await deps.saude() : null);
     if (saude && saude !== 'open') return pausaPorSinal(saude, deps.agora());
     const v = visao ?? (deps.visao ? await deps.visao() : null);
-    return v ? pausaPorRespostas(v, deps.agora()) : null;
+    return deps.avaliarSilencio === false ? null : v ? pausaPorRespostas(v, deps.agora()) : null;
   }
   async function pausar(pausa: PausaAutomatica) {
     // O cadeado vem primeiro: mesmo se a configuração falhar, as reservas continuam barradas.

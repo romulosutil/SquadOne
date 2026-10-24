@@ -9,6 +9,7 @@ import { criarProtecaoProspeccao, lerPausaAutomatica, RetomadaRecusada, type Sin
 import { noExpedienteDeVenda } from '../src/operations/trava-de-horario.ts';
 import { conferirMensagem } from './gate-de-envio.ts';
 import type { MemoriaDaVenda } from './venda-do-dia.ts';
+import type { RodadaComercial } from './rodada-comercial.ts';
 
 /**
  * O time comercial na Central (19/10/2026). O time em si roda no Dell (deploy/dell/frente-comercial.py,
@@ -98,6 +99,7 @@ export interface DepsDaFrente {
   /** O retrato do CRM. Ausente (CRM não configurado): o time não reserva nada. */
   visao?: () => Promise<Pick<CrmVisao, 'estado' | 'leads'>>;
   agora?: () => number;
+  rodada?: RodadaComercial;
   saude?: () => Promise<'open' | SinalDaConta | null>;
   vigiar?: boolean;
 }
@@ -114,7 +116,7 @@ function mesmaOrigem(req: express.Request): boolean {
 export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
   const { dataDir } = deps;
   const agora = deps.agora ?? Date.now;
-  const protecao = criarProtecaoProspeccao({ dir: dataDir, agora, visao: deps.visao, saude: deps.saude });
+  const protecao = criarProtecaoProspeccao({ dir: dataDir, agora, visao: deps.visao, saude: deps.saude, avaliarSilencio: !deps.rodada });
   const relogios: ReturnType<typeof setTimeout>[] = [];
   if (deps.vigiar) {
     const conferir = () => { void protecao.verificar().catch(() => console.error('[frente] proteção não pôde ser conferida; envios exigem nova verificação.')); };
@@ -125,8 +127,20 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
     try {
       const visao = deps.visao ? await deps.visao().catch(() => null) : null;
       await protecao.verificar(visao);
-      res.set('Cache-Control', 'no-store').json(await lerFrente(dataDir, agora(), visao));
+      const rodada = deps.rodada && visao?.estado === 'ok' ? await deps.rodada.status(visao.leads) : null;
+      res.set('Cache-Control', 'no-store').json({ ...await lerFrente(dataDir, agora(), visao), ...(deps.rodada ? { rodada, rodadaIndisponivel: !rodada } : {}) });
     } catch (e) { next(e); }
+  });
+  router.post('/crm/frente/rodada/revisar', express.json({ limit:'4kb' }), async (req,res) => {
+    if (!mesmaOrigem(req)) return void res.status(403).json({ error:'Revise na própria Central.' });
+    const { motivo, inicioAnterior } = req.body ?? {};
+    if (!deps.rodada || !deps.visao) return void res.status(503).json({ error:'Controle da rodada indisponível.' });
+    if (typeof motivo !== 'string' || !motivo.trim() || motivo.length > 400 || !(inicioAnterior === null || typeof inicioAnterior === 'string')) return void res.status(400).json({ error:'Registre o motivo e confira a rodada atual.' });
+    try {
+      const visao = await deps.visao();
+      if (visao.estado !== 'ok') return void res.status(503).json({ error:'CRM indisponível; não foi iniciada uma nova rodada.' });
+      res.json(await deps.rodada.revisar(motivo,inicioAnterior,visao.leads));
+    } catch (e) { res.status(409).json({ error:e instanceof Error ? e.message : 'Não foi possível revisar a rodada.' }); }
   });
   router.post('/crm/frente/config', express.json({ limit: '4kb' }), async (req, res, next) => {
     try {
@@ -164,9 +178,10 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
       const gate = lead && texto
         ? conferirMensagem(texto, { modo: 'bloquear', tipo: 'primeiro', nome: lead.empresa, destino: { link: lead.produto === 'site' ? undefined : lead.produto === 'plus' ? lead.links.enviar : lead.links.convite, registro: lead.links.whatsapp } })
         : null;
-      const r: ReservaDoTime = await deps.memoriaDaVenda.reservarPrimeiro(leadId, (dia) => reservaDoTime({
+      const reservar = () => deps.memoriaDaVenda.reservarPrimeiro(leadId, (dia) => reservaDoTime({
         leadId, lead, frente, leads: visao.leads, primeiros: dia.primeiros, mensagemAprovada: Boolean(gate && !gate.bloqueia), agora: agora(),
       }));
+      const r = deps.rodada && lead ? await deps.rodada.reservar(lead,visao.leads,reservar) : await reservar();
       if (r.ok === false) return void res.json({ reservado: false, motivo: r.motivo, ate: r.ate === null ? null : new Date(r.ate).toISOString() });
       res.json({ reservado: true, texto });
     } catch (error) {
