@@ -1,0 +1,11 @@
+[Unit]
+Description=Recibos de retrato CRM fechado pelo n8n
+
+[Path]
+PathChanged=%h/.local/share/n8n-estado/crm-publicacao/prontos
+MakeDirectory=yes
+DirectoryMode=0700
+# Sem DirectoryNotEmpty: recibo parcial/invalido fica pendente sem busyloop.
+
+[Install]
+WantedBy=default.target

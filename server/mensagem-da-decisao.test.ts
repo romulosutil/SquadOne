@@ -156,3 +156,25 @@ test('atendimento de preço derivado da visão retorna tarefa interna sem consul
     assert.equal(JSON.stringify(cliente), antes)
   } finally { await api.fechar() }
 })
+
+test('falha selecionada pelo CRM bloqueia mesmo horário igual, recuado ou metadado inválido', async () => {
+  const geradoEm = '2026-10-24T15:00:00.000Z';
+  const publicacao = { v:1 as const, execucaoId:'100', conteudoHash:'a'.repeat(64), publicadoEm:geradoEm };
+  for (const ultimaFalha of [
+    { em:geradoEm,erro:'Fonte indisponível',publicacao:{...publicacao,execucaoId:'101'} },
+    { em:'2026-10-24T14:00:00.000Z',erro:'Fonte indisponível',publicacao:{...publicacao,execucaoId:'101'} },
+    { em:'',erro:'Metadados inválidos',publicacaoInvalida:true as const },
+  ]) {
+    let chamadas=0;
+    const api=await servidor(lead(), {ler:async()=>{chamadas++;return null},sugerir:async()=>{chamadas++;throw new Error('Não gerar')}},undefined,{geradoEm,publicacao,ultimaFalha});
+    try {assert.equal((await api.pedir()).status,503);assert.equal(chamadas,0)} finally {await api.fechar()}
+  }
+})
+
+test('falha nova durante leitura do cache invalida a mensagem sem retornar rascunho', async () => {
+  const cliente=lead(),quando=new Date().toISOString();
+  const fonte:Partial<CrmVisao>={geradoEm:quando};
+  const sugestao={quando,sugestao:{mensagem:'Rascunho fictício',porque:'',ofertas:[],proposta:{itens:[]},faltaSaber:[]}} as unknown as SugestaoNaFicha;
+  const api=await servidor(cliente,{ler:async()=>{fonte.ultimaFalha={em:quando,erro:'Fonte indisponível'};return sugestao},sugerir:async()=>{throw new Error('Não gerar')}},undefined,fonte);
+  try {const r=await api.pedir();assert.equal(r.status,409);assert.equal((await r.json()).mensagem,undefined)} finally {await api.fechar()}
+})

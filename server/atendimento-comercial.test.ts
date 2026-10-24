@@ -160,3 +160,19 @@ test('saída posterior não esconde reserva ambígua',async t=>{
   f.setLeads([lead({conversa:{desde:em,mensagens:2,ultimaEntrada:em,ultimaSaida:saida,ultima:{direcao:'saida',em:saida,trecho:'Respondido'}}})])
   const [p]=await f.controlador.listarPendencias();assert.equal(p.estado,'ambiguo');assert.equal(p.tipo,'handoff');assert.equal(p.texto,undefined)
 })
+
+test('fila preserva identidade verificada e horário original sem renovar idade pelo recebimento', async t=>{
+  const f=await fixture(t),contaHash=hash('conta-ficticia-prumo'),config={v:1 as const,identidadePrumoHash:contaHash,desde:'2026-10-23T16:00:00Z'};
+  const prova={v:1,coletor:'evolution',contaHash,garantia:'webhook-evolution',sessaoHash:null,instancia:'prumo',capturadoEm:'2026-10-23T17:30:00Z',
+    mensagem:{idOriginal:f.evento.idOriginal,direcao:'entrada',ocorridoEm:em,conteudoHash:f.evento.conteudoHash}};
+  const fonte={...f.original,identidade:{ativa:true,config,assinatura:hash('prova-ficticia'),jsonl:JSON.stringify(prova)}};
+  f.setFonte(fonte);await f.controlador.receber(f.evento);await f.controlador.atualizar();
+  const [confirmada]=await f.controlador.listarPendencias();
+  assert.equal(confirmada.identidade,'confirmada');assert.equal(confirmada.ocorridoEm,em);
+  assert.notEqual(confirmada.ocorridoEm,f.evento.recebidoEm);assert.equal(confirmada.tipo,'rascunho');
+  f.setFonte({...fonte,identidade:{...fonte.identidade,assinatura:hash('prova-ausente-ficticia'),jsonl:''}});
+  const [semProva]=await f.controlador.listarPendencias();
+  assert.equal(semProva.identidade,'sem-prova');assert.equal(semProva.ocorridoEm,em);
+  assert.equal(semProva.tipo,'handoff');assert.equal(semProva.texto,undefined);
+  assert.equal(semProva.id,confirmada.id,'diagnóstico não fabrica outro evento');
+})

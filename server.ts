@@ -437,7 +437,7 @@ async function startServer() {
       return {...v,leads:await Promise.all(v.leads.map(async l=>{
         const p=pendencias.find(p=>p.leadIds.includes(l.id));if(!p)return l;
         const bloqueio=await crm.bloqueioDaConversa(l,v.leads);
-        return {...l,atendimentoComercial:bloqueio ? {id:p.id,tipo:'handoff',titulo:'Conferir atendimento com Rômulo',motivo:bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash} : {id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,alvo:p.alvo,texto:p.texto ?? p.orientacao,estado:p.estado,contextoHash:p.contextoHash}};
+        return {...l,atendimentoComercial:bloqueio ? {id:p.id,tipo:'handoff',titulo:'Conferir atendimento com Rômulo',motivo:bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm} : {id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,alvo:p.alvo,texto:p.texto ?? p.orientacao,estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm}};
       }))};
     };
     montarLeituraComercial(app, {visao:visaoAtendimento,
@@ -448,7 +448,7 @@ async function startServer() {
       res.set('Cache-Control','no-store');
       try {
         const pendencias = await atendimento.listarPendencias();
-        res.json({cobertura:atendimento.cobertura(),pendenciasSemOportunidade:pendencias.filter(p=>!p.leadIds.length).map(p=>({id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,estado:p.estado,contextoHash:p.contextoHash}))});
+        res.json({cobertura:atendimento.cobertura(),pendenciasSemOportunidade:pendencias.filter(p=>!p.leadIds.length).map(p=>({id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm}))});
       } catch {res.status(503).json({cobertura:atendimento.cobertura(),error:'Cobertura de atendimento indisponível; nenhuma ação de contato foi autorizada.'});}
     });
     // Sinais do site de um lead (17/10/2026): lidos sob demanda pela Ficha (POST /crm/sinais), com cache

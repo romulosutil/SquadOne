@@ -1,3 +1,5 @@
+import { validarPublicacaoCrm, falhaMaisRecenteQueRetrato, type CrmPublicacao, type CrmUltimaFalha } from './publicacao-crm.ts';
+import { resumirSinaisComerciais } from '../src/operations/sinais-comerciais.ts';
 import { PREFIXO_RESPONSAVEL, lerResponsavelConversa, textoResponsavelConversa, projetarResponsavelConversa, validarSucessaoResponsavel, identidadeDaConversa } from '../src/operations/responsavel-conversa.ts';
 import { timingSafeEqual } from 'node:crypto';
 import fs from "node:fs/promises";
@@ -371,6 +373,7 @@ export interface CrmFonte {
 export interface CrmRetrato {
   versao: 1;
   geradoEm: string;
+  publicacao?: CrmPublicacao;
   links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaIris?: string; planilhaEstampa?: string; planilhaCrm?: string };
   /** `iris` e `estampa` (14/10/2026): ausentes num retrato antigo, viram fonte vazia com o aviso. */
   fontes: { site: CrmFonte; prumo: CrmFonte; iris: CrmFonte; estampa: CrmFonte; registros: CrmFonte };
@@ -432,12 +435,18 @@ export function validarRetrato(valor: unknown): CrmRetrato {
   if (bruto.versao !== 1) throw new RetratoInvalido("Versão do retrato desconhecida.");
   const geradoEm = texto(bruto.geradoEm, 64);
   if (!Number.isFinite(Date.parse(geradoEm))) throw new RetratoInvalido("Retrato sem geradoEm válido.");
+  let publicacao: CrmPublicacao | undefined;
+  if (Object.hasOwn(bruto, 'publicacao')) {
+    try { publicacao = validarPublicacaoCrm(bruto.publicacao); }
+    catch { throw new RetratoInvalido('Metadados da publicação CRM inválidos.'); }
+  }
   const fontes = (bruto.fontes && typeof bruto.fontes === "object" ? bruto.fontes : {}) as Record<string, unknown>;
   const links = (bruto.links && typeof bruto.links === "object" ? bruto.links : {}) as Record<string, unknown>;
   const linkLimpo = (nome: string) => urlHttps(links[nome]);
   return {
     versao: 1,
     geradoEm: new Date(geradoEm).toISOString(),
+    ...(publicacao ? { publicacao } : {}),
     links: Object.fromEntries(LINKS_DO_RETRATO
       .map((nome) => [nome, linkLimpo(nome)]).filter(([, v]) => v)) as CrmRetrato["links"],
     fontes: {
@@ -536,7 +545,7 @@ export interface CrmLink {
 }
 
 export interface CrmLead {
-  atendimentoComercial?: {id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string};
+  atendimentoComercial?: {id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string;identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel';ocorridoEm?:string};
   aarr?: ReceitaDoLead;
   revisaoComercial?: string;
   demoProtegida?: string;
@@ -679,6 +688,7 @@ export type CrmFonteId = CrmProduto | "registros";
  */
 export interface CrmVisao {
   estado: "ok" | "sem-retrato" | "retrato-invalido";
+  publicacao?: CrmPublicacao;
   mensagem?: string;
   geradoEm?: string;
   minutosAteVelho: number;
@@ -695,7 +705,7 @@ export interface CrmVisao {
   registro: { disponivel: boolean; motivo?: string };
   links: CrmRetrato["links"];
   /** Última rodada do n8n que não conseguiu ler as planilhas (crm-falha.json), se for mais nova que o retrato. */
-  ultimaFalha?: { em: string; erro: string };
+  ultimaFalha?: CrmUltimaFalha;
 }
 
 interface Registro {
@@ -734,7 +744,7 @@ export interface ContextoDoCrm {
   raioX?: RaioXDoPrumo[];
   plus?: PlusLido;
   registroDisponivel?: { disponivel: boolean; motivo?: string };
-  ultimaFalha?: { em: string; erro: string };
+  ultimaFalha?: CrmUltimaFalha;
   /** As conversas guardadas pelo observador, pela chave do número (conversa-do-lead.ts). */
   conversas?: Map<string, MensagemDaConversa[]>;
   /** Os sinais do site já lidos, por id do lead, com o endereço lido (a leitura só vale para ele). */
@@ -748,7 +758,8 @@ export interface ContextoDoCrm {
 function conversaDoLead(conversas: ContextoDoCrm["conversas"], numero: string | undefined, links: ReadonlyArray<string | undefined>,
   segundasAnotadas: number[], agora: number) {
   const mensagens = numero ? conversas?.get(chaveDoNumero(numero)) : undefined;
-  const resumo = resumirConversa(mensagens, links);
+  const base = resumirConversa(mensagens, links);
+  const resumo = base ? { ...base, sinaisComerciais: resumirSinaisComerciais(mensagens ?? [], agora) } : null;
   const saidas = saidasDaConversa(mensagens, links);
   return {
     resumo,
@@ -2223,6 +2234,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   return {
     estado: "ok",
     geradoEm: retrato.geradoEm,
+    ...(retrato.publicacao ? { publicacao: retrato.publicacao } : {}),
     minutosAteVelho: MINUTOS_ATE_RETRATO_VELHO,
     fontes: ([...PRODUTOS, "registros"] as const).map((id) => ({
       id,
@@ -2250,7 +2262,7 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     ...(contexto.gerador ? { gerador: contexto.gerador } : {}),
     registro: contexto.registroDisponivel ?? { disponivel: false, motivo: "Registro não configurado." },
     links: retrato.links,
-    ...(contexto.ultimaFalha && Date.parse(contexto.ultimaFalha.em) > Date.parse(retrato.geradoEm) ? { ultimaFalha: contexto.ultimaFalha } : {}),
+    ...(contexto.ultimaFalha && falhaMaisRecenteQueRetrato(contexto.ultimaFalha, retrato) ? { ultimaFalha: contexto.ultimaFalha } : {}),
   };
 }
 
@@ -2589,11 +2601,22 @@ export class CrmStore {
   }
 
   /** crm-falha.json, ao lado do retrato: o fluxo grava quando não consegue ler Leads ou Prospects. */
-  private async ultimaFalha(): Promise<{ em: string; erro: string } | undefined> {
+  private async ultimaFalha(): Promise<CrmUltimaFalha | undefined> {
     try {
       const dados = JSON.parse(await fs.readFile(path.join(path.dirname(this.config.retrato), "crm-falha.json"), "utf8")) as Record<string, unknown>;
       const em = texto(dados.falhouEm, 64);
-      return Number.isFinite(Date.parse(em)) ? { em: new Date(em).toISOString(), erro: texto(dados.erro, 300) || "sem detalhe" } : undefined;
+      const dataValida = Number.isFinite(Date.parse(em));
+      let publicacao: CrmPublicacao | undefined;
+      if (Object.hasOwn(dados, 'publicacao')) {
+        try { publicacao = validarPublicacaoCrm(dados.publicacao); }
+        catch {
+          return { em: dataValida ? new Date(em).toISOString() : '', erro: 'Metadados da publicação CRM inválidos; confira a última rodada.', publicacaoInvalida: true };
+        }
+      }
+      if (!dataValida) return publicacao
+        ? { em: '', erro: 'Data da falha de publicação CRM inválida; confira a última rodada.', publicacaoInvalida: true }
+        : undefined;
+      return { em: new Date(em).toISOString(), erro: texto(dados.erro, 300) || "sem detalhe", ...(publicacao ? { publicacao } : {}) };
     } catch {
       return undefined;
     }

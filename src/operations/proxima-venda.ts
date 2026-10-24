@@ -1,3 +1,4 @@
+import { compararPlanosComerciais, conferenciaComercialInterna, planoComercialDoLead, temContextoPrioridadeComercial } from './prioridade-comercial'
 import { acaoInternaComercial } from './acao-interna-comercial'
 /**
  * PURO: a próxima venda (16/10/2026). Uma fila só, na ordem de quem está mais perto de comprar, com
@@ -57,6 +58,8 @@ export type TipoDeEnvioAnotado = 'segunda_enviada' | 'followup_enviado' | 'plus_
 export type AnotacaoDeVenda = TipoDeEnvioAnotado | 'proposta' | 'recusou' | 'cadencia_enviada' | 'indicacao_pedida'
 
 export interface AcaoDeVenda {
+  prioridadeComercial?: number
+  evidenciaEm?: string | null
   interna?: boolean
   conferirHistorico?: boolean
   /**
@@ -239,7 +242,7 @@ function acaoMandarProposta(lead: CrmLead, momento?: MomentoDaVenda): AcaoDeVend
   if (precoExplicito && !['ganho','perdido'].includes(lead.etapa) && !['negativa','exclusao'].includes(lead.resposta?.tipo ?? '')) return {
     chave: `${lead.id}|negociacao-humana`, leadId: lead.id, empresa: lead.empresa, produto: lead.produto, tipo: 'combinado',
     titulo: `Rômulo: responda ao pedido de preço de ${lead.empresa}`, contexto: 'Pedido comercial explícito', porque: 'Pergunta de preço pede condução humana mesmo com lacunas de qualificação.',
-    tatica: 'Confira a conversa, confirme a oferta e o próximo passo. Prepare a proposta no caminho comercial com valores aprovados.', primeiroContato: false, quente: true }
+    tatica: 'Confira a conversa, confirme a oferta e o próximo passo. Prepare a proposta no caminho comercial com valores aprovados.', primeiroContato: false, quente: false }
   if (temQualificacaoComercial(lead)) {
     if (['ganho','perdido'].includes(lead.etapa) || ['negativa','exclusao'].includes(lead.resposta?.tipo ?? '')) return null
     const pergunta = proximaPerguntaQualificacao(lead)
@@ -590,8 +593,8 @@ export const PRIORIDADE_DA_FILA: Readonly<Record<TipoDeVenda, number>> = {
 }
 /** A revisão comercial é `combinado` na fila, mas não é o combinado do lead: vem depois das propostas. */
 export const PRIORIDADE_DA_REVISAO = 5
-export const prioridadeDaAcao = (a: Pick<AcaoDeVenda, 'tipo' | 'revisao'>): number =>
-  a.revisao ? PRIORIDADE_DA_REVISAO : PRIORIDADE_DA_FILA[a.tipo]
+export const prioridadeDaAcao = (a: Pick<AcaoDeVenda, 'tipo' | 'revisao' | 'prioridadeComercial'>): number =>
+  a.prioridadeComercial ?? (a.revisao ? PRIORIDADE_DA_REVISAO : PRIORIDADE_DA_FILA[a.tipo])
 
 /**
  * A fila inteira, na ordem de venda. Primeiro contato (e o reenvio do só-robô) só entra com
@@ -603,9 +606,13 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
   const escopo = ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads
   const elegiveis = escopo.filter((l) => !contatoPausado(l))
   const revisaoDeQualificacao = (l: CrmLead) => { const q = qualificacaoComercialAtual(l, ctx.agora); return q?.intencao === 'sem-interesse' || q?.adequacao.estado === 'inadequada' }
-  const atendimentos = escopo.filter(l=>l.atendimentoComercial);
+  const agoraDaPrioridade=ctx.agora??Date.now()
+  const planosComerciais=new Map(escopo.map(l=>[l.id,planoComercialDoLead(l,agoraDaPrioridade)]))
+  const prioridadeCompartilhada=escopo.some(l=>temContextoPrioridadeComercial(l,agoraDaPrioridade))
+  const atendimentos = escopo.filter(l=>l.atendimentoComercial||conferenciaComercialInterna(l,agoraDaPrioridade));
+  const internosComerciais=new Set(atendimentos.map(l=>l.id))
   const revisoes = elegiveis.filter((l) => l.revisaoComercial || revisaoDeQualificacao(l))
-  const leads = elegiveis.filter((l) => !l.atendimentoComercial && !l.revisaoComercial && !revisaoDeQualificacao(l))
+  const leads = elegiveis.filter((l) => !internosComerciais.has(l.id) && !l.revisaoComercial && !revisaoDeQualificacao(l))
   const porId = new Map(leads.map((l) => [l.id, l] as [string, CrmLead]))
   const grupos = new Map(visao.hoje.map((g) => [g.id, g] as [CrmGrupoHojeId, CrmGrupoHoje]))
   const fila: AcaoDeVenda[] = revisoes.map((l) => ({
@@ -614,9 +621,15 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
     tatica: revisaoDeQualificacao(l) ? 'Confira a revisão e registre o encaminhamento interno. Não insistir nem enviar outra oferta por este cartão.' : 'Confira o último combinado e salve espera, próximo passo ou encerramento. A revisão não envia mensagem.',
     contexto: 'Revisão comercial', primeiroContato: false, quente: false, conferirHistorico: true, revisao: true,
   }))
-  fila.unshift(...atendimentos.map(l=>({chave:`${l.id}|${l.atendimentoComercial!.id}|atendimento-comercial`,leadId:l.id,empresa:l.empresa,produto:l.produto,tipo:'combinado' as const,interna:true,
-    titulo:l.atendimentoComercial!.titulo,contexto:'Atendimento comercial assistido',porque:l.atendimentoComercial!.motivo,
-    tatica:'Abra a ficha, confira a fonte e assuma a conversa quando houver negociação. Rascunhos exigem sua revisão.',primeiroContato:false,quente:l.atendimentoComercial!.tipo==='handoff'})))
+  fila.unshift(...atendimentos.map(l=>{
+    const plano=planosComerciais.get(l.id)!
+    // Mantém a identidade do encaminhamento já reconhecido; o sinal histórico não cria urgência.
+    const propostaLegada = !l.atendimentoComercial ? acaoMandarProposta(l, ctx.sugestoes?.get(l.id)?.momento) : null
+    const pedidoDePreco = propostaLegada?.chave.endsWith('|negociacao-humana') ? propostaLegada : null
+    return {chave:pedidoDePreco?.chave??`${l.id}|${l.atendimentoComercial?.id??`preparo-${plano.evidencia.tipo}-${plano.em}`}|atendimento-comercial`,leadId:l.id,empresa:l.empresa,produto:l.produto,tipo:'combinado' as const,interna:true,
+      titulo:l.atendimentoComercial?.titulo??pedidoDePreco?.titulo??plano.acao,contexto:pedidoDePreco?.contexto??'Revisão comercial interna',porque:l.atendimentoComercial?.motivo??pedidoDePreco?.porque??'Sinal comercial recebido; fonte e condições dependem de revisão humana.',
+      tatica:`${plano.acao} ${plano.resultado}`,primeiroContato:false,quente:plano.urgente,prioridadeComercial:plano.ordem/10,evidenciaEm:plano.em}
+  }))
   fila.push(...leads.flatMap(l => { const a = acaoDaCadencia(l, ctx); return a ? [a] : [] }))
   if (ctx.agora !== undefined) for (const l of leads) {
     if (l.etapa === 'perdido' || ['negativa', 'exclusao'].includes(l.resposta?.tipo ?? '') || (l.proximoPasso?.data && l.proximoPasso.data > new Date(ctx.agora - 10800_000).toISOString().slice(0, 10))) continue
@@ -687,7 +700,11 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
   }
   const conscientes = fila.filter(a => !comDesfecho.has(a.leadId) || a.tipo === 'desfecho')
     .map((a) => comAConversa(a, porId.get(a.leadId), ctx))
-  const unicos = conscientes.sort((a, b) => prioridadeDaAcao(a) - prioridadeDaAcao(b)).filter((a, i, todos) => todos.findIndex(b => b.leadId === a.leadId) === i)
+  const unicos = conscientes.sort((a, b) => {
+    if(a.leadId===b.leadId)return prioridadeDaAcao(a)-prioridadeDaAcao(b)
+    const pa=planosComerciais.get(a.leadId),pb=planosComerciais.get(b.leadId)
+    return prioridadeCompartilhada&&pa&&pb?compararPlanosComerciais(pa,pb,`${a.produto}:${a.leadId}`,`${b.produto}:${b.leadId}`):prioridadeDaAcao(a)-prioridadeDaAcao(b)
+  }).filter((a, i, todos) => todos.findIndex(b => b.leadId === a.leadId) === i)
   return [...unicos.filter((a) => !pulados.has(a.chave)), ...unicos.filter((a) => pulados.has(a.chave))]
 }
 

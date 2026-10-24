@@ -2,6 +2,10 @@
 Data: 23/10/2026. Base: diagnóstico do comitê, inspeção do Dell e entrevista com Rômulo.
 Status: execução iniciada neste chat em 23/10/2026, por autorização de Rômulo, com subagentes de escopo delimitado. Publicações e testes são registrados por lote; início de execução não significa implantação concluída.
 
+## Execução atual
+
+A matriz de execução e as condições que ainda dependem de Rômulo/cliente estão em [estado da reorganização em 24/10](PRUMO-ENCERRAMENTO-TECNICO-2026-10-24.md). Os checkboxes abaixo preservam o planejamento original; não devem ser usados isoladamente como status da produção. Os lotes publicados registram código, testes, estados e reversão. Venda, aceite e pagamento exigem os fatos reais correspondentes.
+
 ## Diretriz obrigatória — preservar o escritório
 
 Preservar o escritório isométrico existente, sua identidade visual, cenário, personagens/sprites, mesas, quadros, câmera e navegação. As melhorias comerciais devem utilizar os quadros, indicadores e painéis já existentes. Não substituir o escritório por um dashboard nem remover o cenário como consequência da reorganização das filas.

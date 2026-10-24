@@ -16,7 +16,7 @@ export function montarMensagemDaDecisao(router: Router, op: { crm?: { visao(): P
     try {
       const visao = await op.crm.visao()
       const lead = visao.leads.find(l => l.id === id && l.produto === produto)
-      const fonteFalhouDepois = visao.ultimaFalha && Date.parse(visao.ultimaFalha.em) > Date.parse(visao.geradoEm ?? '')
+      const fonteFalhouDepois = Boolean(visao.ultimaFalha)
       if (visao.estado !== 'ok' || !lead || fonteFalhouDepois) return void res.status(503).json({ error: 'Não há leitura atual deste cliente.' })
       if (await hashDoContexto(lead) !== contextoHash) return void res.status(409).json({ error: 'A conversa mudou. Atualize o contexto antes de preparar a mensagem.' })
       const procedimento = procedimentoDaDecisao(lead)
@@ -30,6 +30,11 @@ export function montarMensagemDaDecisao(router: Router, op: { crm?: { visao(): P
       // Encaminhamento interno não é uma oportunidade para o modelo produzir outra mensagem.
       if (acaoInternaComercial(acao)) return void res.json({ ...base, acao, mensagem: null, origem: null, podeAbrir: false, motivo: acao?.tatica })
       let sugestao = op.copiloto && copilotoServe(lead) ? await op.copiloto.ler(produto, id) : null
+      // Ler o cache também aguarda I/O: uma tarefa/prova nova veta a geração antes de chamá-la.
+      if(op.copiloto&&copilotoServe(lead)){
+        const conferida=await op.crm.visao(),clienteAtual=conferida.leads.find(l=>l.id===id&&l.produto===produto)
+        if(conferida.estado!=='ok'||conferida.ultimaFalha||!clienteAtual||await hashDoContexto(clienteAtual)!==contextoHash)return void res.status(409).json({error:'Chegou um novo contexto durante a leitura do preparo. Atualize antes de continuar.'})
+      }
       const paraFila = () => sugestao ? { mensagem: sugestao.sugestao.mensagem, porque: sugestao.sugestao.porque, quando: sugestao.quando, momento: sugestao.sugestao.momento } : undefined
       acao = acaoDoLead(visao, id, Date.now(), paraFila())
       if (acaoInternaComercial(acao)) return void res.json({ ...base, acao, mensagem: null, origem: null, podeAbrir: false, motivo: acao?.tatica })
@@ -51,7 +56,7 @@ export function montarMensagemDaDecisao(router: Router, op: { crm?: { visao(): P
       // Revalida depois de aguardar o modelo: nenhuma sugestão atravessa uma mensagem nova.
       const releitura = await op.crm.visao()
       const atual = releitura.leads.find(l => l.id === id && l.produto === produto)
-      if (releitura.estado !== 'ok' || !atual || await hashDoContexto(atual) !== contextoHash) return void res.status(409).json({ error: 'Chegou um novo contexto durante o preparo. Atualize para preparar novamente.' })
+      if (releitura.estado !== 'ok' || releitura.ultimaFalha || !atual || await hashDoContexto(atual) !== contextoHash) return void res.status(409).json({ error: 'Chegou um novo contexto durante o preparo. Atualize para preparar novamente.' })
       res.json({ ...base, acao, leitura: sugestao?.sugestao.momento?.leitura, porque: sugestao?.sugestao.porque, proximaAcao: sugestao?.sugestao.momento?.passo, mensagem: motivo ? null : mensagem, origem: motivo ? null : sugestao ? 'copiloto' : 'fila', podeAbrir: !motivo, ...(motivo ? { motivo: 'O contexto ainda não permite preparar uma mensagem completa. Confira os dados ou o material na ficha.' } : {}) })
     } catch { res.status(503).json({ error: 'Não foi possível preparar a mensagem com o contexto atual. Tente novamente ou confira a ficha.' }) }
   })

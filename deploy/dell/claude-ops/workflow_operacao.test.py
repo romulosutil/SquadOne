@@ -28,6 +28,24 @@ CONFIG = {'v': 1, 'pausados': [{'id': ID, 'nome': NOME, 'motivo': MOTIVO}]}
 
 
 class PoliticaPura(unittest.TestCase):
+    def test_06_acrescentado_preserva_05_grafo_historico_e_demais_workflows(self):
+        id06='workflow06-fixture'; nome06='06 · Funil semanal (Site antes da venda)'
+        cfg=copy.deepcopy(CONFIG)
+        cfg['pausados'].append({'id':id06,'nome':nome06,'motivo':'Piloto: seleção e espera pertencem à Central; conservar Buscas e retrato.'})
+        antes=copy.deepcopy(cfg);self.assertEqual(m.validar_config(cfg),cfg)
+        for id_ in [ID,id06]:
+            self.assertTrue(m.conferir_pedido('POST','/workflows/'+id_+'/activate',config=cfg)['desligado'])
+            with self.assertRaises(ValueError):m.conferir_pedido('DELETE','/workflows/'+id_,config=cfg)
+        body={'name':nome06,'nodes':[{'name':'Funil','parameters':{'jsCode':'legado preservado'}}],
+              'connections':{'Funil':{'main':[[]]}},'settings':{'timezone':'America/Sao_Paulo'}}
+        before_body=copy.deepcopy(body)
+        self.assertIsNone(m.conferir_pedido('PUT','/workflows/'+id06,body,config=cfg))
+        self.assertEqual(body,before_body);self.assertEqual(cfg,antes)
+        for name in [nome06,'ZZ rodar agora: '+nome06+' (apagar)']:
+            with self.assertRaises(ValueError):m.conferir_pedido('POST','/workflows',{'name':name},config=cfg)
+        self.assertIsNone(m.conferir_pedido('POST','/workflows/'+id06+'/deactivate',config=cfg))
+        self.assertIsNone(m.conferir_pedido('POST','/workflows/outro/activate',config=cfg))
+
     def test_schema_estrito_tipos_campos_unicos_nomes_equivalentes_sem_mutar_config(self):
         antes = copy.deepcopy(CONFIG)
         self.assertEqual(m.validar_config(CONFIG), CONFIG)
@@ -120,6 +138,21 @@ class ClienteN8n(unittest.TestCase):
 
     def configurar(self, config=CONFIG):
         (self.cfg/'workflow-operacao.json').write_text(json.dumps(config),encoding='utf-8')
+
+    def test_06_bloqueado_no_cliente_antes_da_rede_e_pausa_nao_reescreve_outros(self):
+        id06='workflow06-fixture';nome06='06 · Funil semanal (Site antes da venda)'
+        cfg=copy.deepcopy(CONFIG);cfg['pausados'].append({'id':id06,'nome':nome06,'motivo':'Preservar ciclo e dono na Central.'})
+        self.configurar(cfg)
+        for id_ in [ID,id06]:
+            self.assertTrue(self.cli.api('post','/workflows/'+id_+'/activate')['desligado'])
+        with self.assertRaises(ValueError):self.cli.api('DELETE','/workflows/'+id06)
+        with self.assertRaises(ValueError):self.cli.api('POST','/workflows',{'name':nome06,'nodes':[]})
+        self.assertFalse(self.pedidos);self.preparar.assert_not_called()
+        # Desativação é explícita: configurar a guarda não executa API ou altera grafo/dados.
+        self.cli.api('POST','/workflows/'+id06+'/deactivate')
+        self.assertEqual(len(self.pedidos),1)
+        self.assertEqual(self.pedidos[0][0],'POST')
+        self.assertTrue(self.pedidos[0][1].endswith('/'+id06+'/deactivate'))
 
     def test_ausente_e_removido_apos_optin_preservam_comportamento_sem_autoativar(self):
         self.assertTrue(self.cli.api('post','/workflows/'+ID+'/activate')['active'])

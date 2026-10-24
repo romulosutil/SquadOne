@@ -1,3 +1,4 @@
+import { compararPlanosComerciais, conferenciaComercialInterna, planoComercialDoLead, temContextoPrioridadeComercial } from '../operations/prioridade-comercial'
 import type { CrmLead } from '../operations/types'
 import { prioridadeDaAcao, PRIORIDADE_DA_FILA, type AcaoDeVenda } from '../operations/proxima-venda'
 import { conversasParaConduzir, type ConversaParaVoce } from '../operations/conversas-para-conduzir'
@@ -74,6 +75,8 @@ function roboConfirmadoAtual(lead: CrmLead & { classificacaoResposta?: {
 
 /** Uma linha por cliente. A ordem de Vendas e as proteções de contato continuam valendo. */
 export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly AcaoDeVenda[], agora: number, conversasLidas?: readonly (Pick<ConversaParaVoce, 'lead' | 'rotulo'> & Partial<Pick<ConversaParaVoce, 'prioridade' | 'em'>>)[]): Decisao[] {
+  const planosComerciais=new Map(leads.map(l=>[l.id,planoComercialDoLead(l,agora)]))
+  const prioridadeCompartilhada=leads.some(l=>temContextoPrioridadeComercial(l,agora))
   const observadas = new Map(conversasParaConduzir(leads, agora).map(c => [c.lead.id, c]))
   const conversas = conversasLidas ?? [...observadas.values()]
   const porConversa = new Map(conversas.map(c => [c.lead.id, c]))
@@ -81,9 +84,9 @@ export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly 
   const comAcaoAlemDaResposta = new Set(acoes.filter(a => !a.primeiroContato && a.tipo !== 'responder').map(a => a.leadId))
   for (const acao of acoes) if (!acao.primeiroContato && !porAcao.has(acao.leadId)) porAcao.set(acao.leadId, acao)
   const ordem = new Map([...new Set([...porAcao.keys(), ...conversas.map(c => c.lead.id)])].map((id, i) => [id, i]))
-  const prioridade = (d: Decisao) => d.lead.atendimentoComercial ? 0 : porConversa.get(d.lead.id)?.prioridade ?? observadas.get(d.lead.id)?.prioridade ?? (d.acao ? prioridadeDaAcao(d.acao) : undefined) ?? PRIORIDADE_DA_FILA.combinado
+  const prioridade = (d: Decisao) => d.lead.atendimentoComercial ? planoComercialDoLead(d.lead,agora).ordem/10 : porConversa.get(d.lead.id)?.prioridade ?? observadas.get(d.lead.id)?.prioridade ?? (d.acao ? prioridadeDaAcao(d.acao) : undefined) ?? PRIORIDADE_DA_FILA.combinado
   return leads.flatMap((lead): Decisao[] => {
-    if(lead.atendimentoComercial) return [{lead,estado:'agora',motivo:lead.atendimentoComercial.titulo,acao:porAcao.get(lead.id)??null}]
+    if(lead.atendimentoComercial||conferenciaComercialInterna(lead,agora)) return [{lead,estado:'agora',motivo:lead.atendimentoComercial?.titulo??planosComerciais.get(lead.id)!.acao,acao:porAcao.get(lead.id)??null}]
     const atendida = respostaJaAtendida(lead)
     const candidata = porAcao.get(lead.id) ?? null
     const materialPendente = materialSolicitadoPendente(lead)
@@ -99,9 +102,10 @@ export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly 
     return [{ lead, estado: 'acompanhando', motivo: protegido ? 'Contato em espera' : procedimentoDaDecisao(lead, new Date(agora)).tipo === 'robo' ? 'Só o robô respondeu · conferir atendimento humano' : lead.proximoPasso?.texto ? 'Próximo passo definido' : 'Aguardando retorno', acao: null }]
   }).sort((a, b) => {
     const estados = { agora: 0, acompanhando: 1, encerrada: 2 }
-    return estados[a.estado] - estados[b.estado] || (a.estado === 'agora' ? prioridade(a) - prioridade(b)
-      || (prioridade(a) === PRIORIDADE_DA_FILA.responder ? Number(!!observadas.get(b.lead.id)?.resposta) - Number(!!observadas.get(a.lead.id)?.resposta)
-        || (observadas.get(b.lead.id)?.em ?? 0) - (observadas.get(a.lead.id)?.em ?? 0) : 0)
-      || (ordem.get(a.lead.id) ?? Infinity) - (ordem.get(b.lead.id) ?? Infinity) : 0) || a.lead.empresa.localeCompare(b.lead.empresa, 'pt-BR')
+    const pulado=(d:Decisao)=>(porConversa.get(d.lead.id)?.prioridade??0)>=10
+    const novaOrdem=prioridadeCompartilhada?compararPlanosComerciais(planosComerciais.get(a.lead.id)!,planosComerciais.get(b.lead.id)!,`${a.lead.produto}:${a.lead.id}`,`${b.lead.produto}:${b.lead.id}`):prioridade(a)-prioridade(b)
+      ||(prioridade(a)===PRIORIDADE_DA_FILA.responder?Number(!!observadas.get(b.lead.id)?.resposta)-Number(!!observadas.get(a.lead.id)?.resposta)||(observadas.get(b.lead.id)?.em??0)-(observadas.get(a.lead.id)?.em??0):0)
+      ||(ordem.get(a.lead.id)??Infinity)-(ordem.get(b.lead.id)??Infinity)
+    return estados[a.estado]-estados[b.estado]||(a.estado==='agora'?Number(pulado(a))-Number(pulado(b))||novaOrdem:0)||a.lead.empresa.localeCompare(b.lead.empresa,'pt-BR')
   })
 }

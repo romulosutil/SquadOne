@@ -154,6 +154,11 @@ describe("vendedor: passagem comercial interna sem confirmação de envio", () =
     marcos: { enviado: "2026-10-13T13:00:00Z", respondeu: new Date(T).toISOString() }, eventos: [], links: { whatsapp: "https://wa.me/5511999999999" },
     resposta: { tipo: "neutra", trecho: preco ? "Quanto custa?" : "Obrigado", em: new Date(T).toISOString() },
   } as CrmLead)
+  const clienteConfirmado = (id: string): CrmLead => {
+    const l = cliente(id), em = new Date(T).toISOString()
+    return { ...l, conversa: { desde: em, mensagens: 1, ultimaEntrada: em, ultima: { em, direcao: "entrada", trecho: "Quanto custa?" } },
+      atendimentoComercial: { id: `pedido-${id}`, tipo: "handoff", titulo: "Conferir o pedido de preço", motivo: "Pedido comercial atual", alvo: "operador", estado: "concluido", identidade: "confirmada", ocorridoEm: em } }
+  }
   const visao = (...leads: CrmLead[]): CrmVisao => ({ estado: "ok", leads, hoje: [{ id: "resposta", titulo: "Responder", explicacao: "", itens: leads.map(l => ({ leadId: l.id, acao: "Responder", detalhe: "", ordem: 1, links: [] })) }] } as unknown as CrmVisao)
 
   it("negociação, qualificação, ciclo e revisão oferecem só Central/Pular, mesmo com rascunho antigo", () => {
@@ -186,7 +191,7 @@ describe("vendedor: passagem comercial interna sem confirmação de envio", () =
     assert.equal(toqueNoAviso(aberto("site:qa|atendimento-comercial", T, { tipo: "combinado", interna: true }), "enviei", dia()).tipo, "bloqueado")
   })
   it("pedido comercial quente ultrapassa aviso aberto e teto sem reavisar a mesma chave", () => {
-    const v = visao(cliente("primeiro"), cliente("segundo")), f = filaDeVenda(v, { primeiroLiberado: false, agora: T })
+    const v = visao(clienteConfirmado("primeiro"), clienteConfirmado("segundo")), f = filaDeVenda(v, { primeiroLiberado: false, agora: T })
     assert.equal(f.filter(a => acaoInternaComercial(a) && a.quente).length, 2)
     const chave = f[0].chave, e = { ...estadoNovo(T), avisosHoje: MAX_AVISOS_POR_DIA, avisados: [chave], abertos: [aberto(chave, T, { tipo: "combinado", interna: true })] }
     const r = decidir(v, e, T, undefined, dia())
@@ -197,12 +202,27 @@ describe("vendedor: passagem comercial interna sem confirmação de envio", () =
     assert.notEqual(decidir(v, vistos, T + min, undefined, dia()).decisao.tipo, "avisar")
   })
   it("passagem quente tem prioridade sobre uma resposta comum sem relaxar o silêncio noturno", () => {
-    const v = visao(cliente("comum", false), cliente("comercial"))
+    const v = visao(cliente("comum", false), clienteConfirmado("comercial"))
     const r = decidir(v, estadoNovo(T), T, undefined, dia())
     assert.equal(r.decisao.tipo, "avisar")
     if (r.decisao.tipo === "avisar") assert.equal(r.decisao.acao.leadId, "site:comercial")
     const noite = Date.parse("2026-10-15T02:00:00Z")
     assert.equal(decidir(v, estadoNovo(noite), noite, undefined, dia()).decisao.tipo, "nada")
+  })
+  it("preço sem prova ou importado tardiamente permanece interno sem ultrapassar o teto", () => {
+    const confirmado = clienteConfirmado("qa"), antigo = new Date(T - 24 * 60 * min).toISOString()
+    const casos: CrmLead[] = [
+      cliente("sem-prova"),
+      { ...confirmado, atendimentoComercial: { ...confirmado.atendimentoComercial!, identidade: "sem-prova" } },
+      { ...confirmado, resposta: { ...confirmado.resposta!, em: antigo }, conversa: { ...confirmado.conversa!, ultimaEntrada: antigo, ultima: { ...confirmado.conversa!.ultima!, em: antigo } }, atendimentoComercial: { ...confirmado.atendimentoComercial!, ocorridoEm: antigo } },
+      { ...confirmado, conversa: { ...confirmado.conversa!, ultimaSaida: new Date(T + min).toISOString() } },
+    ]
+    for (const l of casos) {
+      const v = visao(l), f = filaDeVenda(v, { primeiroLiberado: false, agora: T + min })
+      assert.equal(f.length, 1); assert.equal(acaoInternaComercial(f[0]), true); assert.equal(f[0].quente, false)
+      assert.equal(f[0].rascunho, undefined); assert.equal(f[0].link, undefined); assert.equal(f[0].anota, undefined)
+      assert.equal(decidir(v, { ...estadoNovo(T), avisosHoje: MAX_AVISOS_POR_DIA }, T + min, undefined, dia()).decisao.tipo, "nada")
+    }
   })
   it("callback persistido Enviei interno não altera arquivo, contadores, CRM ou memória do dia", async () => {
     const dir = await mkdtemp(join(tmpdir(), "vendedor-interno-"))

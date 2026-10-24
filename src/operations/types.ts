@@ -1,3 +1,4 @@
+import type { ResumoSinaisComerciais } from './sinais-comerciais.ts'
 import type { SinaisDoSite } from '../../server/sinais-do-site.ts'
 import type { QualificacaoComercial } from './qualificacao-comercial'
 import type { Spiced } from './spiced'
@@ -100,6 +101,7 @@ export interface CrmLink {
 
 /** Espelha ResumoDaConversa de server/conversa-do-lead.ts. */
 export interface CrmResumoDaConversa {
+  sinaisComerciais?: ResumoSinaisComerciais
   /** A primeira mensagem guardada: antes dela a Central não sabe o que foi dito. */
   desde: string
   mensagens: number
@@ -144,7 +146,7 @@ export interface AchadoDoRaioX {
 }
 
 export interface CrmLead {
-  atendimentoComercial?: { id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string };
+  atendimentoComercial?: { id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string;identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel';ocorridoEm?:string };
   /** Instrumentação comercial explicitamente confirmada na aba CRM; nunca Finanças ou receita inferida. */
   aarr?: import('./aarr').ReceitaDoLead
   revisaoComercial?: string
@@ -261,6 +263,22 @@ export interface CrmGrupoHoje {
 
 export type CrmContagem = { total: number } & Record<CrmProduto, number>
 
+/** Sequência de execução local do n8n; não é uma transação entre planilhas. */
+export interface CrmPublicacao {
+  v: 1
+  execucaoId: string
+  conteudoHash: string
+  publicadoEm: string
+}
+
+export interface CrmUltimaFalha {
+  em: string
+  erro: string
+  publicacao?: CrmPublicacao
+  /** Metadado presente ilegível não pode ser tratado como uma rodada legada saudável. */
+  publicacaoInvalida?: true
+}
+
 export interface CrmVisao {
   estado: 'ok' | 'sem-retrato' | 'retrato-invalido'
   mensagem?: string
@@ -278,7 +296,8 @@ export interface CrmVisao {
   gerador?: { estado: 'processando' | 'ocioso' | 'atencao' | 'desconhecido'; detalhe: string; atualizadoEm?: string; pendentes?: number }
   registro: { disponivel: boolean; motivo?: string }
   links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaIris?: string; planilhaEstampa?: string; planilhaCrm?: string }
-  ultimaFalha?: { em: string; erro: string }
+  publicacao?: CrmPublicacao
+  ultimaFalha?: CrmUltimaFalha
 }
 
 export type CrmTipoDeRegistro = 'nota' | 'proximo_passo' | 'proposta' | 'proposta_desfeita' | 'sem_contato' | 'sem_contato_desfeito'

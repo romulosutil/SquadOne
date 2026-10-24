@@ -12,7 +12,11 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
 def dados(resultado="individual"):
-    return {"v": 1, "somenteLeitura": True, "contatoAutorizado": False, "resultado": resultado, "fonte": {"geradoEm": "2026-10-24T15:00:00.000Z", "idadeMs": 1000, "limiteMs": 900000, "atual": True}, "total": 1, "truncado": False, "oportunidades": [{"referencia": "a" * 64, "empresa": "Empresa teste", "produto": "site", "etapa": "contato", "autoridade": "qualificacao-nova", "qualificacao": {"estado": "parcial", "confirmacaoHumana": True, "ofertaId": "encontrado", "intencao": "avaliar", "camposConfirmados": {"necessidade": True, "adequacao": True, "intencao": True, "decisao": True, "proximoPasso": False}, "lacunas": ["próximo passo aceito"]}, "ciclo": {"estado": "proposta-enviada", "marcosConfirmados": ["proposta", "proposta_enviada"], "exigeHumano": True}, "responsavel": {"estado": "definido", "quem": "romulo"}, "atendimento": {"presente": True, "tipo": "handoff", "alvo": "operador"}, "bloqueios": ["responsabilidade-humana", "ciclo-comercial"], "proximaAcao": "conferir-com-romulo", "somenteLeitura": True, "contatoAutorizado": False, "ficha": "https://central.test.ts.net:8443/crm?lead=site%3Ateste"}]}
+    d = {"v": 1, "somenteLeitura": True, "contatoAutorizado": False, "resultado": resultado, "fonte": {"geradoEm": "2026-10-24T15:00:00.000Z", "idadeMs": 1000, "limiteMs": 900000, "atual": True}, "total": 1, "truncado": False, "oportunidades": [{"referencia": "a" * 64, "empresa": "Empresa teste", "produto": "site", "etapa": "contato", "autoridade": "qualificacao-nova", "qualificacao": {"estado": "parcial", "confirmacaoHumana": True, "ofertaId": "encontrado", "intencao": "avaliar", "camposConfirmados": {"necessidade": True, "adequacao": True, "intencao": True, "decisao": True, "proximoPasso": False}, "lacunas": ["próximo passo aceito"]}, "ciclo": {"estado": "proposta-enviada", "marcosConfirmados": ["proposta", "proposta_enviada"], "exigeHumano": True}, "responsavel": {"estado": "definido", "quem": "romulo"}, "atendimento": {"presente": True, "tipo": "handoff", "alvo": "operador"}, "bloqueios": ["responsabilidade-humana", "ciclo-comercial"], "proximaAcao": "conferir-com-romulo", "somenteLeitura": True, "contatoAutorizado": False, "ficha": "https://central.test.ts.net:8443/crm?lead=site%3Ateste"}]}
+
+    d["consultadoEm"] = "2026-10-24T15:00:01.000Z"
+    d["oportunidades"][0]["prioridadeTrabalho"] = {"grupo": "conferir", "nivel": 2, "ordem": 20, "acao": "Conferir condições já discutidas e preparar decisão, sem novo envio", "resultado": "Condições e contexto conferidos por Rômulo; nenhuma retomada presumida.", "evidencia": {"fonte": "sinal-recebido", "tipo": "preco", "estado": "historica"}, "em": "2026-10-22T20:03:00.000Z", "destaque": True, "urgente": False, "contatoAutorizado": False}
+    return d
 
 class Resposta:
     def __init__(self, obj=None, status=200, url=None, bruto=None):
@@ -114,6 +118,47 @@ class LeituraTests(unittest.TestCase):
     def test_opcoes_desconhecidas_nao_viram_texto_livre(self):
         for alvo, chave, valor in (("qualificacao", "estado", "texto-privado"), ("qualificacao", "lacunas", ["texto-privado"]), ("ciclo", "marcosConfirmados", ["recibo-privado"])):
             d = dados(); d["oportunidades"][0][alvo][chave] = valor
+            with self.assertRaises(ValueError):
+                m.resposta_segura(d)
+
+    def test_prioridade_preserva_historico_sem_confundir_urgencia_ou_compra(self):
+        d = dados()
+        p = d["oportunidades"][0]["prioridadeTrabalho"]
+        p["texto"] = "valor-privado e recibo-privado"
+        r = m.resposta_segura(d)["oportunidades"][0]["prioridadeTrabalho"]
+        self.assertEqual(r["em"], "2026-10-22T20:03:00.000Z")
+        self.assertEqual(r["evidencia"]["estado"], "historica")
+        self.assertTrue(r["destaque"])
+        self.assertFalse(r["urgente"])
+        self.assertFalse(r["contatoAutorizado"])
+        self.assertNotIn("privado", str(r))
+
+    def test_prioridade_recusa_acao_resultado_tipo_ou_ordem_livres(self):
+        for chave, valor in (("acao", "Enviar para telefone-privado"), ("resultado", "valor-privado"), ("ordem", True), ("nivel", 10), ("em", "2026-02-31T10:00:00.000Z"), ("contatoAutorizado", True)):
+            d = dados(); d["oportunidades"][0]["prioridadeTrabalho"][chave] = valor
+            with self.subTest(chave=chave), self.assertRaises(ValueError):
+                m.resposta_segura(d)
+        d = dados(); d["oportunidades"][0]["prioridadeTrabalho"]["evidencia"]["tipo"] = "recibo-privado"
+        with self.assertRaises(ValueError):
+            m.resposta_segura(d)
+
+    def test_urgencia_so_para_decisao_atual_com_data_original_recente(self):
+        d = dados()
+        p = d["oportunidades"][0]["prioridadeTrabalho"]
+        p.update({"grupo": "decidir", "ordem": 10, "nivel": 1, "acao": "Conferir o pedido comercial atual com Rômulo", "resultado": "Preço, proposta ou contratação revisados pelo humano; nenhuma resposta ou contratação automática.", "evidencia": {"fonte": "atendimento", "tipo": "preco", "estado": "atual"}, "em": "2026-10-24T14:59:00.000Z", "urgente": True})
+        self.assertTrue(m.resposta_segura(d)["oportunidades"][0]["prioridadeTrabalho"]["urgente"])
+        for em in ("2026-10-22T20:03:00.000Z", "2026-10-24T15:01:00.000Z"):
+            p["em"] = em
+            with self.assertRaises(ValueError):
+                m.resposta_segura(d)
+        p["em"] = "2026-10-24T14:59:00.000Z"
+        p["evidencia"]["estado"] = "historica"
+        with self.assertRaises(ValueError):
+            m.resposta_segura(d)
+
+    def test_pausa_e_desfecho_nao_recebem_destaque_ou_urgencia(self):
+        for grupo in ("aguardar", "encerrado"):
+            d = dados(); p = d["oportunidades"][0]["prioridadeTrabalho"]; p["grupo"] = grupo
             with self.assertRaises(ValueError):
                 m.resposta_segura(d)
 

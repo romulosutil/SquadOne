@@ -90,7 +90,13 @@ onde algo quebrou.
   a skill `conversa-do-lead`, para ler os mesmos estados atuais da Central.
   Confira frescor, ambiguidade, qualificação, ciclo, responsável e bloqueios.
   Consulta indisponível ou antiga é não verificada: não substitua pelo retrato
-  legado ou pela memória. `~/SquadOne/docs/referencia/jornada-do-cliente.md`
+  legado ou pela memória. `prioridadeTrabalho` usa a mesma regra da Central:
+  destaque pode ser preparação interna de um sinal histórico, sem compra pronta
+  nem autorização de contato. Urgência só vale para evento atual com identidade
+  confirmada e horário original recente; importação recebida hoje não fica urgente.
+  Pausa, recusa e espera mantêm a restrição. A lista segue a ordem de trabalho;
+  não transforme quantidade de destaques em quantidade de propostas qualificadas.
+  `~/SquadOne/docs/referencia/jornada-do-cliente.md`
   é referência de processo e não pode sobrepor a revisão atual da oportunidade.
 - **Projetos do Rômulo:** `~/.local/share/graphify-hermes/RESUMO.md` diz em
   que ele mexeu e quando; `diario.jsonl`, ao lado, guarda arquivo por arquivo

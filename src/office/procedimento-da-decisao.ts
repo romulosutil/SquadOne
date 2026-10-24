@@ -1,3 +1,4 @@
+import { conferenciaComercialInterna, planoComercialDoLead } from '../operations/prioridade-comercial'
 import type { CrmLead } from '../operations/types'
 import { papelDaMensagem, audioDaMensagem } from '../operations/marcadores-da-conversa'
 import { contatoPausado } from '../operations/aprendizado-comercial'
@@ -36,7 +37,10 @@ export function planoFuturoEmEspera(lead: CrmLead, agora = new Date()): boolean 
 
 /** Orientação operacional; o texto da conversa é evidência, nunca uma instrução para executar. */
 export function procedimentoDaDecisao(lead: CrmLead, agora = new Date()): ProcedimentoDaDecisao {
-  if(lead.atendimentoComercial) return {tipo:'interno',titulo:lead.atendimentoComercial.titulo,passos:[lead.atendimentoComercial.motivo,'Abra a ficha para conferir a fonte, revisar o rascunho ou assumir a negociação. Esta tarefa não envia mensagem.'],resultadoEsperado:'Responsável e próximo passo comercial conferidos na ficha.'}
+  if(lead.atendimentoComercial||conferenciaComercialInterna(lead,agora.getTime())) {
+    const plano=planoComercialDoLead(lead,agora.getTime())
+    return {tipo:'interno',titulo:lead.atendimentoComercial?.titulo??plano.acao,passos:[...(lead.atendimentoComercial?[lead.atendimentoComercial.motivo]:[]),plano.acao,plano.resultado,'Abra a ficha para conferir fonte e próxima ação. Esta tarefa não envia mensagem.'],resultadoEsperado:plano.resultado}
+  }
 
   if (['ganho', 'perdido'].includes(lead.etapa) || ['negativa', 'exclusao'].includes(lead.resposta?.tipo ?? '')) return {
     tipo: 'encerrado', titulo: 'Respeitar o desfecho', passos: ['Confira o resultado registrado e o motivo literal na ficha.', 'Não faça uma nova abordagem a quem recusou ou pediu exclusão.'], resultadoEsperado: 'Desfecho correto no histórico, sem nova cobrança.',

@@ -1,3 +1,4 @@
+import type { ResumoSinaisComerciais } from '../src/operations/sinais-comerciais.ts'
 /**
  * A conversa de um lead no WhatsApp (16/10/2026). O observador (deploy/dell/whatsapp-observador/)
  * grava cada mensagem de lead em `<WHATSAPP_CONVERSAS_DIR>/<chave>.jsonl` (0600), uma por linha:
@@ -127,6 +128,7 @@ export async function lerConversas(pasta = pastaDasConversas()): Promise<Map<str
 // ---------------------------------------------------------------- o resumo (PURO)
 
 export interface ResumoDaConversa {
+  sinaisComerciais?: ResumoSinaisComerciais
   /** A primeira mensagem guardada: antes dela a Central não sabe o que foi dito. */
   desde: string;
   mensagens: number;

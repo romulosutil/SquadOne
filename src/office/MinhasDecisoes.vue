@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { destaquesComerciais, planoComercialDoLead } from "../operations/prioridade-comercial"
 import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import type { Pessoa } from '../types'
 import type { CrmVisao } from '../operations/types'
@@ -19,6 +20,11 @@ const respostasParaAvisar = ref<RespostaParaAviso[]>([])
 let leituraDasRespostas: LeituraDasRespostas | null = null
 const topo = ref<HTMLElement | null>(null)
 const decisoes = computed(() => decisoesDoEscritorio(props.visao?.leads ?? [], props.acoes, props.agora, props.conversas))
+const preparacoes = computed(() => destaquesComerciais(props.visao?.leads ?? [],props.agora).flatMap(item=>{
+  const decisao=decisoes.value.find(d=>d.lead.id===item.leadId&&d.lead.produto===item.produto)
+  return decisao?[{...item,decisao}]:[]
+}))
+const dataDaEvidencia=(em:string|null)=>em?new Date(em).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'Data não confirmada'
 const avisosDeResposta = computed(() => avisosPorPrioridade(respostasParaAvisar.value, decisoes.value))
 function dispensarAviso(id: string) { respostasParaAvisar.value = respostasParaAvisar.value.filter(a => a.id !== id) }
 watch([() => props.visao, () => props.atualizando, () => props.erro], () => {
@@ -102,6 +108,13 @@ const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferid
     </template>
     <template v-else-if="visao?.estado === 'ok' || visao?.leads.length">
       <div class="minhas-decisoes__introducao"><h3>Uma decisão por vez.</h3><p>Escolha um cliente e conduza a conversa. O time acompanha automaticamente os envios e as respostas capturados.</p><ol aria-label="Como conduzir uma decisão"><li><strong>1</strong> Entender</li><li><strong>2</strong> Agir</li><li><strong>3</strong> Acompanhar</li></ol></div>
+      <aside v-if="preparacoes.length && !erro && visao?.estado === 'ok'" class="minhas-decisoes__preparacao" aria-label="Preparação para a primeira venda">
+        <h3>Preparação para a primeira venda</h3>
+        <p class="texto-2 texto-pequeno">Prioridades de revisão interna. O histórico orienta a preparação; qualquer envio depende da sua decisão e das restrições da conversa.</p>
+        <ol><li v-for="item in preparacoes" :key="`${item.produto}:${item.leadId}`">
+          <button type="button" @click="abrir(item.decisao)"><strong>{{ item.decisao.lead.empresa }}</strong><span>{{ item.plano.acao }}</span><small>{{ item.plano.evidencia.estado === 'historica' ? 'Indício histórico' : item.plano.evidencia.estado === 'pendente' ? 'Evidência a conferir' : 'Evidência atual' }} · {{ dataDaEvidencia(item.plano.em) }} · Sem envio automático</small></button>
+        </li></ol>
+      </aside>
       <div class="minhas-decisoes__estados" role="group" aria-label="Situação das decisões">
         <button v-for="e in estados" :key="e.id" type="button" :aria-pressed="filtro === e.id" @click="filtro = e.id"><strong>{{ contagens[e.id] }}</strong><span>{{ e.nome }}</span></button>
       </div>
@@ -117,7 +130,7 @@ const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferid
         <li v-for="(d, i) in visiveis" :key="d.lead.id">
           <button type="button" :class="{ 'minhas-decisoes__recomendada': filtro === 'agora' && pagina === 1 && i === 0 }" @click="abrir(d)">
             <span class="minhas-decisoes__ordem">{{ (pagina - 1) * 8 + i + 1 }}</span>
-            <span class="minhas-decisoes__cliente"><small>{{ nomesDasOfertas[d.lead.produto] }}<template v-if="filtro === 'agora' && pagina === 1 && i === 0"> · Comece por aqui</template></small><strong>{{ d.lead.empresa }}</strong><span>{{ d.motivo }}</span><small v-if="d.lead.proximoPasso && d.estado !== 'encerrada'">Próximo passo · {{ d.lead.proximoPasso.data.split('-').reverse().join('/') }} · {{ d.lead.proximoPasso.texto }}</small></span>
+            <span class="minhas-decisoes__cliente"><small>{{ nomesDasOfertas[d.lead.produto] }}<template v-if="filtro === 'agora' && pagina === 1 && i === 0"> · Comece por aqui</template></small><strong>{{ d.lead.empresa }}</strong><span>{{ d.motivo }}</span><small v-if="d.lead.atendimentoComercial">{{ planoComercialDoLead(d.lead,agora).resultado }}</small><small v-if="d.lead.proximoPasso && d.estado !== 'encerrada'">Próximo passo · {{ d.lead.proximoPasso.data.split('-').reverse().join('/') }} · {{ d.lead.proximoPasso.texto }}</small></span>
             <span class="minhas-decisoes__abrir">{{ filtro === 'agora' ? 'Conduzir' : 'Consultar' }} <span aria-hidden="true">→</span></span>
           </button>
         </li>
@@ -130,6 +143,10 @@ const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferid
 </template>
 
 <style scoped>
+.minhas-decisoes__preparacao { display:grid; gap:var(--esp-3); padding:var(--esp-4); border:var(--divisor); border-radius:var(--raio-controle); background:var(--superficie-2); }
+.minhas-decisoes__preparacao ol { display:grid; gap:var(--esp-2); padding:0; margin:0; list-style:none; }
+.minhas-decisoes__preparacao button { display:grid; gap:var(--esp-1); width:100%; min-height:var(--toque); padding:var(--esp-3); text-align:left; font:inherit; color:var(--texto); background:var(--superficie); border:var(--divisor); border-radius:var(--raio-controle); cursor:pointer; overflow-wrap:anywhere; }
+.minhas-decisoes__preparacao small { color:var(--texto-2); }
 .minhas-decisoes { display: grid; gap: var(--esp-4); min-width: 0; }
 .minhas-decisoes__topo, .minhas-decisoes__navegacao, .minhas-decisoes__titulo-fila, .minhas-decisoes__paginacao { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--esp-2); }
 .minhas-decisoes p, .minhas-decisoes h3 { margin: 0; }

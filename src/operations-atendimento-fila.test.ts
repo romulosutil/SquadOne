@@ -70,7 +70,7 @@ describe('atendimento comercial nas superfícies de decisão', () => {
     const antes = JSON.stringify(cliente)
     const acao = conferirAcaoInterna(cliente)
     assert.equal(acao.titulo, cliente.atendimentoComercial!.titulo)
-    assert.equal(acao.quente, true)
+    assert.equal(acao.quente, false, "handoff sem prova e horário original não fabrica urgência")
     assert.equal(JSON.stringify(cliente), antes, 'a projeção não confirma fatos nem grava fonte')
   })
 

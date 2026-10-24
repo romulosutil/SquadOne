@@ -1,0 +1,11 @@
+[Unit]
+Description=Publicar retratos CRM completos com rename atomico e ordem de execucao
+
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 %h/.local/bin/publicador-crm
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

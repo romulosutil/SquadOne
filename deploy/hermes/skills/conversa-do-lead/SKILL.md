@@ -62,6 +62,13 @@ aplicador do Hermes, workflows ou geradores para responder a uma consulta.
 - `lista` é um conjunto limitado de oportunidades; não é autorização nem ranking
   de compradores. `ambiguo` exige escolher explicitamente a oportunidade pela
   referência e pelo produto. Não selecione a primeira nem funda conversas/contas.
+- `prioridadeTrabalho` ordena o trabalho pelos mesmos critérios da Central.
+  `grupo`, `ordem`, `acao` e `resultado` são orientação interna; `evidencia` e `em`
+  distinguem fonte humana, classificação atual e indício histórico. Destaque é
+  preparação/revisão e não probabilidade de compra, proposta pronta ou envio.
+  `urgente` só fica verdadeiro em evento atual confirmado há até 15 minutos pelo
+  horário original. Não use a hora de importação, da consulta ou do recebimento
+  de um aviso para renovar essa urgência. Pausa/espera/recusa ficam sem destaque.
 - `individual` traz só o contexto mínimo: autoridade, estados, campos confirmados,
   lacunas, bloqueios e orientação interna. Sem textos, valores contratuais,
   referências de recibos, telefones, links WhatsApp ou notas JSON brutas. Referência

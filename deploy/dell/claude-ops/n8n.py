@@ -75,20 +75,64 @@ def preparar_comercial_se_configurado(body):
     return preparar_comercial(body, endpoint=endpoint, credencial_crm=configuracao.get('credencial_crm'))
 
 
-def preparar_simplificacao_se_configurado(body):
-    """Opt-in local versionado por contrato; não liga fluxo nem nova autonomia."""
+def configuracao_contexto():
+    """v1 fica intacta; v2 exige migração explícita e todos os booleanos."""
     arquivo = Path.home() / '.config/claude-ops/workflow-contexto-whatsapp.json'
     if not arquivo.exists():
-        return body
-    config = json.loads(arquivo.read_text())
-    if not isinstance(config, dict) or set(config) != {'v', 'contextoFresco', 'pausarJev'} or type(config['v']) is not int or config['v'] != 1 or type(config['contextoFresco']) is not bool or type(config['pausarJev']) is not bool:
+        return None
+    config = json.loads(arquivo.read_text(encoding='utf-8'))
+    if not isinstance(config, dict) or type(config.get('v')) is not int:
         raise ValueError('Configuração de simplificação WhatsApp inválida.')
+    chaves = {'v', 'contextoFresco', 'pausarJev'}
+    if config['v'] == 2:
+        chaves.add('contextoLote')
+    if config['v'] not in (1, 2) or set(config) != chaves or any(type(config[k]) is not bool for k in chaves - {'v'}):
+        raise ValueError('Configuração de simplificação WhatsApp inválida.')
+    if config.get('contextoLote') and not config['contextoFresco']:
+        raise ValueError('Contexto em lote exige contexto fresco habilitado.')
+    return config
+
+
+_CONFIG_NAO_LIDA = object()
+
+
+def preparar_simplificacao_se_configurado(body, config=_CONFIG_NAO_LIDA):
+    """Opt-in local versionado por contrato; não liga fluxo nem nova autonomia."""
+    config = configuracao_contexto() if config is _CONFIG_NAO_LIDA else config
+    if config is None:
+        return body
     if config['contextoFresco']:
-        from workflow_contexto_whatsapp import preparar
+        if config.get('contextoLote'):
+            from workflow_contexto_lote import preparar_contexto_compativel as preparar
+        else:
+            from workflow_contexto_whatsapp import preparar
         body = preparar(body)
     if config['pausarJev']:
         from workflow_papeis import pausar_sombra
         body = pausar_sombra(body)
+    return body
+
+
+def preparar_lote_se_configurado(body, config=_CONFIG_NAO_LIDA):
+    config = configuracao_contexto() if config is _CONFIG_NAO_LIDA else config
+    if config and config.get('contextoLote'):
+        from workflow_contexto_lote import preparar
+        return preparar(body)
+    return body
+
+
+def preparar_publicacao_crm_se_configurado(body):
+    """Política independente: publicar retrato nunca depende do opt-in WhatsApp."""
+    arquivo = Path.home() / '.config/claude-ops/workflow-publicacao-crm.json'
+    if not arquivo.exists():
+        return body
+    config = json.loads(arquivo.read_text(encoding='utf-8'))
+    if (not isinstance(config, dict) or set(config) != {'v', 'publicacaoAtomica'}
+            or type(config['v']) is not int or config['v'] != 1 or type(config['publicacaoAtomica']) is not bool):
+        raise ValueError('Configuração de publicação CRM inválida.')
+    if config['publicacaoAtomica']:
+        from workflow_publicacao_crm import preparar
+        return preparar(body)
     return body
 
 
@@ -112,7 +156,8 @@ def api(method, path, body=None):
     if method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
         from workflow_confiabilidade import preparar
         body = garantir_erro_salvo(preparar(body))
-        body = preparar_simplificacao_se_configurado(body)
+        config_contexto = configuracao_contexto()
+        body = preparar_simplificacao_se_configurado(body, config_contexto)
         cred_luna = Path.home() / '.config/claude-ops/luna-workflows-cred'
         if cred_luna.exists():
             from workflow_luna import usar_luna
@@ -121,6 +166,8 @@ def api(method, path, body=None):
         if do_escopo(body):
             body = preparar_contexto(body, carregar_contexto())
         body = preparar_comercial_se_configurado(body)
+        body = preparar_lote_se_configurado(body, config_contexto)
+        body = preparar_publicacao_crm_se_configurado(body)
     if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}

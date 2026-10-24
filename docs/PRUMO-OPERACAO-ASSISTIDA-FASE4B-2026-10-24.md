@@ -15,6 +15,7 @@ Data: 24/10/2026. Objetivo: responder oportunidades existentes e chegar à prime
 | Contrato e pagamento | Rômulo | Aceite, cobrança e recebimento com evidência | Confirmar cada marco separadamente; ganho não equivale a pagamento |
 | Aviso de passagem | Fila existente e Telegram | Aviso com encaminhamento | Abrir a pendência e agir; aviso lido não conclui tarefa |
 | Aquisição futura | Caçadores e frente comercial, conforme pausas existentes | Somente funções já autorizadas e ativas | Não ampliar nem reativar aquisição por esta reorganização |
+| Revisão semanal legada 06 | Pausa operacional aprovada para o piloto, instalação conferida separadamente | Preservar Buscas e último retrato; nenhuma nova pausa/restrição pelo parser antigo | Revisar feedback pela Central e decidir qualquer reativação específica |
 
 Diego avalia aderência, Elisa confere evidências/entrega e Carla avalia abordagem no executor da frente comercial. São três leituras do mesmo modelo; o nome do personagem não prova um executor independente nem uma tarefa em andamento. A frente está com `ativo=false` na leitura de implantação; o timer ativo, sozinho, não significa envio autorizado. Os personagens e o cenário continuam intactos.
 
@@ -25,6 +26,15 @@ Luna dos workflows é inferência restrita do Caçador; não é o secretário He
 O inventário de partida contém 21 workflows, 18 ativos. Não fundir entradas distintas apenas para reduzir a contagem. Três convites já usam a mesma fábrica; o clique do Site conserva seu rastro técnico para a variante de abordagem, sem equivaler a envio. Paths, IDs, credenciais e histórico permanecem.
 
 O `05 · Acompanhamento (Site antes da venda)` repete uma decisão comercial fora da Central. Seu parser legado protege proposta, próximo passo e aprendizado, mas ignora os novos contratos de ciclo e responsável. Nesta fase, a rotina fica pausada, com trava local versionada contra reativação pelos publicadores. Não criar outro parser de qualificação/contrato no n8n para compensar essa divergência.
+
+Extensão aprovada em 24/10, após a auditoria da Fase 5: a mesma guarda deve
+reservar também `06 · Funil semanal (Site antes da venda)`, ID `cn4KcQujNk9CwcN0`.
+O código antigo ignora ciclo/responsável atuais e inclui licença como sinal de
+compra; seus updates em Buscas e sua lista `nao_gerar` podem interferir na
+aquisição/geração. A proteção é pausa reversível, sem parser paralelo, sem limpar
+`site-funil.json`, sem reler dados antigos como fonte comercial e sem desfazer
+pausas existentes em Buscas. A confirmação da desativação cabe à implantação;
+o registro histórico anterior de 21/17 não inclui automaticamente essa mudança.
 
 A Central já calcula vencimento e follow-up com a conversa e seus contratos atuais. Efeito deliberado: novos envios silenciosos deixam de receber `status=expirado` na planilha pelo 05; a mudança física de pasta causada por essa marca também deixa de ser produzida por ele. Contagem de pastas/colunas antigas não é o estado comercial atual. O leitor do Hermes usa a Central para evitar essa ambiguidade.
 
@@ -77,3 +87,43 @@ Consulta real do leitor: fonte atual, lista limitada a 20; cinco seleções indi
 Preservação conferida: 31 arquivos preexistentes do clone Dell byte a byte; conteúdo original dos 116 históricos intacto; registros humanos na aba CRM sem alteração. A cobertura anterior continua com 174 respostas históricas conferidas e zero falhas de leitura. Nenhum arquivo de `src/`, cena, câmera, personagem ou navegação foi alterado. A frente comercial continua com `ativo=false`; Central, Hermes, Luna, adaptador Evolution e observadores estão ativos. Grafo AST do SquadOne atualizado no Dell com êxito.
 
 Backups, exports originais e validação sanitizada ficam em `~/.cache/mel-work/fase4b-20261024T152212Z/`, fora do Git. Nenhuma mensagem foi enviada a clientes, nenhum modelo foi invocado pela homologação e nenhum marco de proposta, contrato ou pagamento foi criado. O lote organiza o caminho até a primeira venda; não comprova uma venda.
+
+## Instalação exata da extensão 06 pelo root
+
+Não executar o publicador de acompanhamento para pausar: ele pode republicar
+outros workflows. O módulo de guarda existente já aceita múltiplas reservas e
+não precisa de alteração runtime; dois testes novos cobrem 05+06 no validador e
+no cliente com transporte dublado.
+
+1. No backup privado da implantação, conservar o export atual de 06, estado
+   `active`, inventário, configuração operacional e bytes/hash do
+   `~/.local/share/n8n-estado/site-funil.json`. Conferir se existe execução 06 em
+   curso. Não interromper/descartar uma execução em andamento silenciosamente.
+2. Ler a configuração existente, validar com `workflow_operacao.validar_config`
+   e acrescentar **somente** a entrada abaixo; preservar 05 e quaisquer outras
+   reservas. Se já existir por ID/nome, exigir correspondência, sem duplicar.
+   Gravar por temporário no mesmo diretório, chmod0600, flush/fsync e rename.
+
+```json
+{
+  "id": "cn4KcQujNk9CwcN0",
+  "nome": "06 · Funil semanal (Site antes da venda)",
+  "motivo": "Piloto assistido: ciclo, responsável e espera são decididos pela Central; preservar Buscas e retrato."
+}
+```
+
+3. Fazer explicitamente `POST /workflows/cn4KcQujNk9CwcN0/deactivate`. A guarda
+   permite a desativação. Não fazer PUT do grafo, DELETE, reset de Buscas,
+   exclusão do retrato ou execução do workflow.
+4. Conferir `active=false`, nenhuma execução 06 em curso, mesmos nós/conexões/
+   settings/credenciais, mesmo arquivo `site-funil.json` e nenhuma chamada de
+   update em Buscas. Comparar os demais estados com a baseline da mesma fase;
+   outras publicações do lote têm sua própria lista autorizada de diferenças.
+5. Com transporte bloqueado por dublê, tentar ativação pelo cliente e conferir
+   a recusa local antes da API. Não usar ativação real como teste. API direta e
+   UI administrativa continuam fora da guarda; esta não é uma ACL universal.
+
+Reversão preserva 06 inativo e os dados novos. Retirar a reserva e reativar são
+ações separadas, sujeitas a revisão do contrato completo da Central e autorização
+específica. A antiguidade das métricas semanais congeladas deve ser explícita;
+o relatório 06 não substitui a fila comercial atual.

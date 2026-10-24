@@ -5,7 +5,7 @@ export const PEDIDO_DE_RESPOSTA_REVISADA = 'Prepare uma resposta curta e útil p
 /** Recência comercial, sem incluir contadores de tempo que mudam a cada leitura. */
 export async function hashDoContexto(lead: CrmLead): Promise<string> {
   const texto = JSON.stringify([lead.id, lead.produto, lead.etapa, lead.subEtapa, lead.resposta,
-    lead.conversa, lead.eventos, lead.proximoPasso, lead.proposta, lead.links.whatsapp,
+    lead.conversa, lead.eventos, lead.proximoPasso, lead.proposta, lead.atendimentoComercial ?? null, lead.links.whatsapp,
     lead.links.raioX, lead.links.site, lead.notas, lead.achados, lead.equipe, lead.porte])
   const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(texto))
   return Array.from(new Uint8Array(bytes), n => n.toString(16).padStart(2, '0')).join('')

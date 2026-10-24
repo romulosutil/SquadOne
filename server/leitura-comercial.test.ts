@@ -10,6 +10,8 @@ import {PREFIXO_CICLO} from '../src/operations/ciclo-comercial.ts'
 import {textoResponsavelConversa} from '../src/operations/responsavel-conversa.ts'
 import {notaDoAprendizado} from '../src/operations/aprendizado-comercial.ts'
 import {guardaDeIdentidade} from './acesso.ts'
+import {resumirSinaisComerciais} from '../src/operations/sinais-comerciais.ts'
+import {planoComercialDoLead} from '../src/operations/prioridade-comercial.ts'
 import {LeiturasDaMensagem} from './assistente-ferramentas.ts'
 const AGORA=Date.parse('2026-10-24T15:00:00Z'),EM='2026-10-24T14:00:00Z'
 const lead=(extra:Partial<CrmLead>={}):CrmLead=>({id:'site:teste',chave:'teste',produto:'site',empresa:'Empresa teste',nicho:'serviços',cidade:'Vitória',etapa:'contato',sinal:'em-conversa',subEtapa:'Respondeu',marcos:{},eventos:[],notas:0,links:{whatsapp:'https://wa.me/5511999991234'},resposta:{tipo:'neutra',trecho:'Texto privado da conversa'},conversa:{mensagens:1,ultimaEntrada:EM,ultima:{direcao:'entrada',em:EM,trecho:'Texto privado da conversa'}},...extra} as CrmLead)
@@ -83,10 +85,23 @@ test('mesma guarda da Central recusa pedido Serve sem login e admite leitura loo
 test('Assistente lê handoff pela visão atual, sem mensagem ou link do atendimento',async()=>{
  const l=lead({atendimentoComercial:{id:'handoff-001',tipo:'handoff',titulo:'Conferir com Rômulo',motivo:'Confirmar escopo',alvo:'operador',texto:'RASCUHO-NAO-EXPORTAR',estado:'pendente'}})
  const leituras=new LeiturasDaMensagem({visao:async()=>visao([l]) as CrmVisao},()=>new Date(AGORA))
- const p=await leituras.executar('ler_proxima_venda',{});assert.match(JSON.stringify(p),/Conferir com Rômulo/);assert.ok(!JSON.stringify(p).includes('RASCUHO-NAO-EXPORTAR'));assert.ok(!JSON.stringify(p).includes('wa.me'))
+ const p=await leituras.executar('ler_proxima_venda',{});assert.ok(JSON.stringify(p).includes(planoComercialDoLead(l,AGORA).acao));assert.ok(!JSON.stringify(p).includes('RASCUHO-NAO-EXPORTAR'));assert.ok(!JSON.stringify(p).includes('wa.me'))
  const fonte=await readFile(new URL('../server.ts',import.meta.url),'utf8');assert.match(fonte,/fontes:\s*\{\s*visao: visaoAtendimento,\s*roster:/);assert.ok(fonte.indexOf('app.use(porteiroDeIp())')<fonte.indexOf('montarLeituraComercial(app'))
 })
 
 test('referência duplicada continua ambígua, nunca presume unicidade da oportunidade',async()=>{
  const l=lead(),api=await servidor(visao([l,{...l,empresa:'Registro duplicado'}]));try{const p=await(await api.get('?referencia='+referenciaLeituraComercial(l))).json();assert.equal(p.resultado,'ambiguo');assert.equal(p.oportunidades.length,2)}finally{await api.fechar()}
+})
+
+test('leitura compartilha prioridade interna e ordenação do helper antes do corte de resultados',async()=>{
+ const q={...qualificacaoComercialVazia(Date.parse(EM)),id:'q-valida',fonte:'Fonte privada',evidencia:'Evidência privada',necessidade:'Captar pedidos',adequacao:{estado:'confirmada' as const,oferta:'encontrado' as const,motivo:'Faz sentido'},intencao:'avaliar' as const,decisao:'Dois sócios',proximoPasso:{aceito:true,descricao:'Avaliar escopo'}}
+ const historico=lead({id:'site:historia',empresa:'Z histórico',conversa:{desde:EM,mensagens:3,ultimaEntrada:EM,ultimaSaida:'2026-10-24T14:10:00Z',ultima:{em:'2026-10-24T14:10:00Z',direcao:'saida',trecho:'Resposta privada'},sinaisComerciais:resumirSinaisComerciais([{em:EM,direcao:'entrada',texto:'Quanto fica?'},{em:'2026-10-24T14:10:00Z',direcao:'saida',texto:'Resposta privada'}],AGORA)}})
+ const qualificada=lead({id:'site:qualificada',empresa:'A qualificada',qualificacaoComercial:q}),espera=lead({id:'site:espera',empresa:'B espera',proximoPasso:{texto:'Esperar resposta; sem nova cobrança',data:'2099-01-01',registradoEm:EM}})
+ const api=await servidor(visao([espera,historico,qualificada]));try{const p=await(await api.get()).json();assert.deepEqual(p.oportunidades.map((o:{empresa:string})=>o.empresa),['A qualificada','Z histórico','B espera'])
+ for(const l of [qualificada,historico,espera]){const o=p.oportunidades.find((o:{referencia:string})=>o.referencia===referenciaLeituraComercial(l));assert.deepEqual(o.prioridadeTrabalho,planoComercialDoLead(l,AGORA));assert.equal(o.contatoAutorizado,false)}
+ assert.equal(p.oportunidades[1].prioridadeTrabalho.evidencia.estado,'historica');assert.equal(p.oportunidades[1].prioridadeTrabalho.urgente,false);assert.equal(p.oportunidades[2].proximaAcao,'aguardar')
+ }finally{await api.fechar()}
+})
+test('qualquer falha exposta pelo store bloqueia leitura, inclusive timestamp igual/antigo com execução nova',async()=>{
+ for(const em of ['2026-10-24T14:59:00.000Z','2026-10-24T14:00:00.000Z']){const api=await servidor(visao([lead()],{ultimaFalha:{em,erro:'Falha privada'}}));try{const r=await api.get();assert.equal(r.status,503);assert.deepEqual((await r.json()).oportunidades,[])}finally{await api.fechar()}}
 })

@@ -57,7 +57,7 @@ export function criarInventarioCapturasAtendimento(pasta:string,lerIdentidade:Le
     return {identidade,fontes,falhas}
   }
 }
-export type ConferenciaFonteAtendimento = ({ estado: 'ok'; texto: string; papel?: string; saidasEm: string[]; ultimaEntradaEm?: string } | { estado: 'ausente'; motivo: string } | { estado: 'invalida'; motivo: string }) & {sourceProofHash?:string}
+export type ConferenciaFonteAtendimento = ({ estado: 'ok'; texto: string; papel?: string; saidasEm: string[]; ultimaEntradaEm?: string } | { estado: 'ausente'; motivo: string } | { estado: 'invalida'; motivo: string }) & {sourceProofHash?:string;identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel'}
 /** O leitor recebe a conversa do arquivo realmente aberto, nunca a identidade copiada do envelope. */
 export interface DependenciasAtendimentoComercial {
   inbox: EntradaAtendimentoComercialDuravel
@@ -73,15 +73,16 @@ export interface PendenciaAtendimentoComercial {
   tipo: 'rascunho' | 'handoff' | 'aguardando-fonte'
   titulo: string; motivo: string; alvo: 'cliente' | 'operador'; orientacao: string; texto?: string
   contextoHash: string; estado: RegistroEntradaAtendimento['estado']; somenteRevisao: true
+  identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel'; ocorridoEm?:string
 }
-export type ResumoAtendimentoComercial = Pick<PendenciaAtendimentoComercial,'id'|'tipo'|'titulo'|'motivo'|'alvo'|'texto'|'orientacao'|'estado'|'contextoHash'>
+export type ResumoAtendimentoComercial = Pick<PendenciaAtendimentoComercial,'id'|'tipo'|'titulo'|'motivo'|'alvo'|'texto'|'orientacao'|'estado'|'contextoHash'|'identidade'|'ocorridoEm'>
 const objeto=(v: unknown): v is Record<string,unknown> => !!v && typeof v==='object' && !Array.isArray(v)
 export function conferirFonteAtendimento(evento: EventoAtendimentoComercial, fonte: FonteAtendimentoComercial | null, agora = Date.now()): ConferenciaFonteAtendimento {
   const prova=fonte?.identidade,meta=prova?.ativa?{sourceProofHash:prova.assinatura}:{}
-  const falha=(estado:'ausente'|'invalida',motivo:string):ConferenciaFonteAtendimento=>({estado,motivo,...meta})
+  const falha=(estado:'ausente'|'invalida',motivo:string,identidade:'sem-prova'|'conflito'|'indisponivel'='indisponivel'):ConferenciaFonteAtendimento=>({estado,motivo,...meta,identidade})
   if (!fonte) return falha('ausente','Mensagem original ainda não está disponível na fonte privada.')
   if (fonte.conversa !== evento.conversa || evento.origem !== 'whatsapp' || evento.conta !== 'prumo' || evento.canal !== 'whatsapp'
-    || evento.fonteId !== evento.idOriginal || typeof fonte.jsonl !== 'string' || Buffer.byteLength(fonte.jsonl,'utf8') > 8*1024*1024) return falha('invalida','Identidade da fonte divergente; confira a captura original.')
+    || evento.fonteId !== evento.idOriginal || typeof fonte.jsonl !== 'string' || Buffer.byteLength(fonte.jsonl,'utf8') > 8*1024*1024) return falha('invalida','Identidade da fonte divergente; confira a captura original.','conflito')
   const candidatas: Record<string,unknown>[]=[], saidasEm:string[]=[], entradasEm:string[]=[]
   for (const linha of fonte.jsonl.split('\n')) {
     if (!linha.trim()) continue
@@ -98,18 +99,18 @@ export function conferirFonteAtendimento(evento: EventoAtendimentoComercial, fon
     if (v.id === evento.idOriginal && v.direcao === evento.direcao) candidatas.push(v)
   }
   if (!candidatas.length) return falha(prova?.ativa?'invalida':'ausente','Mensagem original ainda não está disponível na fonte privada.')
-  if (candidatas.length !== 1) return falha('invalida','Identidade repetida na fonte privada; confira a captura original.')
+  if (candidatas.length !== 1) return falha('invalida','Identidade repetida na fonte privada; confira a captura original.','conflito')
   const m=candidatas[0]
   if ((!prova?.ativa&&m.origem!=='prumo') || prova?.ativa&&!['prumo','pessoal','hermes-historico','hermes-historico-transcrito'].includes(String(m.origem)) || m.em !== evento.ocorridoEm || typeof m.texto !== 'string'
-    || createHash('sha256').update(m.texto,'utf8').digest('hex') !== evento.conteudoHash) return falha('invalida','Integridade da mensagem original divergente; nenhuma resposta foi preparada.')
+    || createHash('sha256').update(m.texto,'utf8').digest('hex') !== evento.conteudoHash) return falha('invalida','Integridade da mensagem original divergente; nenhuma resposta foi preparada.','conflito')
   if(prova?.ativa){
     const tuple=mensagemDaCaptura(m)
     if(!tuple)return falha('invalida','Metadados originais inválidos; confira a captura.')
     const r=conferirIdentidadeCaptura(tuple,prova,agora)
-    if(r.estado!=='verificada')return falha('invalida',r.motivo)
+    if(r.estado!=='verificada')return falha('invalida',r.motivo,r.estado==='ausente'?'sem-prova':'conflito')
   }
   const ultimaEntradaEm=entradasEm.sort((a,b)=>Date.parse(b)-Date.parse(a))[0]
-  return {estado:'ok',texto:m.texto,saidasEm,...meta,...(ultimaEntradaEm?{ultimaEntradaEm}:{}),...(typeof m.papel==='string'?{papel:m.papel}:{})}
+  return {estado:'ok',texto:m.texto,saidasEm,...meta,identidade:prova?.ativa?'confirmada':'indisponivel',...(ultimaEntradaEm?{ultimaEntradaEm}:{}),...(typeof m.papel==='string'?{papel:m.papel}:{})}
 }
 const comercial=(r: RegistroEntradaAtendimento) => r.evento.origem==='whatsapp' && r.evento.direcao==='entrada' && r.evento.tipo==='resposta'
 const ids=(leads: readonly CrmLead[])=>leads.map(l=>l.id).sort()
@@ -192,7 +193,7 @@ export class AtendimentoComercial {
     const unico=leads.length===1?leads[0]:undefined
     const base: PendenciaAtendimentoComercial={id:'atendimento-'+r.chave,chave:r.chave,conversa:e.conversa,leadIds:ids(leads),
       ...(unico?{leadId:unico.id,produto:unico.produto,empresa:unico.empresa}:{}),tipo:'handoff',titulo:'Conferir atendimento com Rômulo',
-      motivo:'Contexto exige revisão humana.',alvo:'operador',orientacao:'Confira a conversa e o CRM antes de decidir o próximo passo.',contextoHash,estado:r.estado,somenteRevisao:true}
+      motivo:'Contexto exige revisão humana.',alvo:'operador',orientacao:'Confira a conversa e o CRM antes de decidir o próximo passo.',contextoHash,estado:r.estado,somenteRevisao:true,identidade:fonte.identidade??'indisponivel',ocorridoEm:e.ocorridoEm}
     const handoff=(motivo:string,orientacao=base.orientacao):PendenciaAtendimentoComercial=>({...base,motivo,orientacao})
     if(fonte.estado==='ausente')return {...handoff(fonte.motivo),tipo:'aguardando-fonte',titulo:'Aguardar mensagem original'}
     if(fonte.estado==='invalida')return handoff(fonte.motivo)

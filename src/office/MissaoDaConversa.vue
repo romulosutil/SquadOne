@@ -18,11 +18,13 @@ const emit = defineEmits<{ ficha: [id: string]; registrado: []; interagiu: []; o
 const procedimento = computed(() => procedimentoDaDecisao(props.lead))
 const preparo = ref<MensagemDaDecisao | null>(null), preparando = ref(false), erroDoPreparo = ref('')
 const acaoEfetiva = computed(() => preparo.value ? preparo.value.acao : props.acao)
-const mensagem = computed(() => preparo.value?.mensagem ?? '')
+const mensagem = computed(() => procedimento.value.tipo === 'interno' ? '' : preparo.value?.mensagem ?? '')
 const passo = ref(props.estado === 'agora' || !props.estado || procedimento.value.tipo === 'robo' ? 1 : 3)
 const passos = [{ nome: 'Entender', detalhe: 'Contexto da conversa' }, { nome: 'Agir', detalhe: 'Sua próxima ação' }, { nome: 'Acompanhar', detalhe: 'Leitura automática da conversa' }]
 const marcos = computed(() => marcosDaMissao(props.lead))
-const agora = computed(() => procedimento.value.tipo === 'robo'
+const agora = computed(() => procedimento.value.tipo === 'interno'
+  ? { frase: procedimento.value.titulo, como: procedimento.value.resultadoEsperado }
+  : procedimento.value.tipo === 'robo'
   ? { frase: procedimento.value.titulo, como: 'Use o menu ou aguarde o atendimento. O pedido de encaminhamento só cabe quando ainda não há uma pessoa na conversa.' }
   : preparo.value?.proximaAcao
   ? { frase: preparo.value.proximaAcao, como: preparo.value.porque }
@@ -40,10 +42,10 @@ const ajuste = ref<'concluir' | 'reagendar' | null>(null), registrar = ref(false
 const fatoDoRegistro = ref<FatoDaVenda>('passo')
 function abrirRegistro(fato: FatoDaVenda) { fatoDoRegistro.value = fato; registrar.value = true; ajuste.value = null; passo.value = 3 }
 function acompanharEnvio() { saidaAoAbrir.value = props.lead.conversa?.ultimaSaida ?? (props.lead.conversa?.ultima.direcao === 'saida' ? props.lead.conversa.ultima.em : null); abriu.value = true; passo.value = 3 }
-const contexto = () => JSON.stringify([props.lead.etapa, props.lead.resposta, props.lead.conversa, props.lead.eventos, props.lead.proximoPasso, props.lead.proposta, props.lead.links, props.acao?.chave, props.acao?.rascunho])
+const contexto = () => JSON.stringify([props.lead.etapa, props.lead.resposta, props.lead.conversa, props.lead.eventos, props.lead.proximoPasso, props.lead.proposta, props.lead.links, props.lead.atendimentoComercial, props.acao?.chave, props.acao?.rascunho])
 const contextoRevisado = ref(contexto())
 const mudou = computed(() => contextoRevisado.value !== contexto())
-const linkDaAcao = computed(() => props.disponivel && props.estado !== 'encerrada' && preparo.value?.podeAbrir && !mudou.value ? whatsappParaRevisao(props.lead.links.whatsapp, mensagem.value) : '')
+const linkDaAcao = computed(() => props.disponivel && props.estado !== 'encerrada' && procedimento.value.tipo !== 'interno' && preparo.value?.podeAbrir && !mudou.value ? whatsappParaRevisao(props.lead.links.whatsapp, mensagem.value) : '')
 const registroDisponivel = computed(() => props.disponivel && props.registroDisponivel !== false && props.estado !== 'encerrada')
 function mudarOcupado(valor: boolean) { ocupado.value = valor; emit('ocupado', valor) }
 function revisarContexto() { contextoRevisado.value = contexto(); abriu.value = false; passo.value = 1; preparo.value = null; void prepararMensagem() }
@@ -101,7 +103,7 @@ watch(() => props.estado, (estado, anterior) => { if (anterior === 'agora' && es
           <a v-if="linkDaAcao && !ocupado" class="botao" :class="{ 'botao--primario': !abriu }" :href="linkDaAcao" target="_blank" rel="noopener" @click="acompanharEnvio">{{ abriu ? 'Reabrir mensagem no WhatsApp ↗' : 'Revisar no WhatsApp ↗' }}</a>
           <button v-if="!linkDaAcao && !preparando" type="button" class="botao botao--primario" :disabled="ocupado" @click="emit('ficha', lead.id)">{{ acaoEfetiva?.conferirHistorico ? 'Conferir histórico na ficha' : 'Conduzir pela ficha' }}</button>
         </div>
-        <p class="texto-2 texto-pequeno">Envie pelo WhatsApp. O time acompanha o texto que realmente sair, incluindo suas edições, assim que a integração o capturar.</p>
+        <p v-if="procedimento.tipo !== 'interno'" class="texto-2 texto-pequeno">Envie pelo WhatsApp. O time acompanha o texto que realmente sair, incluindo suas edições, assim que a integração o capturar.</p>
       </template>
       <button v-else type="button" class="botao botao--primario" @click="passo = 3">Ver acompanhamento →</button>
       <button type="button" class="botao botao--leve" :disabled="ocupado" @click="passo = 3">Acompanhar conversa →</button>

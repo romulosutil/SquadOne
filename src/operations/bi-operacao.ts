@@ -3,6 +3,9 @@ import { type ClasseDaResposta, ROTULOS_DA_CLASSIFICACAO } from './classificacao
 import { revisaoRetomadaDoLead } from './revisao-retomadas'
 import { procedimentoDaDecisao } from '../office/procedimento-da-decisao'
 import { lacunasDoSpiced } from './spiced'
+import { planoComercialDoLead } from './prioridade-comercial'
+import { temQualificacaoComercial } from './qualificacao-comercial'
+import { PREFIXO_CICLO } from './ciclo-comercial'
 import { diaEmSP } from './retomadas'
 
 const DIA = 86_400_000
@@ -18,9 +21,15 @@ export function planoDoLead(lead: CrmLead, agora = Date.now()): PlanoBi {
   const p = procedimentoDaDecisao(lead, new Date(agora))
   const r = revisaoRetomadaDoLead(lead, agora)
   const c = lead.classificacaoResposta
+  const trabalho = planoComercialDoLead(lead,agora)
   const base = { lead, responsavel: 'Rômulo', prazo: 'Na próxima revisão', evidencia: c?.evidencia?.trecho || lead.conversa?.ultima.trecho || c?.motivo || 'Sem trecho de conversa preservado.' }
   const plano = (tipo: PlanoBi['tipo'], prioridade: number, acao: string, resultado: string, extra: Partial<PlanoBi> = {}): PlanoBi => ({ ...base, tipo, prioridade, acao, resultado, ...extra })
-  if (lead.atendimentoComercial) return plano('conferir',0,lead.atendimentoComercial.titulo,'Decisão comercial revisada por Rômulo, com próximo passo confirmado na ficha.',{evidencia:lead.atendimentoComercial.motivo,prazo:'Agora, na ficha',condicao:'Tarefa interna: revisar a fonte e o rascunho; não autoriza envio.'})
+  const evidenciaTrabalho = `${trabalho.evidencia.fonte} · ${trabalho.evidencia.tipo} · ${trabalho.evidencia.estado}${trabalho.em ? ` · ${trabalho.em}` : ''}`
+  // Visibilidade da tarefa interna não reabre a conversa em pausa ou com desfecho.
+  if (lead.atendimentoComercial) return plano('conferir',0,trabalho.acao,trabalho.resultado,{evidencia:evidenciaTrabalho,prazo:trabalho.urgente?'Agora, conferir o evento original':'Na ficha, sem novo envio',condicao:'Tarefa interna: preservar a restrição e conferir a fonte; não autoriza envio.'})
+  const novaPolitica = temQualificacaoComercial(lead,agora) || !!lead.conversa?.sinaisComerciais || trabalho.destaque
+    || lead.eventos.some(e=>e.tipo==='nota'&&e.origem==='manual'&&(e.registroTexto??e.texto??'').startsWith(PREFIXO_CICLO))
+  if(novaPolitica) return plano(trabalho.grupo==='aguardar'?'aguardar':trabalho.grupo==='encerrado'?'encerrado':'conferir',trabalho.grupo==='encerrado'?99:trabalho.grupo==='aguardar'?80:trabalho.destaque?1:2,trabalho.acao,trabalho.resultado,{evidencia:evidenciaTrabalho,prazo:trabalho.grupo==='aguardar'?lead.proximoPasso?.data||'Até resposta ou condição combinada':trabalho.urgente?'Agora, conferir o evento original':'Na próxima revisão',condicao:'Prioridade de trabalho interno; não confirma compra nem autoriza contato.'})
   if (p.tipo === 'encerrado' || c?.classe === 'recusa' || c?.classe === 'exclusao') return plano('encerrado', 99, 'Preservar o desfecho e conferir o motivo registrado', 'Histórico correto; sem nova abordagem.')
   if (p.tipo === 'espera') return plano('aguardar', 90, lead.proximoPasso?.texto || p.titulo, 'Aguardar a condição ou nova abertura; revisar antes de contato.', { prazo: lead.proximoPasso?.data || 'Até nova resposta' })
   if (r && !r.atual) return plano('conferir', 2, 'Atualizar a revisão com as mensagens e registros posteriores', 'Novo próximo passo baseado no contexto atual.', { evidencia: `A revisão de ${r.em.slice(0,10)} perdeu validade após mudança de contexto.`, prazo: 'Antes de retomar' })

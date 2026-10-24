@@ -1,5 +1,6 @@
 """Consulta comercial somente leitura. Transporte fixo local, sem cache ou fallback."""
 import argparse
+from datetime import datetime
 import json
 import re
 import sys
@@ -12,6 +13,9 @@ MAX_BYTES = 262144
 LACUNAS = {"necessidade", "adequação da oferta", "intenção de avaliar ou contratar", "participantes e processo de decisão", "próximo passo aceito", "fonte, evidência e confirmação humana", "dor", "impacto", "decisor confirmado"}
 BLOQUEIOS = {"encerramento", "recusa-ou-exclusao", "pausa", "espera", "revisao-pendente", "qualificacao-invalida", "qualificacao-negativa", "ciclo-comercial", "responsabilidade-humana", "responsabilidade-indefinida", "identidade-ou-registro-pendente", "atendimento-interno", "conteudo-ou-autoria-pendente", "decisao-comercial-humana"}
 OFERTAS = {"", "raio-x", "mapa", "encontrado", "respondido", "anuncios", "anuncios-duas", "redes", "fonte", "fonte-em-dia", "iris", "estampa", "pacote"}
+
+ACOES_TRABALHO = set(["Aguardar a resposta ou a condição combinada", "Aguardar retorno após a última resposta enviada", "Conferir a restrição comercial registrada", "Conferir condições já discutidas e preparar decisão, sem novo envio", "Conferir necessidade e a próxima lacuna comercial", "Conferir o canal e a autoria da resposta", "Conferir o ciclo comercial e decidir o próximo marco com Rômulo", "Conferir o pedido comercial atual com Rômulo", "Conferir o pedido recebido antes de escolher a próxima ação", "Conferir se há uma conversa comercial e evidência disponível", "Conferir uma lacuna da qualificação por vez", "Preparar a decisão comercial com Rômulo", "Preservar o desfecho e a restrição de contato", "Resolver contexto antes de preparar qualquer contato"])
+RESULTADOS_TRABALHO = set(["Condições e contexto conferidos por Rômulo; nenhuma retomada presumida.", "Escopo, condições e versão da proposta conferidos antes de apresentação.", "Espera preservada; revisão interna não autoriza retomada.", "Histórico e restrição preservados; nenhuma nova abordagem.", "Identidade, fonte e pendência conferidas na ficha.", "Indício comercial separado de qualificação e condição humana confirmadas.", "Nenhuma oportunidade pronta presumida pela ausência de dados.", "Não repetir apresentação, proposta ou pergunta já respondida.", "Permissão, encaminhamento e curiosidade separados de intenção de contratar.", "Preço, proposta ou contratação revisados pelo humano; nenhuma resposta ou contratação automática.", "Próxima pergunta ou conferência interna escolhida sem repetir o que já foi confirmado.", "Resposta automática não tratada como intenção de compra.", "Revisão humana negativa preservada, sem rascunho de contato.", "Uma lacuna pertinente identificada, sem reunião ou proposta presumida.", "Versão, evidência e condição de proposta, contratação ou recebimento conferidas; sem confirmação automática."])
 
 class SemRedirecionamento(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
@@ -53,6 +57,30 @@ def ficha_fonte(valor):
         raise ValueError("Ficha inválida")
     return valor
 
+def prioridade_trabalho(item, consultado_em):
+    p = item["prioridadeTrabalho"]
+    if p.get("contatoAutorizado") is not False:
+        raise ValueError("Prioridade não autoriza contato")
+    evidencia = p["evidencia"]
+    em = p["em"]
+    if em is not None:
+        if not isinstance(em, str) or not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", em):
+            raise ValueError("Data de origem inválida")
+        datetime.strptime(em, "%Y-%m-%dT%H:%M:%S.%fZ")
+    destaque, urgente = booleano(p["destaque"]), booleano(p["urgente"])
+    grupo = opcao(p["grupo"], {"decidir", "qualificar", "conferir", "aguardar", "encerrado"})
+    if type(p["nivel"]) is not int or not 1 <= p["nivel"] <= 5 or type(p["ordem"]) is not int or p["ordem"] not in {10, 11, 20, 21, 25, 30, 31, 45, 60, 65, 70, 75, 80, 81, 90}:
+        raise ValueError("Ordem de trabalho inválida")
+    if destaque and em is None or grupo in {"aguardar", "encerrado"} and (destaque or urgente) or urgente and (not destaque or grupo != "decidir" or p["ordem"] != 10 or evidencia.get("fonte") != "atendimento" or evidencia.get("estado") != "atual"):
+        raise ValueError("Prioridade inconsistente")
+    if urgente:
+        if not isinstance(consultado_em, str) or not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", consultado_em):
+            raise ValueError("Frescor da urgência indisponível")
+        idade = (datetime.strptime(consultado_em, "%Y-%m-%dT%H:%M:%S.%fZ") - datetime.strptime(em, "%Y-%m-%dT%H:%M:%S.%fZ")).total_seconds()
+        if not 0 <= idade <= 900:
+            raise ValueError("Urgência exige evento original recente")
+    return {"grupo": grupo, "nivel": p["nivel"], "ordem": p["ordem"], "acao": opcao(p["acao"], ACOES_TRABALHO), "resultado": opcao(p["resultado"], RESULTADOS_TRABALHO), "evidencia": {"fonte": opcao(evidencia["fonte"], {"qualificacao-humana", "ciclo-humano", "classificacao-atual", "sinal-recebido", "atendimento", "restricao", "sem-evidencia"}), "tipo": opcao(evidencia["tipo"], {"necessidade", "adequacao", "intencao", "decisao", "proximoPasso", "evidencia", "proposta", "proposta_enviada", "aceite", "entrega_vista", "condicao_cobranca", "cobranca", "pagamento", "correcao", "preco", "contratar", "material", "interesse", "recusa", "exclusao", "espera", "sem-interesse", "inadequada", "sem-prova", "conflito", "indisponivel", "contexto-pendente", "qualificacao-invalida", "robo", "revisao-pendente", "revisao", "saida-posterior", "qualificacao-suficiente", "sem-contexto", "conversa", "permissao", "acesso", "curiosidade", "silencio", "neutra", "pendente", "nao-contatado"}), "estado": opcao(evidencia["estado"], {"atual", "historica", "pendente"})}, "em": em, "destaque": destaque, "urgente": urgente, "contatoAutorizado": False}
+
 def resposta_segura(dados):
     # Projeção explícita: campos extras jamais atravessam para o Hermes.
     if not isinstance(dados, dict) or dados.get("v") != 1 or dados.get("somenteLeitura") is not True or dados.get("contatoAutorizado") is not False:
@@ -79,6 +107,7 @@ def resposta_segura(dados):
         if "intencao" in q:
             qualificacao["intencao"] = opcao(q["intencao"], {"desconhecida", "permissao", "avaliar", "contratar", "sem-interesse"})
         linha = {"referencia": item["referencia"], "empresa": rotulo(item["empresa"]), "produto": opcao(item["produto"], {"site", "prumo", "iris", "estampa", "plus"}), "etapa": opcao(item["etapa"], {"novo", "contato", "proposta", "ganho", "perdido"}), "autoridade": opcao(item["autoridade"], {"qualificacao-nova", "spiced-legado", "sem-revisao"}), "qualificacao": qualificacao, "ciclo": {"estado": opcao(c["estado"], {"ausente", "revisar", "cobranca-pendente", "recebimento", "condicao", "aceite", "proposta-enviada", "rascunho"}), "marcosConfirmados": lista_opcoes(c["marcosConfirmados"], {"proposta", "proposta_enviada", "aceite", "entrega_vista", "condicao_cobranca", "cobranca", "pagamento", "correcao"}), "exigeHumano": booleano(c["exigeHumano"])}, "responsavel": {"estado": opcao(dono["estado"], {"definido", "ausente", "bloqueado"}), "quem": opcao(dono["quem"], {None, "time", "romulo"})}, "atendimento": {"presente": booleano(att["presente"]), "tipo": opcao(att["tipo"], {None, "rascunho", "handoff", "aguardando-fonte"}), "alvo": opcao(att["alvo"], {None, "operador", "cliente"})}, "bloqueios": lista_opcoes(item["bloqueios"], BLOQUEIOS), "proximaAcao": opcao(item["proximaAcao"], {"preservar-desfecho", "aguardar", "conferir-com-romulo", "conferir-qualificacao-na-ficha"}), "contatoAutorizado": False}
+        linha["prioridadeTrabalho"] = prioridade_trabalho(item, dados.get("consultadoEm"))
         if resultado == "individual":
             linha["ficha"] = ficha_fonte(item.get("ficha"))
         saida.append(linha)
