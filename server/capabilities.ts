@@ -59,6 +59,7 @@ export function ehBaixaPrioridade(modo: Modo): boolean {
 }
 
 export interface CapabilityContext {
+  operacaoId?: string;
   /**
    * Access token OAuth do usuário, obtido e renovado pelo servidor
    * (auth-store) — o browser nunca o vê. `null` quando não há credencial: o
@@ -268,6 +269,7 @@ const agendarEvento: Capability = {
       pessoa,
       colorId: CORES_POR_DOMINIO[indice % CORES_POR_DOMINIO.length],
       agenda: ctx.agenda,
+      operacaoId: ctx.operacaoId,
     });
     // Passos DEPOIS dos eventos: a tarefa-mãe aponta para o evento principal, e
     // o modelo não recebe eventId de volta (turno one-shot) — por isso é campo

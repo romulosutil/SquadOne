@@ -1,3 +1,4 @@
+import { AgendaRequerConferencia, type GarantiasAgenda } from './garantias-agenda.ts';
 import { randomUUID } from "node:crypto";
 import { GoogleGenAI, FunctionCallingConfigMode, type FunctionCall } from "@google/genai";
 import { CAPABILITIES, declarations, ehBaixaPrioridade, tipoForcado, type CapabilityContext, type CapabilityResult, type EventoCriado, type Modo, type Sugestao, type TarefaCriada } from "./capabilities.ts";
@@ -7,7 +8,7 @@ import { ErroDeConfig, PrecisaConectar } from "./auth-store.ts";
 import { AgendaDoTurno, AgendaIndisponivel } from "./agenda.ts";
 import { descreverJanela, FUSO, lerJanela, SemHorarioLivre, type Janela } from "./alocador.ts";
 import { prioridadeDeAgendamento } from "./agendamento.ts";
-import type { ObterToken } from "./calendar.ts";
+import { ErroCalendario, type ObterToken } from "./calendar.ts";
 
 export const MODEL = "gemini-3.7-flash";
 /** Uma fonte só do fuso: o alocador e o prompt não podem discordar. */
@@ -56,6 +57,8 @@ export interface AvisoTarefa {
  * é o mesmo gesto que `PrecisaConectar`: reconectar.
  */
 export function motivoDoErro(err: unknown): MotivoDeErro | undefined {
+  if (err instanceof AgendaRequerConferencia) return "agendaIndisponivel";
+  if (err instanceof ErroCalendario && err.ehCredencial) return "precisaConectar";
   if (err instanceof PrecisaConectar) return "precisaConectar";
   if (err instanceof ErroDeConfig) return "configuracao";
   if (err instanceof SemHorarioLivre) return "semHorarioLivre";
@@ -377,6 +380,8 @@ export async function gerarComRetry(
 /** Tudo que um turno precisa, já resolvido pela rota antes de tocar Google e Gemini. */
 export interface PedidoDeTurno {
   demanda: string;
+  requestId?: string;
+  garantiasAgenda?: GarantiasAgenda;
   token: string | null;
   modo: Modo;
   roster: Roster;
@@ -462,7 +467,7 @@ async function rodarTurno(
   });
 
   const calls: FunctionCall[] = response.functionCalls ?? [];
-  const agenda = new AgendaDoTurno({ token, falhaDoToken, janela, agora });
+  const agenda = new AgendaDoTurno({ token, falhaDoToken, janela, agora, garantias:pedido.garantiasAgenda });
   const obterToken: ObterToken =
     pedido.obterToken ??
     (async () => {
@@ -490,7 +495,7 @@ async function rodarTurno(
       return { capacidade: nome, args, erro: `Capacidade desconhecida: '${nome}'` };
     }
     try {
-      return await capacidade.handler(args, ctx);
+      return await capacidade.handler(args, { ...ctx, ...(pedido.requestId ? { operacaoId:pedido.requestId+":"+squad.id+":"+calls.indexOf(call) } : {}) });
     } catch (err: any) {
       const motivo = motivoDoErro(err);
       return { capacidade: nome, args, erro: err?.message ?? String(err), ...(motivo ? { motivo } : {}) };

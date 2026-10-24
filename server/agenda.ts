@@ -1,3 +1,5 @@
+import type { GarantiasAgenda } from './garantias-agenda.ts';
+import { comPrazoOperacional } from './estado-operacional-duravel.ts';
 import { ErroDeConfig, PrecisaConectar } from "./auth-store.ts";
 import { ErroCalendario, lerOcupacao } from "./calendar.ts";
 import { HORIZONTE_DIAS, type Intervalo, type Janela } from "./alocador.ts";
@@ -32,17 +34,22 @@ export class AgendaDoTurno {
   readonly token: string | null;
   readonly janela: Janela;
   readonly agora: Date;
+  readonly garantias?: GarantiasAgenda;
+  private protecoes: Intervalo[] = [];
+  private readonly prazoLeituraMs: number;
   private readonly falhaDoToken: unknown;
   /** Por trecho lido (`inicio-fim`); a padrão é a primeira a entrar. */
   private readonly leituras = new Map<string, Promise<Intervalo[]>>();
   private falhaDeLeitura: AgendaIndisponivel | null = null;
   private readonly reservas: Intervalo[] = [];
 
-  constructor(p: { token: string | null; falhaDoToken?: unknown; janela: Janela; agora: Date }) {
+  constructor(p: { token: string | null; falhaDoToken?: unknown; janela: Janela; agora: Date; garantias?: GarantiasAgenda; prazoLeituraMs?: number }) {
     this.token = p.token;
     this.falhaDoToken = p.falhaDoToken ?? null;
     this.janela = p.janela;
     this.agora = p.agora;
+    this.garantias = p.garantias;
+    this.prazoLeituraMs=p.prazoLeituraMs??20000;
   }
 
   /**
@@ -75,7 +82,7 @@ export class AgendaDoTurno {
   async ocupacao(trecho?: Intervalo): Promise<Intervalo[]> {
     this.exigirAcesso();
     if (this.falhaDeLeitura) throw this.falhaDeLeitura;
-    const reservas = () => this.reservas.map((r) => ({ ...r }));
+    const reservas = () => [...this.reservas,...this.protecoes].map((r) => ({ ...r }));
     if (trecho && trecho.fim <= trecho.inicio) return reservas();
 
     const agora = this.agora.getTime();
@@ -87,7 +94,7 @@ export class AgendaDoTurno {
     const chave = `${lido.inicio}-${lido.fim}`;
     let leitura = this.leituras.get(chave);
     if (!leitura) {
-      leitura = lerOcupacao(this.token!, new Date(lido.inicio), new Date(lido.fim)).catch((err: any) => {
+      leitura = comPrazoOperacional(sinal => lerOcupacao(this.token!, new Date(lido.inicio), new Date(lido.fim), sinal),this.prazoLeituraMs).catch((err: any) => {
         this.falhaDeLeitura ??= new AgendaIndisponivel(
           `Não deu para ler a agenda: ${err?.message ?? String(err)}`,
           err instanceof ErroCalendario && err.ehCredencial,
@@ -98,6 +105,11 @@ export class AgendaDoTurno {
     }
     const lidos = await leitura;
     return [...lidos, ...reservas()];
+  }
+
+  /** Só sob trava global: relê o Calendar e cruza com reservas já confirmadas no journal. */
+  revalidar(protecoes: Intervalo[]): void {
+    this.leituras.clear(); this.falhaDeLeitura=null; this.protecoes=protecoes.map(r=>({...r}));
   }
 
   /** Desconta um horário recém-gravado para os próximos compromissos do turno. */

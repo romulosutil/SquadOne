@@ -1,3 +1,4 @@
+import type { SessaoReservaAgenda } from './garantias-agenda.ts';
 import {
   alocar,
   BLOCO_MIN,
@@ -91,6 +92,8 @@ export interface PedidoDeCompromisso {
   pessoa: { id: string; nome: string; papel: string };
   colorId: string;
   agenda: AgendaDoTurno;
+  operacaoId?: string;
+  reserva?: SessaoReservaAgenda;
 }
 
 const MIN_MS = 60_000;
@@ -177,6 +180,7 @@ async function gravar(
   p: PedidoDeCompromisso,
   corpo: Record<string, unknown>,
 ): Promise<{ id: string; htmlLink?: string }> {
+  if (p.reserva) return p.reserva.gravar(corpo);
   const resp = await fetch(urlDeEventos(p.calendarId), {
     method: "POST",
     headers: {
@@ -194,6 +198,15 @@ async function gravar(
  * AQUI. O modelo só disse a intenção (tipo, duração/esforço, até quando).
  */
 export async function agendarCompromisso(p: PedidoDeCompromisso): Promise<CompromissoAgendado> {
+  if (p.agenda.garantias && !p.reserva) {
+    p.agenda.exigirAcesso();
+    if (!p.operacaoId) throw new Error('A reserva exige identidade da demanda. Atualize a leitura antes de tentar.');
+    const conteudo={args:p.args,tipoForcado:p.tipoForcado,baixaPrioridade:p.baixaPrioridade,squadId:p.squadId,pessoa:p.pessoa.id,dominio:p.dominio.id};
+    return p.agenda.garantias.executar(p.calendarId,p.operacaoId,conteudo,p.agenda.token!,async reserva=>{
+      p.agenda.revalidar(reserva.ocupacao);
+      return agendarCompromisso({...p,reserva});
+    });
+  }
   // Antes de tudo: sem agenda não há o que alocar, e o erro já vem classificado.
   // A leitura vem depois, quando o pedido diz QUAL trecho da agenda importa.
   p.agenda.exigirAcesso();

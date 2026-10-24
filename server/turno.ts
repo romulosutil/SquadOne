@@ -1,3 +1,7 @@
+import path from 'node:path';
+import { GarantiasAgenda, DemandasAgendaDuraveis } from './garantias-agenda.ts';
+import { diretorioDeDados } from './dados.ts';
+import { randomUUID } from 'node:crypto';
 import type { GoogleGenAI } from "@google/genai";
 import { readRoster, resolverSquad } from "./squad.ts";
 import { executarTurno, type TurnoResult } from "./orchestrator.ts";
@@ -15,6 +19,7 @@ import type { ChamadaCrua, ObservacaoDeDemanda } from "./jev-sombra.ts";
  */
 export interface PedidoDeDemanda {
   demanda: string;
+  requestId?: string;
   modo: Modo;
   /** Ausente = primeira squad ativa (`resolverSquad`). O bot não tem aba. */
   squadId?: unknown;
@@ -63,7 +68,9 @@ export async function rodarDemanda(
 ): Promise<TurnoResult> {
   turnosEmAndamento++;
   try {
-    return await rodarDemandaContada(ai, pedido, observadores.luna ?? null, observadores.jev ?? null);
+    const requestId=pedido.requestId??'interno:'+randomUUID();
+    const demandas=new DemandasAgendaDuraveis(path.join(diretorioDeDados(),'agenda-demandas'));
+    return await demandas.executar(requestId,{demanda:pedido.demanda,modo:pedido.modo,squadId:pedido.squadId??null},()=>rodarDemandaContada(ai,{...pedido,requestId},observadores.luna??null,observadores.jev??null));
   } finally {
     turnosEmAndamento--;
   }
@@ -101,6 +108,8 @@ async function rodarDemandaContada(
   const observando = Boolean(sombra || jev);
   const resultado = await executarTurno(ai, {
     demanda: pedido.demanda,
+    requestId: pedido.requestId ?? "interno:"+randomUUID(),
+    garantiasAgenda: new GarantiasAgenda(path.join(diretorioDeDados(),"agenda-reservas")),
     token,
     falhaDoToken,
     modo: pedido.modo,

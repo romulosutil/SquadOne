@@ -1,3 +1,4 @@
+import { IdentidadeDoPedido } from './identidade-pedido.ts'
 /**
  * Estado e ações do app dos agentes — o que era o `<script>` do App.vue até a
  * casca mobile (07/10/2026). A casca e as rotas (Hoje, Agenda, Escritório, a
@@ -732,6 +733,7 @@ function criarEstadoDosAgentes() {
     pedirAberto.value = true
   }
 
+  const identidadeDelegacao=new IdentidadeDoPedido()
   const handleDelegation = async (payload: { demanda: string; modo: Modo }) => {
     if (isLoading.value || modalAberto.value) return
 
@@ -740,6 +742,7 @@ function criarEstadoDosAgentes() {
     // A squad do turno, não a da tela quando ele voltar: é nela que os eventos nasceram.
     const squadIdDoTurno = squadAtiva.value?.id ?? null
     turnoSquadId.value = squadIdDoTurno
+    const requestId=identidadeDelegacao.preparar({demanda:payload.demanda,modo:payload.modo,squadId:squadIdDoTurno})
     const pedido: UltimoPedido = {
       estado: 'rodando',
       demanda: payload.demanda,
@@ -759,7 +762,7 @@ function criarEstadoDosAgentes() {
       const response = await fetch('/api/orquestrar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ demanda: payload.demanda, modo: payload.modo, squadId: squadIdDoTurno ?? undefined })
+        body: JSON.stringify({ demanda: payload.demanda, modo: payload.modo, squadId: squadIdDoTurno ?? undefined, requestId })
       })
 
       if (!response.ok) {
@@ -857,6 +860,7 @@ function criarEstadoDosAgentes() {
       // Rele o calendario em vez de confiar no retorno: o que o Google gravou e
       // o que vale, inclusive edicoes feitas fora do app.
       await carregarMochila()
+      identidadeDelegacao.concluir(requestId)
     } catch (error) {
       console.error('Falha ao orquestrar:', error)
       pedido.estado = 'erro'

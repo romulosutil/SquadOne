@@ -463,7 +463,7 @@ export function eventoOcupa(ev: EventoDeOcupacao): Intervalo | null {
  * Mais de 10 páginas é erro, não leitura parcial: alocar sobre ocupação
  * incompleta marcaria por cima de compromissos.
  */
-export async function lerOcupacao(token: string, de: Date, ate: Date): Promise<Intervalo[]> {
+export async function lerOcupacao(token: string, de: Date, ate: Date, sinal?: AbortSignal): Promise<Intervalo[]> {
   const eventos = await listarPaginado<EventoDeOcupacao>(
     CALENDARIO_DE_OCUPACAO,
     {
@@ -476,6 +476,7 @@ export async function lerOcupacao(token: string, de: Date, ate: Date): Promise<I
       fields: CAMPOS_OCUPACAO,
     },
     token,
+    sinal,
   );
   const ocupado: Intervalo[] = [];
   for (const ev of eventos) {

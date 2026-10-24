@@ -38,3 +38,21 @@ Abrir Minhas decisões → conferir a preparação prioritária e a evidência o
 Conservar o snapshot e os eventos novos. Reverter somente código/configuração do lote; workflows têm exports privados anteriores. Não restaurar dados humanos antigos sobre os novos. Não reativar 05, caçadores, Grok ou envios como efeito colateral da reversão.
 
 A validação final, versões publicadas, estados e verificação visual são registrados no lote de implantação. Conclusão técnica não equivale a primeira venda.
+
+## Lote comercial conferido no Dell
+
+Versões `37c8457` e `73419a8` publicadas na main e construídas pelo atualizador. O segundo commit conserva os controles preexistentes do painel de ação; a cópia local anterior foi preservada em stash e backup privado. Os outros 30 arquivos preexistentes conservaram seus hashes.
+
+- 4.055 testes TS/JS e 97 Python relacionados aprovados; tipagem/build aprovados.
+- 21 workflows preservados, 16 ativos após pausar somente 06 nesta fase; 05 continua pausado.
+- Três comparações reais isoladas comprovaram mesmas quatro fontes e mesmo resultado do consumidor no contexto em lote; três temporários removidos.
+- Publicação atômica comprovada por snapshot real novo e recibo validado, com um retrato publicado e zero falhas/conflitos/órfãos no aceite. O 08 não retém execução bem-sucedida: ausência na API de histórico não é falha do retrato. Arquivo de erro legado de 20/10 foi preservado e permanece anterior ao retrato.
+- Registros humanos e os prefixos de 116 históricos preservados; `site-funil.json` preservado.
+- Cinco fichas reais conferidas por referência individual; destino e prioridade reproduzidos no leitor do Hermes. Nenhum contato autorizado por essa leitura.
+- O único destaque encontrado foi preparação interna de ControEco. Seu adiamento na fila de hoje foi preservado; o destaque não desfaz essa resolução. Comece, Roda Mais e Favarato continuam aguardando.
+
+Backups, exports, manifests e provas sanitizadas permanecem na pasta privada do Dell `~/.cache/mel-work/fase5-20261024T160338Z/`, fora do Git. Nenhum novo fato de qualificação, contratação ou recebimento foi gravado pelo lote.
+
+## Garantias de agenda e Telegram
+
+O [lote de garantias](PRUMO-AGENDA-TELEGRAM-GARANTIAS-2026-10-24.md) acrescenta identidade de pedido, reserva durável por calendário, timeout e replay protegido. Status e conferência leem as reservas sem reenviar. A revisão independente e a suíte integrada Linux de 4.093 casos passaram; tipagem/build também. Ajuste legado e alterações externas do Google continuam fora da trava de criação, com limites explícitos. Não houve criação de reunião, convite ou mensagem real para testar.

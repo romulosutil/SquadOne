@@ -9,7 +9,7 @@ import { decisoesDoEscritorio, novaRespostaEnviada, respostaJaAtendida, proximaD
 import MissaoDaConversa from './MissaoDaConversa.vue'
 import { avisosPorPrioridade, lerNovasRespostas, type LeituraDasRespostas, type RespostaParaAviso } from './avisos-de-resposta'
 
-const props = defineProps<{ visao: CrmVisao | null; erro: string; acoes: AcaoDeVenda[]; conversas?: readonly { lead: import('../operations/types').CrmLead; rotulo: string }[]; agora: number; agente?: Pessoa; alertas: ReturnType<typeof recomendacoesDoTime>; atualizando: boolean; conferidoEm: number | null }>()
+const props = defineProps<{ visao: CrmVisao | null; erro: string; acoes: AcaoDeVenda[]; conversas?: readonly { lead: import('../operations/types').CrmLead; rotulo: string; prioridade?: number }[]; agora: number; agente?: Pessoa; alertas: ReturnType<typeof recomendacoesDoTime>; atualizando: boolean; conferidoEm: number | null }>()
 const emit = defineEmits<{ ficha: [id: string]; registrado: []; ocupado: [valor: boolean]; atualizar: []; agentes: [] }>()
 const filtro = ref<EstadoDaDecisao>('agora'), busca = ref(''), oferta = ref(''), pagina = ref(1)
 const selecionada = ref<Decisao | null>(null), ocupado = ref(false)
@@ -22,7 +22,7 @@ const topo = ref<HTMLElement | null>(null)
 const decisoes = computed(() => decisoesDoEscritorio(props.visao?.leads ?? [], props.acoes, props.agora, props.conversas))
 const preparacoes = computed(() => destaquesComerciais(props.visao?.leads ?? [],props.agora).flatMap(item=>{
   const decisao=decisoes.value.find(d=>d.lead.id===item.leadId&&d.lead.produto===item.produto)
-  return decisao?[{...item,decisao}]:[]
+  return decisao?[{...item,decisao,adiada:props.conversas?.some(c=>c.lead.id===item.leadId&&(c.prioridade??0)>=10)??false}]:[]
 }))
 const dataDaEvidencia=(em:string|null)=>em?new Date(em).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'Data não confirmada'
 const avisosDeResposta = computed(() => avisosPorPrioridade(respostasParaAvisar.value, decisoes.value))
@@ -112,7 +112,7 @@ const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferid
         <h3>Preparação para a primeira venda</h3>
         <p class="texto-2 texto-pequeno">Prioridades de revisão interna. O histórico orienta a preparação; qualquer envio depende da sua decisão e das restrições da conversa.</p>
         <ol><li v-for="item in preparacoes" :key="`${item.produto}:${item.leadId}`">
-          <button type="button" @click="abrir(item.decisao)"><strong>{{ item.decisao.lead.empresa }}</strong><span>{{ item.plano.acao }}</span><small>{{ item.plano.evidencia.estado === 'historica' ? 'Indício histórico' : item.plano.evidencia.estado === 'pendente' ? 'Evidência a conferir' : 'Evidência atual' }} · {{ dataDaEvidencia(item.plano.em) }} · Sem envio automático</small></button>
+          <button type="button" @click="abrir(item.decisao)"><strong>{{ item.decisao.lead.empresa }}</strong><small v-if="item.adiada">Adiada na fila de hoje · Preparação interna disponível</small><span>{{ item.plano.acao }}</span><small>{{ item.plano.evidencia.estado === 'historica' ? 'Indício histórico' : item.plano.evidencia.estado === 'pendente' ? 'Evidência a conferir' : 'Evidência atual' }} · {{ dataDaEvidencia(item.plano.em) }} · Sem envio automático</small></button>
         </li></ol>
       </aside>
       <div class="minhas-decisoes__estados" role="group" aria-label="Situação das decisões">

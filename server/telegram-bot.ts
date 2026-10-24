@@ -1,3 +1,4 @@
+import type { FilaTelegramDuravel } from './fila-telegram-duravel.ts';
 import type { RequestHandler } from "express";
 import type { Modo } from "./capabilities.ts";
 import type { TurnoResult } from "./orchestrator.ts";
@@ -24,8 +25,8 @@ import {
 } from "./telegram-resposta.ts";
 
 /**
- * A cola do bot: portão próprio (a rota fica FORA do porteiro de IP), 200
- * imediato e uma fila serial de turnos. Duas portas para o mesmo `receber`:
+ * A cola do bot: portão próprio (a rota fica FORA do porteiro de IP), ACK
+ * após persistir e uma fila serial de turnos. Duas portas para o mesmo `receber`:
  * `processar` (webhook, Express) e o polling (`telegram-polling.ts`).
  *
  * - 200 antes do turno: um turno leva até ~6 min no pior caso (redirecionamento
@@ -34,7 +35,7 @@ import {
  *   nasceria duas vezes.
  * - Fila serial: dois turnos em paralelo leriam a agenda antes de o outro
  *   reservar e pegariam o mesmo horário. A CommandBar evita isso com isLoading.
- *   Turno da UI e do bot ao mesmo tempo continua possível (custo aceito).
+ *   Em produção, reservas também passam pela trava durável global do calendário.
  * - Áudio entra na MESMA fila: a transcrição é só o primeiro passo do turno.
  * - Propostas de contratação vão em mensagens próprias com Aprovar/Descartar.
  *   Ficam só em memória (redeploy esquece: o botão responde "expirada") e valem
@@ -44,11 +45,12 @@ import {
  */
 
 export interface DepsDoBot {
+  filaDuravel?: FilaTelegramDuravel;
   /** Segredo do webhook; null no polling (sem rota, o portão recusa tudo). */
   segredo: string | null;
   chatsPermitidos: ReadonlySet<number>;
   /** `squadId` só com prefixo de squad (`/p`); ausente = primeira squad ativa. */
-  rodar(demanda: string, modo: Modo, squadId?: string): Promise<TurnoResult>;
+  rodar(demanda: string, modo: Modo, squadId?: string, requestId?: string): Promise<TurnoResult>;
   enviar(chatId: number, texto: string, responderA?: number, botoes?: Botao[]): Promise<void>;
   digitando(chatId: number): Promise<void>;
   /** Baixa o áudio do Telegram e devolve a transcrição (lança `AudioSemFala` sem fala). */
@@ -106,6 +108,9 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
   const propostas = new Map<string, PropostaPendente>();
   let fila: Promise<void> = Promise.resolve();
   let pendentes = 0;
+  let ingressos = 0;
+  let ingressosEmVoo: Promise<unknown> = Promise.resolve();
+  type Registro = {id:number;update:unknown};
 
   const falhouAoEnviar = (err: unknown) =>
     console.error(`[telegram] falha ao responder: ${err instanceof Error ? err.message : String(err)}`);
@@ -161,8 +166,9 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
     modo: Modo,
     squadId: string | undefined,
     obterDemanda: () => Promise<{ demanda: string; prefixo?: string } | { falha: string }>,
+    registro?: Registro,
   ): number {
-    return enfileirar(async () => {
+    const tarefa = async () => {
       deps.digitando(chatId).catch(() => {});
       const relogio = setInterval(() => deps.digitando(chatId).catch(() => {}), INTERVALO_DIGITANDO_MS);
       let resultado: TurnoResult | undefined;
@@ -175,7 +181,7 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
         } else {
           prefixo = obtida.prefixo ?? "";
           try {
-            resultado = await deps.rodar(obtida.demanda, modo, squadId);
+            resultado = await deps.rodar(obtida.demanda, modo, squadId, `tg:${chatId}:${mensagemId}`);
           } catch (err) {
             console.error("[telegram] erro no turno:", err);
             texto = textoDaFalha(err);
@@ -198,6 +204,23 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
       }
       await deps.enviar(chatId, cortarParaTelegram(prefixo + texto), mensagemId).catch(falhouAoEnviar);
       if (resultado) await mandarPropostas(chatId, resultado);
+    };
+    return enfileirar(async()=>{
+      if(!registro||!deps.filaDuravel)return tarefa();
+      const token=await deps.filaDuravel.iniciar(registro.id);if(!token)return;
+      try {
+        // Pode ter esperado na fila/reiniciado: autorização e idade são conferidas novamente.
+        const atual=interpretarUpdate(registro.update,deps.chatsPermitidos,deps.agora());
+        if(atual.tipo!=='demanda'&&atual.tipo!=='audio'){
+          await deps.filaDuravel.concluir(registro.id,token);
+          if(atual.tipo==='atrasada')await deps.enviar(chatId,textoDeDemandaAtrasada(atual.atrasoMin),mensagemId).catch(falhouAoEnviar);
+          return;
+        }
+        await tarefa();await deps.filaDuravel.concluir(registro.id,token);
+      }catch{
+        await deps.filaDuravel.marcarAmbiguo(registro.id,token);
+        throw new Error('Turno Telegram sem conclusão comprovada; confira a fila privada antes de repetir.');
+      }
     });
   }
 
@@ -252,7 +275,7 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
    * assim que o update está na fila, sem esperar o turno: é o ponto em que o
    * webhook responde 200 e o polling avança o offset.
    */
-  function receber(update: unknown): void {
+  function receberAgora(update: unknown, registro?: Registro): void {
     const entrada = interpretarUpdate(update, deps.chatsPermitidos, deps.agora());
     if (entrada.updateId !== null && memoria.jaVisto(entrada.updateId)) return;
 
@@ -335,27 +358,51 @@ export function criarBotDoTelegram(deps: DepsDoBot) {
             console.error("[telegram] transcrição falhou:", err);
             return { falha: textoDaFalhaDeTranscricao(err) };
           }
-        });
+        }, registro);
         if (antes > 0) deps.enviar(chatId, `⏳ Na fila (${antes} antes desta).`, mensagemId).catch(falhouAoEnviar);
         return;
       }
       case "demanda": {
         const { chatId, mensagemId, demanda, modo, squadId } = entrada;
-        const antes = turnoNaFila(chatId, mensagemId, modo, squadId, async () => ({ demanda }));
+        const antes = turnoNaFila(chatId, mensagemId, modo, squadId, async () => ({ demanda }), registro);
         if (antes > 0) deps.enviar(chatId, `⏳ Na fila (${antes} antes desta).`, mensagemId).catch(falhouAoEnviar);
         return;
       }
     }
   }
 
-  const processar: RequestHandler = (req, res) => {
-    // 200 para tudo que passou do segredo, inclusive o que é ignorado: status
-    // diferente faz o Telegram reentregar e segurar os updates seguintes.
-    res.sendStatus(200);
-    receber(req.body);
+  function receber(update:unknown):void|Promise<void> {
+    if(!deps.filaDuravel)return receberAgora(update);
+    const entrada=interpretarUpdate(update,deps.chatsPermitidos,deps.agora());
+    if(entrada.tipo!=='demanda'&&entrada.tipo!=='audio')return receberAgora(update);
+    ingressos++;
+    const promessa=deps.filaDuravel.receber(update).then(r=>{
+      if(r.estado==='pendente')receberAgora(update,{id:r.id,update});
+    }).finally(()=>{ingressos--});
+    ingressosEmVoo=Promise.allSettled([ingressosEmVoo,promessa]);
+    return promessa;
+  }
+  async function retomar():Promise<void>{
+    if(!deps.filaDuravel)return;
+    for(const r of await deps.filaDuravel.pendentes()){
+      const entrada=interpretarUpdate(r.update,deps.chatsPermitidos,deps.agora());
+      if(entrada.tipo!=='demanda'&&entrada.tipo!=='audio'){
+        await deps.filaDuravel.descartarPendente(r.id);receberAgora(r.update);continue;
+      }
+      receberAgora(r.update,{id:r.id,update:r.update});
+    }
+    for(const r of await deps.filaDuravel.avisosAmbiguos()){
+      const entrada=interpretarUpdate(r.update,deps.chatsPermitidos,deps.agora());
+      if('chatId' in entrada&&'mensagemId' in entrada)
+        await deps.enviar(entrada.chatId,'⚠️ Este pedido foi interrompido e pode ter criado eventos. Não o executei de novo. Confira o Calendar e o estado da agenda antes de repetir.',entrada.mensagemId).catch(falhouAoEnviar);
+    }
+  }
+  const processar: RequestHandler = (req,res)=>{
+    if(!deps.filaDuravel){res.sendStatus(200);receberAgora(req.body);return}
+    Promise.resolve().then(()=>receber(req.body)).then(()=>res.sendStatus(200)).catch(()=>res.sendStatus(503));
   };
 
   // `ocupado` conta também o que espera na fila, não só o turno da vez: a
-  // mensagem já recebeu 200 e o Telegram não a reentrega se o processo cair.
-  return { portao, processar, receber, ocioso: () => fila, ocupado: () => pendentes > 0 };
+  // mensagem já recebeu ACK; a fila durável distingue pendente e execução incerta.
+  return { portao, processar, receber, retomar, ocioso: () => ingressosEmVoo.then(()=>fila), ocupado: () => pendentes > 0 || ingressos > 0 };
 }

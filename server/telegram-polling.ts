@@ -9,13 +9,13 @@ import { ErroDeTelegram } from "./telegram.ts";
  * porque webhook exigiria URL pública e Funnel é proibido (regra 7).
  *
  * - **Offset persistido e confirmado ao enfileirar.** Cada update vai para o
- *   bot (`receber`, que deduplica e enfileira o turno sem esperá-lo) e só
+ *   bot (`receber`, que persiste e enfileira o turno sem esperá-lo) e só
  *   então o offset avança para `update_id + 1` e vai ao disco. O `getUpdates`
  *   seguinte manda esse offset, e é isso que confirma ao Telegram: o update
  *   some de lá. Avançar ANTES de enfileirar perderia a mensagem num crash;
  *   avançar só DEPOIS do turno rodaria de novo um turno que já criou o
- *   compromisso. Crash entre o enfileirar e o turno perde aquela resposta, o
- *   mesmo custo aceito do webhook depois do 200.
+ *   compromisso. A fila privada sobrevive ao crash: pendente retoma; execução
+ *   iniciada e interrompida exige conferência, sem repetir o turno.
  * - **Nunca setWebhook.** O Telegram recusa `getUpdates` (409) enquanto houver
  *   webhook; quem o tira é o runbook, com `deleteWebhook` SEM
  *   `drop_pending_updates`. Aqui o 409 só vira log e espera.
@@ -28,7 +28,7 @@ export interface DepsDoPolling {
   /** `getUpdates` com o offset (null = o Telegram decide: tudo que está pendente). */
   buscar(offset: number | null): Promise<unknown[]>;
   /** O `receber` do bot: deduplica e enfileira, sem esperar o turno. */
-  receber(update: unknown): void;
+  receber(update: unknown): void | Promise<void>;
   lerOffset(): Promise<number | null>;
   gravarOffset(offset: number): Promise<void>;
   esperar(ms: number): Promise<void>;
@@ -115,8 +115,8 @@ export function criarPollingDoTelegram(deps: DepsDoPolling) {
    * Um getUpdates. Devolve quantos updates foram entregues ao bot. Falha do
    * getUpdates sobe (quem roda o laço decide a espera); falha ao GRAVAR o
    * offset não: o offset em memória já avançou e o próximo getUpdates confirma
-   * do mesmo jeito; só um reinício nesse meio repetiria (e a deduplicação de
-   * update_id do bot não sobrevive a ele, custo aceito como o do webhook).
+   * do mesmo jeito. Em produção a fila privada conserva a identidade no reinício
+   * e não repete o turno mesmo se o offset em disco ficou atrasado.
    */
   async function rodada(): Promise<number> {
     if (!carregado) {
@@ -131,7 +131,7 @@ export function criarPollingDoTelegram(deps: DepsDoPolling) {
       // Já confirmado: o Telegram não devolve abaixo do offset, mas um offset
       // regravado à mão ou uma resposta fora de ordem não roda o turno de novo.
       if (offset !== null && id < offset) continue;
-      deps.receber(u);
+      await deps.receber(u);
       entregues++;
       offset = id + 1;
       try {

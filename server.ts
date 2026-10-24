@@ -1,3 +1,6 @@
+import { montarGarantiasAgenda } from './server/rotas-garantias-agenda.ts';
+import { GarantiasAgenda, DemandasAgendaDuraveis } from './server/garantias-agenda.ts';
+import { FilaTelegramDuravel } from './server/fila-telegram-duravel.ts';
 import { AtendimentoComercial, criarLeitorFonteAtendimento, criarInventarioCapturasAtendimento } from './server/atendimento-comercial.ts';
 import { criarLeitorIdentidadeCaptura } from './server/identidade-captura.ts';
 import { EntradaAtendimentoComercialDuravel } from './server/entrada-atendimento-comercial.ts';
@@ -294,16 +297,18 @@ async function startServer() {
       ? publicarAvisoPessoal(aviso, { fila: filaDeAvisos, telegram: telegramDoDono, enviados: enviadosPessoais })
       : publicarAviso(aviso, { fila: filaDeAvisos, telegram: telegramDoDono });
   let botDoTelegram: ReturnType<typeof criarBotDoTelegram> | null = null;
+  const filaTelegramDuravel=new FilaTelegramDuravel(path.join(dataDir,"telegram-turnos.json"));
   // O Assistente da Central (RULES 28): preparado no bloco da Central, lido pelo /api/runtime.
   let assistenteDoProcesso: Assistente | null = null;
   if (configDeTelegram) {
     const c = configDeTelegram;
     const bot = (botDoTelegram = criarBotDoTelegram({
+      filaDuravel: filaTelegramDuravel,
       segredo: c.transporte === "webhook" ? c.segredo : null,
       chatsPermitidos: c.chatsPermitidos,
       // O bot não tem aba: sem prefixo, squadId ausente = primeira squad ativa +
       // redirecionamento automático; com `/p`, a squad do prefixo (telegram-entrada).
-      rodar: (demanda, modo, squadId) => rodarDemanda(ai, { demanda, modo, squadId }, { luna: sombra, jev }),
+      rodar: (demanda, modo, squadId, requestId) => rodarDemanda(ai, { demanda, modo, squadId, requestId }, { luna: sombra, jev }),
       enviar: async (chatId, texto, responderA, botoes) => { await enviarMensagem(c, chatId, texto, responderA, botoes); },
       digitando: (chatId) => avisarDigitando(c, chatId),
       transcrever: async (fileId, mime) => transcreverAudio(ai, await baixarArquivo(c, fileId), mime),
@@ -890,10 +895,19 @@ async function startServer() {
     }
   });
 
+  montarGarantiasAgenda(rotasDoApp,{
+    calendario:async squadId=>resolverSquad(await readRoster(),squadId).calendarId,
+    garantias:new GarantiasAgenda(path.join(dataDir,'agenda-reservas')),
+    demandas:new DemandasAgendaDuraveis(path.join(dataDir,'agenda-demandas')),
+    fila:filaTelegramDuravel,
+    token:tokenValido,
+  });
+
   // Um turno: demanda -> 1 chamada ao Gemini -> executa as capacidades.
   rotasDoApp.post("/api/orquestrar", async (req, res) => {
     try {
-      const { demanda, modo = "auto", squadId } = req.body ?? {};
+      const { demanda, modo = "auto", squadId, requestId } = req.body ?? {};
+      if(typeof requestId!=="string"||!/^ui:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(requestId))return res.status(400).json({error:"Identidade do pedido ausente ou inválida. Atualize a página antes de reenviar."});
       if (typeof demanda !== "string" || !demanda.trim()) {
         return res.status(400).json({ error: "Campo 'demanda' é obrigatório" });
       }
@@ -906,7 +920,7 @@ async function startServer() {
           .json({ error: "Campo 'modo' deve ser 'auto', 'foco' ou 'baixa_prioridade'" });
       }
 
-      const resultado = await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId }, { luna: sombra, jev });
+      const resultado = await rodarDemanda(ai, { demanda: demanda.trim(), modo, squadId, requestId }, { luna: sombra, jev });
       // A avaliação observa um turno já terminado; nunca participa da execução,
       // da agenda ou do resultado principal. Falha posterior não pode induzir
       // retry de uma delegação que talvez já tenha criado eventos no Google.
@@ -1144,6 +1158,9 @@ async function startServer() {
     if (sinal) paradores.push(sinal.iniciar());
     vendedorDoProcesso?.iniciar();
     leadQuenteDoProcesso?.iniciar();
+
+    // Retoma só pendentes duráveis; turnos interrompidos ficam ambíguos sem reexecução.
+    if(botDoTelegram)void botDoTelegram.retomar().catch(()=>console.error("[telegram] Fila durável indisponível; confira estado privado."));
 
     // Polling (Dell): busca as mensagens; nunca registra webhook.
     if (configDeTelegram?.transporte === "polling" && botDoTelegram) {
