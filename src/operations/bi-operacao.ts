@@ -20,6 +20,7 @@ export function planoDoLead(lead: CrmLead, agora = Date.now()): PlanoBi {
   const c = lead.classificacaoResposta
   const base = { lead, responsavel: 'Rômulo', prazo: 'Na próxima revisão', evidencia: c?.evidencia?.trecho || lead.conversa?.ultima.trecho || c?.motivo || 'Sem trecho de conversa preservado.' }
   const plano = (tipo: PlanoBi['tipo'], prioridade: number, acao: string, resultado: string, extra: Partial<PlanoBi> = {}): PlanoBi => ({ ...base, tipo, prioridade, acao, resultado, ...extra })
+  if (lead.atendimentoComercial) return plano('conferir',0,lead.atendimentoComercial.titulo,'Decisão comercial revisada por Rômulo, com próximo passo confirmado na ficha.',{evidencia:lead.atendimentoComercial.motivo,prazo:'Agora, na ficha',condicao:'Tarefa interna: revisar a fonte e o rascunho; não autoriza envio.'})
   if (p.tipo === 'encerrado' || c?.classe === 'recusa' || c?.classe === 'exclusao') return plano('encerrado', 99, 'Preservar o desfecho e conferir o motivo registrado', 'Histórico correto; sem nova abordagem.')
   if (p.tipo === 'espera') return plano('aguardar', 90, lead.proximoPasso?.texto || p.titulo, 'Aguardar a condição ou nova abertura; revisar antes de contato.', { prazo: lead.proximoPasso?.data || 'Até nova resposta' })
   if (r && !r.atual) return plano('conferir', 2, 'Atualizar a revisão com as mensagens e registros posteriores', 'Novo próximo passo baseado no contexto atual.', { evidencia: `A revisão de ${r.em.slice(0,10)} perdeu validade após mudança de contexto.`, prazo: 'Antes de retomar' })

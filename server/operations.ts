@@ -480,7 +480,7 @@ export function createOperationsRouter(options: {
   const router = express.Router();
   const observarCrm = options.crm ? criarSinalDoCrm(options.crm.config ?? {}) : undefined;
   montarRevisaoDeResposta(router, options.crm);
-  montarMensagemDaDecisao(router, { crm: options.crm, copiloto: options.copiloto });
+  montarMensagemDaDecisao(router, { crm: options.visaoAtendimento ? {visao:options.visaoAtendimento} : options.crm, copiloto: options.copiloto });
   montarDecisoesComerciais(router, options.crm);
   montarResponsavelAtendimento(router, options.crm);
 

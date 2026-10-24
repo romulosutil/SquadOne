@@ -126,3 +126,33 @@ test('falha de leitura posterior ao retrato impede usar a sugestão antiga', asy
     { geradoEm: '2026-10-23T15:00:00Z', ultimaFalha: { em: '2026-10-23T15:05:00Z', erro: 'Fonte indisponível' } })
   try { assert.equal((await api.pedir()).status, 503); assert.equal(chamadas, 0) } finally { await api.fechar() }
 })
+
+test('atendimento de preço derivado da visão retorna tarefa interna sem consultar modelo ou cache', async () => {
+  const cliente = lead({
+    resposta: { tipo: 'interesse', trecho: 'Quanto fica?' },
+    atendimentoComercial: { id: 'handoff-preco-qa', tipo: 'handoff', titulo: 'Rômulo: revisar o pedido de preço',
+      motivo: 'Negociação com confirmação humana.', alvo: 'operador', estado: 'pendente',
+      texto: 'Rascunho que não autoriza envio.' },
+  })
+  const antes = JSON.stringify(cliente)
+  let leituras = 0, geracoes = 0
+  const api = await servidor(cliente, {
+    ler: async () => { leituras++; throw new Error('Não consultar cache para tarefa interna') },
+    sugerir: async () => { geracoes++; throw new Error('Não gerar mensagem para tarefa interna') },
+  })
+  try {
+    const r = await api.pedir(), p = await r.json()
+    assert.equal(r.status, 200)
+    assert.equal(p.procedimento.tipo, 'interno')
+    assert.equal(p.mensagem, null)
+    assert.equal(p.podeAbrir, false)
+    assert.equal(p.origem, null)
+    assert.equal(p.proximaAcao, cliente.atendimentoComercial!.titulo)
+    assert.equal(p.acao?.interna, true)
+    assert.equal(p.acao?.rascunho, undefined)
+    assert.equal(p.acao?.link, undefined)
+    assert.equal(leituras, 0)
+    assert.equal(geracoes, 0)
+    assert.equal(JSON.stringify(cliente), antes)
+  } finally { await api.fechar() }
+})

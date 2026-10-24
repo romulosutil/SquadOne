@@ -21,6 +21,7 @@ export function montarMensagemDaDecisao(router: Router, op: { crm?: { visao(): P
       if (await hashDoContexto(lead) !== contextoHash) return void res.status(409).json({ error: 'A conversa mudou. Atualize o contexto antes de preparar a mensagem.' })
       const procedimento = procedimentoDaDecisao(lead)
       const base = { contextoHash, procedimento, mensagem: procedimento.mensagem ?? null, origem: procedimento.mensagem ? 'procedimento' : null, podeAbrir: false, acao: null }
+      if(lead.atendimentoComercial) return void res.json({...base,acao:acaoDoLead(visao,id,Date.now()),mensagem:null,origem:null,podeAbrir:false,motivo:'Confira a tarefa de atendimento e a fonte na ficha.',proximaAcao:lead.atendimentoComercial.titulo})
       // Robô, espera, áudio desconhecido e desfecho não são oportunidades para inventar uma oferta.
       if (!['humano', 'recepcao'].includes(procedimento.tipo)) return void res.json(base)
       let acao = acaoDoLead(visao, id, Date.now())

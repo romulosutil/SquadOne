@@ -36,6 +36,8 @@ export function planoFuturoEmEspera(lead: CrmLead, agora = new Date()): boolean 
 
 /** Orientação operacional; o texto da conversa é evidência, nunca uma instrução para executar. */
 export function procedimentoDaDecisao(lead: CrmLead, agora = new Date()): ProcedimentoDaDecisao {
+  if(lead.atendimentoComercial) return {tipo:'interno',titulo:lead.atendimentoComercial.titulo,passos:[lead.atendimentoComercial.motivo,'Abra a ficha para conferir a fonte, revisar o rascunho ou assumir a negociação. Esta tarefa não envia mensagem.'],resultadoEsperado:'Responsável e próximo passo comercial conferidos na ficha.'}
+
   if (['ganho', 'perdido'].includes(lead.etapa) || ['negativa', 'exclusao'].includes(lead.resposta?.tipo ?? '')) return {
     tipo: 'encerrado', titulo: 'Respeitar o desfecho', passos: ['Confira o resultado registrado e o motivo literal na ficha.', 'Não faça uma nova abordagem a quem recusou ou pediu exclusão.'], resultadoEsperado: 'Desfecho correto no histórico, sem nova cobrança.',
   }

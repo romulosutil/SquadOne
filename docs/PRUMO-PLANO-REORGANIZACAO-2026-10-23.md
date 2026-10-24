@@ -309,3 +309,9 @@ A oportunidade não espera o término da reorganização técnica para receber a
 ## Referência
 
 Diagnóstico completo e evidências sanitizadas foram entregues no chat. Baseline técnico desta execução: PRUMO-BASELINE-REORGANIZACAO-2026-10-23.md. Roteiro comercial: PRUMO-OPERACAO-COMERCIAL-PILOTO.md.
+
+## Registro da integração — 24/10/2026
+
+A implementação assistida da fase3 foi publicada: envelopes de respostas do observador, deduplicação/entrada durável, contexto comercial dos agentes, uma pergunta faltante ou passagem humana, responsabilidade por conversa e controles na ficha existente. Somente CRM08 e classificador receberam deltas; o escritório e os estados dos21 workflows foram preservados.
+
+Detalhes e evidências: `PRUMO-INTEGRACAO-COMERCIAL-N8N-AGENTES-2026-10-23.md`. Suíte final Linux3.964/3.964, tipagem/build e162 testes Python aprovados. O piloto segue sem novas respostas autônomas e sem reativar Grok/caçadores. Os critérios de aceite com3–5 conversas reais, aviso efetivamente recebido e contratação/pagamento continuam pendentes de uso real; os testes técnicos não os encerram.
