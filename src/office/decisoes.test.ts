@@ -189,3 +189,130 @@ test('retorno posterior, mensagem recebida e saída histórica não são uma nov
   assert.equal(novaRespostaEnviada(antes, historico), false)
   assert.equal(novaRespostaEnviada(antes, { ...antes, conversa: { ...resposta!, ultimaSaida: 'inválido' } }), false)
 })
+
+
+type LeadComLeitura = CrmLead & { classificacaoResposta?: {
+  classe?: string; evidencia?: { em?: string }; revisar?: boolean; houveRespostaHumana?: boolean; materialSolicitado?: boolean
+} }
+function conversaAutomatica(campos: Partial<CrmLead> = {}): LeadComLeitura {
+  const em = '2026-10-21T15:00:00Z'
+  return { ...lead('automatico', { resposta: { tipo: 'bot', trecho: 'Mensagem automática: atendimento indisponível', em },
+    conversa: { ...resposta!, ultimaEntrada: em, entradas: { gente: 1, recepcao: 0, robo: 0 }, ultima: { direcao: 'entrada', em, trecho: 'Mensagem automática: atendimento indisponível' } }, ...campos }),
+    classificacaoResposta: { classe: 'robo', evidencia: { em }, revisar: false, houveRespostaHumana: false, materialSolicitado: false } }
+}
+
+test('robô confirmado na entrada atual vai para acompanhamento, preservando histórico e sem ação de contato', () => {
+  const cliente = conversaAutomatica()
+  const copia = structuredClone(cliente)
+  const anterior = [{ lead: cliente, rotulo: 'Resposta recebida', prioridade: 0 }]
+  const decisao = decisoesDoEscritorio([cliente], [{ ...acao(cliente.id), tipo: 'responder' }], agora, anterior)[0]
+  assert.equal(decisao.estado, 'acompanhando')
+  assert.equal(decisao.motivo, 'Resposta automática confirmada · conferir atendimento humano')
+  assert.equal(decisao.acao, null)
+  assert.equal(decisao.lead, cliente)
+  assert.deepEqual(cliente, copia, 'o encaminhamento não reclassifica, perde ou altera o registro')
+  assert.equal(proximaDecisaoPorPrioridade([decisao]), null)
+})
+
+test('marcador de robô reconhecido pelo procedimento também retira abordagem antiga da fila humana', () => {
+  const cliente = conversaAutomatica()
+  delete cliente.classificacaoResposta
+  cliente.conversa!.ultima = { ...cliente.conversa!.ultima, papel: 'robo', trecho: '[Bot] Digite uma opção' }
+  assert.equal(procedimentoDaDecisao(cliente).tipo, 'robo')
+  assert.equal(decisoesDoEscritorio([cliente], [{ ...acao(cliente.id), tipo: 'responder' }], agora)[0].estado, 'acompanhando')
+})
+
+test('rótulo antigo, evidência sem data ou leitura que pede revisão não escondem uma decisão', () => {
+  const base = conversaAutomatica()
+  const leituras = [undefined, { ...base.classificacaoResposta!, evidencia: undefined },
+    { ...base.classificacaoResposta!, evidencia: { em: '2026-10-20T15:00:00Z' } },
+    { ...base.classificacaoResposta!, revisar: true }, { ...base.classificacaoResposta!, houveRespostaHumana: true }]
+  for (const classificacaoResposta of leituras) {
+    const cliente = { ...base, classificacaoResposta }
+    assert.equal(decisoesDoEscritorio([cliente], [{ ...acao(cliente.id), tipo: 'responder' }], agora)[0].estado, 'agora')
+  }
+})
+
+test('humano ou recepção posteriores superam leitura anterior de robô', () => {
+  for (const papel of [undefined, 'recepcao'] as const) {
+    const base = conversaAutomatica()
+    const em = '2026-10-21T15:05:00Z'
+    const cliente = { ...base, conversa: { ...base.conversa!, ultimaEntrada: em, ultima: { direcao: 'entrada' as const, em, trecho: 'Sou a responsável, podemos conversar?', papel } } }
+    assert.equal(decisoesDoEscritorio([cliente], [], agora)[0].estado, 'agora')
+    assert.equal(decisoesDoEscritorio([cliente], [], agora)[0].motivo, 'Resposta recebida')
+  }
+  const cliente = conversaAutomatica()
+  cliente.conversa!.ultimaEntrada = '2026-10-21T15:05:00Z'
+  assert.equal(decisoesDoEscritorio([cliente], [{ ...acao(cliente.id), tipo: 'responder' }], agora)[0].estado, 'agora', 'um resumo de humano posterior também impede o rebaixamento')
+})
+
+test('retorno humano informado depois do robô mantém revisão humana', () => {
+  const cliente = conversaAutomatica({ eventos: [{ tipo: 'nota', origem: 'manual', em: '2026-10-21T15:05:00Z',
+    texto: '[Retorno informado pelo operador · 2026-10-21]\nLigou e pediu condições.', rotulo: 'Nota', fonte: 'planilha' }] })
+  assert.equal(decisoesDoEscritorio([cliente], [{ ...acao(cliente.id), tipo: 'responder' }], agora)[0].estado, 'agora')
+})
+
+test('robô atual não esconde compromisso interno vencido, material pendente, pausa ou desfecho', () => {
+  const tarefa = conversaAutomatica({ proximoPasso: { texto: 'Revisar internamente condição comercial', data: '2026-10-21', registradoEm: '2026-10-21T14:00:00Z' } })
+  assert.equal(decisoesDoEscritorio([tarefa], [], agora)[0].estado, 'agora')
+  const material = conversaAutomatica({ resposta: { tipo: 'licenca', trecho: 'Pode mandar', em: '2026-10-21T14:00:00Z' } })
+  material.classificacaoResposta!.materialSolicitado = true
+  assert.equal(decisoesDoEscritorio([material], [], agora)[0].estado, 'agora')
+  const pausa = notaDoAprendizado({ fato: 'Aguardar atendimento', hipotese: 'Espera', teste: 'Esperar retorno', resultado: 'em-teste', pausarAteResposta: true })
+  const pausado = conversaAutomatica({ eventos: [{ tipo: 'nota', origem: 'manual', em: '2026-10-21T15:05:00Z', texto: pausa, rotulo: 'Nota', fonte: 'planilha' }] })
+  assert.equal(decisoesDoEscritorio([pausado], [], agora)[0].motivo, 'Contato em espera')
+  for (const etapa of ['ganho', 'perdido'] as const) assert.equal(decisoesDoEscritorio([conversaAutomatica({ etapa })], [], agora)[0].estado, 'encerrada')
+  for (const tipo of ['negativa', 'exclusao'] as const) {
+    const cliente = conversaAutomatica({ resposta: { tipo, trecho: 'Não contatar', em: '2026-10-21T15:00:00Z' } })
+    const [decisao] = decisoesDoEscritorio([cliente], [{ ...acao(cliente.id), tipo: 'desfecho' }], agora)
+    assert.equal(decisao.estado, 'agora')
+    assert.equal(decisao.acao?.tipo, 'desfecho', 'a conferência explícita do desfecho permanece, sem encerrar automaticamente')
+  }
+})
+
+
+test('papel humano explícito na entrada prevalece sobre classificação divergente de robô na mesma data', () => {
+  for (const papel of ['gente', 'recepcao']) {
+    const cliente = conversaAutomatica()
+    // O JSON da integração pode trazer "gente", embora o contrato legado só enumere recepção e robô.
+    Object.assign(cliente.conversa!.ultima, { papel, trecho: 'Sou a responsável, como funciona?' })
+    const [decisao] = decisoesDoEscritorio([cliente], [{ ...acao(cliente.id), tipo: 'responder' }], agora)
+    assert.equal(decisao.estado, 'agora')
+    assert.equal(decisao.motivo, 'Resposta recebida')
+  }
+})
+
+
+test('resposta automática posterior não remove proposta registrada ou etapa de proposta da cadência', () => {
+  for (const campos of [
+    { etapa: 'proposta' as const },
+    { proposta: { em: '2026-10-20T15:00:00Z', data: '2026-10-20' } },
+  ]) {
+    const cliente = conversaAutomatica(campos)
+    const pendente = { ...acao(cliente.id), tipo: 'proposta' as const, titulo: 'Conferir proposta sem retorno' }
+    const [decisao] = decisoesDoEscritorio([cliente], [pendente], agora)
+    assert.equal(decisao.estado, 'agora')
+    assert.equal(decisao.acao, pendente)
+    assert.notEqual(decisao.motivo, 'Resposta automática confirmada · conferir atendimento humano')
+    assert.equal(cliente.etapa, campos.etapa ?? 'contato')
+  }
+})
+
+test('somente a pendência de responder permite encaminhar robô; outras ações comerciais continuam visíveis', () => {
+  for (const tipo of ['mandar-proposta', 'proposta', 'combinado', 'depois-do-link', 'followup', 'desfecho'] as const) {
+    const cliente = conversaAutomatica()
+    const pendente = { ...acao(cliente.id), tipo }
+    const [decisao] = decisoesDoEscritorio([cliente], [pendente], agora)
+    assert.equal(decisao.estado, 'agora', tipo)
+    assert.equal(decisao.acao, pendente, tipo)
+  }
+})
+
+test('segunda ação comercial pendente impede rebaixar robô mesmo com responder na primeira posição', () => {
+  const cliente = conversaAutomatica()
+  const respostaPendente = { ...acao(cliente.id), tipo: 'responder' as const }
+  const propostaPendente = { ...acao(cliente.id), tipo: 'mandar-proposta' as const, chave: 'segunda-pendencia' }
+  const [decisao] = decisoesDoEscritorio([cliente], [respostaPendente, propostaPendente], agora)
+  assert.equal(decisao.estado, 'agora')
+  assert.equal(decisao.acao, respostaPendente, 'preserva seleção e ordem existentes, sem ocultar o cliente')
+})
