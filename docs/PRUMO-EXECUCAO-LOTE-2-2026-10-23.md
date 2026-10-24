@@ -19,3 +19,11 @@ Validação na worktree Linux: 3.705 testes aprovados, zero falhas; tipos e comp
 O áudio da ESTAMPARIA SP de 23/10 às 18h02min59s já tinha transcrição preservada de 62 segundos. A leitura existente indica recusa no momento, outras prioridades e mudança de instalações; não há pedido de proposta ou retomada combinada. O CRM consultado apresenta Perdido, e não foi encontrada resposta posterior preservada após o áudio. Não foi feita nova transcrição, recuperação de histórico, alteração do CRM ou contato. A informação corrige a pendência relatada pelo VENDAS; a base dele continua separada.
 
 Permanece pendente esclarecer com Rômulo se os R$ 500/mês oferecidos a Kelisson cobrem apenas gestão de tráfego ou também anúncios. Até essa confirmação, a condição não é completada por suposição nem enviada ao cliente.
+
+## Publicação conferida
+
+Código do lote em `faf251a`, publicado na main e confirmado como versão construída no Dell. Serviço ativo; comparação preservou integralmente as 29 alterações anteriores do checkout. Após recarregar no navegador às 22h10 de São Paulo, o escritório continuou com cenário, personagens, quadros e navegação; fila exibiu 41 decisões, 49 acompanhamentos e 1.627 encerradas. O caso que antes abria a fila apareceu no acompanhamento com motivo de resposta automática confirmada. Nenhum comando ou mensagem foi submetido. Grafo AST atualizado no Dell.
+
+A integração continua na worktree gerenciada deste chat: `C:/Users/sutil/.codex/worktrees/prumo-reorganizacao-comercial/SquadOne`. O checkout original do PC contém trabalho anterior e não deve substituir integralmente a produção. O plano, baseline e registros também foram copiados para docs do checkout original para consulta.
+
+Fases restantes seguem abertas. A correção de atomicidade do retrato n8n exige lote próprio; o fluxo de contratação e recebimento encontrado em desenvolvimento ainda exige integração e homologação. Este lote não representa contratação ou venda.
