@@ -55,6 +55,7 @@ export class EncontradoAutomatico {
       &&lead.conversa?.ultima.direcao==='entrada'&&lead.conversa.ultima.em===e.ocorridoEm
       &&!(fonte.ultimaEntradaEm&&Date.parse(fonte.ultimaEntradaEm)>Date.parse(e.ocorridoEm))
       &&!fonte.saidasEm.some(s=>Date.parse(s)>=Date.parse(e.ocorridoEm))
+      &&!historico.some(m=>m.direcao==='saida'&&Date.parse(m.em)>=Date.parse(e.ocorridoEm))
     const respondida=fonteDisponivel&&fonte.estado==='ok'&&fonte.saidasEm.some(s=>Date.parse(s)>Date.parse(e.ocorridoEm))&&!(fonte.ultimaEntradaEm&&Date.parse(fonte.ultimaEntradaEm)>Date.parse(e.ocorridoEm))
     let decisao=decidirEncontrado({politica:p,catalogoHash:HASH_CATALOGO_ENCONTRADO,agora:now,ocorridoEm:e.ocorridoEm,
       texto:fonte.estado==='ok'?fonte.texto:'',identidade:fonte.identidade??'indisponivel',fonteAtual:fresca,respondida,

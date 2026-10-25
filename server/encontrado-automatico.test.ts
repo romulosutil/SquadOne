@@ -71,7 +71,7 @@ async function fixture(t:{after:(f:()=>Promise<unknown>)=>void},texto='Quanto cu
   const evento:EventoAtendimentoComercial={idOriginal:String(raw[0].id),origem:'whatsapp',conta:'prumo',canal:'whatsapp',conversa:CONVERSA,tipo:'resposta',direcao:'entrada',ocorridoEm:EM,recebidoEm:EM,conteudoHash:sha(texto),fonteId:String(raw[0].id)}
   const config={v:1 as const,identidadePrumoHash:sha('conta-ficticia'),desde:DESDE}
   const fonte=():FonteAtendimentoComercial=>({conversa:CONVERSA,jsonl:raw.map(r=>JSON.stringify(r)).join('\n'),identidade:{ativa:true,assinatura:sha(JSON.stringify(raw)),config,
-    jsonl:raw.filter(m=>mensagemDaCaptura(m)!==null).map(m=>({v:1,coletor:'evolution',garantia:'webhook-evolution',sessaoHash:null,instancia:'prumo',contaHash:config.identidadePrumoHash,capturadoEm:EM,mensagem:mensagemDaCaptura(m)!} satisfies ProvaIdentidadeCaptura)).map(r=>JSON.stringify(r)).join('\n')}})
+    jsonl:raw.filter(m=>mensagemDaCaptura(m)!==null&&m.provaAusente!==true).map(m=>({v:1,coletor:'evolution',garantia:'webhook-evolution',sessaoHash:null,instancia:'prumo',contaHash:config.identidadePrumoHash,capturadoEm:EM,mensagem:mensagemDaCaptura(m)!} satisfies ProvaIdentidadeCaptura)).map(r=>JSON.stringify(r)).join('\n')}})
   const inbox=new EntradaAtendimentoComercialDuravel(path.join(dir,'inbox.json'))
   const atendimento=new AtendimentoComercial({inbox,lerFonte:async()=>fonte(),visao:async()=>({estado:'ok',geradoEm:new Date(agora).toISOString(),leads:[l],colunasAusentes:[],fontes:[]}),agora:()=>agora})
   await atendimento.receber(evento)
@@ -119,6 +119,10 @@ test('tomada humana ou pausa durante verificação de saúde veta envio antes da
 test('nova saída durante a conferência invalida a pergunta anterior',async t=>{
   const f=await fixture(t);f.setConfere(async()=>{f.raw.push({id:'saida-humana',direcao:'saida',origem:'prumo',em:new Date(AGORA-1000).toISOString(),texto:'Já respondi'})})
   await f.criar().executar();assert.equal(f.envios(),0)
+})
+test('saída posterior ainda sem prova de conta também impede outra resposta enquanto o CRM atrasa',async t=>{
+  const f=await fixture(t);f.setConfere(async()=>{f.raw.push({id:'saida-sem-prova',direcao:'saida',origem:'prumo',em:'2026-10-25T13:59:30.000Z',texto:'Já respondi',provaAusente:true})})
+  await f.criar().executar();assert.equal(f.envios(),0);assert.equal((await f.saidas.listar()).length,0)
 })
 test('sem política, política pausada e backfill anterior não enviam nem reservam',async t=>{
   const f=await fixture(t);f.setPolitica(null);await f.criar().executar()
