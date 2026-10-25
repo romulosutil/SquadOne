@@ -88,7 +88,9 @@ Preservação conferida: 31 arquivos preexistentes do clone Dell byte a byte; co
 
 Backups, exports originais e validação sanitizada ficam em `~/.cache/mel-work/fase4b-20261024T152212Z/`, fora do Git. Nenhuma mensagem foi enviada a clientes, nenhum modelo foi invocado pela homologação e nenhum marco de proposta, contrato ou pagamento foi criado. O lote organiza o caminho até a primeira venda; não comprova uma venda.
 
-## Instalação exata da extensão 06 pelo root
+## Extensão 06 — procedimento histórico supersedido
+
+> Os passos abaixo documentam o procedimento preparado antes da implantação. O encerramento técnico de 24/10 registra que a pausa do workflow 06 foi aplicada e conferida; não repetir estas instruções. O estado de produção válido está no encerramento técnico mais recente.
 
 Não executar o publicador de acompanhamento para pausar: ele pode republicar
 outros workflows. O módulo de guarda existente já aceita múltiplas reservas e

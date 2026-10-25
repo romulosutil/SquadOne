@@ -41,6 +41,33 @@ class Confiabilidade(unittest.TestCase):
     def setUpClass(cls):
         cls.h = load('workflow_confiabilidade')
 
+    def test_cacador_site_preserva_criterios_e_endurece_dedupe_e_persistencia(self):
+        fixture=BASE.parents[2]/'ops/n8n/workflows/01-Cacador.sanitizado.json'
+        documento=json.loads(fixture.read_text(encoding='utf-8'))
+        origem=documento[0] if isinstance(documento,list) else documento
+        antes=json.dumps(origem,ensure_ascii=False,sort_keys=True)
+        saida=self.h.preparar(origem)
+        self.assertEqual(saida.get('active'),origem.get('active'))
+        def todos(wf):
+            for n in wf.get('nodes',[]):
+                yield n
+                filho=n.get('parameters',{}).get('workflowJson')
+                if isinstance(filho,str):yield from todos(json.loads(filho))
+        orig={n.get('name'):n for n in todos(origem)}
+        novos={n.get('name'):n for n in todos(saida)}
+        self.assertEqual(orig['Normalizar campos'],novos['Normalizar campos'])
+        self.assertEqual(orig['Dentro do raio'],novos['Dentro do raio'])
+        self.assertEqual(orig['5+ avaliações'],novos['5+ avaliações'])
+        self.assertNotIn('onError',novos['Ler leads existentes'])
+        self.assertFalse(novos['Ler leads existentes'].get('continueOnFail'))
+        for nome in ('Salvar lead na planilha','Salvar descartado na planilha'):
+            no=novos[nome]
+            self.assertEqual(no['parameters']['operation'],'appendOrUpdate')
+            self.assertEqual(no['parameters']['columns']['matchingColumns'],['place_id'])
+            self.assertFalse(no.get('retryOnFail'))
+        self.assertEqual(json.dumps(origem,ensure_ascii=False,sort_keys=True),antes)
+        self.assertEqual(self.h.preparar(saida),saida)
+
     def test_confirmacao_so_depois_de_todas_as_gravacoes(self):
         names = ['Decidir', 'Responder ao observador', 'Qual planilha?', 'Marcar no PRUMO', 'Marcar no Site antes da venda']
         nodes = [code_node(n) for n in names]

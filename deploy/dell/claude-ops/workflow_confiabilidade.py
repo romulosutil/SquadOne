@@ -101,9 +101,49 @@ def desembrulhar(wf):
     return wf
 
 
+def proteger_dedupe_persistencia_cacador(wf):
+    """Falha fechado na leitura e usa a identidade existente em regravações do Caçador Site."""
+    wf = copy.deepcopy(wf)
+
+    def proteger(nos):
+        for no in nos:
+            nome = no.get("name")
+            if nome == "Ler leads existentes":
+                if no.get("type") != "n8n-nodes-base.googleSheets" or no.get("parameters", {}).get("operation") != "read":
+                    raise ValueError("Leitura de dedupe do Caçador Site fora do contrato.")
+                no.pop("onError", None)
+                no.pop("continueOnFail", None)
+            if nome in ("Salvar lead na planilha", "Salvar descartado na planilha"):
+                params = no.setdefault("parameters", {})
+                colunas = params.get("columns", {})
+                schema = colunas.get("schema", [])
+                identidade = next((c for c in schema if c.get("id") == "place_id"), None)
+                if (no.get("type") != "n8n-nodes-base.googleSheets"
+                        or params.get("operation") not in ("append", "appendOrUpdate")
+                        or not identidade or colunas.get("mappingMode") != "autoMapInputData"):
+                    raise ValueError("Persistência do Caçador Site sem chave place_id mapeada.")
+                params["operation"] = "appendOrUpdate"
+                colunas["matchingColumns"] = ["place_id"]
+                identidade["canBeUsedToMatch"] = True
+                no["retryOnFail"] = False
+                no.pop("maxTries", None)
+                no.pop("waitBetweenTries", None)
+            filho = no.get("parameters", {}).get("workflowJson")
+            if isinstance(filho, str):
+                try:
+                    sub = json.loads(filho)
+                except (ValueError, TypeError) as erro:
+                    raise ValueError("Subworkflow do Caçador Site inválido.") from erro
+                proteger(sub.get("nodes", []))
+                no["parameters"]["workflowJson"] = json.dumps(sub, ensure_ascii=False)
+
+    proteger(wf.get("nodes", []))
+    return wf
+
+
 def preparar(wf):
     if wf.get("name") == "01 · Caçador":
-        return concluir_cacador(wf)
+        return proteger_dedupe_persistencia_cacador(concluir_cacador(wf))
     if wf.get("name") in ("WhatsApp — conversa com lead (marca sozinho)", "WhatsApp — resposta de lead (classifica)"):
         return confirmar_persistencia(wf)
     if any(n.get("parameters", {}).get("path") == "lead-acao" for n in wf.get("nodes", [])):

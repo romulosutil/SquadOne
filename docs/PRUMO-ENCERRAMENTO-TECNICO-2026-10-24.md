@@ -71,3 +71,71 @@ Os lotes `79dfb45` (agenda/Telegram) e `d67da88` (custo da fila) também foram p
 A preparação prioritária é ControEco/Kelisson, baseada em discussão histórica concreta de preço e sócios, sem presumir interesse atual. A minuta privada separa os R$ 500/mês de gestão da verba de mídia, preserva a implantação do site condicionada ao pacote e deixa a mensalidade do site como não combinada. Comece e Roda Mais permanecem em espera; Favarato requer conferência interna do material antes de qualquer ação; recusa continua impedindo nova abordagem.
 
 A implantação técnica do piloto assistido está concluída. O próximo resultado comercial depende de Rômulo completar e aprovar as condições da proposta e de uma abertura real do cliente. Aceite, contrato, cobrança e pagamento só avançam com evidência correspondente. A expansão da aquisição permanece condicionada à capacidade e ao atendimento/fechamento comprovados; não é liberada para preencher o aceite do plano.
+
+
+## Retomada do trabalho — 24/10/2026
+
+### Feito nesta retomada
+
+- Conferidos o workspace original e o worktree. O original está em outra branch e mantém 341 alterações locais; não foi alterado. No worktree `codex/prumo-preservar-escritorio` (`0a2ecb3`), as alterações preexistentes de `RULES.md` e `output/` foram preservadas.
+- Atualizado o preparador da fábrica Íris/Estamparia e o preparador do Site legado: leitura de dedupe agora falha fechado; gravação de linha usa upsert pela identidade existente (`ID` nas ofertas, `place_id` no Site); repetição automática da persistência foi removida. Configurações e critérios por oferta não foram alterados.
+- O auditor de contrato exige leitura estrita e chave de upsert. A documentação marca o procedimento de pausa do 06 como histórico supersedido.
+- Validação offline: 6 testes do contrato de prospecção e 17 testes de confiabilidade aprovados, incluindo triagem interrompida com fonte indisponível e comparação do export sanitizado Site antes/depois.
+
+### Limites e evidência ainda ausente
+
+O worktree não foi publicado. `ssh mel` falhou ao resolver o hostname do alias em 24/10; não houve leitura da versão, dos workflows ativos, do CRM nem do histórico Hermes/SOS Dedetização. Portanto, a origem, o destino e o alcance do aviso de desligamento não estão determinados, e não se afirma que tenha sido entregue ao cliente. A evidência de implantação anterior permanece a registrada neste documento, não foi revalidada nesta retomada.
+
+`appendOrUpdate` pela API do Google Sheets protege repetição sequencial do mesmo ID, mas a busca e a gravação não são uma operação atômica de unicidade. Duas execuções simultâneas ainda podem competir. O auditor mantém `concorrencia-google-sheets-upsert` como risco explícito. Os caçadores continuam no estado anterior; não houve ativação, aquisição, mensagem, contato de teste ou mudança de autonomia.
+
+### Reversão
+
+Nenhuma alteração foi publicada em produção. No worktree, reverter somente os arquivos de código e documentação desta retomada para `0a2ecb3`, mantendo `RULES.md` e `output/`; não tocar no workspace original nem nos dados de produção.
+
+### Próximos passos
+
+1. Restabelecer resolução/acesso SSH ao Dell; conferir a versão publicada e os estados dos 21 workflows antes de aplicar o patch.
+2. Determinar a origem, o destino e o alcance do aviso SOS no histórico Hermes com consulta mínima e registrar apenas evidência sanitizada.
+3. Publicar a proteção após baseline e validação do export atual; comprovar a condição de escritor único ou manter expansão bloqueada.
+4. Validar passagem e qualificação apenas quando houver entrada natural, conferindo conversa atual e aviso no Telegram; sem backfill de teste.
+5. Rômulo decide e aprova escopo, custos, prazo, preços e documento final de contratação para a oferta efetivamente escolhida; cliente confirma abertura, próximo passo e aceite; Rômulo confere cobrança e recebimento reais. A preparação documental não prova proposta enviada, aceite, pagamento nem primeira venda nova.
+
+## Conferência de produção e correção SOS — 24/10/2026, 22h BRT
+
+Esta seção substitui o bloqueio de acesso registrado na retomada anterior. O Tailscale confirmou o Dell online em `100.68.136.88`, nome completo `romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net`. O alias SSH `mel` agora usa o IP e `HostKeyAlias` da chave já conhecida; o config anterior foi preservado em `~/.ssh/config.prumo-20261024.bak` no Windows. Não houve desativação da verificação SSH.
+
+### Produção conferida
+
+- Repositório Dell em `0a2ecb3`, com alterações locais anteriores preservadas. Este lote foi instalado como patch explícito; o HEAD sozinho não representa os arquivos instalados.
+- API viva `/api/operations/crm`: HTTP 200, estado `ok`, 3.525 leads, nenhuma coluna ausente. `/api/operations/crm/frente`: HTTP 200. Nenhum dado de conversa foi copiado para o Git.
+- Central, Hermes, adaptador Evolution e observador Prumo ativos após a instalação.
+- 21 workflows, 16 ativos antes/depois; 05/06, Íris e Estamparia continuam pausados. O Site permanece no estado ativo anterior. Nenhum workflow foi executado manualmente ou ativado.
+- Frente comercial viva retorna `ativo=false`, `estado=pausado`, com pausa automática registrada por desconexão do WhatsApp Prumo. Essa pausa foi preservada. O estado registrado não substitui uma nova confirmação da identidade/conexão da conta.
+- Leitura estrita e upsert por identidade foram publicados nos três workflows e conferidos por releitura da API (nós, conexões e estado ativo). Critérios por oferta preservados. Os quatro fontes Python/JS correspondentes foram instalados com backup.
+- A concorrência de gravações no Google Sheets continua sendo um risco residual: upsert não fornece exclusão mútua/índice único. Não há autorização de expansão por este lote.
+
+### Aviso Hermes atribuído à SOS
+
+Foram encontrados quatro avisos técnicos iguais, em 24/10 às 09:32:49, 10:37:02, 12:43:58 e 13:52:49 BRT. A origem é a notificação automática de desligamento do gateway Hermes. O log registra sucesso de envio ao **home channel WhatsApp em LID** nesses horários. A sessão Hermes confirma que esse LID corresponde a outro número, e não à SOS, inclusive com a normalização DDD + últimos oito dígitos usada pelo CRM.
+
+O cache do adaptador Prumo associava incorretamente esse mesmo LID ao número da SOS. Havia um único conflito entre o cache e os mapeamentos confirmados da sessão. Assim, o observador gravou os avisos como saídas Prumo na ficha errada. Não foi encontrada evidência de entrega desses quatro avisos à SOS. O sucesso registrado pelo gateway comprova seu envio ao canal principal, não leitura pelo destinatário.
+
+Correção instalada: a sessão confirmada tem precedência sobre cache e hints; `senderPn`/`participantAlt` não identificam o destinatário; divergências sem confirmação ficam pendentes. O spool novo conserva somente `remoteJidAlt` como alternativa de destinatário. O código instalado resolve agora o LID do canal principal conforme a sessão.
+
+O único vínculo LID comprovadamente incorreto e os quatro IDs de aviso foram retirados do cache. Apenas os quatro registros comprovados foram colocados em quarentena: a ficha passou de 38 para 34 mensagens. O arquivo original integral, mapa e script anterior permanecem no backup privado. Os demais 34 registros não foram certificados por este lote e exigem correlação individual antes de sustentar qualificação ou próxima ação. Não foi feita reclassificação comercial ou alteração de planilha com base nesses avisos. A busca por hash do aviso nos 116 históricos não encontrou outras ocorrências após a correção.
+
+### Evidências e reversão
+
+Pasta privada no Dell: `~/.cache/mel-work/retomada-acesso-20261024/`. Contém snapshot dos workflows, plano aplicado, provas sanitizadas, fontes anteriores, homologação e `sos-before/` com os originais e os quatro avisos em quarentena. Não copiar esse material bruto para o Git. O adaptador foi reiniciado isoladamente; o gateway Hermes permaneceu em execução.
+
+Validações: 23 testes locais das proteções de captação; 99 testes do adaptador e 27 da entrada durável aprovados no Linux, sem skips. Os testes não enviaram mensagens nem criaram eventos nas integrações reais. Leitura funcional da API e comparação do código instalado concluídas. A primeira tentativa de homologação Linux apontou ausência da biblioteca de avisos na pasta temporária; após reproduzir a estrutura do repositório, as duas suítes completas passaram.
+
+Reversão: restaurar somente os arquivos deste lote a partir de `source-before/` e `sos-before/`, com o adaptador parado e a trava da conversa respeitada; reiniciar somente o adaptador. Não reintroduzir o mapa/histórico contaminado sem decisão explícita. Os workflows podem ser restaurados do snapshot por ID, preservando seus estados ativos e as alterações posteriores. A restauração de histórico deve mesclar entradas novas, nunca sobrescrevê-las. O alias SSH tem backup separado no Windows.
+
+### Pendências reais após esta conferência
+
+- Concluído: acesso ao Dell, inspeção viva do CRM/serviços/workflows, identificação de origem/destino do aviso SOS, correção de associação LID, quarentena preservando originais e publicação das proteções locais de captação.
+- Executável sem contato: revisar individualmente os demais registros suspeitos da SOS quando houver evidência de transporte; retirar eventual uso comercial de conteúdo sem origem confirmada. Não condicionar a operação inteira a esse lead.
+- Dependente de evidência: validar uma nova passagem qualificada ao humano com entrada real e conta confirmada; a API e históricos importados não provam interesse atual. A pausa da frente comercial não foi removida.
+- Dependente de Rômulo: confirmar a conta Prumo antes de eventual reconexão/retomada; aprovar os termos concretos de cada proposta (escopo, preço, custo, prazo, recorrência e condições), confirmar envio/aceite e recebimento por evidência. Valores ainda desconhecidos permanecem em aberto; R$99 para o site de Kelisson continua sem aprovação.
+- O objetivo de primeira venda nova e R$10 mil/mês continua aberto; Silmer segue como cliente existente e não conta como primeira venda nova. Nenhum contato foi feito neste lote.

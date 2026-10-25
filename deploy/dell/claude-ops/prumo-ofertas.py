@@ -156,26 +156,24 @@ def doc(planilha_id, gid=None, aba=None):
             "sheetName": ({"__rl": True, "mode": "id", "value": str(gid)} if gid is not None else {"__rl": True, "mode": "name", "value": aba})}
 
 
-def ler(nome, planilha_id, pos, gid=None, aba=None, tolerante=True):
-    """Leitura para o dedupe. A da própria oferta não é tolerante: sem ela o caçador gravaria repetidos."""
+def ler(nome, planilha_id, pos, gid=None, aba=None):
+    """Leitura de dedupe falha fechada: fonte indisponível interrompe a rodada."""
     no = {"id": re.sub(r"[^a-z0-9]+", "-", unicodedata.normalize("NFD", nome.lower()).encode("ascii", "ignore").decode()), "name": nome, "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
           "position": pos, "credentials": SHEETS, "executeOnce": True, "alwaysOutputData": True,
           "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000,
           "parameters": {"resource": "sheet", "operation": "read", **doc(planilha_id, gid, aba), "filtersUI": {"values": []}, "options": {}}}
-    if tolerante:
-        no["onError"] = "continueRegularOutput"
     return no
 
 
 def anexar(no_id, nome, gid, colunas, pos):
     return {"id": no_id, "name": nome, "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7, "position": pos,
-            "credentials": SHEETS, "retryOnFail": True, "maxTries": 3, "waitBetweenTries": 5000,
-            "parameters": {"resource": "sheet", "operation": "append", **doc(PLANILHA, gid),
-                           "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": [],
+            "credentials": SHEETS, "retryOnFail": False,
+            "parameters": {"resource": "sheet", "operation": "appendOrUpdate", **doc(PLANILHA, gid),
+                           "columns": {"mappingMode": "autoMapInputData", "value": {}, "matchingColumns": ["ID"],
                                        "schema": [{"id": c, "displayName": c, "required": False, "defaultMatch": False, "display": True,
                                                    "type": "string", "canBeUsedToMatch": True} for c in colunas]},
                            # RAW: nome de empresa que começa com "=" fica texto. ignoreIt: o _tipo não vira coluna.
-                           "options": {"cellFormat": "RAW", "handlingExtraData": "ignoreIt", "useAppend": True}}}
+                           "options": {"cellFormat": "RAW", "handlingExtraData": "ignoreIt"}}}
 
 
 def code(no_id, nome, js, pos):
@@ -207,7 +205,7 @@ def escolher_js(o, leitura_propria):
         "const BUSCAS = " + json.dumps(buscas_de(o), ensure_ascii=False) + ";",
         "const ROTULO = " + json.dumps(o["rotulo"] + ":", ensure_ascii=False) + ";",
         "const ultima = new Map();",
-        "const ler = (no) => { try { return $(no).all().map((i) => i.json ?? {}); } catch (e) { return []; } };",
+        "const ler = (no) => { try { return $(no).all().map((i) => i.json ?? {}); } catch (e) { throw new Error('Falha ao ler fonte de deduplicação: ' + no + '. Triagem cancelada.'); } };",
         f"for (const l of [...ler({json.dumps(leitura_propria, ensure_ascii=False)}), ...ler('Ler Descartados').filter((d) => String(d['Motivo'] ?? '').startsWith(ROTULO))]) {{",
         "  const q = String(l['Busca'] ?? '').trim();",
         "  const t = Date.parse(l['Encontrado em'] ?? '');",
@@ -243,7 +241,7 @@ def cacador(oferta, gids, descartados, erro, busca_fixa=None):
         {"id": "manual", "name": "Executar manualmente", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [0, -100], "parameters": {}},
         {"id": "agenda", "name": "Dias úteis às 9h", "type": "n8n-nodes-base.scheduleTrigger", "typeVersion": 1.2, "position": [0, 100],
          "parameters": {"rule": {"interval": [{"field": "cronExpression", "expression": "0 9 * * 1-5"}]}}},
-        ler(leitura_propria, PLANILHA, [x, 0], gid=gids[oferta], tolerante=False),
+        ler(leitura_propria, PLANILHA, [x, 0], gid=gids[oferta]),
     ]
     for k, v in outras:
         x += 220

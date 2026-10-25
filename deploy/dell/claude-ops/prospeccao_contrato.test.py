@@ -64,8 +64,15 @@ class Prospeccao(unittest.TestCase):
             comum=js.replace(constante,'const CONFIG = __CONFIG__;')
             if assinatura is None: assinatura=comum
             else: self.assertEqual(comum,assinatura)
-            self.assertIn('leitura-dedupe-tolerante',out['riscosLegados'])
-            self.assertIn('persistencia-com-retry-requer-recibo',out['riscosLegados'])
+            self.assertEqual(out['riscosLegados'],['concorrencia-google-sheets-upsert'])
+            for nome in contract['leiturasDedupe']:
+                self.assertNotIn('onError',por[nome]); self.assertFalse(por[nome].get('continueOnFail'))
+            for nome in contract['etapas']['persistencia']:
+                if nome.startswith('Gravar'):
+                    node=por[nome]
+                    self.assertEqual(node['parameters']['operation'],'appendOrUpdate')
+                    self.assertEqual(node['parameters']['columns']['matchingColumns'],['ID'])
+                    self.assertFalse(node['retryOnFail'])
         self.assertEqual(cfg,antes)
         on_disk=json.loads(Path(__file__).with_name('prumo-ofertas.json').read_text(encoding='utf-8'))
         self.assertEqual(on_disk,self.config_original)
@@ -98,6 +105,18 @@ class Prospeccao(unittest.TestCase):
         self.assertIn('não confirmado',prospects[0]['Origem do WhatsApp'])
         self.assertTrue(all(p['Motivo'].startswith('Oferta sintética:') for p in descartes))
 
+    def test_falha_em_leitor_de_dedupe_interrompe_triagem_sem_tentar_rede(self):
+        cfg=self.terceira(); o=cfg['ofertas']['fixture']; contract=c.contrato_oferta(cfg,'fixture')
+        codigo=self.factory.triar_js('fixture',o,contract['leiturasDedupe'])
+        source=("const $=name=>{if(name===\"Ler Estamparias\")throw Error(\"fonte indisponível\");"
+                "return {all:()=>[{json:{}}],first:()=>({json:{query:\"teste\"}})}};let http=0;"
+                " (async()=>{await (async function(){"+codigo+"}).call({helpers:{httpRequest:async()=>{http++;throw Error(\"HTTP proibido\")}}});"
+                "console.log(http)})().catch(e=>{console.error(e.message);process.exit(1)});")
+        r=subprocess.run([shutil.which('node') or 'node','-e',source],capture_output=True,text=True,encoding='utf-8',timeout=15)
+        self.assertNotEqual(r.returncode,0)
+        self.assertIn('Falha ao ler fonte de deduplicação: Ler Estamparias',r.stderr)
+        self.assertNotIn('HTTP proibido',r.stderr)
+
     def test_config_incompleta_duplicada_ou_sem_limite_falha_sem_alterar_origem(self):
         for change in [lambda x:x['ofertas']['iris'].pop('perfil'),lambda x:x['ofertas']['iris'].update(teto_por_rodada=True),
                        lambda x:x['ofertas']['iris'].update(cidades=[]),lambda x:x['ofertas']['iris'].update(aba=x['ofertas']['estampa']['aba']),
@@ -115,7 +134,9 @@ class Prospeccao(unittest.TestCase):
             if nome in contract['leiturasDedupe']:n.update(type='n8n-nodes-base.googleSheets',parameters={'operation':'read'})
             elif nome in contract['etapas']['persistencia']:
                 arquivo=nome.startswith('Entregar ')
-                n.update(type='n8n-nodes-base.readWriteFile' if arquivo else 'n8n-nodes-base.googleSheets',parameters={'operation':'write' if arquivo else 'append'})
+                params={'operation':'write' if arquivo else 'appendOrUpdate'}
+                if not arquivo: params['columns']={'matchingColumns':['place_id'],'schema':[{'id':'place_id','canBeUsedToMatch':True}]}
+                n.update(type='n8n-nodes-base.readWriteFile' if arquivo else 'n8n-nodes-base.googleSheets',parameters=params,retryOnFail=False)
             elif nome=='Buscar no Google Places':n.update(type='n8n-nodes-base.httpRequest',parameters={'url':'https://places.googleapis.com/v1/places:searchText'})
             nodes.append(n)
         # Contrato atravessa inline; não reescreve nem perde o export legado.
@@ -128,9 +149,16 @@ class Prospeccao(unittest.TestCase):
 
     def test_fonte_dedupe_ou_persistencia_trocada_nao_passa_auditoria(self):
         cfg=self.config_original;contract=c.contrato_oferta(cfg,'iris')
-        for name in ['Ler Clínicas','Gravar na aba Clínicas']:
+        wf=self.factory.cacador('iris',{'iris':101,'estampa':102},104,'erro-fixture')
+        next(n for n in wf['nodes'] if n['name']=='Ler Estamparias')['onError']='continueRegularOutput'
+        self.assertIn('leitura-dedupe-tolerante',c.auditar_adaptador(wf,contract)['riscosLegados'])
+        for change in [
+            lambda n:n['parameters'].update(operation='update'),
+            lambda n:n['parameters']['columns'].update(matchingColumns=[]),
+            lambda n:n.update(retryOnFail=True),
+        ]:
             wf=self.factory.cacador('iris',{'iris':101,'estampa':102},104,'erro-fixture')
-            next(n for n in wf['nodes'] if n['name']==name)['parameters']['operation']='update'
+            node=next(n for n in wf['nodes'] if n['name']=='Gravar na aba Clínicas');change(node)
             with self.assertRaises(ValueError):c.auditar_adaptador(wf,contract)
 
 
