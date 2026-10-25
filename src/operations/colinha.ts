@@ -135,7 +135,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Mapa',
     etapa: 'ver',
     tipo: 'diagnostico',
-    entrega: 'O Raio-X mostra a empresa por fora; o Mapa, por dentro. O dono responde 16 perguntas (uns 10 minutos, sem nenhum dado financeiro) e recebe um documento: Índice do Prumo X/18, os 6 blocos, o que passa pelo dono, onde a informação mora, as travas estimadas e o que fazer primeiro. Mais uma conversa de 45 minutos sobre o resultado. O documento é do dono, contrate ou não.',
+    entrega: 'O Raio-X mostra a empresa por fora; o Mapa, por dentro. O dono responde 16 perguntas (uns 10 minutos, com números aproximados informados pelo dono, sem extratos nem senhas) e recebe um documento: Índice do Prumo X/18, os 6 blocos, o que passa pelo dono, onde a informação mora, as travas estimadas e o que fazer primeiro. Mais uma conversa de 45 minutos sobre o resultado. O documento é do dono, contrate ou não.',
     preco: 'grátis',
     paraQuem: 'Só empresa com equipe (umas 8 pessoas ou mais, onde a Fonte se paga), depois do Raio-X ou direto pela CDL. Empresa pequena fica no Raio-X e nos produtos.',
   },
@@ -200,7 +200,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Fonte em dia',
     etapa: 'manter',
     tipo: 'mensalidade',
-    entrega: 'Revisão mensal da Fonte, atualização das regras, leitura dos números e uma conversa de 45 minutos.',
+    entrega: 'Incluir, mudar ou tirar regras e dados da Fonte: até 10 mudanças por mês, pedidas pelo WhatsApp e feitas em até 2 dias úteis. Começa depois dos 30 dias de ajustes; cancela quando quiser.',
     preco: 'R$ 190/mês',
     condicao: 'opcional, até 10 mudanças por mês, depois dos 30 dias de ajustes',
     sobProposta: true,
@@ -211,8 +211,8 @@ export const CARDAPIO: ServicoDoCardapio[] = [
 /** O preço de um serviço sob proposta, no cardápio (como o "grátis" do Raio-X). */
 export const SOB_PROPOSTA = 'sob proposta'
 
-/** O que dizer ao cliente que pergunta o preço de um serviço sob proposta: nenhum valor. */
-export const FRASE_SOB_PROPOSTA = 'O valor depende do que encontramos na empresa de vocês, no Raio-X ou no Mapa, e vai por escrito na proposta, em até 24 horas.'
+/** Prazo ao cliente é combinado; a meta interna de 24 h não vira promessa automática. */
+export const FRASE_SOB_PROPOSTA = 'O valor depende do escopo que confirmarmos para a empresa de vocês e vai por escrito na proposta. Combinamos o prazo de envio depois de conferir as informações necessárias.'
 
 /** A resposta ao "isso é pago?" sobre o Mapa (09/10/2026): sem número, porque o Mapa não tem preço. */
 export const FRASE_MAPA_E_GRATIS = 'Não cobramos pelo Mapa. Cobramos se vocês quiserem construir a Fonte depois.'
@@ -393,7 +393,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
     // empresa por fora, o Mapa vê por dentro. É a única porta para a Fonte.
     momento: 'convite-mapa',
     titulo: 'Depois do Raio-X · empresa com equipe: o convite para o Mapa',
-    objetivo: 'Levar o dono às 16 perguntas do Mapa (uns 10 minutos, sem dado financeiro). Só empresa com equipe, umas 8 pessoas ou mais; a pequena fica no Raio-X e nos produtos.',
+    objetivo: 'Levar o dono às 16 perguntas do Mapa (uns 10 minutos, com estimativas do dono, sem extratos nem senhas). Só empresa com equipe, umas 8 pessoas ou mais; a pequena fica no Raio-X e nos produtos.',
     servico: 'mapa',
     trechos: [
       {
@@ -403,7 +403,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         texto: [
           'Oi, [nome]. Aqui é o Rômulo, do Prumo. O raio-x mostrou o lado de fora {ARTIGO} {NOME}, do jeito que o cliente vê no Google.',
           'O Mapa mostra o de dentro: o que hoje só anda com você, onde a informação mora e o que arrumar primeiro. Vocês recebem um documento e uma conversa de 45 minutos sobre ele, sem custo.',
-          'São 16 perguntas, uns 10 minutos, sem nenhum dado financeiro:',
+          'São 16 perguntas, uns 10 minutos, com números aproximados informados pelo dono, sem extratos nem senhas:',
           '[link das 16 perguntas]',
           'Consegue responder até [dia]?',
         ].join('\n'),
@@ -435,7 +435,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       '"Isto só anda com você: [o que passa pelo dono]." Quem do time poderia decidir isso, se a regra estivesse escrita?',
       '"A informação de [assunto] mora em [onde]." Uma pessoa nova acha sozinha?',
       '"Pelas respostas, essas travas custam algo como [valor estimado] por mês." Faz sentido para você?',
-      'Para fechar: "O primeiro passo é [o que fazer primeiro]. Se quiserem construir isso com o time, é a Fonte: te mando a proposta por escrito até amanhã." Sem time para usar a Fonte, encerre bem e aponte o produto que resolve.',
+      'Para fechar: "O primeiro passo é [o que fazer primeiro]. Se quiserem construir isso com o time, é a Fonte: preparo a proposta por escrito e combinamos o prazo de apresentação." Sem time para usar a Fonte, encerre bem e aponte o produto que resolve.',
     ],
   },
   {
@@ -448,7 +448,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'conversa-convite',
         titulo: 'Convite para a conversa',
         texto:
-          'Que bom! Antes de te propor qualquer coisa, quero entender como o cliente chega até vocês hoje e o que acontece depois que ele chama. São 20 minutos de conversa, por telefone ou vídeo. Se fizer sentido, te mando a proposta por escrito em até 24 horas. Que dia fica bom?',
+          'Que bom! Antes de te propor qualquer coisa, quero entender como o cliente chega até vocês hoje e o que acontece depois que ele chama. São 20 minutos de conversa, por telefone ou vídeo. Se fizer sentido, preparo a proposta por escrito e combinamos quando ela será apresentada. Qual próximo passo funciona para vocês?',
         dica: 'Só depois de um sim ou de uma pergunta do dono, nunca no WhatsApp frio. Anote cada número: é o "antes" da medição, e a diferença em 30 dias é a prova do Respondido.',
         produtos: TODOS,
       },
@@ -463,20 +463,20 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       'De cada 10 que chamam, quantos viram cliente?',
       'Quanto vale um cliente para vocês, em média, num serviço?',
       'De cada 10 clientes novos, quantos chegam pelo Google? Quem procura vocês lá, acha?',
-      'Para fechar: "Pelo que vocês me contaram, o maior vazamento está em [onde]: uns [quantos] clientes por mês. É isso que o [serviço] resolve, e a gente mede: conta antes de ligar e mostra a diferença em 30 dias. Te mando a proposta até amanhã."',
+      'Para fechar: "Pelo que vocês me contaram, o maior vazamento está em [onde]: uns [quantos] clientes por mês. É isso que o [serviço] resolve, e a gente mede: conta antes de ligar e mostra a diferença em 30 dias. Preparo a proposta por escrito e combinamos o prazo de apresentação."',
     ],
   },
   {
     momento: 'proposta',
     titulo: 'Proposta',
-    objetivo: 'Qualificar (dor, impacto, decisor) e depois mandar a proposta em até 24 h do "gostei" ou da conversa: o que entra, quanto custa e quando começa.',
+    objetivo: 'Conferir necessidade, adequação, intenção, participantes e próximo passo; preparar proposta com escopo, preço e início. Meta interna: até 24 h após abertura comercial confirmada, conforme informações e compromisso possível.',
     trechos: [
       {
         id: 'proposta-encontrado',
         titulo: 'Encontrado (depois do "gostei")',
         texto:
           'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando. Posso começar?',
-        dica: 'Qualifique antes (dor, impacto, decisor) e mande em até 24 h depois do "gostei". Pediram mudança no demo? Faça antes de cobrar.',
+        dica: 'Confira a qualificação e a condição individual antes da versão final. Meta interna de preparação: até 24 h após abertura confirmada; conferir informações e compromisso antes de prometer prazo. Pediram mudança no demo? Faça antes de cobrar.',
         produtos: SITE,
       },
       {
@@ -492,7 +492,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Fonte (depois do Mapa)',
         texto:
           'Como vimos no Mapa: hoje [o que só anda com você]. A proposta: na primeira semana conferimos o Mapa com o time; depois escrevemos junto como a {NOME} vende, compra, entrega e cobra, e quem faz o quê, num Notion ou num agente com IA que o time consulta. Assim o orçamento sai no mesmo dia sem você aprovar cada preço. O projeto parte de R$ 1.500 (Drive, Notion ou caderno no Gemini; R$ 2.400 se for robô no WhatsApp ou chat próprio), metade para começar e metade na entrega. Se fizer sentido, começo [dia].',
-        dica: 'Só depois do Mapa, em até 24 h da devolutiva. A manutenção da Fonte (R$ 190/mês, opcional, até 10 mudanças por mês) entra no fim como opção, nunca como condição.',
+        dica: 'Só depois do Mapa. Meta interna de preparação: até 24 h da devolutiva, com escopo e dependências conferidos; combinar prazo individual antes de prometer. A manutenção da Fonte (R$ 190/mês, opcional, até 10 mudanças por mês) entra no fim como opção, nunca como condição.',
         produtos: PRUMO,
       },
     ],
@@ -569,7 +569,7 @@ export const OBJECOES: Objecao[] = [
       titulo: '"Quanto custa?"',
       texto:
         'Para colocar o site no ar com o endereço de vocês: R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando. Quer que eu coloque?',
-      dica: 'Diga o preço na hora, sem rodeio. Lead do PRUMO: o Raio-X e o Mapa são grátis; Respondido e Fonte são sob proposta, com o valor por escrito em até 24 horas. Se a pergunta é sobre o Mapa, use o "isso é pago?".',
+      dica: 'Diga o preço na hora, sem rodeio. Lead do PRUMO: o Raio-X e o Mapa são grátis; Respondido e Fonte são sob proposta, com o valor por escrito e o prazo combinado após conferir o escopo. Se a pergunta é sobre o Mapa, use o "isso é pago?".',
       produtos: TODOS,
     },
   },

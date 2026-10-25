@@ -5,6 +5,24 @@ description: Ler o estado do Dell worker, n8n, SquadOne, GitHub e pastas sincron
 
 # Leitura do Dell
 
+## Operação geral e encaminhamento — 25/10/2026
+
+Quando a pergunta for como a operação vende e funciona, explique primeiro o
+modelo **Como vender e operar** da Central (Configurações ou topo de Vendas,
+`/mais?abrir=operacao#modelo-operacional`). Separe catálogo, passagens, rotina,
+capacidade, indicadores e autorização de automação. Saúde técnica não comprova
+atendimento, proposta entregue, aceite ou recebimento.
+
+Diagnóstico deve terminar com fonte/frescor, impacto, regra aplicada, evidência
+ou lacuna, responsável pela decisão e condição de conclusão. Aponte a ficha
+fornecida pela fonte quando for caso individual; não mantenha fila em memória.
+Disponibilidade do Rômulo não cria número de horas, prazo ou autorização extra.
+
+O papel comercial de leitura é uma regra operacional, não prova de sandbox: os
+presets e ferramentas efetivamente instalados podem ter capacidades mais amplas.
+Não use essa capacidade como autorização para alterar dados, cron ou serviços.
+Preserve o atendimento pessoal, Silmer, a agenda e os contratos de Socorro.
+
 ## Escopo comercial atual — 24/10/2026
 
 A Central/SquadOne também é o CRM operacional: leia ficha, fila e fontes atuais

@@ -154,6 +154,9 @@ def api(method, path, body=None):
                 return bloqueio
     partes = path.strip("/").split("/")
     if method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
+        from serializacao_aquisicao import desembrulhar as desembrulhar_aquisicao, protegido as aquisicao_protegida, preparar_se_configurado as preparar_aquisicao
+        guarda_aquisicao_obrigatoria = aquisicao_protegida(body)
+        body = desembrulhar_aquisicao(body)
         from workflow_confiabilidade import preparar
         body = garantir_erro_salvo(preparar(body))
         config_contexto = configuracao_contexto()
@@ -168,6 +171,7 @@ def api(method, path, body=None):
         body = preparar_comercial_se_configurado(body)
         body = preparar_lote_se_configurado(body, config_contexto)
         body = preparar_publicacao_crm_se_configurado(body)
+        body = preparar_aquisicao(body, obrigatoria=guarda_aquisicao_obrigatoria)
     if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}

@@ -52,7 +52,7 @@ import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./se
 import { guardaDeIdentidade, guardaDeOrigem, lerLoginsPermitidos, porteiroDeIp, veioPeloServe } from "./server/acesso.ts";
 import { criarRepasseDaEntrada, ENTRADA_PREFIXO } from "./server/entrada-proxy.ts";
 import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
-import { avisosPessoaisPeloTelegram, criarRegistroDeEnviados, publicarAviso, publicarAvisoPessoal, type Aviso } from "./server/avisos.ts";
+import { avisosPessoaisPeloTelegram, criarRegistroDeEnviados, enviarAvisoPessoalAosDestinos, publicarAviso, publicarAvisoPessoal, type Aviso, type DestinoDoAvisoPessoal } from "./server/avisos.ts";
 import { diretorioDeDados, motivoParaAgendaDesligada } from "./server/dados.ts";
 import { arquivoDeOffset, criarPollingDoTelegram } from "./server/telegram-polling.ts";
 import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/sinal-de-vida.ts";
@@ -275,16 +275,13 @@ async function startServer() {
   const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
   // O bot ao chat do dono: espelho do P0 e, desde 16/10/2026 (OT-14, exceção da regra 20), o canal
   // dos lembretes da agenda e dos alertas de finanças, para tirá-los do número que fala com os leads.
-  // Sucesso se AO MENOS UM chat recebeu: lançar com um chat entregue mandaria o aviso de novo pela fila.
+  // Cada destino conserva resultado proprio; entrega parcial ou timeout nunca aciona fallback.
   const telegramDoDono = configDeTelegram
-    ? async (texto: string, opcoes?: { silencioso?: boolean }) => {
-        const chats = [...configDeTelegram!.chatsPermitidos];
-        if (chats.length === 0) throw new Error("nenhum chat na allowlist do Telegram");
-        const resultados = await Promise.allSettled(chats.map((chat) => enviarMensagem(configDeTelegram!, chat, texto, undefined, undefined, opcoes)));
-        const falhas = resultados.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-        if (falhas.length === chats.length) throw falhas[0].reason;
-        if (falhas.length > 0) console.error(`[avisos] Telegram: ${falhas.length} de ${chats.length} chat(s) não receberam o aviso`);
-      }
+    ? async (texto: string, opcoes?: { silencioso?: boolean }, registrar?: (destinos: DestinoDoAvisoPessoal[]) => Promise<void>) =>
+        enviarAvisoPessoalAosDestinos([...configDeTelegram!.chatsPermitidos].map(chat => ({
+          identidade: chat,
+          enviar: () => enviarMensagem(configDeTelegram!, chat, texto, undefined, undefined, opcoes),
+        })), registrar)
     : undefined;
   const pessoalPeloTelegram = avisosPessoaisPeloTelegram(process.env);
   // Chaves já enviadas pelo caminho pessoal, em disco: a Central reinicia a cada merge e a vigia varre no

@@ -1,0 +1,54 @@
+{
+  "id": "prumo",
+  "nome": "Prumo",
+  "objetivo": "Definir o que a empresa vende, a promessa que pode cumprir e os critérios de entrega e aceite; o SquadOne executa essa operação.",
+  "responsavel": "Prumo é a fonte do negócio; Rômulo aprova condições, compromissos e qualidade de cada entrega.",
+  "executa": [
+    "Organiza consultoria digital e produtos digitais por família, modalidade comercial e situação de qualidade.",
+    "Mantém uma fonte canônica de nomes, escopo, preços, suporte e decisões; o catálogo operacional é sua consulta derivada.",
+    "Escolhe a menor oferta adequada à necessidade: consultoria por diagnóstico e produto próprio pela sua jornada, sem impor a origem da lista.",
+    "Prepara orçamento identificado para o que é sob medida e conserva acordos individuais já confirmados.",
+    "Confere versão, manifesto, requisitos e aceite da entrega antes de publicação ou apresentação como Profissional."
+  ],
+  "naoExecuta": [
+    "Não transforma demonstração, rascunho, catálogo ou produto declarado pronto em aceite de cliente.",
+    "Não atribui custo, margem, horas, fornecedor, prazo ou condição individual sem fonte.",
+    "Não opera pagamentos ou finanças do cliente; despesas de terceiros e mídia não viram receita própria.",
+    "Não reativa aquisição nem libera negociação autônoma por alterar o catálogo."
+  ],
+  "entradas": [
+    "Necessidade observada, fonte e contexto da oportunidade; qualificação e responsabilidade confirmadas onde exigidas.",
+    "Negócio, organização, preços e fichas de produto canônicos, com versão; condições individuais preservadas.",
+    "Escopo, dependências e capacidade por compromisso; disponibilidade qualitativa de Rômulo confirmada em 25/10/2026."
+  ],
+  "saidas": [
+    "Oferta e modalidade coerentes, com entrega, exclusões, preço de referência, suporte e dependências explícitos.",
+    "Proposta revisável com versão, responsável, prazo combinado e condição de cobrança, sem confirmação fictícia de envio.",
+    "Artefato conferido e evidência de qualidade/aceite separados de assinatura, cobrança e recebimento."
+  ],
+  "fontes": [
+    "Prumo: 00-contexto/organizacao.md, negocio.md, produtos.md e decisoes.md.",
+    "Preço dos serviços: 04-venda/piloto-cdl/precos.json, commit 114f9b306dd59e669477ebd9ebc79ae8af7ef793.",
+    "Qualidade: 06-qualidade/README.md e critérios do produto; liberação vinculada à versão/manifesto.",
+    "SquadOne: catálogo operacional, colinha.ts e tabela marginal própria de Íris."
+  ],
+  "falhas": [
+    "Divergência entre catálogo e consumidor: usar a fonte canônica, preservar condição individual e corrigir o texto antes de nova apresentação.",
+    "Fonte, versão ou escopo desconhecidos: manter a lacuna, preparar revisão interna e não preencher com preço ou prazo padrão.",
+    "Falta de material, acesso ou dependência externa: replanejar o compromisso com evidência, sem deslocar prazo silenciosamente.",
+    "Qualidade não comprovada: identificar homologação/rascunho e não usar selo Profissional nem declarar entrega aceita."
+  ],
+  "verificacao": [
+    "Conferir público, problema, entregáveis, exclusões e pré-requisitos na ficha do catálogo operacional.",
+    "Antes da proposta final, conferir fonte/versão de preço e eventual condição individual; preservar valores desconhecidos.",
+    "Manutenção da Fonte: até dez mudanças/mês, em até dois dias úteis, após trinta dias de ajustes, conforme condição contratada.",
+    "Mapa admite números aproximados informados pelo dono; não solicita extratos nem senhas e identifica estimativas.",
+    "Meta interna de proposta em até 24 h orienta prioridade; prazo ao cliente é combinado com informações e compromisso conferidos."
+  ],
+  "limites": [
+    "Padrão comercial pronto não equivale a artefato homologado; cada entrega exige seu gate próprio.",
+    "Íris mantém sua fonte marginal; CRM de estamparia não recebe preço inventado; incubação não vira produto pronto.",
+    "Contrato, aceite, cobrança e recebimento são fatos distintos; o catálogo não confirma nenhum deles.",
+    "Este painel é leitura geral de operação, sem clientes ou fatos comerciais editáveis."
+  ]
+}

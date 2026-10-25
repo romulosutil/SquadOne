@@ -87,7 +87,8 @@ def concluir_cacador(wf):
 
 def desembrulhar(wf):
     """Devolve o grafo editável para os scripts que atualizam o Caçador."""
-    wf = copy.deepcopy(wf)
+    from serializacao_aquisicao import desembrulhar as desembrulhar_aquisicao
+    wf = desembrulhar_aquisicao(wf)
     chamada = next((n for n in wf["nodes"] if n["name"] == "Concluir processamento da busca"), None)
     if chamada is None:
         return wf

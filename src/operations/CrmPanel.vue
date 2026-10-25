@@ -387,6 +387,7 @@ function abrirColinha() {
     <header class="crm-topo">
       <div>
         <h1 id="crm-titulo">Vendas</h1>
+        <a href="/mais?abrir=operacao#modelo-operacional">Como vender e operar →</a>
         <p class="crm-topo__fonte" :title="detalheDoRetrato">{{ textoDoRetrato }}</p>
       </div>
 <span class="sincronizacao">Atualização automática</span>

@@ -5,6 +5,25 @@ description: Onde cada coisa do Rômulo roda (PC e celular, nuvem, Dell, externo
 
 # Mapa do ecossistema
 
+## Modelo comum de operação — 25/10/2026
+
+A porta de entrada para entender a operação comercial inteira é **Como vender e
+operar**, na Central em Configurações ou no topo de Vendas
+(`/mais?abrir=operacao#modelo-operacional`). Ali estão catálogo operacional,
+passagens, rotina diária, capacidade, indicadores e critérios de automação.
+Essa referência não substitui o CRM: fato de cliente continua na fonte e na
+leitura atual da oportunidade. Não criar base concorrente em memória/cron.
+
+Hermes explica e encaminha; Central projeta fatos e permissões; n8n executa
+contratos autorizados; Telegram transporta avisos; observadores capturam
+WhatsApp; Prumo define promessa/qualidade; Rômulo confirma condições e marcos.
+Aviso, processo ativo, arquivo gerado e clique não confirmam conclusão comercial.
+
+A disponibilidade humana qualitativa está confirmada; prazos vêm do escopo e
+das dependências. Pausa de prospecção e atendimento manual são coisas distintas.
+Nenhuma consulta a este mapa autoriza envio, retomada, negociação ou mudança de
+infraestrutura. Se um estado não foi conferido, declare-o não verificado.
+
 ## Escopo comercial atual — 24/10/2026
 
 Para a operação comercial, esta seção atualiza os papéis históricos deste mapa:
@@ -15,7 +34,7 @@ Para a operação comercial, esta seção atualiza os papéis históricos deste 
 | Central/SquadOne | CRM, ficha, fila de atendimento, agenda e controles | Projeta fonte e confirmações humanas; qualificação/ciclo/responsabilidade têm evidência própria |
 | n8n do Dell | Transporte e execução de fluxos autorizados | Não confirma compra por classificação nem substitui decisão humana |
 | Luna de `luna-workflows.service` | Classificação e resumo nos contratos restritos | Serviço separado do secretário; não envia a lead nem confirma qualificação comercial humana |
-| Gemini + Jev no classificador | Gemini classifica; novas comparações Jev serão pausadas no lote técnico | Amostra existente continua disponível; Jev não decide nem confirma compra |
+| Gemini + Jev no classificador | Gemini classifica; nova coleta Jev depende do gate e da autorização vigentes | Amostra existente continua disponível; Jev não decide nem confirma compra |
 | VENDAS/Grok externo | Rascunhos sob pedido no escopo atual | Estado e pausa externos não verificados/controlados por Hermes ou Central |
 | Rômulo | Negociação, condições, proposta final e atendimento humano | Confirma fatos e marcos no CRM após conferir a fonte |
 | Telegram existente | Aviso prioritário de pendência e passagem, com acesso à Central | Aviso recebido não é envio a cliente ou contratação |

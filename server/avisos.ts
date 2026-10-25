@@ -1,14 +1,16 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ehMadrugada } from "./tempo.ts";
+import { EstadoOperacionalDuravel, sincronizarPasta } from "./estado-operacional-duravel.ts";
+import { ErroDeTelegram } from "./telegram.ts";
 
 /**
  * Saída proativa do SquadOne (regra 20). Hoje há dois caminhos, e o Telegram vem primeiro:
  *
  * - Avisos pessoais (lembrete da agenda, alerta de finanças, "Google desconectado"; OT-14,
  *   16/10/2026): vão ao chat do dono pelo bot do Telegram (Bot API oficial), sem som das 22h às 7h.
- *   A fila do WhatsApp é só RESERVA, quando o bot está desligado ou falha. Motivo: o número do
+ *   A fila do WhatsApp é só RESERVA quando o bot está desligado ou todos os destinos recusaram explicitamente. Motivo: o número do
  *   WhatsApp é o mesmo que fala com os leads e já levou restrição por volume.
  * - A fila de avisos do Dell (`~/.local/share/avisos/fila`), que o `dell-status` drena para o
  *   WhatsApp do Hermes com teto, silêncio das 22h às 7h (aí sim, o aviso espera e sai às 7h) e chave
@@ -161,17 +163,23 @@ export function validarAviso(a: Aviso): void {
  * dell-status (criar aqui com outra permissão quebraria o n8n). Devolve o
  * caminho gravado.
  */
+class FilaDeAvisosAusente extends Error {}
+
 export async function gravarAvisoNaFila(fila: string, aviso: Aviso, agora = new Date()): Promise<string> {
   validarAviso(aviso);
   const nome = `${agora.toISOString().replace(/[-:.]/g, "")}-squadone-${randomBytes(4).toString("hex")}.json`;
   const destino = path.join(fila, nome);
   const tmp = path.join(fila, `.${nome}.tmp`);
+  let tentouPublicar = false;
   try {
-    await fs.writeFile(tmp, JSON.stringify(avisoParaArquivo(aviso)) + "\n", { encoding: "utf8", mode: 0o660, flag: "wx" });
+    const h = await fs.open(tmp, "wx", 0o660);
+    tentouPublicar = true;
+    try { await h.writeFile(JSON.stringify(avisoParaArquivo(aviso)) + "\n", "utf8"); await h.sync(); } finally { await h.close(); }
     await fs.rename(tmp, destino);
+    await sincronizarPasta(fila);
   } catch (err: any) {
     await fs.rm(tmp, { force: true }).catch(() => {});
-    if (err?.code === "ENOENT") throw new Error(`fila de avisos não existe em ${fila} (instale o dell-status)`);
+    if (err?.code === "ENOENT" && !tentouPublicar) throw new FilaDeAvisosAusente(`fila de avisos não existe em ${fila} (instale o dell-status)`);
     throw err;
   }
   return destino;
@@ -192,82 +200,149 @@ export function textoDoAviso(a: Aviso): string {
  */
 export const RETENCAO_DOS_ENVIADOS_MS = 24 * 3600_000;
 
-export interface RegistroDeEnviados {
-  /** A chave foi enviada nas últimas 24 h? */
-  jaEnviado(chave: string, agora: Date): Promise<boolean>;
-  /** Anota o envio. Nunca lança: a mensagem já saiu, e falhar aqui faria quem chama reenviar. */
-  marcar(chave: string, agora: Date): Promise<void>;
-  /** Tira a chave (ex.: o Google voltou, a próxima perda é um aviso novo). Só grava se ela existia. */
-  esquecer(chave: string): Promise<void>;
+export type EstadoDoDestinoPessoal = "naoTentado" | "tentando" | "entregue" | "recusado" | "incerto";
+export interface DestinoDoAvisoPessoal { destinoHash: string; estado: EstadoDoDestinoPessoal }
+export interface EntregaDoAvisoPessoal { destinos: DestinoDoAvisoPessoal[] }
+type EstadoDaTentativaPessoal = "reservado" | "telegram" | "fila" | "incerto" | "naoEnviado";
+interface TentativaPessoal {
+  id: string; chaveHash: string; estado: EstadoDaTentativaPessoal; em: number; atualizadoEm: number;
+  destinos: DestinoDoAvisoPessoal[]; dedupeEncerrado?: boolean;
+}
+interface JournalPessoal { versao: 1; tentativas: TentativaPessoal[] }
+type ReservaPessoal = { estado: "reservado"; token: string } | { estado: "repetido" | "incerto" };
+const hashPessoal = (chave: string) => createHash("sha256").update(chave).digest("hex");
+const HASH_PESSOAL = /^[a-f0-9]{64}$/;
+const ESTADOS_DESTINO = new Set(["naoTentado", "tentando", "entregue", "recusado", "incerto"]);
+function validarJournalPessoal(v: unknown): JournalPessoal {
+  const j = v as JournalPessoal;
+  if (!j || j.versao !== 1 || !Array.isArray(j.tentativas)) throw new Error("Journal pessoal invalido.");
+  const ids = new Set<string>();
+  for (const t of j.tentativas) {
+    if (!t || typeof t.id !== "string" || ids.has(t.id) || !HASH_PESSOAL.test(t.chaveHash) ||
+      !["reservado", "telegram", "fila", "incerto", "naoEnviado"].includes(t.estado) ||
+      !Number.isFinite(t.em) || !Number.isFinite(t.atualizadoEm) || !Array.isArray(t.destinos) ||
+      (t.dedupeEncerrado !== undefined && typeof t.dedupeEncerrado !== "boolean")) throw new Error("Tentativa pessoal invalida.");
+    ids.add(t.id);
+    const destinos = new Set<string>();
+    for (const d of t.destinos) {
+      if (!d || !HASH_PESSOAL.test(d.destinoHash) || !ESTADOS_DESTINO.has(d.estado) || destinos.has(d.destinoHash)) throw new Error("Destino pessoal invalido.");
+      destinos.add(d.destinoHash);
+    }
+  }
+  return j;
 }
 
+/** Captura TODOS os resultados. Uma recusa nao oculta timeout de outro chat. */
+export async function enviarAvisoPessoalAosDestinos(
+  destinos: ReadonlyArray<{ identidade: string | number; enviar: () => Promise<unknown> }>,
+  registrar?: (destinos: DestinoDoAvisoPessoal[]) => Promise<void>,
+): Promise<EntregaDoAvisoPessoal> {
+  const estados = destinos.map(d => ({ destinoHash: hashPessoal(String(d.identidade)), estado: "naoTentado" as EstadoDoDestinoPessoal }));
+  if (new Set(estados.map(d => d.destinoHash)).size !== estados.length) throw new Error("Destino pessoal repetido.");
+  const salvar = async () => registrar?.(estados.map(d => ({ ...d })));
+  await salvar();
+  // Serial: reserva persistida antes da chamada e resultado antes do proximo destino.
+  for (let i = 0; i < destinos.length; i++) {
+    estados[i].estado = "tentando";
+    await salvar();
+    try {
+      const recibo = await destinos[i].enviar();
+      estados[i].estado = recibo === null ? "incerto" : "entregue";
+    } catch (err) {
+      estados[i].estado = err instanceof ErroDeTelegram && [400, 401, 403, 404, 429].includes(err.status ?? 0) ? "recusado" : "incerto";
+    }
+    await salvar();
+  }
+  return { destinos: estados };
+}
+
+export interface RegistroDeEnviados {
+  jaEnviado(chave: string, agora: Date): Promise<boolean>;
+  /** Compatibilidade: marca somente entrega confirmada; nunca falha depois do transporte. */
+  marcar(chave: string, agora: Date): Promise<void>;
+  /** Encerra dedupe confirmado; reserva/incerteza nunca e liberada automaticamente. */
+  esquecer(chave: string): Promise<void>;
+  reservar(chave: string, agora: Date): Promise<ReservaPessoal>;
+  registrarDestinos(token: string, destinos: DestinoDoAvisoPessoal[]): Promise<void>;
+  concluir(token: string, estado: Exclude<EstadoDaTentativaPessoal, "reservado">, agora: Date): Promise<void>;
+}
+
+/** Sidecar privado e fonte da reserva; mapa numerico legado continua legivel por versoes antigas. */
 export function criarRegistroDeEnviados(
   arquivo: string,
   opcoes: { log?: { error: (...a: unknown[]) => void }; retencaoMs?: number } = {},
 ): RegistroDeEnviados {
   const log = opcoes.log ?? console;
   const retencao = opcoes.retencaoMs ?? RETENCAO_DOS_ENVIADOS_MS;
-  let mapa: Map<string, number> | null = null;
-  let gravacoes: Promise<void> = Promise.resolve();
-
-  async function carregar(): Promise<Map<string, number>> {
-    if (mapa) return mapa;
-    const lido = new Map<string, number>();
+  const journal = new EstadoOperacionalDuravel<JournalPessoal>(arquivo + ".tentativas.json", () => ({ versao: 1, tentativas: [] }), validarJournalPessoal);
+  async function lerLegado(): Promise<Record<string, number>> {
     try {
-      const bruto = JSON.parse(await fs.readFile(arquivo, "utf8"));
-      if (bruto && typeof bruto === "object" && !Array.isArray(bruto)) {
-        for (const [chave, em] of Object.entries(bruto)) if (typeof em === "number" && Number.isFinite(em)) lido.set(chave, em);
-      }
-    } catch (err: any) {
-      // Arquivo ausente é o primeiro boot; torto é perda do que já foi dito: começa vazio e reescreve.
-      if (err?.code !== "ENOENT") log.error(`[avisos] registro de enviados ilegível, recomeço vazio: ${err?.message ?? err}`);
+      const bruto: unknown = JSON.parse(await fs.readFile(arquivo, "utf8"));
+      if (!bruto || typeof bruto !== "object" || Array.isArray(bruto) || Object.values(bruto).some(v => typeof v !== "number" || !Number.isFinite(v))) throw new Error();
+      return Object.assign(Object.create(null) as Record<string, number>, bruto);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return {};
+      throw new Error("Registro legado ilegivel; preserve os arquivos e confira antes de repetir.");
     }
-    return (mapa = lido);
   }
-
-  function podar(m: Map<string, number>, agora: number): boolean {
-    let mudou = false;
-    for (const [chave, em] of m) {
-      if (agora - em >= retencao) {
-        m.delete(chave);
-        mudou = true;
-      }
-    }
-    return mudou;
+  const usar = <R>(fn: (j: JournalPessoal, salvar: () => Promise<void>, legado: Record<string, number>) => Promise<R>) =>
+    journal.usar(async (j, salvar) => fn(j, salvar, await lerLegado()));
+  const confirmado = (t: TentativaPessoal, agora: Date) => !t.dedupeEncerrado && ["telegram", "fila"].includes(t.estado) && agora.getTime() - t.atualizadoEm < retencao;
+  async function espelhar(legado: Record<string, number>): Promise<void> {
+    const tmp = arquivo + "." + randomUUID() + ".tmp";
+    try { await fs.writeFile(tmp, JSON.stringify(legado) + "\n", { mode: 0o600, flag: "wx" }); await fs.rename(tmp, arquivo); }
+    catch { await fs.rm(tmp, { force: true }).catch(() => undefined); log.error("[avisos] espelho legado nao gravado; a reserva privada permanece. Confira antes de voltar versao."); }
   }
-
-  /** Em série e atômico (`.tmp` + rename): duas gravações juntas não se pisam e o arquivo nunca fica pela metade. */
-  function gravar(m: Map<string, number>): Promise<void> {
-    const instantaneo = JSON.stringify(Object.fromEntries(m));
-    gravacoes = gravacoes.then(async () => {
-      const tmp = `${arquivo}.tmp`;
-      try {
-        await fs.mkdir(path.dirname(arquivo), { recursive: true });
-        await fs.writeFile(tmp, `${instantaneo}\n`, { encoding: "utf8", mode: 0o600 });
-        await fs.rename(tmp, arquivo);
-      } catch (err) {
-        await fs.rm(tmp, { force: true }).catch(() => {});
-        log.error(`[avisos] registro de enviados não gravado (vale só até o próximo reinício): ${(err as Error)?.message ?? err}`);
-      }
-    });
-    return gravacoes;
-  }
-
   return {
     async jaEnviado(chave, agora) {
-      const m = await carregar();
-      const em = m.get(chave);
-      return em !== undefined && agora.getTime() - em < retencao;
+      return usar(async (j, _salvar, legado) => j.tentativas.some(t => t.chaveHash === hashPessoal(chave) && confirmado(t, agora)) ||
+        (legado[chave] !== undefined && agora.getTime() - legado[chave] < retencao));
+    },
+    async reservar(chave, agora) {
+      return usar(async (j, salvar, legado) => {
+        const hash = hashPessoal(chave);
+        // Nunca expira reserva interrompida ou resultado incerto, mesmo alem de 24 h.
+        if (j.tentativas.some(t => t.chaveHash === hash && ["reservado", "incerto"].includes(t.estado))) return { estado: "incerto" };
+        if (j.tentativas.some(t => t.chaveHash === hash && confirmado(t, agora)) || (legado[chave] !== undefined && agora.getTime() - legado[chave] < retencao)) return { estado: "repetido" };
+        const token = randomUUID();
+        j.tentativas.push({ id: token, chaveHash: hash, estado: "reservado", em: agora.getTime(), atualizadoEm: agora.getTime(), destinos: [] });
+        await salvar();
+        return { estado: "reservado", token };
+      });
+    },
+    async registrarDestinos(token, destinos) {
+      await usar(async (j, salvar) => {
+        const t = j.tentativas.find(t => t.id === token);
+        if (!t || t.estado !== "reservado") throw new Error("Reserva pessoal indisponivel.");
+        t.destinos = destinos.map(d => ({ destinoHash: d.destinoHash, estado: d.estado })); await salvar();
+      });
+    },
+    async concluir(token, estado, agora) {
+      await usar(async (j, salvar) => {
+        const t = j.tentativas.find(t => t.id === token);
+        if (!t || t.estado !== "reservado") throw new Error("Reserva pessoal indisponivel.");
+        t.estado = estado; t.atualizadoEm = agora.getTime(); await salvar();
+      });
     },
     async marcar(chave, agora) {
-      const m = await carregar();
-      m.set(chave, agora.getTime());
-      podar(m, agora.getTime());
-      await gravar(m);
+      try {
+        await usar(async (j, salvar, legado) => {
+          const hash = hashPessoal(chave);
+          if (!j.tentativas.some(t => t.chaveHash === hash && confirmado(t, agora))) {
+            j.tentativas.push({ id: randomUUID(), chaveHash: hash, estado: "telegram", em: agora.getTime(), atualizadoEm: agora.getTime(), destinos: [] }); await salvar();
+          }
+          legado[chave] = agora.getTime();
+          await espelhar(legado);
+        });
+      } catch { log.error("[avisos] confirmacao pessoal nao persistida; preservar reserva e conferir antes de repetir."); }
     },
     async esquecer(chave) {
-      const m = await carregar();
-      if (m.delete(chave)) await gravar(m);
+      await usar(async (j, salvar, legado) => {
+        let mudou = false;
+        for (const t of j.tentativas) if (t.chaveHash === hashPessoal(chave) && ["telegram", "fila"].includes(t.estado) && !t.dedupeEncerrado) { t.dedupeEncerrado = true; mudou = true; }
+        if (mudou) await salvar();
+        if (Object.hasOwn(legado, chave)) { delete legado[chave]; await espelhar(legado); }
+      });
     },
   };
 }
@@ -278,10 +353,10 @@ export interface DepsDePublicacao {
   /**
    * sendMessage do bot ao chat do dono para avisos pessoais. P0 usa a outbox e o dell-status. `silencioso` chega
    * sem som (o `disable_notification` da Bot API).
-   * Deve lançar só se NENHUM chat recebeu: lançar com um chat entregue duplicaria o aviso pela fila.
+   * Retorno por destino distingue recusa de incerteza. Excecao apos tentativa nunca autoriza fallback.
    */
-  telegram?: (texto: string, opcoes?: { silencioso?: boolean }) => Promise<void>;
-  /** Só o caminho pessoal consulta e grava (`publicarAvisoPessoal`). Ausente = sem dedupe de 24 h. */
+  telegram?: (texto: string, opcoes?: { silencioso?: boolean }, registrar?: (destinos: DestinoDoAvisoPessoal[]) => Promise<void>) => Promise<void | EntregaDoAvisoPessoal>;
+  /** Só o caminho pessoal consulta e grava (`publicarAvisoPessoal`). Ausente = somente fila, sem iniciar Telegram direto. */
   enviados?: RegistroDeEnviados;
   agora?: () => Date;
   log?: { error: (...a: unknown[]) => void };
@@ -310,7 +385,8 @@ export async function publicarAviso(aviso: Aviso, deps: DepsDePublicacao): Promi
  * mensagem a mais na conta desse número. Agora:
  * - vai pelo bot do Telegram (Bot API oficial, sem risco para o número de vendas);
  * - das 22h às 7h de São Paulo chega sem som (o silêncio que a fila já fazia);
- * - Telegram desligado ou com falha: cai na fila de sempre, para o lembrete nunca se perder;
+ * - Telegram desligado ou todos os destinos recusados explicitamente: usa a fila pessoal;
+ * - timeout, erro ambiguo ou entrega parcial: conserva reserva revisavel sem fallback/repeticao;
  * - a mesma chave não sai duas vezes em 24 h, mesmo depois de reinício (`deps.enviados`);
  * - a validação é a mesma da fila (schema e nenhum R$, regra 24).
  * O P0 segue por `publicarAviso` (outbox exclusiva do Telegram).
@@ -320,36 +396,55 @@ export function noSilencio(agora: Date): boolean {
 }
 
 export interface ResultadoDoPessoal {
-  /** `repetido`: a chave já saiu nas últimas 24 h, nada foi enviado agora. */
-  canal: "telegram" | "fila" | "repetido";
+  /** Repetido: dedupe confirmado. Incerto: reserva bloqueada para conferencia, sem declarar envio. */
+  canal: "telegram" | "fila" | "repetido" | "incerto";
   arquivo: string | null;
 }
 
 export async function publicarAvisoPessoal(aviso: Aviso, deps: DepsDePublicacao): Promise<ResultadoDoPessoal> {
   validarAviso(aviso);
   const agora = deps.agora?.() ?? new Date();
-  if (avisoExigeTelegram(aviso)) return enviarPessoal(aviso, deps, agora);
-  if (deps.enviados && (await deps.enviados.jaEnviado(aviso.chave, agora))) return { canal: "repetido", arquivo: null };
-  const resultado = await enviarPessoal(aviso, deps, agora);
-  await deps.enviados?.marcar(aviso.chave, agora);
-  return resultado;
-}
-
-async function enviarPessoal(aviso: Aviso, deps: DepsDePublicacao, agora: Date): Promise<ResultadoDoPessoal> {
   if (avisoExigeTelegram(aviso)) {
     const r = await publicarAviso(aviso, deps);
     return { canal: "fila", arquivo: r.arquivo };
   }
-  const log = deps.log ?? console;
+  // Sem reserva duravel, nao iniciar Telegram: a fila existente continua sendo o emissor unico.
+  if (!deps.enviados) return { canal: "fila", arquivo: await gravarAvisoNaFila(deps.fila, aviso, agora) };
+  const registro = deps.enviados;
+  const reserva = await registro.reservar(aviso.chave, agora);
+  if (reserva.estado !== "reservado") return { canal: reserva.estado, arquivo: null };
+  const token = reserva.token, log = deps.log ?? console;
+  const incerto = async (): Promise<ResultadoDoPessoal> => {
+    await registro.concluir(token, "incerto", agora).catch(() => undefined); // Reserva anterior ja bloqueia repeticao.
+    log.error("[avisos] entrega pessoal incerta; preservada para conferencia, sem fallback ou repeticao automatica.");
+    return { canal: "incerto", arquivo: null };
+  };
   if (deps.telegram) {
+    let entrega: void | EntregaDoAvisoPessoal;
     try {
-      await deps.telegram(textoDoAviso(aviso), { silencioso: noSilencio(agora) });
+      entrega = await deps.telegram(textoDoAviso(aviso), { silencioso: noSilencio(agora) }, d => registro.registrarDestinos(token, d));
+      if (entrega) await registro.registrarDestinos(token, entrega.destinos);
+    } catch { return incerto(); }
+    if (entrega && entrega.destinos.some(d => ["incerto", "tentando", "naoTentado"].includes(d.estado))) return incerto();
+    if (!entrega || (entrega.destinos.length > 0 && entrega.destinos.every(d => d.estado === "entregue"))) {
+      try { await registro.concluir(token, "telegram", agora); } catch { return incerto(); }
+      await registro.marcar(aviso.chave, agora);
       return { canal: "telegram", arquivo: null };
-    } catch (err) {
-      log.error(`[avisos] Telegram falhou, o aviso vai pela fila: ${(err as Error)?.message ?? err}`);
     }
+    // Entrega parcial nao dispara outro canal e nao repete os chats ja entregues.
+    if (entrega.destinos.some(d => d.estado === "entregue")) return incerto();
+    // Todos recusados explicitamente, ou nenhum destino/tentativa: fila pessoal pode assumir.
   }
-  const arquivo = await gravarAvisoNaFila(deps.fila, aviso, agora);
+  let arquivo: string;
+  try { arquivo = await gravarAvisoNaFila(deps.fila, aviso, agora); }
+  catch (e) {
+    // A ausencia comprovada da pasta nao publicou arquivo. Outros erros permanecem revisaveis.
+    if (e instanceof FilaDeAvisosAusente) await registro.concluir(token, "naoEnviado", agora);
+    else await incerto();
+    throw e;
+  }
+  try { await registro.concluir(token, "fila", agora); } catch { return incerto(); }
+  await registro.marcar(aviso.chave, agora);
   return { canal: "fila", arquivo };
 }
 

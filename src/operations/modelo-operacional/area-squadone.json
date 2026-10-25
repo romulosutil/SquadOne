@@ -1,0 +1,45 @@
+{
+  "id": "squadone",
+  "nome": "SquadOne",
+  "objetivo": "Organizar o trabalho comercial da Prumo com prioridades, evidência e passagem claras no escritório existente.",
+  "responsavel": "A Central calcula e apresenta; Rômulo decide e confirma os fatos humanos.",
+  "executa": [
+    "Lê a fonte CRM, conserva a distinção entre dado atual, histórico e não verificado e ordena a próxima obrigação.",
+    "Apresenta Agora, qualificação, responsável, proposta, aceite, cobrança e recebimento em controles separados.",
+    "Oferece Como vender e operar com catálogo, passagens, rotina, capacidade, indicadores e critérios de automação.",
+    "Atualiza a leitura quando volta à tela; uma consulta operacional não envia mensagem nem muda um marco."
+  ],
+  "naoExecuta": [
+    "Não confirma qualificação, identidade histórica, envio, aceite, pagamento ou responsável por inferência.",
+    "Não mantém uma base comercial concorrente, negocia condições sozinho ou libera prospecção por exibir instruções."
+  ],
+  "entradas": [
+    "Retrato CRM completo e atual, conversas observadas e registros humanos na fonte existente.",
+    "Estado da frente comercial e definições operacionais versionadas."
+  ],
+  "saidas": [
+    "Próxima ação, motivo, evidência, dono e condição de espera na ficha e nas filas existentes.",
+    "Indicadores com contagem verificável ou declaração de dado não verificado."
+  ],
+  "fontes": [
+    "src/operations/ModeloOperacionalPanel.vue",
+    "src/operations/modelo-operacional.ts",
+    "src/operations/prioridade-comercial.ts",
+    "server/crm.ts"
+  ],
+  "falhas": [
+    "Fonte ausente, antiga, incompleta ou com erro: não declarar fila vazia ou sucesso; conferir a publicação antes de decidir.",
+    "Operação de gravação ambígua: conservar o bloqueio e conferir a fonte, sem novo identificador para repetir."
+  ],
+  "verificacao": [
+    "Vendas contém acesso visível a Como vender e operar.",
+    "Mais/Configurações abre a seção solicitada e preserva o retorno ao escritório.",
+    "Painel opera apenas com GET CRM/frente; fonte falha não produz zero confirmado.",
+    "Desktop e celular mantêm conteúdo legível, navegação por teclado e uma rolagem principal."
+  ],
+  "limites": [
+    "Consulta operacional não concede autonomia nem altera pausa.",
+    "Cenário, sprites, câmera e navegação do escritório permanecem fora deste lote.",
+    "Dados operacionais versionados não são texto de prompt nem fatos editáveis de clientes."
+  ]
+}

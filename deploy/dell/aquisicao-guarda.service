@@ -1,0 +1,19 @@
+[Unit]
+Description=Guarda exclusiva dos tres cacadores Prumo - nao executa aquisicao
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/bin/aquisicao-guarda
+Environment=AQUISICAO_BIND=172.23.0.1
+Environment=AQUISICAO_REDE=172.23.0.0/16
+Environment=AQUISICAO_PORT=8791
+ExecStartPre=/bin/sh -c 'PATH=/usr/sbin:/sbin:$$PATH; for i in $$(seq 1 60); do ip -o -4 addr show | grep -qF "inet $${AQUISICAO_BIND}/" && exit 0; sleep 1; done; exit 1'
+Restart=on-failure
+RestartSec=10
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

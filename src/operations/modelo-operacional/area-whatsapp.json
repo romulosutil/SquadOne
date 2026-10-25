@@ -1,0 +1,56 @@
+{
+  "id": "whatsapp",
+  "nome": "WhatsApp",
+  "objetivo": "Transportar e capturar mensagens com origem verificável para que a Central e Rômulo conduzam o atendimento sem confundir sinais técnicos com venda.",
+  "responsavel": "Adaptador e observadores preservam evidências; a Central projeta a próxima obrigação; Rômulo conduz atendimento e confirma decisões comerciais.",
+  "executa": [
+    "Acompanha conta pessoal e Prumo por coletores separados, respeitando a lista fresca e as capturas permitidas.",
+    "Persiste eventos antes do recibo, reconhece replays e conserva tipo, direção e horário original.",
+    "Resolve LID pela sessão confirmada antes do cache; participante ou remetente não é escolhido como destinatário.",
+    "Fornece conversa e sinais de saída/leitura para a ficha; identidade da conta exige prova própria por evento.",
+    "Mantém fila durável em falhas de fonte ou associação, sem adivinhar número ou criar compra."
+  ],
+  "naoExecuta": [
+    "O adaptador não envia mensagens, marca leitura, muda presença, negocia ou escolhe condições comerciais.",
+    "Origem do coletor, conexão aberta, recibo ou importação não confirmam autoria humana, interesse, qualificação ou responsável.",
+    "Saída genérica não confirma material devido ou proposta exata; envio não equivale a aceite e aceite não equivale a pagamento.",
+    "Não reativa prospecção ao reconectar, não gera contato de teste e não transforma atendimento pessoal em outra base comercial."
+  ],
+  "entradas": [
+    "Evento legítimo do transporte existente, autenticado e restrito ao conjunto de conversas permitido.",
+    "ID original, conta, conversa, direção, tipo e horário, com prova de vínculo e conteúdo quando disponível.",
+    "Fonte atual do CRM, responsável e restrições; evidência histórica mantém sua data original."
+  ],
+  "saidas": [
+    "Histórico e evento preservados com referência original, ou pendência explícita quando não é seguro associar.",
+    "Contexto para responder ao pedido, cumprir material ou passar decisão ao Rômulo, respeitando espera e recusa.",
+    "Estado técnico do canal e das filas separado de qualificação, aceite, cobrança e recebimento."
+  ],
+  "fontes": [
+    "Adaptador Evolution, observadores e helper de identidade versionados no SquadOne; três instalados conferidos byte a byte em 25/10/2026.",
+    "Fonte CRM, conversa observada e guardas de identidade, responsável, qualificação e ciclo existentes.",
+    "Consulta autenticada de conexão e identidade atual por hash, saúde do adaptador e metadados privados; nenhuma conversa ou credencial foi exportada."
+  ],
+  "falhas": [
+    "Desconexão: preservar pausa e fila; Rômulo confirma conta e operador autorizado conduz recuperação explícita, sem reenviar por suposição.",
+    "Fonte antiga ou LID contraditório: conservar evento e conferir a origem antes de associar ou agir.",
+    "Timeout ou resultado ambíguo: conferir recibo e estado original; não repetir automaticamente, gerar outro ID ou apagar journal.",
+    "Associação errada: preservar original e prova, corrigir de forma controlada; não apagar evidência nem certificar o histórico inteiro.",
+    "Robô, recepção, áudio ou mídia sem contexto: conferir o conteúdo e a autoria antes de escolher a próxima ação."
+  ],
+  "verificacao": [
+    "Em 25/10 às 11h49 BRT, Prumo estava conectado e a identidade atual da conta conferia com a âncora configurada por comparação de hash.",
+    "Quatro serviços observados estavam ativos; saúde autenticada do adaptador indicava lista de leads disponível, zero pendências e ausência de erro de entrada.",
+    "Prospecção permaneceu pausada e desativada, com zero primeiros contatos exibidos; nenhum envio ou reconexão foi executado.",
+    "Suítes offline de identidade, adaptador e entrada durável passaram; condições POSIX não executáveis no Windows ficaram explicitamente separadas.",
+    "A captura de uma mensagem nova deve ser conferida quando ocorrer naturalmente, sem fabricar evento.",
+    "Nova consulta em 25/10/2026 às 12h19 BRT confirmou Prumo open, identidade igual à âncora privada e quatro serviços ativos, sem reconexão ou envio. A pausa anterior foi preservada."
+  ],
+  "limites": [
+    "Conexão aberta no instante da consulta não prova estabilidade futura, identidade histórica ou entrega de mensagem.",
+    "Não havia prova por mensagem nova nesta leitura; status de identidade antigo não foi usado como saúde atual nem confirmação em massa dos handoffs.",
+    "Recibo de transporte ou leitura não confirma intenção de compra. Formato não reconhecido exige conferência, sem inferência de sucesso.",
+    "O acervo pode ser parcial; ausência de entrada capturada não prova ausência de mensagens fora da captura.",
+    "Pausa da prospecção não proíbe atendimento manual legítimo do Rômulo e não autoriza resposta automática dos agentes."
+  ]
+}

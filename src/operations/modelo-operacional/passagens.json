@@ -1,0 +1,253 @@
+{
+  "versao": 1,
+  "etapas": [
+    {
+      "id": "captura",
+      "nome": "Capturar e preservar o evento",
+      "entrada": [
+        "Evento real da integração existente, com ID original, origem, conta, canal, direção, tipo e horário original."
+      ],
+      "responsavel": "Observadores/adaptadores e entrada durável; Rômulo apenas para esclarecer exceção sem prova.",
+      "acao": "Persistir antes do recibo e deduplicar a mesma combinação de evento, preservando eventos distintos da mesma mensagem.",
+      "saida": [
+        "Evento persistido com referência verificável à captura original.",
+        "Repetição reconhecida sem novo efeito; fonte ainda não legível fica preservada para conferência."
+      ],
+      "excecoes": [
+        "Falha de persistência não confirma recebimento.",
+        "Saída, entrega e leitura preservam evidência, mas não entram como nova resposta comercial.",
+        "Timeout/resultado ambíguo não autoriza novo ID, replay ou apagar journal."
+      ],
+      "evidencia": "Recibo durável e referência original privada; a data de importação não substitui a data do acontecimento.",
+      "limiteAutomacao": "Captura e projeção existentes podem continuar. Nenhum envio, resposta, compra ou fato humano é produzido por capturar."
+    },
+    {
+      "id": "identidade",
+      "nome": "Conferir conta, conversa e oportunidade",
+      "entrada": [
+        "Captura original disponível e retrato CRM atual.",
+        "Conta emissora e destinatário precisam de prova; o nome do coletor não basta."
+      ],
+      "responsavel": "Central aplica as verificações; Rômulo resolve identidade, associação múltipla e responsabilidade.",
+      "acao": "Confrontar a captura, a prova da conta e a chave da conversa; associar à oportunidade correta e conferir o responsável atual.",
+      "saida": [
+        "Conta/conversa/oportunidade sustentadas pela fonte e contexto atual.",
+        "Se houver mais de uma oportunidade, seleção humana explícita preserva as demais."
+      ],
+      "excecoes": [
+        "Sem prova, conflito, fonte indisponível ou associação múltipla gera conferência interna.",
+        "Nome de empresa igual não autoriza unir registros.",
+        "Histórico importado não comprova abertura atual ou identidade da conta no passado."
+      ],
+      "evidencia": "Tupla original conferida e estado de identidade; responsabilidade confirmada em nota própria da conversa.",
+      "limiteAutomacao": "Pode conferir e derivar pendência. Não atribui responsável humano, corrige identidade por suposição ou libera contato."
+    },
+    {
+      "id": "triagem",
+      "nome": "Escolher o trabalho correto",
+      "entrada": [
+        "Contexto e fonte atuais, incluindo última entrada, saída, restrições e próximo passo."
+      ],
+      "responsavel": "Central organiza a fila; Rômulo decide revisão humana e próximo combinado.",
+      "acao": "Aplicar as restrições e classificar trabalho como decidir, qualificar, conferir, aguardar ou encerrado; separar resposta, material, encaminhamento e revisão interna.",
+      "saida": [
+        "Uma próxima ação interna compreensível, com motivo e resultado esperado.",
+        "Espera ou desfecho preservado quando a restrição prevalece."
+      ],
+      "excecoes": [
+        "Robô não é comprador; recepção não confirma decisão; áudio não ouvido não é conteúdo conhecido.",
+        "Saída posterior impede repetir pergunta ou apresentação.",
+        "Sinal histórico pode justificar revisão interna, nunca urgência pelo horário do backfill."
+      ],
+      "evidencia": "Prioridade canônica e sua fonte/data, sem converter classificação em confirmação humana.",
+      "limiteAutomacao": "Ordena e explica a fila. Prioridade não é chance de venda, autorização de contato ou negociação."
+    },
+    {
+      "id": "qualificacao",
+      "nome": "Qualificar uma lacuna por vez",
+      "entrada": [
+        "Necessidade e contexto que possam ser conferidos em fonte real.",
+        "Para conversar, abertura atual e gates de contato válidos; sob pausa, somente revisão interna."
+      ],
+      "responsavel": "Time prepara a próxima lacuna; Rômulo confirma a revisão humana e conduz a conversa neste piloto.",
+      "acao": "Conferir necessidade, adequação da oferta, intenção, participantes/processo de decisão e próximo passo aceito; registrar fonte e evidência do que foi efetivamente confirmado.",
+      "saida": [
+        "Revisão parcial válida com lacunas explícitas, ou revisão suficiente para avaliar proposta final.",
+        "Pedido comercial encaminhado ao Rômulo mesmo quando ainda faltam campos."
+      ],
+      "excecoes": [
+        "Permissão, curiosidade e avaliação não são intenção de contratar.",
+        "Sem interesse ou oferta inadequada preserva a restrição, sem rascunho de contato.",
+        "Nota nova inválida exige revisão; não recuperar silenciosamente SPICED antigo como atual.",
+        "Sem nota nova, o fallback SPICED existente permanece compatível; não completar impacto, orçamento ou prazo por suposição."
+      ],
+      "evidencia": "Nota humana de qualificação na fonte, com referência e trecho real; silêncio ou classificação do modelo não preenche os campos.",
+      "limiteAutomacao": "Sugere uma pergunta ou conferência interna e rascunho. Não confirma qualificação, impõe reunião ou exige um único decisor."
+    },
+    {
+      "id": "material",
+      "nome": "Preparar e cumprir o material solicitado",
+      "entrada": [
+        "Pedido ou permissão específica para o material mencionado.",
+        "Material realmente localizado, disponível e conferido conforme os critérios da oferta."
+      ],
+      "responsavel": "Time prepara e confere; Rômulo revisa e decide qualquer envio quando autorizado.",
+      "acao": "Conferir o que foi prometido, a versão e a disponibilidade; preparar somente esse material e verificar sua entrega observada depois de eventual envio autorizado.",
+      "saida": [
+        "Material/versão e saída correspondente conferidos na conversa, ou pendência interna específica de disponibilidade.",
+        "Próxima condição de espera ou pergunta pertinente após a entrega, sem presumir aceite."
+      ],
+      "excecoes": [
+        "Link aberto ou arquivo gerado não prova entrega ao cliente.",
+        "Demo removida, URL indisponível ou homologação não validada não é material pronto.",
+        "Recepção que autoriza vídeo autoriza esse vídeo, não reunião, proposta ou contratação."
+      ],
+      "evidencia": "Referência do material e evidência de saída compatível com o prometido; existência de site local não comprova cliente vendo no ar.",
+      "limiteAutomacao": "Pode preparar arquivos e conferir fatos observados dentro dos serviços existentes. Não envia sob a pausa nem declara compromisso cumprido pelo clique."
+    },
+    {
+      "id": "proposta",
+      "nome": "Preparar e conferir a proposta",
+      "entrada": [
+        "Oferta adequada e referência comercial identificável.",
+        "Rascunho pode ter lacunas; versão final exige qualificação suficiente e condições completas segundo os gates existentes."
+      ],
+      "responsavel": "Time prepara; Rômulo aprova escopo, valores, prazo, responsável e versão final.",
+      "acao": "Identificar oferta e versão; preencher entregáveis, exclusões, dependências, responsável, prazo, valor inicial, mensalidade e condições somente a partir de fontes aprovadas.",
+      "saida": [
+        "Rascunho identificado e lacunas explícitas para revisão.",
+        "Proposta enviada somente após versão completa, autorização aplicável e evidência real do conteúdo enviado conferida por Rômulo."
+      ],
+      "excecoes": [
+        "Campo desconhecido não recebe zero para liberar formulário.",
+        "Nova versão preparada não troca automaticamente versão aceita.",
+        "Condição individual confirmada prevalece na negociação; catálogo não reescreve oferta passada.",
+        "Proposta histórica real permanece preservada; rascunho atual não prova envio passado."
+      ],
+      "evidencia": "Referência/versão da proposta e fonte do preço; marco separado de proposta_enviada com prova do envio da versão exata.",
+      "limiteAutomacao": "Pode montar rascunho e apontar lacunas. Não cria preço, desconto, promessa, envio, aceite ou dívida."
+    },
+    {
+      "id": "negociacao",
+      "nome": "Passar decisão comercial ao Rômulo",
+      "entrada": [
+        "Pedido contextualizado de preço, proposta, desconto, negociação, contratação, contrato ou pagamento; também intenção confirmada de contratar."
+      ],
+      "responsavel": "Rômulo negocia e decide; time e Hermes fornecem síntese e referências de leitura.",
+      "acao": "Encaminhar o pedido original, as condições já discutidas e as lacunas; conferir o responsável da conversa antes de qualquer atuação e preservar o último combinado.",
+      "saida": [
+        "Decisão humana e versão/condições correspondentes, ou espera com motivo e condição de revisão.",
+        "Se Rômulo assumir, responsabilidade registrada na conversa e atuação concorrente do time impedida pelos gates."
+      ],
+      "excecoes": [
+        "Qualificação incompleta não bloqueia o encaminhamento.",
+        "Aviso recebido/aberto não significa conversa assumida nem tarefa concluída.",
+        "Falta de prova, várias oportunidades ou nota de responsável inválida mantém revisão interna.",
+        "Negociação não permite apagar documento ou condição anteriormente aceita."
+      ],
+      "evidencia": "Passagem vinculada ao evento, contexto atual e referência da ficha; confirmação humana de responsabilidade e decisão quando ocorrer.",
+      "limiteAutomacao": "Encaminha pela fila/transporte já existente quando permitido e prepara síntese. Não negocia autonomamente, confirma responsável por inferência ou promete prazo ao cliente."
+    },
+    {
+      "id": "aceite",
+      "nome": "Conferir aceite e documento",
+      "entrada": [
+        "Versão completa da proposta com envio real confirmado, documento identificado e evidência do aceite."
+      ],
+      "responsavel": "Rômulo confere partes, representantes, versão e aceite; documento para uso passa pela revisão humana aplicável.",
+      "acao": "Vincular o aceite à versão exata enviada e guardar o documento completo em local privado, registrando somente a referência e a evidência necessárias no CRM.",
+      "saida": [
+        "Aceite humano registrado com documento e vínculo ativos, ou pendência documental explícita.",
+        "Condição de cobrança contratada pronta para conferência separada."
+      ],
+      "excecoes": [
+        "Rascunho, pedido de proposta, mensagem genérica de concordância e proposta enviada não confirmam aceite do escopo/valor.",
+        "Nova versão não modifica contratação aceita sem decisão/documento coerentes.",
+        "Correções preservam o original e tratam dependentes primeiro."
+      ],
+      "evidencia": "Marco de aceite vinculado à versão enviada e referência do documento, com data compatível e confirmação do operador.",
+      "limiteAutomacao": "Valida formato, vínculo e coerência dos registros. Não gera assinatura, aprovação jurídica ou contrato aceito automaticamente."
+    },
+    {
+      "id": "cobranca",
+      "nome": "Conferir condição e cobrança",
+      "entrada": [
+        "Aceite/documento ativos, componente e valor contratados, vigência e gatilho de cobrança explicitados.",
+        "Gatilho realmente satisfeito; Site Encontrado, inclusive em pacote, exige cliente vendo o site funcionando no ar."
+      ],
+      "responsavel": "Rômulo confirma a condição, a liberação, o destinatário e qualquer cobrança.",
+      "acao": "Vincular condição ao aceite e cobrança à condição; conferir valor, vencimento, forma e competência mensal antes de registrar ou apresentar cobrança.",
+      "saida": [
+        "Condição e cobrança rastreáveis, sem exceder o componente aceito e sem duplicar componente/competência.",
+        "Se gatilho não estiver comprovado, espera preservada e nenhuma cobrança liberada."
+      ],
+      "excecoes": [
+        "Não presumir entrada universal; anúncio sem Site não herda gatilho de Site.",
+        "Registrar cobrança não a envia e não emite documento fiscal.",
+        "Mensalidade exige competência; versões substitutivas não geram cobrança sobreposta.",
+        "Sem evidência de site visto, vencimento ou forma, manter pendência."
+      ],
+      "evidencia": "Condição, gatilho e cobrança vinculados; para Site, marco de entrega_vista com prova específica de visualização funcionando.",
+      "limiteAutomacao": "Confere regras e projeta obrigação registrada. Não escolhe forma, envia cobrança, informa dados bancários ou confirma pagamento por conta própria."
+    },
+    {
+      "id": "recebimento",
+      "nome": "Confirmar o recebimento real",
+      "entrada": [
+        "Cobrança confirmada e dinheiro efetivamente verificado por Rômulo, com referência única e data real."
+      ],
+      "responsavel": "Rômulo verifica o recebimento; Central valida vínculo, saldo, componente e competência.",
+      "acao": "Registrar somente o valor recebido de fato, ligado à cobrança correta; separar parcial/integral e preservar o saldo aberto.",
+      "saida": [
+        "Recebimento confirmado na fonte e reencontrado na projeção, com saldo correto e sem duplicação.",
+        "Encaminhamento da entrega conforme a condição contratada, sem usar previsão de receita como caixa."
+      ],
+      "excecoes": [
+        "Promessa, comprovante não conferido, ganho verbal, proposta ou aceite não são dinheiro recebido.",
+        "Referência repetida, inclusive no legado, não gera outra receita.",
+        "Correção acrescenta fato e conserva original; não editar ou duplicar pagamento para ajustar valor.",
+        "Receita existente de outro cliente não comprova primeira venda nova."
+      ],
+      "evidencia": "Confirmação humana de recebimento, referência única privada e cobrança vinculada; projeção pendente continua pendente.",
+      "limiteAutomacao": "Valida e calcula saldo após o registro humano. Não movimenta banco, interpreta comprovante como confirmação ou envia dados financeiros a modelos."
+    },
+    {
+      "id": "entrega-pos-venda",
+      "nome": "Executar entrega e acompanhar o serviço",
+      "entrada": [
+        "Escopo/versão aceitos, responsável de entrega definido e condição de início contratada satisfeita.",
+        "Capacidade, materiais, acessos e dependências efetivamente conferidos."
+      ],
+      "responsavel": "Responsável de entrega definido no documento; Rômulo valida passagem e aceite do cliente.",
+      "acao": "Passar escopo, critérios de aceite, dependências e condição de início ao responsável; conferir entrega por evidência e organizar suporte/recorrência segundo o contratado.",
+      "saida": [
+        "Entrega vinculada ao escopo e critérios aprovados, com evidência de disponibilização e aceite quando exigido.",
+        "Suporte/manutenção e próxima condição registrados, preservando os marcos comerciais e financeiros separados."
+      ],
+      "excecoes": [
+        "Não iniciar por promessa de pagamento se a contratação exige recebimento; não impor pagamento prévio quando outra condição foi contratada.",
+        "Gerador não aprova a própria qualidade; Site/Raio-X exigem as avaliações e manifestos aplicáveis.",
+        "Cliente ver o site no ar é gatilho de cobrança, não aceite automático de todo o projeto.",
+        "Retenção/indicação não são inferidas por tempo: respeitar os registros humanos previstos e não enviar mensagens automáticas."
+      ],
+      "evidencia": "Documento/versão, responsável e checklist de entrega; referência da avaliação e manifestação real do cliente. Fatos de pós-venda ficam na fonte existente.",
+      "limiteAutomacao": "Procedimento operacional humano e execuções técnicas já autorizadas. Este manual não instala executor de entrega, suporte, retenção ou indicação."
+    }
+  ],
+  "regrasGerais": [
+    "Política do piloto: prospecção e envios permanecem pausados. Ler, conferir, preparar rascunhos e preservar evidências não libera contato.",
+    "A aba CRM é a fonte dos fatos comerciais humanos. Conversa observada, classificação e memória do agente são fontes distintas; projeção não cria confirmação.",
+    "Primeiro preservar recusa, exclusão e desfecho. Uma nova revisão interna ou um sinal antigo não reabre a conversa.",
+    "Depois preservar pausa, espera explícita, compromisso futuro e saída posterior ao pedido. Revisão vencida não é autorização para cobrar retorno.",
+    "Fonte antiga, indisponível, identidade sem prova/conflitante, várias oportunidades ou operação ambígua exigem conferência interna. Não adivinhar conta, destinatário, oportunidade ou resultado.",
+    "Responsável Rômulo, ausência de responsável ou registro de responsabilidade bloqueado impedem atuação concorrente do time. Troca depende de confirmação humana na revisão atual da conversa.",
+    "Robô vai para conferência de canal; recepção para encaminhamento; áudio sem conteúdo para ouvir/transcrever e conferir; dúvida de autoria ou significado permanece pendente. Nenhum desses sinais confirma quem compra.",
+    "Preço, proposta, desconto, negociação, intenção de contratar, contrato e pagamento passam ao Rômulo com as lacunas, sem esperar qualificação completa. A passagem respeita os bloqueios anteriores e não presume urgência atual para histórico importado.",
+    "Sem bloqueio e com abertura real, resolver uma lacuna pertinente por vez. Adequação é conferência interna. Não impor reunião, impacto financeiro inventado ou decisor único.",
+    "Permissão para material autoriza somente o material mencionado. Rascunho não é envio; envio não é aceite; aceite não é recebimento.",
+    "A evidência original observada não precisa ser transcrita pelo operador. Rômulo confirma somente fatos humanos e contexto por fora que não estão comprovados na integração.",
+    "Valores desconhecidos ficam pendentes; zero só existe se explicitamente aprovado. Catálogo não substitui condição individual confirmada.",
+    "Uma pendência fica concluída pelo fato esperado na fonte, não pelo aviso recebido, clique, geração de arquivo ou status técnico verde.",
+    "Este roteiro explica o fluxo e os critérios; não substitui o cálculo canônico de prioridade, os validadores ou os gates de envio. Nenhum campo deste manual registra um fato de oportunidade."
+  ]
+}

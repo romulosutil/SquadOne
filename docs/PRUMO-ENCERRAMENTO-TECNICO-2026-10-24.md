@@ -198,3 +198,11 @@ O evento de saída preservado no inbox não é uma pendência comercial bloquead
 Guarda final em 25/10: frente `ativo=false`, `estado=pausado`, zero primeiros contatos exibidos; 21 workflows/16 ativos, `prumo-mapa.path` ativo, hashes instalados conferidos. WhatsApp Prumo conectado na consulta deste lote. Nenhuma mensagem, inferência, execução manual, reativação ou novo fato comercial foi produzido. A primeira venda nova e R$10 mil mensais continuam objetivos abertos; Silmer é receita existente e permanece fora da contagem da primeira venda nova.
 
 Pesquisa complementar de fontes originais: a mensagem Roda Mais de 14/10 às 12h07 BRT sustenta mensalidade, inclusões e gatilho de pagamento, incorporados ao rascunho. Arquivos de três pastas de entrega foram auditados por lista/hash, sem proposta/contrato nomeados encontrados. Site local ou Mapa publicado não virou aceite. Detalhes no documento de qualificação e manifesto privado de pesquisa; nenhum documento anterior foi substituído.
+
+## Modelo operacional geral integrado — 25/10/2026
+
+Doze especialistas concluíram catálogo, passagens, rotina, capacidade, indicadores, critérios de automação e as seis áreas. A entrega consolidada, dependências humanas, evidências e reversão estão em [docs/revops/execucao.md](revops/execucao.md). A Central apresenta “Como vender e operar” por Vendas e Mais/Configurações, sem substituir o escritório.
+
+A pendência de concorrência acima foi tratada para os três produtores conhecidos: guarda durável anterior à primeira leitura, espera de todos os ramos, posse retida em crash/ambiguidade e publicador impedindo clone auxiliar. Instalada e conferida às 12h17 BRT; GET autenticado, zero claims artificiais, três núcleos exatos e outros dezoito grafos intactos. Não se afirma unicidade universal do Sheets para escrita direta ou novos produtores.
+
+Telegram ganhou reserva anterior ao transporte e resultados por destino; parcial/timeout não repetem ou fazem fallback. Bundle instalado com backup e reinício ocioso. Hermes recebeu SOUL/três skills com hash e sem reiniciar gateway. WhatsApp às 12h19 BRT aberto e identidade igual à âncora; prospecção permanece pausada. Nenhuma ativação, inferência, execução manual de workflow, mensagem ou novo fato comercial foi produzido. Catálogo definido não confirma venda nem resolve por inferência a prova dos marcos humanos.

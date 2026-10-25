@@ -1,0 +1,366 @@
+{
+  "versao": 1,
+  "estadoAtual": "Piloto assistido: leitura, captura e preparação sob os contratos existentes; prospecção pausada e nenhuma nova automação de envio autorizada. Negociação, contratação e recebimento permanecem humanos. A matriz é política de consulta, não retrato de saúde ao vivo.",
+  "regrasGerais": [
+    "Este arquivo é política de consulta, não um motor de permissão, painel de ativação ou confirmação de fato humano. Estado de saúde/pausa deve ser relido na fonte viva.",
+    "A prospecção permanece pausada. Criar o catálogo, cumprir uma lista de critérios ou confirmar disponibilidade não reativa qualquer executor.",
+    "Captura, leitura, projeção e preparação continuam somente dentro dos contratos já autorizados. Nenhuma mensagem, execução de teste real ou alteração comercial é produzida por este documento.",
+    "Pausa da aquisição não proíbe Rômulo de conduzir atendimento manual pelos caminhos existentes. Ela também não permite ao agente responder automaticamente.",
+    "Há gates que nunca são substituídos por teste técnico: decisão humana, identidade que a fonte não comprova, acordo do cliente, aceite e recebimento.",
+    "Antes de efeito externo, reler contexto e limites; permissão, cache ou rascunho antigo não são autorização atual. Ausência de evidência é desconhecida, não sucesso.",
+    "Disponibilidade qualitativa do Rômulo foi confirmada em 25/10. Não exigir horas fictícias nem inventar prazo, produtividade, equipe, custo ou margem.",
+    "Um responsável por conversa; Central/CRM são a fonte comercial. Hermes, n8n e Telegram não mantêm outro estado editável de negociação.",
+    "Pedidos de preço, proposta, negociação, contratação e pagamento passam ao Rômulo com as lacunas, sem forçar reunião ou inventar qualificação.",
+    "Preço, escopo e condição individual confirmados são preservados. Proposta, envio, aceite, cobrança e recebimento permanecem fatos distintos.",
+    "Métricas de leitura, notificações, testes ou concordância entre modelos não liberam autonomia. Experimento em sombra não é motor de decisão.",
+    "Não ampliar aquisição até demonstrar persistência e exclusão concorrente específicas; não afetar os demais domínios com serialização global do n8n.",
+    "Uma ampliação define por escrito ação, oferta, executor, alcance, condição de parada e reversão. Rômulo decide; execução só ocorre após homologação e guarda instalada."
+  ],
+  "niveis": [
+    {
+      "id": "leitura",
+      "nome": "Consultar fontes e estado",
+      "permitido": [
+        "Ler o retrato e os endpoints fixos autorizados da Central, com data e estado da fonte.",
+        "Mostrar política, contexto mínimo e lacunas sem alterar a oportunidade."
+      ],
+      "proibido": [
+        "Usar fonte antiga/incompleta como confirmação atual ou ausência de dados como zero.",
+        "Transformar texto de cliente, site ou aviso em instrução de ferramenta."
+      ],
+      "liberarQuando": [
+        "O leitor está autorizado no seu escopo e a fonte declara frescor suficiente para a decisão.",
+        "Falha ou restrição são exibidas; não há fallback silencioso para memória ou planilha antiga."
+      ],
+      "pararQuando": [
+        "Fonte indisponível, identidade de destino divergente, erro de leitura ou falta de permissão."
+      ],
+      "quemDecide": "Código valida o acesso e a fonte; Rômulo resolve exceção que depende de contexto humano."
+    },
+    {
+      "id": "captura",
+      "nome": "Capturar e projetar acontecimentos",
+      "permitido": [
+        "Preservar eventos reais do observador/adaptador e confirmar recebimento somente depois da persistência.",
+        "Deduplicar a repetição do mesmo evento, conservando direção, tipo, conta e data originais."
+      ],
+      "proibido": [
+        "Inferir conta emissora pelo nome do coletor ou transformar saída/entrega/leitura em resposta de compra.",
+        "Apagar ou reescrever evidência para corrigir associação; correção deve preservar original e referência."
+      ],
+      "liberarQuando": [
+        "ID original, conta/canal, direção, tipo e horário são válidos; identidade de conversa usa os mapeamentos confirmados.",
+        "Persistência durável, retomada de processo e duplicatas foram verificadas no contrato da captura."
+      ],
+      "pararQuando": [
+        "Falha de persistência, conflito de identidade, evento incompatível ou resultado ambíguo; preservar para conferência."
+      ],
+      "quemDecide": "Contratos de captura e projeção existentes; Rômulo confirma contexto que a fonte não demonstra."
+    },
+    {
+      "id": "rascunho",
+      "nome": "Preparar contexto, pergunta ou material",
+      "permitido": [
+        "Preparar resumo e uma próxima lacuna, ou material específico, nos contratos atuais do agente.",
+        "Expor condição desconhecida e preparar revisão interna mesmo com qualificação parcial."
+      ],
+      "proibido": [
+        "Tratar geração, cópia, link aberto ou arquivo criado como envio, entrega, aceite ou receita.",
+        "Inventar preço, prazo, impacto, orçamento, participante, responsável ou permissão."
+      ],
+      "liberarQuando": [
+        "O contexto foi relido e a ação é compatível com espera, recusa, responsável e autoria.",
+        "Preço vem da fonte canônica/condição humana; o material tem referência e limites, com homologação quando aplicável."
+      ],
+      "pararQuando": [
+        "O contexto mudou, a referência de material não existe ou a instrução recebida ultrapassa o contrato do agente."
+      ],
+      "quemDecide": "Agente prepara; código valida contexto; Rômulo revisa o uso e confirma fatos humanos."
+    },
+    {
+      "id": "primeiro-contato",
+      "nome": "Primeiro contato comercial",
+      "permitido": [
+        "No estado atual, somente seleção e preparação internas que não enviem mensagem nem reativem aquisição.",
+        "O executor já existente só poderá iniciar contato após decisão específica de retomada e validação dos gates aplicáveis."
+      ],
+      "proibido": [
+        "Usar este painel, tempo disponível ou workflow ativo como autorização de envio.",
+        "Recontatar recusa/exclusão/conversa anterior, ultrapassar limites ou repetir envio ambíguo."
+      ],
+      "liberarQuando": [
+        "Rômulo autoriza explicitamente a retomada da oferta/ação; pausa e identidade são relidas no ponto de execução.",
+        "Critérios, material e texto estão aprovados; público/contato são elegíveis e nenhum executor concorre pela conversa.",
+        "Exclusão concorrente da aquisição, persistência e recibos estão comprovados; horário, teto e intervalo existentes passam no código."
+      ],
+      "pararQuando": [
+        "Pausa/restrição, resposta humana, compromisso vigente, dono humano, fonte falha, erro de envio ou recibo ambíguo."
+      ],
+      "quemDecide": "Rômulo decide a retomada específica; código aplica os gates. Este documento mantém a prospecção pausada."
+    },
+    {
+      "id": "resposta-assistida",
+      "nome": "Responder uma conversa com revisão",
+      "permitido": [
+        "Preparar resposta ao pedido real, uma pergunta de qualificação ou material devido para revisão humana.",
+        "Rômulo pode conduzir atendimento manual pelos caminhos existentes quando decidir fazê-lo; pausa de prospecção não cria autorização do agente."
+      ],
+      "proibido": [
+        "Liberar resposta automática porque houve permissão, curiosidade ou preenchimento de uma qualificação.",
+        "Disputar conversa assumida, responder áudio desconhecido ou repetir apresentação/material já entregue."
+      ],
+      "liberarQuando": [
+        "Há entrada legítima com autoria/contexto compreendidos; identidade e responsável estão conferidos.",
+        "Rômulo revisa e autoriza a ação no fluxo já previsto; o servidor relê contexto e bloqueios antes de abrir o caminho de uso.",
+        "Qualquer futura resposta automática restrita exige lote próprio e decisão explícita após piloto natural; não está liberada aqui."
+      ],
+      "pararQuando": [
+        "Recusa, espera, responsável conflitante, identidade pendente, contexto alterado ou resultado ambíguo."
+      ],
+      "quemDecide": "Rômulo conduz no piloto; agentes e modelos não recebem nova autonomia por esta matriz."
+    },
+    {
+      "id": "proposta",
+      "nome": "Preparar e confirmar a proposta",
+      "permitido": [
+        "Preparar versão identificada, inclusive parcial, mostrando lacunas e fonte das condições.",
+        "Preservar proposta histórica real sem reescrever preço, escopo ou situação como se fosse proposta nova."
+      ],
+      "proibido": [
+        "Apresentar rascunho incompleto como versão final enviada ou usar catálogo para substituir condição individual confirmada.",
+        "Dar por enviado porque o operador abriu WhatsApp, copiou texto ou gerou PDF."
+      ],
+      "liberarQuando": [
+        "Para a versão final, o gate canônico de qualificação é suficiente e coerente com oferta, escopo, preço, prazo/dependências e responsável.",
+        "Rômulo aprova a versão exata; envio efetivo é observado/conferido conforme o registro previsto na ficha."
+      ],
+      "pararQuando": [
+        "Falta de condição essencial, proposta incompatível, nova versão não revisada ou incerteza de envio/projeção."
+      ],
+      "quemDecide": "Rômulo aprova a proposta final e confirma seu envio; agentes preparam e o código preserva versão e vínculos."
+    },
+    {
+      "id": "negociacao",
+      "nome": "Negociar e fechar condições",
+      "permitido": [
+        "Preparar alternativas, fatos, lacunas e efeito de mudança para decisão de Rômulo.",
+        "Encaminhar pedido de preço, desconto, proposta, contratação ou pagamento com qualificação incompleta explicitada."
+      ],
+      "proibido": [
+        "Conceder desconto, alterar preço/escopo/prazo ou assumir compromisso comercial pelo Rômulo.",
+        "Atrasar passagem comercial para forçar reunião, orçamento ou um único decisor."
+      ],
+      "liberarQuando": [
+        "Rômulo confere a condição e os participantes e decide o compromisso concreto.",
+        "Alteração acordada recebe referência/versão coerente sem apagar as condições anteriores."
+      ],
+      "pararQuando": [
+        "Conflito de condições, falta de autorização para decidir ou ausência de evidência de acordo."
+      ],
+      "quemDecide": "Negociação e fechamento permanecem humanos com Rômulo; nenhum gate verde transfere esse poder ao modelo."
+    },
+    {
+      "id": "contrato",
+      "nome": "Documentar contratação e aceite",
+      "permitido": [
+        "Preparar quadro comercial e documento identificado para revisão, mantendo partes e condições pendentes visíveis.",
+        "Registrar a referência da versão e o aceite real pelo caminho humano existente quando comprovados."
+      ],
+      "proibido": [
+        "Assinar ou aceitar pelo cliente, declarar documento validado juridicamente por geração ou presumir aceite por silêncio.",
+        "Substituir documento já aceito só porque existe rascunho de versão mais nova."
+      ],
+      "liberarQuando": [
+        "Partes/representação, proposta enviada, versão, escopo, condição e documento para uso foram conferidos por Rômulo.",
+        "Há evidência de aceite da versão exata por quem pode decidir; correção preserva original e dependentes."
+      ],
+      "pararQuando": [
+        "Documento/parte/versão divergente, aceite não comprovado ou condição comercial ainda em aberto."
+      ],
+      "quemDecide": "Rômulo revisa a contratação e confirma a evidência; o cliente ou representante competente aceita."
+    },
+    {
+      "id": "pagamento",
+      "nome": "Liberar cobrança e confirmar recebimento",
+      "permitido": [
+        "Preparar conferência de condição, gatilho, componente, valor, vencimento e competência nos controles existentes.",
+        "Registrar somente recebimento realmente verificado por Rômulo, com referência única e cobrança vinculada."
+      ],
+      "proibido": [
+        "Enviar cobrança por esta matriz, mover dinheiro, presumir entrada universal ou chamar aceite/cobrança de receita.",
+        "Duplicar/corrigir pagamento apagando o original ou lançar valores bancários em prompts, Git e avisos."
+      ],
+      "liberarQuando": [
+        "Aceite e condição estão vinculados; gatilho contratado foi comprovado. Site Encontrado, inclusive em pacote, exige site visto funcionando antes de cobrar.",
+        "Rômulo confere a cobrança e depois o dinheiro recebido; parcial conserva saldo e mensalidade exige competência."
+      ],
+      "pararQuando": [
+        "Gatilho não cumprido, saldo/vínculo conflitante, comprovante não conferido, resultado incerto ou duplicata."
+      ],
+      "quemDecide": "Rômulo autoriza cobrança e verifica recebimento; código valida vínculos/deduplicação, sem integração bancária nova."
+    }
+  ],
+  "gates": [
+    {
+      "id": "autorizacao",
+      "nome": "Autorização específica e pausa",
+      "criterio": "Identificar a ação e oferta autorizadas; reler pausa e política no executor imediatamente antes do efeito externo. Uma autorização antiga não desfaz uma pausa atual.",
+      "evidencia": "Decisão explícita do Rômulo e estado vigente da frente/workflow/rota. Este JSON não registra essa decisão nem ativa nada.",
+      "responsavel": "Rômulo decide; executor aplica a guarda.",
+      "estado": "prospeccao-pausada",
+      "consequencia": "Continuar captura/leitura/preparação autorizadas; impedir novos envios e reativações nesta entrega."
+    },
+    {
+      "id": "fonte",
+      "nome": "Fonte atual e íntegra",
+      "criterio": "A leitura está ok, completa e dentro do limite de frescor definido pelo consumidor; erros/colunas ausentes não são tolerados como listas vazias.",
+      "evidencia": "Data original do retrato, estado das fontes e validação existente da API; nova leitura quando o contexto mudar.",
+      "responsavel": "Central e leitores; operador confere indisponibilidade.",
+      "estado": "exigir-a-cada-decisao",
+      "consequencia": "Sem prova atual, mostrar desconhecido e trabalhar na conferência interna, sem enviar ou confirmar fatos."
+    },
+    {
+      "id": "identidade",
+      "nome": "Conta, conversa e autoria",
+      "criterio": "Conta emissora e conversa são sustentadas pela fonte; mapeamento confirmado precede cache. Robô, recepção e áudio sem conteúdo não são comprador qualificado.",
+      "evidencia": "Evento original, mapeamento/identidade de captura e conteúdo mínimo contextualizado na ficha; coletor e data de importação não bastam.",
+      "responsavel": "Adaptadores/observadores e validação da Central; Rômulo resolve contexto sem prova.",
+      "estado": "exigir-a-cada-conversa",
+      "consequencia": "Conflito bloqueia contato e fica como revisão interna; não confirmar identidade em massa."
+    },
+    {
+      "id": "restricoes",
+      "nome": "Restrição, espera e responsabilidade",
+      "criterio": "Recusa/exclusão/desfecho, pausa, compromisso vigente, saída posterior e responsável atual passam antes da ação. Um executor por conversa.",
+      "evidencia": "Estado atual e notas humanas válidas da ficha, última entrada/saída e próximo combinado.",
+      "responsavel": "Prioridade e guardas canônicas; Rômulo confirma sucessão de responsável.",
+      "estado": "exigir-a-cada-acao",
+      "consequencia": "Aguardar ou preservar encerramento; vencimento de revisão interna não autoriza retomada."
+    },
+    {
+      "id": "evento-atual",
+      "nome": "Pedido real e efeito já produzido",
+      "criterio": "A ação corresponde ao pedido original e ainda falta seu efeito; backfill não ganha urgência por ter chegado agora.",
+      "evidencia": "ID/tipo/direção/data original, material devido e saídas observadas; abertura/cópia não são envio.",
+      "responsavel": "Central/observador e conferência do operador.",
+      "estado": "exigir-a-cada-acao",
+      "consequencia": "Não repetir material, pergunta, proposta ou cobrança só para encerrar uma tarefa."
+    },
+    {
+      "id": "qualificacao",
+      "nome": "Qualificação e passagem comercial",
+      "criterio": "Aplicar o gate canônico antes da proposta final; nova revisão inválida exige conferência, sem retorno silencioso ao legado. Pedido comercial passa a Rômulo mesmo com lacunas.",
+      "evidencia": "Necessidade, adequação, intenção, participantes, próximo passo aceito e fonte/trecho reais confirmados na ficha.",
+      "responsavel": "Rômulo confirma fatos; código aplica a revisão vigente.",
+      "estado": "humano-com-validacao",
+      "consequencia": "Permitir preparação parcial e passagem; impedir proposta final sem os requisitos correspondentes."
+    },
+    {
+      "id": "catalogo",
+      "nome": "Oferta, condições e versão",
+      "criterio": "Usar a fonte canônica da oferta, preservando condição individual confirmada; preço/prazo desconhecidos ficam pendentes.",
+      "evidencia": "Catálogo e versão, escopo individual e revisão humana; tabela de Íris separada e Estamparia sem preço presumido.",
+      "responsavel": "Prumo define; Rômulo aprova o compromisso.",
+      "estado": "exigir-por-versao",
+      "consequencia": "Não aplicar defaults, desconto, mensalidade zero ou prazo genérico para fazer um formulário passar."
+    },
+    {
+      "id": "material",
+      "nome": "Material e liberação de qualidade",
+      "criterio": "A referência exata está disponível e satisfaz o gate aplicável. Prévia identificada; gerador não aprova a própria entrega.",
+      "evidencia": "Artefato/manifesto e revisão de qualidade da versão. Para Site/Raio-X, trava de qualidade existente; HTTP 200 não prova visualização do cliente.",
+      "responsavel": "Executor prepara; Prumo/Rômulo confere a entrega.",
+      "estado": "exigir-por-entrega",
+      "consequencia": "Material indisponível ou não conferido não é prometido como entregue nem usado para liberar cobrança."
+    },
+    {
+      "id": "capacidade",
+      "nome": "Compromisso executável",
+      "criterio": "Disponibilidade qualitativa do Rômulo está confirmada. Conferir responsável, escopo, pré-requisitos e conflito concreto antes de assumir cada prazo.",
+      "evidencia": "Confirmação de 25/10/2026 e compromissos/ficha/agenda existentes; estimativa do executor quando necessária.",
+      "responsavel": "Rômulo e responsável confirmado pela entrega.",
+      "estado": "disponibilidade-confirmada",
+      "consequencia": "Não exigir horas numéricas para operar o piloto; resolver dependência ou conflito real antes da promessa."
+    },
+    {
+      "id": "dedupe-concorrencia",
+      "nome": "Persistência e concorrência da aquisição",
+      "criterio": "Demonstrar que execuções concorrentes das ofertas não criam dois efeitos sobre a mesma identidade; falha de leitura interrompe gravação e repetição ambígua não é automática.",
+      "evidencia": "Teste isolado de concorrência/falha/reinício e prova do mecanismo instalado de exclusão/reserva e reconciliação. Upsert Sheets isolado não certifica unicidade atômica.",
+      "responsavel": "Engenharia de automação confere; Rômulo decide expansão somente depois da prova.",
+      "estado": "prova-obrigatoria-antes-de-expandir",
+      "consequencia": "Não ampliar aquisição sem a garantia específica; não impor limite global do n8n aos outros domínios."
+    },
+    {
+      "id": "resultado-ambiguo",
+      "nome": "Recibo, projeção e resultado incerto",
+      "criterio": "Persistência é confirmada antes do ACK; ACK e retrato projetado são estados diferentes. Falha incerta bloqueia nova tentativa até conferir a fonte.",
+      "evidencia": "Recibo/journal existente, identidade/hash da operação, execução e reencontro do fato na aba CRM.",
+      "responsavel": "Contratos de persistência e operador na reconciliação.",
+      "estado": "exigir-a-cada-gravacao",
+      "consequencia": "Preservar ID e histórico; não inventar outro ID, apagar journal ou repetir mensagem/pagamento."
+    },
+    {
+      "id": "cadencia",
+      "nome": "Horário, teto e condição de parada",
+      "criterio": "Aplicar horário, ritmo e cadência já aprovados e as interrupções por resposta/espera/dono. O teto não é meta nem autorização.",
+      "evidencia": "Trava compartilhada vigente: até 30 primeiros contatos/dia de São Paulo, 12/h móvel e intervalo mínimo de 5 minutos; contadores do executor e fonte atual.",
+      "responsavel": "Código aplica limites; Rômulo aprova alteração separadamente.",
+      "estado": "preservar-limites-e-pausas",
+      "consequencia": "Não retomar enquanto pausado; não reiniciar sequência por nova nota ou passagem, nem expandir por silêncio."
+    },
+    {
+      "id": "passagem",
+      "nome": "Passagem que permite agir",
+      "criterio": "O encaminhamento identifica oportunidade, pedido, fonte/data original, o que já ocorreu, lacunas, decisão solicitada e responsável esperado.",
+      "evidencia": "Pendência na fila/ficha e vínculo do aviso existente; confirmação de recebimento/abertura quando o piloto natural permitir.",
+      "responsavel": "Central/transportes encaminham; Rômulo assume e decide.",
+      "estado": "exigir-contexto-e-vinculo",
+      "consequencia": "Aviso recebido não conclui atendimento; sem prova de identidade, deixar revisão interna e nenhuma urgência por backfill."
+    },
+    {
+      "id": "homologacao",
+      "nome": "Teste técnico e uso natural",
+      "criterio": "Antes de mudar o alcance, testar falha, duplicata, concorrência, reinício, bloqueios e preservação; depois observar o piloto natural nos casos elegíveis previstos no plano.",
+      "evidencia": "Resultados isolados sem dados reais de cliente, versão instalada e evidência do piloto assistido. Simulação não conta como venda ou aceite.",
+      "responsavel": "Engenharia/RevOps homologam; Rômulo confirma uso real e decide o próximo alcance.",
+      "estado": "exigir-por-mudanca-de-alcance",
+      "consequencia": "Teste verde não ativa automação. Não fabricar contato, reunião, envio, contrato ou pagamento para validar o fluxo."
+    },
+    {
+      "id": "observabilidade",
+      "nome": "Falha visível e reversão preparada",
+      "criterio": "Distinguir executando, aguardando, falha e concluído por evidência; preservar backups e plano que reverta só o lote afetado.",
+      "evidencia": "Estado publicado, log sanitizado, manifesto/backup e teste de restauração aplicável; tarefa sem fonte não vira sucesso.",
+      "responsavel": "Executor publica estado; RevOps acompanha; operador decide exceção.",
+      "estado": "exigir-antes-de-publicar",
+      "consequencia": "Parar a ação afetada e conservar captura/fila/histórico; não religar caçadores ou outros emissores como rollback."
+    },
+    {
+      "id": "marcos-humanos",
+      "nome": "Decisões e marcos humanos separados",
+      "criterio": "Negociação, versão final, aceite, condição de cobrança e recebimento exigem suas confirmações; entrega técnica não os substitui.",
+      "evidencia": "Proposta/versão, documento/aceite, gatilho de cobrança e referência de recebimento conferidos por Rômulo nas rotas existentes.",
+      "responsavel": "Rômulo; código valida vínculos e correções.",
+      "estado": "permanentemente-humano-no-piloto",
+      "consequencia": "Nenhum nível técnico transfere desconto, assinatura, aprovação ou confirmação de dinheiro ao modelo."
+    },
+    {
+      "id": "privacidade",
+      "nome": "Dados mínimos e canais corretos",
+      "criterio": "Enviar aos modelos apenas o recorte permitido/mascarado; preço e regras vêm do código. Não copiar segredos, conversas completas, dados bancários ou recebimentos para o catálogo/manual.",
+      "evidencia": "Contrato de cada leitor/modelo/transporte e logs sanitizados; alertas operacionais seguem o canal previsto.",
+      "responsavel": "Aplicação e integrações; Rômulo decide contexto fora do contrato.",
+      "estado": "exigir-em-todos-os-niveis",
+      "consequencia": "Não ampliar escopos, coletar conversas pessoais adicionais ou usar WhatsApp como fallback de falha operacional."
+    }
+  ],
+  "reversao": [
+    "Ao detectar violação, conter somente a ação/alcance afetado pelas guardas existentes. Não interromper captura e preservação de evidências por conveniência.",
+    "Conservar IDs, hashes, recibos, contexto original e dados novos. Resultado incerto não autoriza reenvio, limpeza de journal ou outra identidade de operação.",
+    "Usar backup/manifesto do lote para restaurar código/configuração de forma seletiva; conferir o que mudou depois do backup antes de restaurar dados.",
+    "Preservar todos os estados pausados. Rollback não reativa Caçadores, VENDAS/Grok, acompanhamento ou outro emissor.",
+    "Manter atendimento humano e leitura disponíveis dentro do contrato; comunicar a pendência pela fila e canal operacional existente, sem fallback pelo WhatsApp.",
+    "Após corrigir, repetir a homologação isolada aplicável, conferir instalação e fonte viva e registrar o limite do que foi provado. Teste não substitui novo aceite de retomada quando necessário."
+  ]
+}

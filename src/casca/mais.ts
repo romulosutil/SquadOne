@@ -8,7 +8,7 @@ import type { OperationTool } from '../operations/types'
 /** Qual seção o endereço pede aberta. `fluxo` é o link do robô do Escritório (?fluxo=&passo=). */
 export interface SecaoDoMais {
   fluxo: boolean
-  abrir: 'manutencao' | 'roteiro' | null
+  abrir: 'manutencao' | 'roteiro' | 'operacao' | null
 }
 
 /**
@@ -18,7 +18,7 @@ export interface SecaoDoMais {
 export function secaoDoMais(search: string): SecaoDoMais {
   const p = new URLSearchParams(search)
   const abrir = p.get('abrir')
-  return { fluxo: p.has('fluxo'), abrir: abrir === 'manutencao' || abrir === 'roteiro' ? abrir : null }
+  return { fluxo: p.has('fluxo'), abrir: abrir === 'manutencao' || abrir === 'roteiro' || abrir === 'operacao' ? abrir : null }
 }
 
 export interface FerramentaDoMais {

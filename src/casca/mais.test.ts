@@ -12,6 +12,7 @@ describe('secaoDoMais: o endereço abre a seção certa', () => {
     ['?abrir=manutencao', { fluxo: false, abrir: 'manutencao' }],
     // O antigo /crm?ver=roteiro manda para cá (AC-20).
     ['?abrir=roteiro', { fluxo: false, abrir: 'roteiro' }],
+    ['?abrir=operacao', { fluxo: false, abrir: 'operacao' }],
     ['?fluxo=site&passo=2', { fluxo: true, abrir: null }],
     // O endereço é digitável: valor desconhecido não abre nada.
     ['?abrir=tudo', { fluxo: false, abrir: null }],

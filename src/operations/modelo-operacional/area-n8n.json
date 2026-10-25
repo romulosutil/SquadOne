@@ -1,0 +1,56 @@
+{
+  "id": "n8n",
+  "nome": "n8n",
+  "objetivo": "Executar integrações e rotinas autorizadas com evidência, recuperação e passagem humana, preservando a pausa comercial.",
+  "responsavel": "Responsável técnico mantém execução e fontes; Rômulo decide qualificação, negociação, contratação, recebimento e retomada comercial.",
+  "executa": [
+    "Lê fontes existentes, aplica critérios versionados e só declara persistência depois de confirmá-la.",
+    "Preserva identidade e eventos observados e encaminha decisões à ficha atual e à fila humana existente.",
+    "Mantém contexto canônico Prumo em entradas e subworkflows, sem reativar fluxos pausados.",
+    "Possui correção homologada para serializar somente Site/Iris/Estamparia antes da leitura e escrita; instalação pelo responsável técnico segue o runbook.",
+    "Conserva falhas, posse incerta e journal privado; prepara rascunhos com preço canônico por código quando houver evidência suficiente."
+  ],
+  "naoExecuta": [
+    "Não retoma prospecção, envia mensagens ou confirma atendimento, aceite e pagamento por inferência.",
+    "Não calcula preço por modelo, transforma aviso em autorização nem cria CRM ou fila comercial paralela.",
+    "Não libera reserva por TTL, crash, relógio, reinício ou exclusão de evidências; não repete efeito ambíguo automaticamente.",
+    "Não limita a concorrência global do n8n nem usa staticData/DataTable como trava atômica."
+  ],
+  "entradas": [
+    "Workflows originais, gatilhos e critérios versionados; contexto Prumo sincronizado e fontes atuais.",
+    "Eventos observados com identidade e origem; catálogo canônico para proposta e confirmações humanas exigidas.",
+    "Configuração privada da guarda, referência de credencial e política operacional de pausa."
+  ],
+  "saidas": [
+    "Persistência comprovada ou bloqueio explícito; ausência de fonte nunca significa ausência de lead.",
+    "Encaminhamento humano com fonte, responsável, próxima ação e condição de conclusão ou espera.",
+    "Estado técnico da execução e journal privado, sem contatos, conteúdo ou preços no guardião.",
+    "Busy termina silenciosamente; saída pendente é preservada e excluída do trabalho pelo contrato do processador."
+  ],
+  "fontes": [
+    "RULES.md e documentos canônicos Prumo; modelo operacional comum e ficha/CRM atual.",
+    "deploy/dell/claude-ops/n8n.py, workflow_confiabilidade.py e serializacao_aquisicao.py.",
+    "deploy/dell/aquisicao-guarda.py e aquisicao-guarda.service; procedimento docs/revops/n8n.md.",
+    "Leitura de produção em 25/10/2026: 21 workflows, 16 ativos; Site legado ativo, Iris/Estamparia/05/06 pausados."
+  ],
+  "falhas": [
+    "Fonte indisponível ou identidade ambígua: bloquear persistência/atribuição e preservar evidência para conferência.",
+    "Crash, erro de escrita ou resposta incerta: reter posse; conferir todos os ramos e execução final antes de reconciliação humana.",
+    "Segredo/configuração inválida ou journal corrompido: fechar, sem reset ou contorno de credencial.",
+    "Clone auxiliar de aquisição é recusado pelo publicador; execução antiga em curso bloqueia migração segura."
+  ],
+  "verificacao": [
+    "51 testes Python passaram no Linux em réplica isolada, zero skips; guarda e serialização também passaram no Windows.",
+    "18 pedidos por seis processos tiveram um titular; crash real após commit conservou a posse no reinício.",
+    "Engine n8n 2.38.7 instalada, Docker sem rede externa/credenciais: bifurcação esperou ambos ramos; zero itens liberou; erro reteve.",
+    "Em 25/10/2026, a coordenação instalou a guarda e publicou os três envelopes: núcleos exatos preservados, outros dezoito grafos intactos e inventário 21/16, com todas as pausas mantidas.",
+    "GET autenticado do host e do container confirmou saúde e zero reservas, sem posse retida. Nenhum workflow foi executado como teste em produção."
+  ],
+  "limites": [
+    "Instalação conferida em 25/10/2026; conectividade depende da bridge/IP privados observados. Execução natural futura continua sujeita à conferência, sem fabricar leads para teste.",
+    "Posse abrange somente três produtores apoiados pelo publicador; escrita direta na planilha e UI/API administrativa fora dele não recebem esta garantia.",
+    "Pausa comercial permanece. Estado ativo técnico, teste aprovado ou saúde verde não autoriza contato nem comprova venda.",
+    "Não há promessa de execução exatamente uma vez: efeito ambíguo exige revisão, sem repetição automática.",
+    "Capacidade humana qualitativa confirmada não equivale a prazo de entrega; reserva técnica não amplia capacidade comercial."
+  ]
+}
