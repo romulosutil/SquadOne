@@ -76,3 +76,24 @@ runtime e preservar todas as reservas, capturas e fatos comerciais novos.
 Restaurar somente os arquivos deste lote pelas preimagens. Não apagar a inbox,
 o journal, os históricos ou o estado de aquisição; não reativar 05/06, Grok ou
 caçadores. Um envio incerto continua bloqueando repetição após rollback.
+
+## Publicação conferida
+
+Primeiro lote instalado no Dell em 25/10/2026 às 18h13 de São Paulo, commit
+`61a53a4`, com fontes anteriores e bundle preservados. Política ativa somente
+para entradas originais a partir de `2026-10-25T21:13:35.045Z`. Saúde e identidade
+da conta foram conferidas por leitura autenticada; prospecção permanece pausada,
+21 workflows/16 ativos e mesmos grafos. Nenhuma mensagem de teste foi enviada.
+
+Homologação Linux inicial: 4.163 testes TS/JS aprovados, sem falhas/skips,
+tipagem/build e 14 testes do leitor Hermes aprovados. Na interface publicada,
+escritório, seis personagens, abertura/fechamento das decisões, canal da Carla
+e retorno à sala foram conferidos no desktop, sem enviar comando ou registrar
+fato comercial. Não foi alegado teste em aparelho móvel neste lote.
+
+Revisão adicional cobre recuperação concorrente de trava abandonada com um
+recuperador exclusivo, para impedir que dois leitores antigos retirem uma nova
+reserva. Esse reforço mantém a política e o corte originais. Publicação e
+homologação finais ficam no recibo privado do lote complementar. Ainda falta
+uma nova entrada natural para comprovar o atendimento em uso real; os testes
+isolados não representam venda nem confirmação financeira.

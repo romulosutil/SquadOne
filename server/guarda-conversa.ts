@@ -18,7 +18,16 @@ export async function comGuardaConversa<T>(pasta:string,conversa:string,acao:()=
         if(Number.isInteger(dono.pid)&&dono.pid>0&&typeof dono.token==='string') {
           let morto=false
           try{process.kill(dono.pid,0)}catch(err){morto=(err as NodeJS.ErrnoException).code==='ESRCH'}
-          if(morto&&await fs.readFile(arquivo,'utf8')===raw)await fs.unlink(arquivo)
+          if(morto) {
+            // Só um recuperador pode retirar uma trava abandonada. Sem isto, dois
+            // leitores antigos poderiam apagar a reserva recém-criada de um terceiro.
+            let recuperacao:Awaited<ReturnType<typeof fs.open>>|undefined
+            try {
+              recuperacao=await fs.open(arquivo+'.recuperacao','wx',0o600)
+              if(await fs.readFile(arquivo,'utf8').catch(()=>null)===raw)await fs.unlink(arquivo)
+            } catch(err) {if((err as NodeJS.ErrnoException).code!=='EEXIST'&&(err as NodeJS.ErrnoException).code!=='ENOENT')throw err}
+            finally {if(recuperacao){await recuperacao.close();await fs.unlink(arquivo+'.recuperacao')}}
+          }
         }
       } catch { /* Trava ilegível não autoriza outro escritor. */ }
       await new Promise(r=>setTimeout(r,100))

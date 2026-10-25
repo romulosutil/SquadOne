@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import {createHash} from 'node:crypto'
+import {spawn} from 'node:child_process'
 import {decidirEncontrado,type ContextoPoliticaEncontrado,type PoliticaEncontrado} from '../src/operations/encontrado-politica.ts'
 import {EncontradoAutomatico,HASH_CATALOGO_ENCONTRADO,validarPoliticaEncontrado,leitorPoliticaEncontrado} from './encontrado-automatico.ts'
 import {SaidasEncontrado} from './encontrado-saidas.ts'
@@ -143,4 +144,13 @@ test('reserva e tomada humana compartilham exclusão, sem execução simultânea
   while(!ordem.length)await new Promise(r=>setTimeout(r,5))
   const b=comGuardaConversa(path.join(f.dir,'locks'),CONVERSA,async()=>{ordem.push('humano')})
   await new Promise(r=>setTimeout(r,30));assert.deepEqual(ordem,['envio']);liberar();await Promise.all([a,b]);assert.deepEqual(ordem,['envio','recibo','humano'])
+})
+test('dois recuperadores de trava abandonada não removem a nova reserva um do outro',async t=>{
+  const f=await fixture(t),locks=path.join(f.dir,'locks');await fs.mkdir(locks)
+  const child=spawn(process.execPath,['-e','process.exit(0)']);await new Promise<void>((r,j)=>{child.once('error',j);child.once('exit',()=>r())})
+  assert.ok(child.pid)
+  await fs.writeFile(path.join(locks,sha(CONVERSA)+'.lock'),JSON.stringify({pid:child.pid,token:'reserva-abandonada'}))
+  let simultaneos=0,maximo=0
+  const executar=()=>comGuardaConversa(locks,CONVERSA,async()=>{simultaneos++;maximo=Math.max(maximo,simultaneos);await new Promise(r=>setTimeout(r,15));simultaneos--})
+  await Promise.all([executar(),executar(),executar()]);assert.equal(maximo,1)
 })
