@@ -1,4 +1,7 @@
 import { montarGarantiasAgenda } from './server/rotas-garantias-agenda.ts';
+import { EncontradoAutomatico, leitorPoliticaEncontrado } from './server/encontrado-automatico.ts';
+import { SaidasEncontrado } from './server/encontrado-saidas.ts';
+import { transporteEncontradoEvolution } from './server/encontrado-evolution.ts';
 import { GarantiasAgenda, DemandasAgendaDuraveis } from './server/garantias-agenda.ts';
 import { FilaTelegramDuravel } from './server/fila-telegram-duravel.ts';
 import { AtendimentoComercial, criarLeitorFonteAtendimento, criarInventarioCapturasAtendimento } from './server/atendimento-comercial.ts';
@@ -405,9 +408,10 @@ async function startServer() {
   // é para o atualizar-central do Dell esperar o turno (ou a fila do bot)
   // terminar antes de reiniciar o processo. `agenda` diz se o app (Pedir,
   // Escritório) mora neste processo: no Dell, só depois do cutover.
+  let atendimentoComercialOcupado = false;
   app.get("/api/runtime", (_req, res) => {
     // A vigia no meio de uma volta também conta: reiniciar agora largaria um lembrete a meio caminho.
-    const ocupado = haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false) || (assistenteDoProcesso?.ocupado() ?? false) || (vigia?.ocupada() ?? false);
+    const ocupado = atendimentoComercialOcupado || haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false) || (assistenteDoProcesso?.ocupado() ?? false) || (vigia?.ocupada() ?? false);
     // `assistente`: o painel do Assistente substitui o Pedir só quando ele está ligado aqui.
     res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado, agenda: agendaAtiva, assistente: assistenteDoProcesso !== null });
   });
@@ -416,7 +420,7 @@ async function startServer() {
     const operationsStore = new OperationsProjectStore(operationsDataDir);
     const readings = new HermesReadingsStore(operationsDataDir);
     // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
-    const crm = new CrmStore(configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory));
+    const crm = new CrmStore({...configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory),guardaConversas:path.join(operationsDataDir,'atendimento-conversas')});
     crmDoAtendimento = crm;
     const inboxComercial = new EntradaAtendimentoComercialDuravel(path.join(operationsDataDir,'atendimento-comercial-inbox.json'));
     await inboxComercial.recuperarInterrompidos();
@@ -426,12 +430,19 @@ async function startServer() {
       lerFonte:criarLeitorFonteAtendimento(pastaCapturas,lerIdentidadeCaptura),lerIdentidade:lerIdentidadeCaptura,
       inventariarCapturas:criarInventarioCapturasAtendimento(pastaCapturas,lerIdentidadeCaptura),visao:()=>crm.visao(new Date())});
     receberAtendimento = valor => atendimento.receber(valor);
+    const encontradoAutomatico = new EncontradoAutomatico({atendimento,
+      saidas:new SaidasEncontrado(path.join(operationsDataDir,'encontrado-saidas')),
+      politica:leitorPoliticaEncontrado(path.join(operationsDataDir,'encontrado-automacao.json')),
+      transporte:transporteEncontradoEvolution(),
+      comConversa:(conversa,acao)=>crm.comConversaExclusiva(conversa,acao),
+      bloqueio:(lead,leads)=>crm.bloqueioDaConversa(lead,leads)});
     let atendimentoEmCurso = false;
     const conferirAtendimento = async () => {
       if(atendimentoEmCurso) return;
       atendimentoEmCurso=true;
-      try { await atendimento.reconciliarCapturas(); await atendimento.atualizar(); } catch { console.warn('[atendimento] conferência pendente; nenhum envio autorizado.'); }
-      finally {atendimentoEmCurso=false;}
+      atendimentoComercialOcupado=true;
+      try { await atendimento.reconciliarCapturas(); await atendimento.atualizar(); await encontradoAutomatico.executar(); } catch { console.warn('[atendimento] etapa pendente; preservar reservas e conferir a automação do Encontrado.'); }
+      finally {atendimentoEmCurso=false;atendimentoComercialOcupado=false;}
     };
     const relogioAtendimento = setInterval(()=>{void conferirAtendimento()},30000);relogioAtendimento.unref();
     paradores.push(()=>clearInterval(relogioAtendimento));
@@ -439,7 +450,10 @@ async function startServer() {
     const visaoAtendimento = async () => {
       const v = await crm.visao();
       const pendencias = await atendimento.listarPendencias(v);
+      const automaticos = await encontradoAutomatico.estados().catch(()=>new Map());
       return {...v,leads:await Promise.all(v.leads.map(async l=>{
+        const auto=automaticos.get(l.id);
+        if(auto) return {...l,atendimentoComercial:{id:`encontrado-${l.id}`,tipo:auto.acao==='time'?'automatico':'handoff',titulo:auto.acao==='time'?'Time conduz o atendimento do Encontrado':'Decisão necessária no Encontrado',motivo:auto.motivo,alvo:auto.acao==='time'?'time':'operador',estado:auto.estado,identidade:auto.identidade,ocorridoEm:auto.ocorridoEm}};
         const p=pendencias.find(p=>p.leadIds.includes(l.id));if(!p)return l;
         const bloqueio=await crm.bloqueioDaConversa(l,v.leads);
         return {...l,atendimentoComercial:bloqueio ? {id:p.id,tipo:'handoff',titulo:'Conferir atendimento com Rômulo',motivo:bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm} : {id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,alvo:p.alvo,texto:p.texto ?? p.orientacao,estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm}};
@@ -448,6 +462,10 @@ async function startServer() {
     montarLeituraComercial(app, {visao:visaoAtendimento,
       bloqueioConversa:(lead,leads)=>crm.bloqueioDaConversa(lead,leads),
       origemCentral:(process.env.SQUADONE_ORIGEM_CENTRAL ?? '').trim() || undefined});
+    app.get('/api/operations/crm/encontrado/automacao',async(_req,res)=>{
+      res.set('Cache-Control','no-store');
+      try{res.json(await encontradoAutomatico.resumo())}catch{res.status(503).json({oferta:'encontrado',estado:'indisponivel',error:'Conferir a configuração e as reservas; nenhum reenvio foi liberado.'})}
+    });
     // Só leitura sob o mesmo porteiro das APIs da Central; sem identidade/contatos na resposta.
     app.get('/api/operations/crm/atendimento/cobertura', async (_req,res) => {
       res.set('Cache-Control','no-store');

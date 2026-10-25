@@ -28,7 +28,7 @@ export interface OportunidadeLeituraComercial {
   qualificacao:Omit<ReturnType<typeof resumoComercialParaContexto>['qualificacao'],'proximaPergunta'>
   ciclo:ReturnType<typeof resumoComercialParaContexto>['ciclo']
   responsavel:{estado:'definido'|'ausente'|'bloqueado';quem:'romulo'|'time'|null}
-  atendimento:{presente:boolean;tipo:'rascunho'|'handoff'|'aguardando-fonte'|null;alvo:'operador'|'cliente'|null}
+  atendimento:{presente:boolean;tipo:'rascunho'|'handoff'|'aguardando-fonte'|'automatico'|null;alvo:'operador'|'cliente'|'time'|null}
   prioridadeTrabalho:PlanoPrioridadeComercial
   bloqueios:MotivoLeituraComercial[]
   proximaAcao:'preservar-desfecho'|'aguardar'|'conferir-com-romulo'|'conferir-qualificacao-na-ficha'
@@ -72,7 +72,7 @@ export async function projetarLeituraComercial(lead:CrmLead,visao:FonteLeituraCo
   const proximaAcao=prioridadeTrabalho.grupo==='encerrado'?'preservar-desfecho':prioridadeTrabalho.grupo==='aguardar'?'aguardar':prioridadeTrabalho.grupo==='qualificar'&&!bloqueios.size?'conferir-qualificacao-na-ficha':'conferir-com-romulo'
   return {referencia:referenciaLeituraComercial(lead),empresa:empresaSegura(lead.empresa),produto:lead.produto,etapa:lead.etapa,
     autoridade:resumo.autoridade,qualificacao,ciclo:resumo.ciclo,responsavel:{estado:dono.estado,quem:dono.registro?.responsavel??null},
-    atendimento:{presente:!!att,tipo:att?['rascunho','handoff','aguardando-fonte'].includes(att.tipo)?att.tipo as 'rascunho'|'handoff'|'aguardando-fonte':'handoff':null,alvo:att?.alvo==='cliente'?'cliente':att?'operador':null},
+    atendimento:{presente:!!att,tipo:att?['rascunho','handoff','aguardando-fonte','automatico'].includes(att.tipo)?att.tipo as 'rascunho'|'handoff'|'aguardando-fonte'|'automatico':'handoff':null,alvo:att?.alvo==='time'?'time':att?.alvo==='cliente'?'cliente':att?'operador':null},
     prioridadeTrabalho,bloqueios:[...bloqueios].sort(),proximaAcao,contatoAutorizado:false,somenteLeitura:true,
     revisaoContexto:createHash('sha256').update(JSON.stringify([resumo.revisaoContexto,dono.estado,dono.registro?.id??null,att?.contextoHash??null,prioridadeTrabalho,[...bloqueios].sort()])).digest('hex'),ficha:fichaDaFonteComercial(lead,deps.origemCentral)}
 }

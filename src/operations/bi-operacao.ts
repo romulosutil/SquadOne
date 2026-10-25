@@ -25,6 +25,7 @@ export function planoDoLead(lead: CrmLead, agora = Date.now()): PlanoBi {
   const base = { lead, responsavel: 'Rômulo', prazo: 'Na próxima revisão', evidencia: c?.evidencia?.trecho || lead.conversa?.ultima.trecho || c?.motivo || 'Sem trecho de conversa preservado.' }
   const plano = (tipo: PlanoBi['tipo'], prioridade: number, acao: string, resultado: string, extra: Partial<PlanoBi> = {}): PlanoBi => ({ ...base, tipo, prioridade, acao, resultado, ...extra })
   const evidenciaTrabalho = `${trabalho.evidencia.fonte} · ${trabalho.evidencia.tipo} · ${trabalho.evidencia.estado}${trabalho.em ? ` · ${trabalho.em}` : ''}`
+  if(lead.atendimentoComercial?.alvo==='time')return plano('aguardar',80,trabalho.acao,trabalho.resultado,{responsavel:'Time',prazo:'Após execução ou nova entrada',evidencia:evidenciaTrabalho,condicao:'Política automática do Encontrado; tomada humana e exceções são revalidadas antes do envio.'})
   // Visibilidade da tarefa interna não reabre a conversa em pausa ou com desfecho.
   if (lead.atendimentoComercial) return plano('conferir',0,trabalho.acao,trabalho.resultado,{evidencia:evidenciaTrabalho,prazo:trabalho.urgente?'Agora, conferir o evento original':'Na ficha, sem novo envio',condicao:'Tarefa interna: preservar a restrição e conferir a fonte; não autoriza envio.'})
   const novaPolitica = temQualificacaoComercial(lead,agora) || !!lead.conversa?.sinaisComerciais || trabalho.destaque

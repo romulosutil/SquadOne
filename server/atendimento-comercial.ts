@@ -62,7 +62,7 @@ export type ConferenciaFonteAtendimento = ({ estado: 'ok'; texto: string; papel?
 export interface DependenciasAtendimentoComercial {
   inbox: EntradaAtendimentoComercialDuravel
   lerFonte: (evento: EventoAtendimentoComercial) => Promise<FonteAtendimentoComercial | null>
-  visao: () => Promise<Pick<CrmVisao,'leads' | 'estado' | 'geradoEm'>>
+  visao: () => Promise<Pick<CrmVisao,'leads' | 'estado' | 'geradoEm'> & Partial<Pick<CrmVisao,'fontes'|'colunasAusentes'>>>
   agora?: () => number
   maxIdadeCrmMs?: number
   lerIdentidade?:LeitorIdentidadeCaptura
@@ -116,6 +116,18 @@ const comercial=(r: RegistroEntradaAtendimento) => r.evento.origem==='whatsapp' 
 const ids=(leads: readonly CrmLead[])=>leads.map(l=>l.id).sort()
 /** Controlador derivado. Não escreve fatos humanos, envia, chama modelo ou altera o JSONL. */
 export class AtendimentoComercial {
+  /** Entrada original para o executor autorizado; não altera o contrato do piloto assistido. */
+  async contextoDaEntrada(chave: string) {
+    const registro = (await this.deps.inbox.listar()).find(r => r.chave === chave)
+    if (!registro || !comercial(registro)) return null
+    const fonte = await this.deps.lerFonte(registro.evento)
+    const conferencia = conferirFonteAtendimento(registro.evento, fonte, this.agora())
+    const visao = await this.deps.visao()
+    return { registro, fonte, conferencia, visao }
+  }
+  async entradasParaAutomacao() {
+    return (await this.deps.inbox.listar()).filter(comercial)
+  }
   private readonly agora: () => number
   private readonly maxIdade: number
   private resumoCobertura:CoberturaCapturasAtendimento=coberturaInicial()

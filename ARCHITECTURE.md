@@ -1,5 +1,17 @@
 # Arquitetura
 
+## Automação restrita do Encontrado (25/10/2026)
+
+A Central decide a política por oferta e os executores aplicam seu resultado.
+O primeiro lote reutiliza a inbox e a prova de identidade do atendimento para
+responder perguntas padronizadas do Encontrado a novas entradas, com política
+privada explícita, corte temporal, catálogo versionado, reserva durável anterior
+ao transporte e trava compartilhada com a tomada humana da conversa. n8n não
+ganha outro parser de condições. A fila humana recebe exceções; execução e
+esperas técnicas ficam com o time. Recibo de envio não cria qualificação humana,
+proposta, aceite, cobrança nem recebimento. As integrações futuras de Asaas e
+Autentique permanecem separadas da execução de mensagens.
+
 ## Qualidade da Prumo (21/10/2026)
 
 A Prumo é a fonte dos critérios, nomes e aceite; o SquadOne executa. Leia `docs/referencia/organizacao-prumo.md` e `../prumo/00-contexto/organizacao.md` antes de criar ou alterar ofertas e fluxos. Site e Raio-X passam por `deploy/dell/lib/qualidade_prumo.py` antes de publicar. Homologação é identificada; Profissional exige todos os obrigatórios, IQS completo, referência e manifesto exatos. O gerador não publica diretamente nem assina aceite; avaliações aprovadas ficam na área privada, fora da pasta do lead. O Mapa continua como rascunho, sem envio automático.

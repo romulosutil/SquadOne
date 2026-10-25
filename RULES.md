@@ -1,5 +1,20 @@
 # Regras do repositório
 
+## Automação do Encontrado (25/10/2026)
+
+Rômulo autorizou implementar em ordem a operação automática, começando pelo
+Encontrado, com intervenção humana somente nas exceções. Para essa oferta,
+respostas padronizadas a novas entradas verificadas podem ser executadas pela
+política versionada, sem aprovação por mensagem. Essa autorização substitui o
+limite de somente rascunho exclusivamente nas ações homologadas desse caminho.
+Preservar condições individuais, recusas, esperas e tomada humana da conversa.
+Prospecção continua pausada; eventos anteriores à ativação não autorizam retomada.
+Preço e escopo vêm da fonte canônica, nunca de texto livre do modelo. Proposta,
+contratação e recebimento exigem suas evidências e integrações próprias; FAQ de
+preço não cria nenhum desses fatos. Rômulo autorizou escolher os provedores:
+Asaas para cobrança e Autentique para assinatura, inicialmente sem efeitos reais.
+Não alterar o escritório para implantar essa automação.
+
 ## Qualidade da Prumo (21/10/2026)
 
 A Prumo é a fonte dos critérios, nomes e aceite; o SquadOne executa. Leia `docs/referencia/organizacao-prumo.md` e `../prumo/00-contexto/organizacao.md` antes de criar ou alterar ofertas e fluxos. Site e Raio-X passam por `deploy/dell/lib/qualidade_prumo.py` antes de publicar. Homologação é identificada; Profissional exige todos os obrigatórios, IQS completo, referência e manifesto exatos. O gerador não publica diretamente nem assina aceite; avaliações aprovadas ficam na área privada, fora da pasta do lead. O Mapa continua como rascunho, sem envio automático.

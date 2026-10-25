@@ -43,6 +43,7 @@ export function planoComercialDoLead(lead:LeadParaPrioridadeComercial,agora:numb
  if(contatoPausado(lead)||futuro||passoVigente&&intencaoDoPasso(passo!.texto)==='espera'||retomada?.atual&&['aguardar','nao-priorizar'].includes(retomada.grupo))
   return devolver('aguardar',80,'Aguardar a resposta ou a condição combinada','Espera preservada; revisão interna não autoriza retomada.','restricao','espera',passo?.registradoEm??retomada?.em??emEntrada)
  const q=qualificacaoComercialAtual(lead,agora)
+ if(att?.alvo==='time')return devolver('aguardar',80,'Aguardar a resposta ou a condição combinada','Não repetir apresentação, proposta ou pergunta já respondida.','atendimento','pendente',att.ocorridoEm??emEntrada)
  if(q?.intencao==='sem-interesse'||q?.adequacao.estado==='inadequada')
   return devolver('conferir',65,'Conferir a restrição comercial registrada','Revisão humana negativa preservada, sem rascunho de contato.','qualificacao-humana',q.intencao==='sem-interesse'?'sem-interesse':'inadequada',q.em)
  const fortes=(resumo?.sinais??[]).filter(s=>sinalForte(s)&&instante(s.em,agora)).sort((a,b)=>Date.parse(b.em)-Date.parse(a.em))

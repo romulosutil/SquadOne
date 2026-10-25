@@ -37,6 +37,7 @@ export function planoFuturoEmEspera(lead: CrmLead, agora = new Date()): boolean 
 
 /** Orientação operacional; o texto da conversa é evidência, nunca uma instrução para executar. */
 export function procedimentoDaDecisao(lead: CrmLead, agora = new Date()): ProcedimentoDaDecisao {
+  if(lead.atendimentoComercial?.alvo==='time')return {tipo:'espera',titulo:'Time conduz o atendimento do Encontrado',passos:[lead.atendimentoComercial.motivo,'O sistema acompanha a execução e o retorno. Assumir a conversa interrompe as próximas respostas automáticas.'],resultadoEsperado:'Dúvida padrão atendida ou exceção específica encaminhada.'}
   if(lead.atendimentoComercial||conferenciaComercialInterna(lead,agora.getTime())) {
     const plano=planoComercialDoLead(lead,agora.getTime())
     return {tipo:'interno',titulo:lead.atendimentoComercial?.titulo??plano.acao,passos:[...(lead.atendimentoComercial?[lead.atendimentoComercial.motivo]:[]),plano.acao,plano.resultado,'Abra a ficha para conferir fonte e próxima ação. Esta tarefa não envia mensagem.'],resultadoEsperado:plano.resultado}

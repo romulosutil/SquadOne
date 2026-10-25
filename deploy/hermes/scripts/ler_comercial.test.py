@@ -162,5 +162,20 @@ class LeituraTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 m.resposta_segura(d)
 
+    def test_atendimento_automatico_preserva_leitura_e_nao_pede_envio_humano(self):
+        d = dados()
+        item = d['oportunidades'][0]
+        item['atendimento'] = {'presente': True, 'tipo': 'automatico', 'alvo': 'time'}
+        item['proximaAcao'] = 'aguardar'
+        item['prioridadeTrabalho'].update({'grupo': 'aguardar', 'ordem': 80, 'nivel': 5,
+            'acao': 'Aguardar a resposta ou a condição combinada',
+            'resultado': 'Não repetir apresentação, proposta ou pergunta já respondida.',
+            'evidencia': {'fonte': 'atendimento', 'tipo': 'pendente', 'estado': 'atual'},
+            'destaque': False, 'urgente': False})
+        r = m.resposta_segura(d)['oportunidades'][0]
+        self.assertEqual(r['atendimento']['alvo'], 'time')
+        self.assertEqual(r['proximaAcao'], 'aguardar')
+        self.assertFalse(r['contatoAutorizado'])
+
 if __name__ == "__main__":
     unittest.main()
