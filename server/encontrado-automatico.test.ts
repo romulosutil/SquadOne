@@ -149,6 +149,12 @@ test('capacidade nova tem corte próprio, versão exata e preserva FAQ antigo',a
   await f.criar().executar();assert.equal(f.envios(),0);await assert.rejects(()=>fs.stat(f.qualificador.pasta))
   for(const q of [{v:1,desde:DESDE,politicaHash:sha('outra')},{v:1,desde:'2026-10-25T12:00:00.000Z',politicaHash:HASH_QUALIFICACAO_ENCONTRADO},{v:1,desde:DESDE,politicaHash:HASH_QUALIFICACAO_ENCONTRADO,extra:true}])assert.throws(()=>validarPoliticaEncontrado({...politica(),qualificacao:q},AGORA))
 })
+test('leitura de observações não percorre fontes de conversas anteriores ao corte novo',async t=>{
+ const f=await fixture(t,'Quero um site',true)
+ f.setPolitica({...politica(),qualificacao:{v:1,desde:new Date(AGORA).toISOString(),politicaHash:HASH_QUALIFICACAO_ENCONTRADO}})
+ f.atendimento.contextoDaEntrada=async()=>{throw new Error('Histórico anterior não deve ser percorrido por GET')}
+ assert.deepEqual(await f.criar().observacoes(),new Map())
+})
 async function pedidoPronto(t:Parameters<typeof fixture>[0]){
   const f=await fixture(t,'Pode mandar uma prévia de site',true),a=f.criar()
   await a.executar();await a.executar();await a.executar()

@@ -65,7 +65,7 @@ export class EncontradoAutomatico {
     const respondida=fonteDisponivel&&fonte.estado==='ok'&&fonte.saidasEm.some(s=>Date.parse(s)>Date.parse(e.ocorridoEm))&&!(fonte.ultimaEntradaEm&&Date.parse(fonte.ultimaEntradaEm)>Date.parse(e.ocorridoEm))
     const lote2=p.qualificacao&&p.qualificacao.politicaHash===HASH_QUALIFICACAO_ENCONTRADO&&Date.parse(e.ocorridoEm)>=Date.parse(p.qualificacao.desde)
     const mensagens:MensagemQualificacao[]=[]
-    for(const m of historico){const tuple=mensagemDaCaptura(m);if(tuple&&c.fonte?.identidade&&conferirIdentidadeCaptura(tuple,c.fonte.identidade,now).estado==='verificada')mensagens.push({id:tuple.idOriginal,em:tuple.ocorridoEm,hash:tuple.conteudoHash,direcao:tuple.direcao,texto:m.texto})}
+    if(lote2)for(const m of historico){const tuple=mensagemDaCaptura(m);if(tuple&&c.fonte?.identidade&&conferirIdentidadeCaptura(tuple,c.fonte.identidade,now).estado==='verificada')mensagens.push({id:tuple.idOriginal,em:tuple.ocorridoEm,hash:tuple.conteudoHash,direcao:tuple.direcao,texto:m.texto})}
     mensagens.sort((a,b)=>Date.parse(a.em)-Date.parse(b.em))
     const observacao=lote2&&this.deps.qualificador?await this.deps.qualificador.ler(mensagens,p.qualificacao!.desde):null
     const politicaHash=hashCanonicoComercial(p),saidas=await this.deps.saidas.listar()
@@ -199,8 +199,10 @@ export class EncontradoAutomatico {
   }
   async observacoes():Promise<Map<string,ObservacaoEncontrado>>{
     const mapa=new Map<string,ObservacaoEncontrado>()
+    const politica=await this.deps.politica()
+    if(politica?.modo!=='respostas'||!politica.qualificacao)return mapa
     const ultimas=new Map<string,Awaited<ReturnType<AtendimentoComercial['entradasParaAutomacao']>>[number]>()
-    for(const r of await this.deps.atendimento.entradasParaAutomacao())if(!ultimas.has(r.evento.conversa)||Date.parse(r.evento.ocorridoEm)>Date.parse(ultimas.get(r.evento.conversa)!.evento.ocorridoEm))ultimas.set(r.evento.conversa,r)
+    for(const r of await this.deps.atendimento.entradasParaAutomacao())if(Date.parse(r.evento.ocorridoEm)>=Date.parse(politica.qualificacao.desde)&&(!ultimas.has(r.evento.conversa)||Date.parse(r.evento.ocorridoEm)>Date.parse(ultimas.get(r.evento.conversa)!.evento.ocorridoEm)))ultimas.set(r.evento.conversa,r)
     for(const r of ultimas.values()){
       const p=await this.plano(r.chave);if(!p?.observacao)continue
       if(!mapa.has(p.lead.id)||Date.parse(mapa.get(p.lead.id)!.em)<Date.parse(p.observacao.em))mapa.set(p.lead.id,{v:1,origem:'conversa-verificada',em:p.observacao.em,qualificacao:p.observacao.resultado})
