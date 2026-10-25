@@ -49,6 +49,7 @@ export class EncontradoAutomatico {
     const gerado=Date.parse(c.visao.geradoEm??'')
     let historico:Array<{direcao:string;texto:string;em:string;id?:string}>=[]
     if(fonte.estado==='ok')historico=(c.fonte?.jsonl??'').split('\n').filter(Boolean).map(l=>JSON.parse(l))
+      .filter(m=>typeof m.texto==='string'&&typeof m.em==='string'&&['entrada','saida'].includes(m.direcao))
     const fonteDisponivel=c.visao.estado==='ok'&&c.visao.colunasAusentes?.length===0&&c.visao.fontes?.every(f=>!f.erro)===true&&gerado<=now&&now-gerado<=15*60000&&fonte.estado==='ok'
     const fresca=fonteDisponivel&&fonte.estado==='ok'
       &&lead.conversa?.ultima.direcao==='entrada'&&lead.conversa.ultima.em===e.ocorridoEm

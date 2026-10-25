@@ -71,7 +71,7 @@ async function fixture(t:{after:(f:()=>Promise<unknown>)=>void},texto='Quanto cu
   const evento:EventoAtendimentoComercial={idOriginal:String(raw[0].id),origem:'whatsapp',conta:'prumo',canal:'whatsapp',conversa:CONVERSA,tipo:'resposta',direcao:'entrada',ocorridoEm:EM,recebidoEm:EM,conteudoHash:sha(texto),fonteId:String(raw[0].id)}
   const config={v:1 as const,identidadePrumoHash:sha('conta-ficticia'),desde:DESDE}
   const fonte=():FonteAtendimentoComercial=>({conversa:CONVERSA,jsonl:raw.map(r=>JSON.stringify(r)).join('\n'),identidade:{ativa:true,assinatura:sha(JSON.stringify(raw)),config,
-    jsonl:raw.map(m=>({v:1,coletor:'evolution',garantia:'webhook-evolution',sessaoHash:null,instancia:'prumo',contaHash:config.identidadePrumoHash,capturadoEm:EM,mensagem:mensagemDaCaptura(m)!} satisfies ProvaIdentidadeCaptura)).map(r=>JSON.stringify(r)).join('\n')}})
+    jsonl:raw.filter(m=>mensagemDaCaptura(m)!==null).map(m=>({v:1,coletor:'evolution',garantia:'webhook-evolution',sessaoHash:null,instancia:'prumo',contaHash:config.identidadePrumoHash,capturadoEm:EM,mensagem:mensagemDaCaptura(m)!} satisfies ProvaIdentidadeCaptura)).map(r=>JSON.stringify(r)).join('\n')}})
   const inbox=new EntradaAtendimentoComercialDuravel(path.join(dir,'inbox.json'))
   const atendimento=new AtendimentoComercial({inbox,lerFonte:async()=>fonte(),visao:async()=>({estado:'ok',geradoEm:new Date(agora).toISOString(),leads:[l],colunasAusentes:[],fontes:[]}),agora:()=>agora})
   await atendimento.receber(evento)
@@ -86,6 +86,10 @@ test('entrada real verificada permite uma resposta; reprocessamento e dois execu
   assert.equal(f.envios(),1);const [s]=await f.saidas.listar();assert.equal(s.estado,'enviada');assert.equal(s.recibo,'saida-ficticia-001')
   assert.equal((await a.estados()).get(f.lead().id)?.acao,'time')
   assert.equal((await fs.readFile(path.join(f.saidas.pasta,s.chave+'.json'),'utf8')).includes('Quanto custa'),false)
+})
+test('recibo sem texto no histórico não vira mensagem nem interrompe a leitura das condições',async t=>{
+  const f=await fixture(t);f.raw.unshift({tipo:'recibo',em:'2026-10-25T13:58:00.000Z',status:'lido'})
+  await f.criar().executar();assert.equal(f.envios(),1)
 })
 test('timeout conserva reserva e reinício não repete; saída exata e provada reconcilia',async t=>{
   const f=await fixture(t);f.setFalhar();await f.criar().executar();await f.criar().executar();assert.equal(f.envios(),1)
