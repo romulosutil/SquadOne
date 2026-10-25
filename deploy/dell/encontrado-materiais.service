@@ -1,0 +1,15 @@
+[Unit]
+Description=Prepara somente materiais do Encontrado autorizados pela Central
+After=squadone-operations.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/SquadOne
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-%h/.config/claude-ops/gerador.env
+EnvironmentFile=%h/.config/squadone/operations.env
+ExecStart=/usr/bin/python3 %h/SquadOne/deploy/dell/encontrado-materiais.py
+TimeoutStartSec=25min
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true

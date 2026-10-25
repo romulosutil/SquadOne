@@ -5,6 +5,7 @@ import { cicloDoLead } from './ciclo-comercial.ts'
 import { qualificacaoComercialAtual, temQualificacaoComercial } from './qualificacao-comercial.ts'
 import { projetarResponsavelConversa } from './responsavel-conversa.ts'
 import type { CrmLead } from './types.ts'
+import { PERGUNTAS_ENCONTRADO, type QualificacaoEncontrado } from './encontrado-qualificacao.ts'
 
 export const VERSAO_POLITICA_ENCONTRADO = 'encontrado-respostas-v1'
 const oferta = CARDAPIO.find(s => s.id === 'encontrado')!
@@ -17,14 +18,17 @@ export const CATALOGO_ENCONTRADO = Object.freeze({
 })
 export interface PoliticaEncontrado {
   v: 1; modo: 'pausado' | 'respostas'; desde: string; catalogoHash: string
+  qualificacao?: {v:1;desde:string;politicaHash:string}
 }
 export type DecisaoEncontrado =
   | { acao: 'responder'; motivo: string; modelo: string; texto: string }
-  | { acao: 'humano' | 'aguardar' | 'ignorar'; motivo: string }
+  | { acao: 'preparar'; motivo:string; materiais:QualificacaoEncontrado['materiais'] }
+  | { acao: 'humano' | 'aguardar' | 'ignorar' | 'qualificar'; motivo: string }
 export interface ContextoPoliticaEncontrado {
   politica: PoliticaEncontrado; catalogoHash: string; agora: number; ocorridoEm: string
   texto: string; identidade: string; papel?: string; fonteAtual: boolean
   respondida?: boolean
+  observada?:QualificacaoEncontrado|null
   lead: CrmLead; leads: readonly CrmLead[]; bloqueio: string | null
   /** Conversa original verificada; não um resumo produzido pelo modelo. */
   historico: readonly { direcao: string; texto: string; em: string }[]
@@ -62,7 +66,7 @@ export function decidirEncontrado(c: ContextoPoliticaEncontrado): DecisaoEncontr
   if (c.papel === 'robo' || c.papel === 'recepcao' || /^\s*\[(?:áudio|audio|imagem|vídeo|video|documento)\b/i.test(c.texto))
     return humano('Conferir interlocutor ou interpretar o conteúdo antes de responder.')
   const s = normalizar(c.texto).trim()
-  if (!s || /(?:nao (?:tenho interesse|quero|preciso)|pare de|nao me (?:mande|envie)|remova|exclua|apague)/.test(s))
+  if (!s || /(?:nao (?:tenho interesse|quero|preciso)|pare de|nao me (?:mande|envie)|remova|exclua|apague)|^(?:nao|dispenso|sem interesse)(?:[,! .]*obrigad[oa])?[!.,\s]*$|\b(?:mais tarde|depois eu|agora nao)\b/.test(s))
     return aguardar('Preservar o pedido de não continuar o contato.')
   // O catálogo não substitui preço/condição individual já oferecidos, mesmo em notas livres.
   const anteriores = [...c.historico.filter(m=>instante(m.em)<entrada).map(m=>m.texto),
@@ -74,6 +78,9 @@ export function decidirEncontrado(c: ContextoPoliticaEncontrado): DecisaoEncontr
     return humano('Pedido exige condição, compromisso ou etapa comercial ainda fora da resposta padrão.')
   if (/r\$|\breais\b|\d+\s*paginas|\b(?:blog|portal|login|estoque|agendamento|multilingue|idiomas)\b/.test(s))
     return humano('Conferir valor ou escopo individual solicitado; não substituir pelo pacote padrão.')
+  const lote2=!!p.qualificacao&&entrada>=instante(p.qualificacao.desde)
+  if(lote2&&c.observada===null)return {acao:'qualificar',motivo:'O time está conferindo as respostas e os materiais pedidos na conversa original.'}
+  if(lote2&&c.observada?.materiais.length)return {acao:'preparar',materiais:c.observada.materiais,motivo:'Preparar o material especificamente solicitado; não exigir completar o questionário antes.'}
   const partes:string[] = [], modelos:string[] = []
   if (/(?:quanto|qual|como).*(?:cust|valor|prec|mensal|paga)|(?:prec|valor|mensalidade|custo)(?:\b|\?)/.test(s)) {
     modelos.push('preco')
@@ -90,6 +97,15 @@ export function decidirEncontrado(c: ContextoPoliticaEncontrado): DecisaoEncontr
   }
   if (!partes.length && /^(?:ok|certo|entendi|obrigad[oa]|valeu|beleza)[!.,\s]*$/.test(s))
     return aguardar('Confirmação simples recebida; aguardar uma nova pergunta, sem insistir.')
+  if (!partes.length&&lote2&&c.observada){
+    const q=c.observada
+    if(q.intencao?.tipo==='pesquisando')return aguardar('O cliente está pesquisando; não insistir nem presumir compra.')
+    const campo=!q.necessidade?'necessidade':!q.intencao?'intencao':!q.decisao?'decisao':'material'
+    const jaPerguntou=(texto:string)=>c.historico.some(m=>m.direcao==='saida'&&m.texto===texto)
+    const escolhido=jaPerguntou(PERGUNTAS_ENCONTRADO[campo])?'esclarecer':campo
+    if(jaPerguntou(PERGUNTAS_ENCONTRADO[escolhido]))return humano('A resposta permanece ambígua após esclarecimento; interpretar o pedido e decidir como continuar.')
+    return {acao:'responder',modelo:'qualificar-'+escolhido,texto:PERGUNTAS_ENCONTRADO[escolhido],motivo:'Perguntar somente a próxima lacuna observada, sem confirmar qualificação humana.'}
+  }
   if (!partes.length) return humano('O pedido precisa de interpretação fora das respostas padrão deste lote.')
   return {acao:'responder',modelo:modelos.join('+'),texto:partes.join('\n\n'),motivo:'Dúvida padrão atendida pela política aprovada do Encontrado.'}
 }

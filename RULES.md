@@ -2,6 +2,17 @@
 
 ## Automação do Encontrado (25/10/2026)
 
+**Segundo lote autorizado:** qualificação automática e preparação dos materiais
+solicitados, com intervenção humana somente para decisões reais. O sistema pode
+perguntar a lacuna seguinte, interpretar respostas com citações verificadas e
+preparar Raio-X/demo especificamente pedidos, reutilizando os geradores e a régua
+de qualidade existentes. Leituras automáticas são derivadas da conversa, com
+origem e referência; nunca usam `humano:true` nem substituem notas humanas.
+Material solicitado tem prioridade sobre completar questionário. Preparar não
+comprova envio; material pronto só sai após nova conferência do contexto e do
+pacote exato. Preservar pausas, condições individuais, tomada humana e o corte
+próprio da nova capacidade. Não criar contato ou geração real para testar.
+
 Rômulo autorizou implementar em ordem a operação automática, começando pelo
 Encontrado, com intervenção humana somente nas exceções. Para essa oferta,
 respostas padronizadas a novas entradas verificadas podem ser executadas pela

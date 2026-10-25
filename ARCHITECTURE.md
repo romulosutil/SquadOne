@@ -1,5 +1,21 @@
 # Arquitetura
 
+## Encontrado — qualificação e materiais (segundo lote, 25/10/2026)
+
+A qualificação observada é uma projeção reconstruível das mensagens comprovadas,
+separada da confirmação humana do CRM. Um leitor local de padrões e respostas às
+perguntas originais prepara observações e pedidos com referências; o código escolhe
+perguntas, aplica restrições e conserva preço/escopo no catálogo. A projeção é
+persistida somente pelo executor; GETs leem e validam resultados. Nenhuma conversa
+é enviada a um novo modelo ou serviço externo para essa leitura.
+
+Pedidos de material têm registro operacional durável, identidade da mensagem de
+origem e execução restrita aos geradores existentes. O worker técnico recebe
+autorização atual da Central antes de reservar o trabalho. Resultado técnico não
+é envio, proposta ou aceite; a entrega pelo canal revalida contexto, identidade e
+recibo de qualidade dos bytes finais. Não há novo CRM editável, permissão de
+prospecção ou aprovação da própria qualidade pelo gerador.
+
 ## Automação restrita do Encontrado (25/10/2026)
 
 A Central decide a política por oferta e os executores aplicam seu resultado.

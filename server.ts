@@ -2,6 +2,8 @@ import { montarGarantiasAgenda } from './server/rotas-garantias-agenda.ts';
 import { EncontradoAutomatico, leitorPoliticaEncontrado } from './server/encontrado-automatico.ts';
 import { SaidasEncontrado } from './server/encontrado-saidas.ts';
 import { transporteEncontradoEvolution } from './server/encontrado-evolution.ts';
+import { QualificadorEncontrado } from './server/encontrado-qualificacao.ts';
+import { MateriaisEncontrado, verificadorMaterialEncontrado } from './server/encontrado-materiais.ts';
 import { GarantiasAgenda, DemandasAgendaDuraveis } from './server/garantias-agenda.ts';
 import { FilaTelegramDuravel } from './server/fila-telegram-duravel.ts';
 import { AtendimentoComercial, criarLeitorFonteAtendimento, criarInventarioCapturasAtendimento } from './server/atendimento-comercial.ts';
@@ -363,9 +365,11 @@ async function startServer() {
 
   let crmDoAtendimento: CrmStore | undefined;
   let receberAtendimento: ((valor: unknown) => Promise<{novo:boolean;registro:{chave:string}}>) | undefined;
+  let autorizarMaterialEncontrado:((id:string)=>Promise<unknown|null>)|undefined;
   if (squadOneMode === 'operations') app.use(entradaTecnicaAtendimento({
     autenticar: valor => crmDoAtendimento?.autenticarAtendimento(valor) ?? Promise.resolve(false),
     receber: valor => receberAtendimento?.(valor) ?? Promise.resolve(null),
+    autorizarMaterial:id=>autorizarMaterialEncontrado?.(id)??Promise.resolve(null),
   }));
 
   // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
@@ -434,8 +438,11 @@ async function startServer() {
       saidas:new SaidasEncontrado(path.join(operationsDataDir,'encontrado-saidas')),
       politica:leitorPoliticaEncontrado(path.join(operationsDataDir,'encontrado-automacao.json')),
       transporte:transporteEncontradoEvolution(),
+      qualificador:new QualificadorEncontrado(path.join(operationsDataDir,'encontrado-qualificacao')),
+      materiais:new MateriaisEncontrado(path.join(operationsDataDir,'encontrado-materiais'),verificadorMaterialEncontrado(operationsDataDir)),
       comConversa:(conversa,acao)=>crm.comConversaExclusiva(conversa,acao),
       bloqueio:(lead,leads)=>crm.bloqueioDaConversa(lead,leads)});
+    autorizarMaterialEncontrado=id=>encontradoAutomatico.autorizarMaterial(id);
     let atendimentoEmCurso = false;
     const conferirAtendimento = async () => {
       if(atendimentoEmCurso) return;
@@ -451,7 +458,9 @@ async function startServer() {
       const v = await crm.visao();
       const pendencias = await atendimento.listarPendencias(v);
       const automaticos = await encontradoAutomatico.estados().catch(()=>new Map());
+      const observacoes = await encontradoAutomatico.observacoes().catch(()=>new Map());
       return {...v,leads:await Promise.all(v.leads.map(async l=>{
+        l={...l,...(observacoes.has(l.id)?{encontradoObservado:observacoes.get(l.id)}:{})};
         const auto=automaticos.get(l.id);
         if(auto) return {...l,atendimentoComercial:{id:`encontrado-${l.id}`,tipo:auto.acao==='time'?'automatico':'handoff',titulo:auto.acao==='time'?'Time conduz o atendimento do Encontrado':'Decisão necessária no Encontrado',motivo:auto.motivo,alvo:auto.acao==='time'?'time':'operador',estado:auto.estado,identidade:auto.identidade,ocorridoEm:auto.ocorridoEm}};
         const p=pendencias.find(p=>p.leadIds.includes(l.id));if(!p)return l;

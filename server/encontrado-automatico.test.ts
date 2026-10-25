@@ -8,6 +8,9 @@ import {spawn} from 'node:child_process'
 import {decidirEncontrado,type ContextoPoliticaEncontrado,type PoliticaEncontrado} from '../src/operations/encontrado-politica.ts'
 import {EncontradoAutomatico,HASH_CATALOGO_ENCONTRADO,validarPoliticaEncontrado,leitorPoliticaEncontrado} from './encontrado-automatico.ts'
 import {SaidasEncontrado} from './encontrado-saidas.ts'
+import {QualificadorEncontrado,HASH_QUALIFICACAO_ENCONTRADO,extrairQualificacaoEncontrado,type MensagemQualificacao} from './encontrado-qualificacao.ts'
+import {MateriaisEncontrado,type ResultadoMaterialEncontrado} from './encontrado-materiais.ts'
+import {PERGUNTAS_ENCONTRADO} from '../src/operations/encontrado-qualificacao.ts'
 import {AtendimentoComercial,type FonteAtendimentoComercial} from './atendimento-comercial.ts'
 import {EntradaAtendimentoComercialDuravel,chaveEventoAtendimento,type EventoAtendimentoComercial} from './entrada-atendimento-comercial.ts'
 import {mensagemDaCaptura,type ProvaIdentidadeCaptura} from './identidade-captura.ts'
@@ -64,9 +67,11 @@ test('política exige versão, data real, hash e esquema exatos',()=>{
   assert.deepEqual(validarPoliticaEncontrado(politica(),AGORA),politica())
   for(const p of [{...politica(),v:2},{...politica(),desde:'2026-02-31T13:00:00.000Z'},{...politica(),desde:'2027-01-01T13:00:00.000Z'},{...politica(),ativar:true},{...politica(),catalogoHash:'hash'}])assert.throws(()=>validarPoliticaEncontrado(p,AGORA))
 })
-async function fixture(t:{after:(f:()=>Promise<unknown>)=>void},texto='Quanto custa?') {
+async function fixture(t:{after:(f:()=>Promise<unknown>)=>void},texto='Quanto custa?',lote2=false) {
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'encontrado-automacao-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}))
   let agora=AGORA,p:PoliticaEncontrado|null=politica(),l=lead(),envios=0,confere:()=>Promise<void>=async()=>{},falhar=false
+  if(lote2){p.qualificacao={v:1,desde:DESDE,politicaHash:HASH_QUALIFICACAO_ENCONTRADO};l.pasta={lugar:'_em-conversa',slug:'empresa-ficticia'}}
+  let verificar:(id:string)=>Promise<unknown>=async()=>null
   const raw:Record<string,unknown>[]=[{id:'entrada-ficticia-001',em:EM,direcao:'entrada',origem:'prumo',texto}]
   const evento:EventoAtendimentoComercial={idOriginal:String(raw[0].id),origem:'whatsapp',conta:'prumo',canal:'whatsapp',conversa:CONVERSA,tipo:'resposta',direcao:'entrada',ocorridoEm:EM,recebidoEm:EM,conteudoHash:sha(texto),fonteId:String(raw[0].id)}
   const config={v:1 as const,identidadePrumoHash:sha('conta-ficticia'),desde:DESDE}
@@ -76,11 +81,131 @@ async function fixture(t:{after:(f:()=>Promise<unknown>)=>void},texto='Quanto cu
   const atendimento=new AtendimentoComercial({inbox,lerFonte:async()=>fonte(),visao:async()=>({estado:'ok',geradoEm:new Date(agora).toISOString(),leads:[l],colunasAusentes:[],fontes:[]}),agora:()=>agora})
   await atendimento.receber(evento)
   const saidas=new SaidasEncontrado(path.join(dir,'saidas'))
+  const qualificador=new QualificadorEncontrado(path.join(dir,'qualificacao'),()=>agora),materiais=new MateriaisEncontrado(path.join(dir,'materiais'),id=>verificar(id))
   const criar=()=>new EncontradoAutomatico({atendimento,saidas,politica:async()=>p,agora:()=>agora,bloqueio:async()=>null,
+    ...(lote2?{qualificador,materiais}:{}),
     comConversa:(conversa,acao)=>comGuardaConversa(path.join(dir,'locks'),conversa,acao),
     transporte:{conferir:async()=>confere(),enviar:async()=>{envios++;if(falhar)throw new Error('timeout');return 'saida-ficticia-001'}}})
-  return {dir,atendimento,inbox,evento,saidas,criar,raw,envios:()=>envios,lead:()=>l,setLead:(v:CrmLead)=>{l=v},setPolitica:(v:PoliticaEncontrado|null)=>{p=v},setAgora:(v:number)=>{agora=v},setConfere:(v:()=>Promise<void>)=>{confere=v},setFalhar:()=>{falhar=true}}
+  return {dir,atendimento,inbox,evento,saidas,criar,raw,qualificador,materiais,setVerificar:(v:typeof verificar)=>{verificar=v},envios:()=>envios,lead:()=>l,setLead:(v:CrmLead)=>{l=v},setPolitica:(v:PoliticaEncontrado|null)=>{p=v},setAgora:(v:number)=>{agora=v},setConfere:(v:()=>Promise<void>)=>{confere=v},setFalhar:()=>{falhar=true}}
 }
+
+const ms=(textos:Array<[string,'entrada'|'saida']>):MensagemQualificacao[]=>textos.map(([texto,direcao],i)=>({id:'msg-'+i,em:EM,hash:sha(texto),direcao,texto}))
+async function novaEntrada(f:Awaited<ReturnType<typeof fixture>>,texto:string,minuto:number){
+ const agora=AGORA+minuto*60000,em=new Date(agora-1000).toISOString(),id='entrada-ficticia-'+minuto
+ f.setAgora(agora);f.raw.push({id,em,direcao:'entrada',origem:'prumo',texto})
+ const l=f.lead();l.conversa={desde:EM,mensagens:f.raw.length,ultima:{direcao:'entrada',em,trecho:texto},ultimaEntrada:em}
+ await f.atendimento.receber({...f.evento,idOriginal:id,fonteId:id,ocorridoEm:em,recebidoEm:em,conteudoHash:sha(texto)})
+}
+test('conversa em vários turnos avança necessidade, decisão e oferta sem repetir pergunta',async t=>{
+ const f=await fixture(t,'Quero um site para minha empresa',true),a=f.criar()
+ for(const [i,campo,resposta] of [[0,'necessidade','Divulgar os serviços'],[1,'decisao','Eu e minha sócia'],[2,'material','Raio-X']] as const){
+  await a.executar();await a.executar();assert.equal(f.envios(),i+1)
+  f.raw.push({id:'saida-ficticia-turno-'+i,em:new Date(AGORA+i*60000).toISOString(),direcao:'saida',origem:'prumo',texto:PERGUNTAS_ENCONTRADO[campo]})
+  await novaEntrada(f,resposta,i+1)
+ }
+ await a.executar();await a.executar();assert.equal(f.envios(),3);assert.equal((await f.materiais.listar())[0]?.tipo,'raio-x')
+ const q=(await a.observacoes()).get(f.lead().id)!.qualificacao
+ assert.equal(q.necessidade?.trecho,'Divulgar os serviços');assert.equal(q.decisao?.trecho,'Eu e minha sócia');assert.equal(q.intencao?.tipo,'avaliando')
+})
+test('pedido original continua após agradecimento; cancelamento posterior impede geração',async t=>{
+ const f=await fixture(t,'Pode mandar uma prévia de site',true),a=f.criar();await a.executar();await a.executar()
+ const [p]=await f.materiais.listar();await novaEntrada(f,'Obrigado',1);await a.executar();await a.executar()
+ assert.equal((await f.materiais.listar()).length,1);assert.deepEqual(await a.autorizarMaterial(p.id),p)
+ await novaEntrada(f,'Não precisa mandar mais',2);await a.executar();assert.equal(await a.autorizarMaterial(p.id),null);assert.equal(f.envios(),0)
+})
+test('permissão para material é específica e não confirma intenção nem compra',()=>{
+  let q=extrairQualificacaoEncontrado(ms([['Posso falar com o responsável?','saida'],['Sim, pode','entrada']]),DESDE)
+  assert.deepEqual(q,{materiais:[]})
+  q=extrairQualificacaoEncontrado(ms([['Posso enviar a prévia de site?','saida'],['Pode mandar','entrada']]),DESDE)
+  assert.equal(q.materiais[0]?.tipo,'demo');assert.equal(q.intencao,undefined);assert.equal(q.materiais[0].evidencia.trecho,'Pode mandar')
+  q=extrairQualificacaoEncontrado(ms([[PERGUNTAS_ENCONTRADO.material,'saida'],['Pode mandar','entrada']]),DESDE)
+  assert.deepEqual(q.materiais,[])
+  q=extrairQualificacaoEncontrado(ms([[PERGUNTAS_ENCONTRADO.material,'saida'],['Raio-X','entrada']]),DESDE)
+  assert.equal(q.materiais[0]?.tipo,'raio-x')
+})
+test('qualificação observa respostas na pergunta original, sem humano:true',()=>{
+  const mensagens=ms([['Quero um site para minha empresa','entrada'],[PERGUNTAS_ENCONTRADO.necessidade,'saida'],['Divulgar meus serviços','entrada'],[PERGUNTAS_ENCONTRADO.decisao,'saida'],['Eu e minha sócia','entrada']])
+  const q=extrairQualificacaoEncontrado(mensagens,DESDE)
+  assert.equal(q.intencao?.tipo,'avaliando');assert.equal(q.necessidade?.trecho,'Divulgar meus serviços');assert.equal(q.decisao?.trecho,'Eu e minha sócia')
+  assert.equal(JSON.stringify(q).includes('humano'),false)
+  assert.deepEqual(extrairQualificacaoEncontrado(mensagens,'2026-10-25T14:01:00.000Z'),{materiais:[]})
+})
+test('recusa retira pedidos antigos; ausência de site não é recusa',()=>{
+  assert.deepEqual(extrairQualificacaoEncontrado(ms([['Pode mandar o demo','entrada'],['Não quero mais','entrada']]),DESDE).materiais,[])
+  assert.equal(extrairQualificacaoEncontrado(ms([['Não tenho site, quero ver uma prévia','entrada']]),DESDE).materiais[0]?.tipo,'demo')
+  for(const s of ['Não precisa enviar demo','Talvez eu queira uma prévia','Gostaria de saber o preço do demo','Quem pediu para enviar uma demo?'])assert.deepEqual(extrairQualificacaoEncontrado(ms([[s,'entrada']]),DESDE).materiais,[],s)
+})
+test('GETs não criam cache, pedidos, geração ou envio; executor faz a pergunta seguinte',async t=>{
+  const f=await fixture(t,'Quero um site para minha empresa',true),a=f.criar()
+  assert.equal((await a.estados()).get(f.lead().id)?.acao,'time');await a.observacoes()
+  await assert.rejects(()=>fs.stat(f.qualificador.pasta));assert.deepEqual(await f.materiais.listar(),[])
+  await a.executar();assert.equal(f.envios(),0);await a.executar();assert.equal(f.envios(),1)
+  assert.equal((await f.saidas.listar())[0].modelo,'qualificar-necessidade')
+  assert.equal((await a.observacoes()).get(f.lead().id)?.qualificacao.intencao?.tipo,'avaliando')
+})
+test('capacidade nova tem corte próprio, versão exata e preserva FAQ antigo',async t=>{
+  const f=await fixture(t,'Quero um site',true)
+  f.setPolitica({...politica(),qualificacao:{v:1,desde:new Date(AGORA).toISOString(),politicaHash:HASH_QUALIFICACAO_ENCONTRADO}})
+  await f.criar().executar();assert.equal(f.envios(),0);await assert.rejects(()=>fs.stat(f.qualificador.pasta))
+  for(const q of [{v:1,desde:DESDE,politicaHash:sha('outra')},{v:1,desde:'2026-10-25T12:00:00.000Z',politicaHash:HASH_QUALIFICACAO_ENCONTRADO},{v:1,desde:DESDE,politicaHash:HASH_QUALIFICACAO_ENCONTRADO,extra:true}])assert.throws(()=>validarPoliticaEncontrado({...politica(),qualificacao:q},AGORA))
+})
+async function pedidoPronto(t:Parameters<typeof fixture>[0]){
+  const f=await fixture(t,'Pode mandar uma prévia de site',true),a=f.criar()
+  await a.executar();await a.executar();await a.executar()
+  const [p]=await f.materiais.listar();assert.ok(p)
+  const pronto:ResultadoMaterialEncontrado={v:1,id:p.id,em:EM,estado:'pronto',url:'https://demo-empresa-ficticia.vercel.app',versao:'sha256:'+sha('pacote'),referencia:'lead:'+sha('ficticio').slice(0,24),qualidade:'homologacao'}
+  await fs.writeFile(path.join(f.materiais.pasta,p.id+'.resultado.json'),JSON.stringify(pronto))
+  f.setVerificar(async()=>pronto)
+  return {f,a,p,pronto}
+}
+test('pedido de material evita questionário, é durável e exige autorização técnica atual',async t=>{
+  const f=await fixture(t,'Pode mandar uma prévia de site',true),a=f.criar()
+  await a.executar();await a.executar();await a.executar();assert.equal(f.envios(),0)
+  const [p]=await f.materiais.listar();assert.equal((await f.materiais.listar()).length,1);assert.deepEqual(await a.autorizarMaterial(p.id),p)
+  assert.equal((await a.estados()).get(f.lead().id)?.acao,'time')
+  f.setPolitica({...politica(),modo:'pausado'});assert.equal(await a.autorizarMaterial(p.id),null)
+})
+test('material pronto só é enviado após conferência independente; não repete nem pergunta de novo',async t=>{
+  const {f,a,p}=await pedidoPronto(t);await a.executar();await f.criar().executar()
+  assert.equal(f.envios(),1);const [s]=await f.saidas.listar();assert.equal(s.modelo,'material-demo');assert.equal(s.entradaChave,chaveEventoAtendimento(f.evento));assert.notEqual(s.chave,p.entradaChave)
+  assert.equal((await a.estados()).get(f.lead().id)?.acao,'time')
+})
+test('qualidade ou bytes sem confirmação não reservam nem enviam; transiente permanece com o time',async t=>{
+  const {f,a}=await pedidoPronto(t);f.setVerificar(async()=>{throw new Error('divergência')});await a.executar()
+  assert.equal(f.envios(),0);assert.deepEqual(await f.saidas.listar(),[]);assert.equal((await a.estados()).get(f.lead().id)?.acao,'time')
+  f.setAgora(AGORA+31*60000);assert.equal((await a.estados()).get(f.lead().id)?.acao,'humano')
+})
+test('troca de versão entre as duas conferências cancela, sem inventar envio',async t=>{
+  const {f,a,pronto}=await pedidoPronto(t);let n=0;f.setVerificar(async()=>++n===1?pronto:{...pronto,versao:'sha256:'+sha('outro pacote')})
+  await a.executar();assert.equal(f.envios(),0);assert.equal((await f.saidas.listar())[0].estado,'cancelada')
+})
+test('cache pronto não pode elevar prévia a profissional nem trocar sua URL',async t=>{
+ const {f,a,pronto,p}=await pedidoPronto(t)
+ for(const alterado of [{...pronto,qualidade:'profissional'},{...pronto,url:'https://outro.vercel.app/https://demo-empresa-ficticia.vercel.app'}]){
+  await fs.writeFile(path.join(f.materiais.pasta,p.id+'.resultado.json'),JSON.stringify(alterado));await a.executar()
+  assert.equal(f.envios(),0);assert.deepEqual(await f.saidas.listar(),[])
+ }
+})
+test('nova entrada durante conferência final impede entrega e preserva reserva',async t=>{
+  const {f,a,pronto}=await pedidoPronto(t);let n=0;f.setVerificar(async()=>{if(++n===2)f.raw.push({id:'nova',em:'2026-10-25T13:59:30.000Z',direcao:'entrada',texto:'Não quero mais'});return pronto})
+  await a.executar();assert.equal(f.envios(),0);assert.equal((await f.saidas.listar())[0].estado,'cancelada')
+})
+test('tomada humana impede preparação; prova ausente não alimenta qualificação',async t=>{
+  const f=await fixture(t,'Quero um site',true);f.raw.unshift({id:'sem-prova',em:'2026-10-25T13:58:00.000Z',direcao:'entrada',texto:'Eu aprovo e quero divulgar serviços',provaAusente:true})
+  await f.criar().executar();assert.equal((await f.criar().observacoes()).get(f.lead().id)?.qualificacao.necessidade,undefined)
+  const l=f.lead();l.eventos.push({tipo:'nota',origem:'manual',em:EM,rotulo:'Nota',fonte:'CRM',registroTexto:textoResponsavelConversa({v:2,id:'humano-ficticio-001',conta:'prumo',canal:'whatsapp',conversa:CONVERSA,responsavel:'romulo',data:EM,motivo:'Assumir',humano:true,anterior:null},AGORA)})
+  await f.criar().executar();assert.equal(f.envios(),0)
+})
+test('dois materiais solicitados aguardam os dois pacotes e saem em uma única resposta',async t=>{
+  const f=await fixture(t,'Quero ver uma prévia e o Raio-X',true),a=f.criar()
+  await a.executar();await a.executar();const ps=await f.materiais.listar();assert.equal(ps.length,2)
+  const resultados=new Map(ps.map(p=>[p.id,{v:1,id:p.id,em:EM,estado:'pronto',url:p.tipo==='demo'?'https://demo-empresa-ficticia.vercel.app':'https://raio-x-prumo.vercel.app/empresa-ficticia',versao:'sha256:'+sha(p.tipo),referencia:'lead:'+sha('ficticio').slice(0,24),qualidade:'homologacao'} satisfies ResultadoMaterialEncontrado]))
+  await fs.writeFile(path.join(f.materiais.pasta,ps[0].id+'.resultado.json'),JSON.stringify(resultados.get(ps[0].id)))
+  await a.executar();assert.equal(f.envios(),0);assert.ok(await a.autorizarMaterial(ps[1].id))
+  await fs.writeFile(path.join(f.materiais.pasta,ps[1].id+'.resultado.json'),JSON.stringify(resultados.get(ps[1].id)))
+  f.setVerificar(async id=>resultados.get(id));await a.executar();await a.executar()
+  assert.equal(f.envios(),1);assert.equal((await f.saidas.listar())[0].materiais?.length,2)
+})
 test('entrada real verificada permite uma resposta; reprocessamento e dois executores não duplicam',async t=>{
   const f=await fixture(t),a=f.criar(),b=f.criar();await Promise.all([a.executar(),b.executar()]);await a.executar()
   assert.equal(f.envios(),1);const [s]=await f.saidas.listar();assert.equal(s.estado,'enviada');assert.equal(s.recibo,'saida-ficticia-001')
