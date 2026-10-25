@@ -1,6 +1,6 @@
 # Prumo — qualificação, contratação e recebimento
 
-Atualização: 23/10/2026, horário de Brasília. Prioridade: a primeira nova venda. Receita já existente da Silmer é R$ 4.100/mês; não confundir o objetivo de R$ 10 mil mensais totais com MRR ou com receita nova já conquistada.
+Atualização: 24/10/2026, horário de Brasília. Prioridade: a primeira nova venda. Receita já existente da Silmer é R$ 4.100/mês; não confundir o objetivo de R$ 10 mil mensais totais com MRR ou com receita nova já conquistada.
 
 ## Operar pelo escritório atual
 
@@ -76,3 +76,93 @@ O journal fica por padrão ao lado do retrato, em crm-registro-comercial-journal
 A fase seguinte conecta os critérios ao contexto dos agentes e à entrada durável do n8n, em modo assistido. O escritório permanece preservado. O CRM continua sendo a fonte humana de proposta, aceite e recebimento. A situação publicada e as verificações estão em `PRUMO-INTEGRACAO-COMERCIAL-N8N-AGENTES-2026-10-23.md`.
 
 Assinatura, Pix, banco, emissão fiscal e gateway continuam fora da integração. Sincronizar todo o catálogo e consolidar os demais workflows permanecem trabalhos posteriores. O Grok externo continua sob o procedimento manual informado pelo usuário.
+
+## Revisão das pendências em produção — 24/10/2026, 23h BRT
+
+Leitura da API viva e da fonte de registros, utilizando as funções canônicas `resumoComercialParaContexto`, `cicloDoLead`, `planoComercialDoLead` e `projetarResponsavelConversa` do checkout Dell. Este é um retrato de auditoria, não uma segunda fila editável nem confirmação de fatos no CRM. A frente permaneceu `ativo=false`, `estado=pausado`; nenhum contato ou inferência foi executado.
+
+Dos 3.525 leads, 107 entraram no recorte por estarem em contato/proposta ou possuírem passagem, revisão ou ciclo registrados. O recorte inclui 17 encerrados, que devem ser preservados; não representa 107 oportunidades abertas ou qualificadas. Há 88 em contato e duas propostas legadas.
+
+| Etapa | Evidência atual | Pendência e ação interna |
+| --- | --- | --- |
+| Qualificação | Nenhuma nota nova de qualificação e nenhum SPICED projetável no recorte. Estado canônico `ausente` nos 107 registros | Rever fonte, necessidade, adequação, intenção, participantes e próximo passo; confirmar somente o que a evidência sustenta. Não preencher todos os campos por inferência |
+| Passagem ao humano | 68 passagens visíveis, todas com identidade `sem-prova`; nenhuma confirmação de responsável projetada nos 107 registros | Conferir conta/conversa, data original e contexto; Rômulo confirma a responsabilidade na ficha. Coletor e recebimento de backfill não confirmam conta nem pedido atual |
+| Proposta | Duas propostas legadas. Zero propostas/envios no ciclo versionado | Preservar versões e condições existentes; conferir documento e envio real antes de registrar qualquer novo marco. Não migrar o legado como aceite |
+| Contratação | Nenhum aceite ou condição de cobrança registrado no ciclo versionado | Preparar o quadro de condições abaixo e revisar referência/documento/versão; só registrar aceite com evidência real |
+| Pagamento | Nenhuma cobrança ou recebimento registrado no ciclo versionado; a fonte lida também não possui registros de recebimento confirmado | Não deduzir inadimplência, ausência de pagamento fora do sistema ou receita nova. Conferir condição, gatilho, cobrança e recebimento reais, separadamente |
+
+A fonte contém 175 registros, incluindo 139 notas, duas propostas legadas e nenhum marcador `[qualificacao-comercial-v1]` ou `[ciclo-comercial-v1]`. A prioridade canônica do recorte é: 75 para conferir, um para qualificar, 14 para aguardar e 17 encerrados. Isso é prioridade de trabalho interno, não autorização de contato. Os dois indicadores `respostaNova` referem-se a registros históricos: Masque sem conversa guardada e The Best com entrada de 21/10; não foram tratados como novas mensagens de 24/10.
+
+### Conferências que destravam o trabalho
+
+| Caso | Próxima ação interna | Condição preservada |
+| --- | --- | --- |
+| ControEco | Conferir composição/escopo, condição individual de tráfego, mensalidade do site, participantes e próximo passo; preparar somente revisão de condições | R$500/mês de gestão e mídia à parte, conforme confirmação anterior do usuário. Mensalidade do site desconhecida; R$99 não aprovado. Indício de preço é histórico, sem identidade confirmada |
+| Masque | Conferir a fonte da resposta e a disponibilidade atual do material removido; escolher a lacuna somente depois | Conversa não guardada na leitura atual; interesse, convite, reunião e demo disponível não presumidos |
+| The Best Estamparia | Conferir identidade e contexto do registro em contato; distinguir o outro registro ainda novo por sua referência individual | São dois registros distintos no produto Estamparia; nome igual não autoriza fusão nem confirma duplicata. A entrada do caso em contato é de 21/10 |
+| Comece | Conferir documento/condições da proposta legada e o combinado de espera | Aguardar; não gerar toque ou cobrança a partir de data vencida de revisão interna |
+| Roda Mais | Conferir a versão e o último combinado da proposta legada | Aguardar; nova proposta, aceite ou pagamento não confirmados |
+| Favarato | Rever o contexto e o material antes de decidir a próxima lacuna | Curiosidade classificada não comprova intenção de contratar; saída posterior e contexto humano devem ser respeitados |
+
+O inbox durável contém 174 registros concluídos com resultado de passagem e um pendente. O pendente é um evento de **saída**, sem tentativa ou resultado; não um pedido novo recebido. Foram preservados ID, estado e conteúdo privado. A reconciliação deve conferir a fonte e o vínculo antes de qualquer processamento; não marcar concluído, repetir evento ou gerar aviso para fazer a contagem fechar. Os 174 resultados internos não equivalem a 174 conversas atuais ou 174 qualificações.
+
+### Folha de revisão para preencher na ficha existente
+
+Usar os campos abaixo como preparação interna. Texto em branco significa pendente; não colar os blocos como fatos confirmados nem assinar confirmação humana pelo operador.
+
+**Qualificação e passagem**
+
+- Oportunidade/ref.: ______. Fonte original, data e autoria conferidas: ______.
+- Identidade da conta/conversa: ______. Evidência ou motivo de pendência: ______.
+- Necessidade nas palavras do cliente: ______.
+- Oferta adequada e motivo; limites/dependências: ______.
+- Intenção comprovada: ______. Permissão para material, avaliação e contratação são estados diferentes.
+- Participantes e processo de decisão: ______. Próximo passo aceito e evidência: ______.
+- Motivo da passagem: ______. Pedido de preço/proposta/negociação/contratação/pagamento passa ao Rômulo mesmo com lacunas; não libera proposta final incompleta.
+- Responsabilidade confirmada por Rômulo: ______. Lacuna seguinte: ______. Ação interna ou condição de espera: ______.
+
+**Proposta para revisão**
+
+- Referência e versão: ______. Oferta(s) estável(is): ______.
+- Necessidade e resultado esperado, com fonte: ______.
+- Entregáveis, inclusões, exclusões e critério de entrega: ______.
+- Materiais/acessos do cliente: ______. Responsável pela entrega confirmado: ______.
+- Prazo e evento que inicia a contagem: ______.
+- Valor inicial: ______. Mensalidade: ______. Custos de terceiros e quem paga: ______.
+- Fonte do preço e eventual condição individual confirmada: ______.
+- Condições, prazo de validade se combinado e próximo passo aceito: ______.
+- Revisão do Rômulo: ______. Evidência de envio da versão exata: ______, preencher somente após envio real.
+
+O modelo visual já existente é `prumo/04-venda/proposta-modelo.html`, localizado no checkout irmão do Windows. Seus campos em `<mark>` e condições indicadas como sugestão exigem revisão. Ele não comprova proposta enviada nem documento de contratação existente. A tabela consultada é `prumo/04-venda/piloto-cdl/precos.json` desse checkout; sua presença não foi confirmada no caminho esperado `~/prumo/04-venda/piloto-cdl/precos.json` do Dell. Antes de uma proposta final, conferir a fonte canônica atual e a versão usada pelo consumidor. Não copiar preços de exemplos, substituir condições individuais por catálogo nem aplicar o catálogo como decisão de escopo.
+
+**Quadro comercial de contratação para revisão**
+
+- Partes e representantes conferidos: ______. Referência da proposta enviada e versão: ______.
+- Escopo, limites, critérios de entrega e dependências: ______.
+- Implantação, recorrência, despesas de terceiros e responsabilidades: ______.
+- Início, vigência e renovação, se combinadas: ______.
+- Suporte, manutenção, revisões, alteração e encerramento a combinar: ______.
+- Condição/gatilho de cobrança: ______. Vencimento, forma e competência: ______.
+- Referência do documento completo, local de guarda e versão: ______.
+- Evidência do aceite dessa versão por quem pode decidir: ______.
+
+Este quadro organiza a revisão comercial; não é contrato final nem aprovação jurídica. O documento completo e dados das partes permanecem em local privado escolhido pela operação; no CRM entra sua referência. A menção do modelo HTML a um contrato de uma página não comprova que esse contrato já exista ou esteja aprovado.
+
+**Cobrança e recebimento para conferência humana**
+
+- Proposta enviada → aceite/documento → condição vinculada: ______.
+- Componente inicial ou mensal: ______. Valor contratado e gatilho satisfeito: ______.
+- Evidência do gatilho e data: ______. Para Site Encontrado, inclusive em pacote, conferir site visto funcionando antes de cobrar.
+- Cobrança/ref.: ______. Valor e vencimento: ______. Forma e competência mensal: ______.
+- Recebimento efetivamente conferido por Rômulo: ______. Data, valor e referência única: ______.
+- Cobrança vinculada, saldo restante e próximo marco: ______.
+
+Não incluir dados bancários, comprovantes ou conversas no Git. Não existe emissão/envio de cobrança ou integração bancária por preencher esses campos. Recebimento parcial conserva saldo; correção acrescenta fato e preserva o original. Silmer continua cliente existente e não comprova a primeira venda nova.
+
+### O que depende de Rômulo
+
+1. Confirmar a autoria/fonte, a responsabilidade pelo atendimento e os fatos de qualificação que estiverem efetivamente comprovados. Campos ausentes permanecem pendentes; os 68 handoffs não devem ser confirmados em massa.
+2. Escolher, por oportunidade, a oferta e o escopo reais; aprovar os custos, responsável pela entrega, valores, prazo, recorrência e condições concretas antes da versão final. Condições não acordadas não viram preço padrão.
+3. Conferir documento e representação, versão e evidência de aceite; confirmar cada cobrança liberada e cada recebimento observado. Nada disso foi marcado como concluído por esta revisão.
+
+A primeira execução comercial natural continua pendente: uma entrada atual com identidade sustentada, revisão humana e passagem coerente. Não gerar contato, reunião, contrato, cobrança ou pagamento artificial para validá-la. Qualquer retomada da prospecção exige decisão explícita separada.
