@@ -12,8 +12,9 @@
  */
 
 /** O que está aberto: a aba Fazer, a Triar, ou uma das três seções de Entender. */
-export type VistaDeVendas = 'afazer' | 'triagem' | 'funil' | 'numeros' | 'resultados'
+export type VistaDeVendas = 'afazer' | 'triagem' | 'funil' | 'numeros' | 'resultados' | 'bi'
 export type AbaDeVendas = 'afazer' | 'triagem' | 'entender'
+export type DetalheDoCliente = 'orientacao' | 'ficha'
 
 /**
  * O nome de cada aba e seção de Vendas na tela, um só (19/10/2026, auditoria dos fluxos). Os ids
@@ -23,6 +24,7 @@ export type AbaDeVendas = 'afazer' | 'triagem' | 'entender'
  * para "A fazer", "Triagem" e "Números", abas que não existem mais com esses nomes.
  */
 export const NOME_DAS_ABAS: Readonly<Record<VistaDeVendas | AbaDeVendas, string>> = {
+  bi: 'BI da operação',
   afazer: 'Conversas para você',
   triagem: 'Primeiros contatos',
   entender: 'Entender',
@@ -37,7 +39,8 @@ export const caminhoDaAba = (aba: VistaDeVendas | AbaDeVendas): string => `Venda
 /** O Roteiro inteiro mora no Mais (AC-20); o botão "Roteiro de venda" de Entender abre lá. */
 export const ENDERECO_DO_ROTEIRO = '/mais?abrir=roteiro'
 
-export const SECOES_DE_ENTENDER: ReadonlyArray<{ id: Extract<VistaDeVendas, 'funil' | 'numeros' | 'resultados'>; rotulo: string; dica: string }> = [
+export const SECOES_DE_ENTENDER: ReadonlyArray<{ id: Extract<VistaDeVendas, 'funil' | 'numeros' | 'resultados' | 'bi'>; rotulo: string; dica: string }> = [
+  { id: 'bi', rotulo: NOME_DAS_ABAS.bi, dica: 'Decisões, público, mensagens, quebras e escolhas dos agentes por cliente.' },
   { id: 'funil', rotulo: NOME_DAS_ABAS.funil, dica: 'Todos os leads por etapa, no Quadro ou na Lista; o filtro Passo mostra um passo da jornada.' },
   { id: 'numeros', rotulo: NOME_DAS_ABAS.numeros, dica: 'Onde o funil perde e quanto a venda espera depois do "sim"; os testes A/B ficam em Experimentos.' },
   { id: 'resultados', rotulo: NOME_DAS_ABAS.resultados, dica: 'Os enviados do período por nicho, mensagem, versão do site e horário.' },
@@ -63,7 +66,7 @@ export function vistaDaAba(aba: AbaDeVendas, ultimaDeEntender: VistaDeVendas = '
 
 export type LeituraDoEndereco =
   | { tipo: 'roteiro'; para: string }
-  | { tipo: 'vendas'; vista: VistaDeVendas; produto: string | null; passo: string | null; lead: string | null }
+  | { tipo: 'vendas'; vista: VistaDeVendas; produto: string | null; passo: string | null; lead: string | null; detalhe?: DetalheDoCliente }
 
 /**
  * PURO. O que o endereço de /crm pede (`busca` é o location.search). Produto e passo voltam crus:
@@ -75,20 +78,23 @@ export function lerEnderecoDeVendas(busca: string): LeituraDoEndereco {
   // Links antigos (Ficha aberta com Ctrl, favoritos, o Hermes): o Roteiro saiu das abas (AC-20).
   if (ver === 'roteiro' || ver === 'colinha') return { tipo: 'roteiro', para: ENDERECO_DO_ROTEIRO }
   const vista: VistaDeVendas = ver === 'funil' || ver === 'jornada' ? 'funil'
+    : ver === 'bi' ? 'bi'
     : ver === 'triagem' ? 'triagem'
     : ver === 'numeros' ? 'numeros'
     : ver === 'resultados' ? 'resultados'
     : 'afazer'
-  return { tipo: 'vendas', vista, produto: q.get('produto'), passo: vista === 'funil' ? q.get('passo') : null, lead: q.get('lead') }
+  const detalhe = q.get('detalhe')
+  return { tipo: 'vendas', vista, produto: q.get('produto'), passo: vista === 'funil' ? q.get('passo') : null, lead: q.get('lead'), ...(q.get('lead') && (detalhe === 'ficha' || detalhe === 'orientacao') ? { detalhe } : {}) }
 }
 
 /** PURO. O endereço canônico de uma vista (o que a tela escreve de volta). */
-export function enderecoDeVendas(e: { vista: VistaDeVendas; produto?: string | null; passo?: string | null; lead?: string | null }): string {
+export function enderecoDeVendas(e: { vista: VistaDeVendas; produto?: string | null; passo?: string | null; lead?: string | null; detalhe?: DetalheDoCliente }): string {
   const q = new URLSearchParams()
   if (e.vista !== 'afazer') q.set('ver', e.vista)
   if (e.produto && e.produto !== 'todos') q.set('produto', e.produto)
   if (e.vista === 'funil' && e.passo) q.set('passo', e.passo)
   if (e.lead) q.set('lead', e.lead)
+  if (e.lead && e.detalhe) q.set('detalhe', e.detalhe)
   const busca = q.toString()
   return `/crm${busca ? `?${busca}` : ''}`
 }

@@ -8,13 +8,13 @@ describe('abas de Vendas na ordem do trabalho', () => {
   it('Fazer → Triar → Entender, e Entender tem Funil, Números e Resultados', () => {
     assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.id), ['afazer', 'triagem', 'entender'])
     assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.rotulo), ['Conversas para você', 'Primeiros contatos', 'Entender'])
-    assert.deepEqual(SECOES_DE_ENTENDER.map((s) => s.id), ['funil', 'numeros', 'resultados'])
+    assert.deepEqual(SECOES_DE_ENTENDER.map((s) => s.id), ['bi', 'funil', 'numeros', 'resultados'])
   })
 
   it('cada vista cai na sua aba; Entender volta à última seção aberta', () => {
     assert.equal(abaDaVista('afazer'), 'afazer')
     assert.equal(abaDaVista('triagem'), 'triagem')
-    for (const v of ['funil', 'numeros', 'resultados'] as const) assert.equal(abaDaVista(v), 'entender')
+    for (const v of ['bi', 'funil', 'numeros', 'resultados'] as const) assert.equal(abaDaVista(v), 'entender')
     assert.equal(vistaDaAba('entender'), 'funil')
     assert.equal(vistaDaAba('entender', 'resultados'), 'resultados')
     assert.equal(vistaDaAba('entender', 'afazer'), 'funil')
@@ -25,7 +25,7 @@ describe('abas de Vendas na ordem do trabalho', () => {
 describe('os nomes das abas são um mapa só', () => {
   it('a barra e as seções leem de NOME_DAS_ABAS, e o caminho diz Vendas › nome', () => {
     assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.rotulo), [NOME_DAS_ABAS.afazer, NOME_DAS_ABAS.triagem, NOME_DAS_ABAS.entender])
-    assert.deepEqual(SECOES_DE_ENTENDER.map((a) => a.rotulo), [NOME_DAS_ABAS.funil, 'Diagnóstico', NOME_DAS_ABAS.resultados])
+    assert.deepEqual(SECOES_DE_ENTENDER.map((a) => a.rotulo), [NOME_DAS_ABAS.bi, NOME_DAS_ABAS.funil, 'Diagnóstico', NOME_DAS_ABAS.resultados])
     assert.equal(caminhoDaAba('afazer'), 'Vendas › Conversas para você')
     assert.equal(caminhoDaAba('numeros'), 'Vendas › Diagnóstico')
   })

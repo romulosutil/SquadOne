@@ -20,6 +20,10 @@ import SeletorDeTema from '../casca/SeletorDeTema.vue'
 import { useTema } from '../casca/temaVivo'
 import CrmFicha from '../operations/CrmFicha.vue'
 import CrmTrecho from '../operations/CrmTrecho.vue'
+import PainelOperacional from '../components/PainelOperacional.vue'
+import OrientacaoDaConversa from '../office/OrientacaoDaConversa.vue'
+import { procedimentoDaDecisao } from '../office/procedimento-da-decisao'
+import type { PlanoBi } from '../operations/bi-operacao'
 import '../operations/crm.css'
 import { ANATOMIA_DA_FICHA, CATALOGO, PRINCIPIOS, REGRAS_DE_COMPOSICAO } from '../blueprint/catalogo'
 import { LEAD_DE_EXEMPLO } from '../blueprint/exemplo'
@@ -31,6 +35,21 @@ import type { CrmVisao } from '../operations/types'
 import type { Trecho } from '../operations/colinha'
 
 const tokens = lerTokens(CSS_DOS_TOKENS)
+const estadoDaOrientacao = ref<'agir' | 'aguardar' | 'conferir'>('agir')
+const exemploOrientacao = computed<PlanoBi>(() => ({
+  lead: LEAD_DE_EXEMPLO, tipo: estadoDaOrientacao.value, prioridade: 0, responsavel: 'Rômulo',
+  acao: estadoDaOrientacao.value === 'agir' ? 'Responder ao pedido de demonstração do estúdio' : estadoDaOrientacao.value === 'aguardar' ? 'Aguardar a data combinada com a cliente' : 'Conferir o conteúdo da última resposta antes de preparar contato',
+  prazo: estadoDaOrientacao.value === 'aguardar' ? '2026-10-26' : 'Antes do próximo contato',
+  evidencia: 'Exemplo fictício: “Pode mandar o link para eu avaliar?”',
+  resultado: estadoDaOrientacao.value === 'agir' ? 'Material solicitado entregue; acompanhar a resposta da cliente.' : estadoDaOrientacao.value === 'aguardar' ? 'Combinado preservado até a próxima revisão.' : 'Contexto suficiente para escolher uma resposta pertinente.',
+  condicao: estadoDaOrientacao.value === 'agir' ? 'Envie somente o material pedido. Permissão para ver não confirma compra.' : 'A preparação interna preserva as restrições e os combinados da conversa.',
+}))
+const procedimentoExemplo = computed(() => estadoDaOrientacao.value === 'agir' ? procedimentoDaDecisao(LEAD_DE_EXEMPLO) : ({
+  tipo: estadoDaOrientacao.value === 'aguardar' ? 'espera' as const : 'interno' as const,
+  titulo: exemploOrientacao.value.acao,
+  passos: estadoDaOrientacao.value === 'aguardar' ? ['Consulte o combinado e mantenha a conversa em acompanhamento.', 'Na data registrada, confira se houve uma nova resposta antes de preparar contato.'] : ['Abra a conversa e identifique a última pergunta da cliente.', 'Complete a informação ausente na ficha e releia a orientação.'],
+  resultadoEsperado: exemploOrientacao.value.resultado,
+}))
 
 // ------------------------------------------------------------ tema
 
@@ -134,7 +153,7 @@ const falhas = computed(() => medidas.value.filter((m) => !m.passa).length)
 
 const fichaAberta = ref(false)
 // Só o `registro` é lido pela Ficha. Indisponível de propósito: o exemplo nunca grava na planilha.
-const VISAO_DE_EXEMPLO = { registro: { disponivel: false, motivo: 'exemplo do blueprint, nada é gravado.' } } as unknown as CrmVisao
+const VISAO_DE_EXEMPLO = { leads: [LEAD_DE_EXEMPLO], registro: { disponivel: false, motivo: 'exemplo do blueprint, nada é gravado.' } } as unknown as CrmVisao
 const RITMO_LIVRE = { motivo: null, ate: null, enviadosHoje: 0, teto: 10 }
 const TRECHO_DE_EXEMPLO: Trecho = {
   id: 'bp-exemplo',
@@ -147,6 +166,7 @@ const segmentoDeExemplo = ref('Lista')
 const escolhaDeExemplo = ref(0)
 
 const secoes = [
+  { id: 'bp-atendimento', rotulo: 'Jornada e hierarquia' },
   { id: 'bp-principios', rotulo: 'Princípios' },
   { id: 'bp-composicao', rotulo: 'Composição' },
   { id: 'bp-tokens', rotulo: 'Tokens' },
@@ -188,6 +208,21 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
         <button class="botao" type="button" @click="desfazerTudo">Desfazer tudo</button>
       </div>
       <p class="texto-2 texto-pequeno" role="status">{{ copiado }}</p>
+    </section>
+
+    <section id="bp-atendimento" class="bp-bloco bp-atendimento" aria-labelledby="bp-atendimento-titulo">
+      <div class="bp-atendimento__titulo"><span class="texto-2 texto-pequeno">Direção de interface · 25/10/2026</span><h2 id="bp-atendimento-titulo">Clareza em cada próximo passo</h2><p>O escritório orienta. O painel explica o que fazer, quando agir e como continuar no WhatsApp.</p></div>
+      <div class="escolhas" role="group" aria-label="Exemplos de orientação"><button v-for="e in [{id:'agir',nome:'Responder ao cliente'},{id:'aguardar',nome:'Aguardar combinado'},{id:'conferir',nome:'Conferir contexto'}] as const" :key="e.id" type="button" :aria-pressed="estadoDaOrientacao === e.id" @click="estadoDaOrientacao = e.id">{{ e.nome }}</button></div>
+      <p class="texto-2 texto-pequeno">Exemplos fictícios de composição. Os controles abaixo não enviam mensagens nem registram fatos comerciais.</p>
+      <div class="bp-atendimento__grade">
+        <OrientacaoDaConversa :plano="exemploOrientacao" :procedimento="procedimentoExemplo">
+          <template #acoes><span class="bp-atendimento__acao">{{ estadoDaOrientacao === 'agir' ? 'Próxima etapa: revisar mensagem' : estadoDaOrientacao === 'aguardar' ? 'Próxima etapa: acompanhar o combinado' : 'Próxima etapa: conferir a ficha' }}</span></template>
+        </OrientacaoDaConversa>
+        <div class="bp-atendimento__apoio">
+          <PainelOperacional titulo="Uma hierarquia visível" contexto="Anatomia do painel" descricao="Cada nível responde a uma pergunta diferente."><dl class="bp-atendimento__anatomia"><div><dt>01 · Título da página</dt><dd>Qual cliente ou tarefa está aberto?</dd></div><div><dt>02 · Bloco de trabalho</dt><dd>O que preciso resolver aqui?</dd></div><div><dt>03 · Orientação</dt><dd>Como agir e em que momento?</dd></div><div><dt>04 · Evidência e apoio</dt><dd>Em que informação posso confiar?</dd></div></dl></PainelOperacional>
+          <PainelOperacional titulo="O que acontece depois" contexto="Acompanhamento"><span class="etiqueta" data-tom="ok">Envio observado</span><p>Uma mensagem enviada abre a espera pela resposta. Aceite, entrega e recebimento continuam sendo fatos próprios.</p></PainelOperacional>
+        </div>
+      </div>
     </section>
 
     <section id="bp-principios" class="bp-bloco" aria-labelledby="bp-principios-titulo">
@@ -330,7 +365,9 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
             <span class="texto-2 texto-pequeno">{{ c.regra }} <span class="bp-onde">({{ c.onde }})</span></span>
           </header>
           <div class="bp-peca__vivo">
-            <div v-if="c.id === 'BP-CABECALHO'" class="cabecalho-pagina"><div><span class="sobretitulo">Seu dia de vendas</span><h2>Conversas para avançar</h2><p>O que precisa de você, antes do que é consulta.</p></div></div>
+            <PainelOperacional v-if="c.id === 'BP-PAINEL'" titulo="Próxima ação" contexto="Conversa com o cliente" descricao="Cabeça, conteúdo e ação têm lugares próprios."><p>Um objetivo por bloco, com leitura e decisão separadas.</p></PainelOperacional>
+            <OrientacaoDaConversa v-else-if="c.id === 'BP-ORIENTACAO'" :plano="exemploOrientacao" :procedimento="procedimentoExemplo" />
+            <div v-else-if="c.id === 'BP-CABECALHO'" class="cabecalho-pagina"><div><span class="sobretitulo">Seu dia de vendas</span><h2>Conversas para avançar</h2><p>O que precisa de você, antes do que é consulta.</p></div></div>
             <div v-else-if="c.id === 'BP-ETIQUETA'" class="acoes"><span class="etiqueta" data-tom="ok">Resposta recebida</span><span class="etiqueta" data-tom="atencao">Sem leitura recente</span><span class="etiqueta">Time avaliando</span></div>
             <div v-else-if="c.id === 'BP-METRICAS'" class="metricas-venda"><div><strong>24<small> / 100</small></strong><span>contatos iniciados hoje</span></div><div><strong>6</strong><span>respostas observadas</span></div><div><strong>80</strong><span>leads avaliados</span></div></div>
             <ol v-else-if="c.id === 'BP-PRIORIDADES'" class="lista-prioridades"><li><span class="etiqueta" data-tom="atencao">Prioridade agora</span><h3>Conversa com resposta recebida</h3><p>Mostre o motivo e uma ação concreta para continuar.</p><button class="botao botao--primario" type="button">Continuar conversa</button></li><li>As demais prioridades usam ações secundárias.</li></ol>
@@ -463,7 +500,7 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
 .bp-sonda { position: absolute; width: 0; height: 0; overflow: hidden; }
 .bp-kicker { color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
 .bp-topo,
-.bp-bloco { display: grid; gap: var(--respiro-interno); min-width: 0; padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
+.bp-bloco { display: grid; gap: var(--respiro-interno); min-width: 0; padding: var(--respiro-bloco); border: var(--contorno-painel); border-radius: var(--raio-bloco); background: var(--superficie); }
 .bp-topo h1 { margin: 0; font-size: var(--tam-titulo); font-weight: var(--peso-titulo); letter-spacing: -0.02em; line-height: 1.05; }
 .bp-bloco h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--esp-2); margin: 0; font-size: var(--tam-secao); font-weight: var(--peso-titulo); letter-spacing: -0.02em; }
 .bp-bloco h3 { margin: 0; font-size: var(--tam-nome); font-weight: var(--peso-forte); letter-spacing: -0.01em; }
@@ -527,6 +564,17 @@ const peca = (id: string) => CATALOGO.find((c) => c.id === id)!
 .bp-peca > header { display: grid; justify-items: start; gap: var(--esp-1); }
 .bp-peca__vivo { min-width: 0; padding: var(--esp-4); border-radius: var(--raio-controle); background: var(--fundo); }
 .bp-onde { font-style: italic; }
+.bp-atendimento__titulo { display: grid; gap: var(--esp-2); }
+.bp-atendimento__titulo h2, .bp-atendimento__titulo p { margin: 0; }
+.bp-atendimento__titulo p { color: var(--texto-2); max-width: var(--leitura-max); line-height: 1.6; }
+.bp-atendimento__grade, .bp-atendimento__apoio { display: grid; gap: var(--esp-5); align-content: start; min-width: 0; }
+.bp-atendimento__anatomia { display: grid; gap: var(--esp-4); margin: 0; }
+.bp-atendimento__anatomia > div { display: grid; gap: var(--esp-1); }
+.bp-atendimento__anatomia dt { font-weight: var(--peso-forte); font-size: var(--tam-apoio); }
+.bp-atendimento__anatomia dd { margin: 0; color: var(--texto-2); line-height: 1.5; }
+.bp-atendimento__acao { font-size: var(--tam-apoio); font-weight: var(--peso-forte); }
+.bp-atendimento__apoio .painel-operacional p { margin: 0; line-height: 1.6; }
+@media (min-width: 64rem) { .bp-atendimento__grade { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }
 .bp-pilha { display: grid; gap: var(--esp-2); justify-items: start; }
 .bp-pilha--larga { justify-items: stretch; }
 .bp-linha { display: flex; flex-wrap: wrap; gap: var(--esp-2); }

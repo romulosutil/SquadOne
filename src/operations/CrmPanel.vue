@@ -3,13 +3,15 @@ import { useSinalDoCrm } from '../casca/sinal-do-crm'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { navegar } from '../casca/rota'
 import Sheet from '../components/Sheet.vue'
-import CrmFicha from './CrmFicha.vue'
+import AtendimentoCliente from './AtendimentoCliente.vue'
 import CrmFunil from './CrmFunil.vue'
 import FrenteComercial from './FrenteComercial.vue'
 import '../estilos/operacao.css'
 import CrmHoje from './CrmHoje.vue'
 import CrmResultados from './CrmResultados.vue'
-import ConversasParaAvancar from './ConversasParaAvancar.vue'
+import FilaAcaoBi from './FilaAcaoBi.vue'
+import CrmBi from './CrmBi.vue'
+import { planoDoLead } from './bi-operacao'
 import { conversasParaVoce } from './conversas-para-conduzir'
 import { coberturaDoHistorico } from './historico-comercial'
 import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataHora, hora } from './crm-formato'
@@ -23,7 +25,7 @@ import {
 import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
 import {
   ABAS_DE_VENDAS, ENDERECO_DO_ROTEIRO, SECOES_DE_ENTENDER, abaDaVista, enderecoDeVendas, lerEnderecoDeVendas, vistaDaAba,
-  type AbaDeVendas, type VistaDeVendas,
+  type AbaDeVendas, type VistaDeVendas, type DetalheDoCliente,
 } from './vendas-abas'
 import './crm.css'
 
@@ -61,6 +63,8 @@ const ultimaDeEntender = ref<Vista>('funil')
 const aba = computed<AbaDeVendas>(() => abaDaVista(vista.value))
 const produto = ref<FiltroProduto>('todos')
 const leadId = ref<string | null>(null)
+const detalheDoCliente = ref<DetalheDoCliente>('orientacao')
+const atendimentoOcupado = ref(false)
 const etapaEmFoco = ref<CrmEtapa | null>(null)
 // O filtro Passo do Funil (AC-19) mora aqui, e não no CrmFunil, para ir no endereço (?passo=):
 // as salas do Escritório abrem o Funil já num passo.
@@ -124,12 +128,13 @@ function lerEndereco(): boolean {
   produto.value = PRODUTOS.find(id => id === lido.produto) ?? 'todos'
   passo.value = lido.vista === 'funil' ? lerFiltroDePasso(lido.passo) : ''
   leadId.value = lido.lead
+  detalheDoCliente.value = lido.detalhe ?? (lido.vista === 'afazer' && !props.fichaInicial ? 'orientacao' : 'ficha')
   return true
 }
 
 function escreverEndereco(substituir = false) {
   if (props.fichaInicial) return
-  const url = enderecoDeVendas({ vista: vista.value, produto: produto.value, passo: passo.value, lead: leadId.value })
+  const url = enderecoDeVendas({ vista: vista.value, produto: produto.value, passo: passo.value, lead: leadId.value, detalhe: detalheDoCliente.value })
   if (url === `${window.location.pathname}${window.location.search}`) return
   if (substituir) history.replaceState(null, '', url)
   else history.pushState(null, '', url)
@@ -262,7 +267,7 @@ const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => (
 })))
 // O número da aba "Conversas para você" é o tamanho da própria lista (conversasParaVoce): a mesma conta
 // do "Sua vez" da Central, sem os primeiros contatos (que são da aba Primeiros contatos, AC-02).
-const totalAFazer = computed(() => conversasParaVoce(visao.value, agora.value, resolvidas.value).length)
+const totalAFazer = computed(() => (visao.value?.leads ?? []).filter(l => (l.marcos.enviado || l.proximoPasso || l.conversa) && planoDoLead(l,agora.value).tipo === 'agir').length)
 // Triagem (OT-05, AC-10): só os prospects para revisar, em lotes de 10 (triagem.ts), longe da fila de venda.
 const triagem = computed(() => hoje.value.find(g => g.id === 'revisar') ?? null)
 // Com a aba aberta, o número é o que ela conta (sem os dispensados e convidados desta tela que o
@@ -364,8 +369,18 @@ async function irParaEtapa(etapa: CrmEtapa) {
 // onde estava, e fechar devolve o foco ao botão que abriu (o Sheet faz isso).
 // O endereço ganha ?lead=, então o "voltar" do celular fecha a folha.
 function abrirFicha(id: string) {
+  detalheDoCliente.value = 'ficha'
   leadId.value = id
   escreverEndereco()
+}
+function conduzirCliente(id: string) {
+  detalheDoCliente.value = 'orientacao'
+  leadId.value = id
+  escreverEndereco()
+}
+function mudarDetalheDoCliente(detalhe: DetalheDoCliente) {
+  detalheDoCliente.value = detalhe
+  escreverEndereco(true)
 }
 
 function fecharFicha() {
@@ -387,9 +402,10 @@ function abrirColinha() {
     <header class="crm-topo">
       <div>
         <h1 id="crm-titulo">Vendas</h1>
+        <a href="/mais?abrir=operacao#modelo-operacional">Como vender e operar →</a>
         <p class="crm-topo__fonte" :title="detalheDoRetrato">{{ textoDoRetrato }}</p>
       </div>
-<span class="sincronizacao">Atualização automática</span>
+<span class="sincronizacao" :data-estado="erro || velho ? 'atencao' : 'ok'">{{ erro ? 'Fonte indisponível' : velho ? 'Leitura atrasada' : 'Atualização automática' }}</span>
     </header>
     <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
     <!-- Discreto de propósito: o WhatsApp já abriu; só o ritmo do servidor ficou sem saber do convite aberto. -->
@@ -426,11 +442,11 @@ function abrirColinha() {
       <!-- Três abas na ordem do trabalho (17/10/2026): Fazer, Triar, Entender. A dica de cada uma vai no
            title. No celular, uma linha que rola de lado (AC-15). -->
       <nav class="crm-vistas" aria-label="Vendas: fazer, triar, entender">
-        <a v-for="a in ABAS_DE_VENDAS.filter((a) => a.id !== 'entender')" :key="a.id" :href="a.href" :title="a.dica" :aria-current="aba === a.id ? 'page' : undefined" @click.prevent="trocarAba(a.id)">
-          {{ a.rotulo }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span>
+        <a v-for="a in ABAS_DE_VENDAS" :key="a.id" :href="a.href" :title="a.dica" :aria-current="aba === a.id ? 'page' : undefined" @click.prevent="trocarAba(a.id)">
+          {{ a.id === 'afazer' ? 'Conversas' : a.rotulo }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span>
         </a>
-        <a v-for="s in SECOES_DE_ENTENDER" :key="s.id" :href="`/crm?ver=${s.id}`" :title="s.dica" :aria-current="vista === s.id ? 'page' : undefined" @click.prevent="trocarVista(s.id)">{{ s.rotulo }}</a>
       </nav>
+      <nav v-if="aba === 'entender'" class="crm-entender" aria-label="Análises de Vendas"><a v-for="s in SECOES_DE_ENTENDER" :key="s.id" class="botao botao--leve" :href="`/crm?ver=${s.id}`" :title="s.dica" :aria-current="vista === s.id ? 'page' : undefined" @click.prevent="trocarVista(s.id)">{{ s.id === 'numeros' ? 'Diagnóstico' : s.rotulo }}</a></nav>
       <!-- Entender: as três seções num segmentado (BP-SEGMENTADO) e o Roteiro de venda, que mora no Mais. -->
 
       <!-- As ofertas num "Filtros" fechado, com a escolhida no resumo: filtrar é ajuste, não a decisão. -->
@@ -443,14 +459,15 @@ function abrirColinha() {
     </div>
 
     <template v-if="visao">
-      <ConversasParaAvancar v-if="vista === 'afazer'" :visao="visao" :agora="agora" :resolvidas="resolvidas" :maximo="20" @abrir="abrirFicha" />
+      <FilaAcaoBi v-if="vista === 'afazer'" :leads="leads" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" @abrir="conduzirCliente" />
+      <CrmBi v-else-if="vista === 'bi'" :visao="visao" :leads="leads" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" @abrir="abrirFicha" />
       <!-- O time só pega o Site em `pronto`; a Triagem (`revisar`) e o Convidar seguem do Rômulo (19/10/2026). -->
       <template v-else-if="vista === 'triagem'">
         <FrenteComercial />
         <CrmHoje
           v-if="triagem?.itens.length" :grupo="triagem" :leads="porId" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo" :agora="agora"
           :registro="visao.registro" :confirmavel="visao.estado === 'ok'"
-          @abrir="abrirFicha" @liberar-lote="liberarVarios" @primeiro="marcarPrimeiroContato" @registrado="depoisDoRegistro" @restantes="restantesDaTriagem = $event"
+          @abrir="abrirFicha" @conduzir="conduzirCliente" @liberar-lote="liberarVarios" @primeiro="marcarPrimeiroContato" @registrado="depoisDoRegistro" @restantes="restantesDaTriagem = $event"
           @sinais-lidos="carregar()"
         />
         <p v-else class="crm-vazio"><strong>Nada para triar.</strong> Quando os caçadores acharem prospects novos, eles aparecem aqui.</p>
@@ -490,10 +507,11 @@ function abrirColinha() {
     </template>
     <p v-else-if="carregando" class="crm-muted" role="status">Lendo Vendas…</p>
   </section>
-      <Sheet v-if="leadId" flutuante titulo="Ficha do lead" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
-        <div class="crm-na-folha">
-          <CrmFicha
-            v-if="lead && visao" :key="lead.id" :lead="lead" :visao="visao" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo"
+      <Sheet v-if="leadId" :bloqueada="atendimentoOcupado" flutuante :titulo="detalheDoCliente === 'ficha' ? 'Ficha do lead' : 'Atendimento do cliente'" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
+        <div>
+          <AtendimentoCliente
+            v-if="lead && visao" :key="lead.id" :lead="lead" :visao="visao" :inicial="detalheDoCliente" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo"
+            @detalhe="mudarDetalheDoCliente" @fechar="fecharFicha" @ocupado="atendimentoOcupado = $event"
             @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @primeiro="marcarPrimeiroContato"
           />
           <p v-else-if="carregando" role="status">Lendo a ficha…</p>
@@ -509,4 +527,5 @@ function abrirColinha() {
 .crm-entender .segmentado button { padding: 0 var(--esp-4); }
 /* Os avisos do retrato, dobrados: abertos, cada um na sua linha. */
 .crm-avisos[open] { display: grid; gap: var(--esp-2); min-width: 0; }
+.crm-entender a[aria-current="page"] { background: var(--realce); box-shadow: inset 0 -3px 0 var(--destaque); }
 </style>

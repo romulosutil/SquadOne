@@ -6,8 +6,8 @@
 .cabecalho-bloco h2 { margin: 0; font-size: var(--tam-titulo-bloco); font-weight: var(--peso-forte); line-height: 1.3; letter-spacing: -.02em; }
 .sobretitulo { display: block; color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); text-transform: uppercase; letter-spacing: .09em; margin: 0 0 var(--esp-2); }
 .etiqueta { display: inline-flex; width: fit-content; align-items: center; gap: var(--esp-1); padding: var(--esp-1) var(--esp-2); border: var(--linha-fina); border-radius: var(--raio-selo); background: var(--superficie-2); color: var(--texto); font-size: var(--tam-mini); line-height: 1.3; font-weight: var(--peso-forte); }
-.etiqueta[data-tom="ok"] { background: var(--ok-fundo); color: var(--sobre-pastel); }
-.etiqueta[data-tom="atencao"] { background: var(--atencao-fundo); color: var(--sobre-pastel); }
+.etiqueta[data-tom="ok"] { background: var(--ok-fundo); color: var(--texto); }
+.etiqueta[data-tom="atencao"] { background: var(--atencao-fundo); color: var(--texto); }
 .etiqueta[data-tom="erro"] { background: var(--erro-fundo); color: var(--negativo); }
 .painel-venda { min-width: 0; padding: var(--respiro-bloco); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
 .painel-venda p { margin: 0; max-width: var(--leitura-max); }
@@ -23,6 +23,27 @@
 .link-discreto { display: inline-flex; width: fit-content; align-items: center; min-height: var(--toque); color: inherit; font-size: var(--tam-apoio); font-weight: var(--peso-forte); text-underline-offset: .2em; }
 .sincronizacao { display: inline-flex; align-items: center; gap: var(--esp-2); color: var(--texto-2); font-size: var(--tam-apoio); }
 .sincronizacao::before { content: ''; width: .5rem; height: .5rem; border-radius: var(--raio-pilula); background: var(--positivo); }
+.sincronizacao[data-estado="atencao"]::before { background: var(--negativo); }
 .rotulo-contexto { display: grid; gap: var(--esp-2); color: var(--texto-2); font-size: var(--tam-mini); font-weight: var(--peso-forte); letter-spacing: .07em; text-transform: uppercase; }
 .rotulo-contexto :is(input,select,textarea) { text-transform: none; letter-spacing: normal; font-size: var(--tam-texto); }
 @media (max-width: 39.99rem) { .metricas-venda { gap: var(--esp-3); } .metricas-venda strong { font-size: var(--tam-secao); } .metricas-venda span { font-size: var(--tam-mini); } }
+
+/* BP-PAINEL: cada unidade de trabalho tem cabeça, conteúdo e ação próprios. */
+.painel-operacional { min-width: 0; overflow-wrap: anywhere; border: var(--contorno-painel); border-radius: var(--raio-bloco); background: var(--superficie); color: var(--texto); }
+.painel-operacional__cabeca { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: var(--esp-3); padding: var(--esp-4) var(--esp-5); background: var(--painel-cabeca); border-bottom: var(--contorno-painel); border-radius: var(--raio-bloco) var(--raio-bloco) 0 0; }
+.painel-operacional__cabeca > div { display: grid; gap: var(--esp-1); min-width: 0; }
+.painel-operacional__contexto { color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
+.painel-operacional .painel-operacional__cabeca h3 { margin: 0; color: var(--texto); font-size: var(--tam-titulo-bloco); line-height: 1.3; letter-spacing: -.02em; font-weight: var(--peso-forte); }
+.painel-operacional__cabeca p { margin: 0; max-width: var(--leitura-max); font-size: var(--tam-apoio); color: var(--texto-2); line-height: 1.5; }
+.painel-operacional__corpo { display: grid; gap: var(--esp-4); padding: var(--esp-5); }
+.painel-operacional__acoes { display: flex; align-items: center; flex-wrap: wrap; gap: var(--esp-3); padding: var(--esp-4) var(--esp-5); border-top: var(--contorno-painel); }
+.painel-operacional--acao { border-left: var(--faixa) solid var(--destaque); }
+.painel-operacional--acao .painel-operacional__cabeca { background: var(--realce); }
+.painel-operacional .botao { box-shadow: none; }
+.painel-operacional .botao:not(.botao--leve), .painel-operacional .campo { border-width: 1px; }
+.painel-operacional .botao--primario { min-height: var(--toque-grande); }
+.painel-operacional :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+@media (max-width: 39.99rem) {
+  .painel-operacional__cabeca, .painel-operacional__corpo, .painel-operacional__acoes { padding: var(--esp-4); }
+  .painel-operacional__acoes > .botao { width: 100%; }
+}

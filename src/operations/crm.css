@@ -47,9 +47,9 @@
 .crm .is-ganho, .crm-na-folha .is-ganho { --crm-cor: var(--crm-ganho); }
 .crm .is-perdido, .crm-na-folha .is-perdido { --crm-cor: var(--crm-perdido); }
 
-.crm-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--esp-3) var(--esp-4); padding: var(--esp-3) var(--esp-4); border: var(--linha); border-radius: var(--raio-bloco); background: var(--superficie); }
+.crm-topo { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--esp-3) var(--esp-4); padding: 0 0 var(--esp-4); border-bottom: var(--contorno-painel); background: var(--superficie); }
 .crm-kicker { display: block; color: var(--texto-2); font-size: var(--tam-apoio); font-weight: var(--peso-medio); }
-.crm-topo h1 { font-size: var(--tam-titulo); line-height: 0.95; }
+.crm-topo h1 { font-size: var(--tam-titulo-pagina); line-height: 1.15; }
 .crm-topo__fonte { margin: var(--esp-2) 0 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-aviso,
 .crm-erro { margin: 0; padding: var(--esp-3) var(--esp-4); border: 0; border-radius: var(--raio-controle); background: var(--atencao-fundo); color: var(--texto); }
@@ -60,9 +60,9 @@
 .crm-muted { margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 
 .crm-controles { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--esp-3); }
-.crm-vistas { display: flex; max-width: 100%; overflow: hidden; border: var(--linha); border-radius: var(--raio-controle); background: var(--superficie); }
+.crm-vistas { display: flex; max-width: 100%; overflow: hidden; border: var(--contorno-painel); border-radius: var(--raio-controle); background: var(--superficie); }
 .crm-vistas a { display: inline-flex; flex: 1 1 auto; align-items: center; justify-content: center; gap: var(--esp-2); padding: var(--esp-2) var(--esp-4); color: var(--texto); font-weight: var(--peso-forte); text-decoration: none; white-space: nowrap; }
-.crm-vistas a + a { border-left: var(--linha); }
+.crm-vistas a + a { border-left: var(--contorno-painel); }
 /* Quatro abas (A fazer, Triagem, Funil, Números; 17/10/2026, AC-15). Abaixo de 48 rem, uma linha só
    que rola de lado: a grade 2 × 2 de antes (com cinco abas, uma célula vazia) gastava duas linhas
    antes da Próxima venda. Cada aba cresce se houver lugar e nunca encolhe abaixo do texto. */
@@ -70,7 +70,7 @@
   .crm-vistas { width: 100%; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; scrollbar-width: none; }
   .crm-vistas a { flex: 1 0 auto; padding-inline: var(--esp-3); font-size: var(--tam-apoio); scroll-snap-align: start; }
 }
-.crm-vistas a[aria-current="page"] { background: var(--destaque); color: var(--destaque-texto); }
+.crm-vistas a[aria-current="page"] { background: var(--realce); color: var(--texto); box-shadow: inset 0 -3px 0 var(--destaque); }
 /* Para que serve a aba aberta, numa linha (16/10/2026): o nome sozinho não explicava. */
 .crm-vistas__dica { order: 3; flex-basis: 100%; margin: 0; color: var(--texto-2); font-size: var(--tam-apoio); }
 .crm-vistas a span { min-width: 1.7rem; padding: 0 var(--esp-2); border: 1px solid currentColor; border-radius: var(--raio-selo); font-size: var(--tam-mini); text-align: center; }

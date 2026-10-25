@@ -55,6 +55,21 @@ describe('lerTokens', () => {
 })
 
 describe('contraste', () => {
+  it('as combinações reais das etiquetas de operação passam nos dois temas', () => {
+    const css = readFileSync(join(RAIZ, 'estilos', 'operacao.css'), 'utf8')
+    for (const tom of ['ok', 'atencao', 'erro']) {
+      const regra = css.match(new RegExp(`\\.etiqueta\\[data-tom="${tom}"\\]\\s*\\{([^}]+)\\}`))?.[1]
+      assert.ok(regra, tom)
+      const texto = regra.match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/)?.[1]
+      const fundo = regra.match(/background:\s*var\((--[\w-]+)\)/)?.[1]
+      assert.ok(texto && fundo, tom)
+      for (const tema of ['claro', 'escuro'] as const) {
+        const valores = valoresDoTema(TOKENS, tema)
+        const razao = contraste(corDoToken(valores, texto)!, corDoToken(valores, fundo)!)
+        assert.ok(razao >= 4.5, `${tom} em ${tema}: ${razao}`)
+      }
+    }
+  })
   it('segue a fórmula da WCAG 2.1', () => {
     assert.equal(contraste([0, 0, 0], [255, 255, 255]), 21)
     assert.equal(contraste([255, 255, 255], [255, 255, 255]), 1)

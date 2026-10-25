@@ -17,6 +17,8 @@ export interface PecaDoCatalogo {
 }
 
 export const CATALOGO: readonly PecaDoCatalogo[] = [
+  { id: 'BP-PAINEL', nome: 'Painel de trabalho', classe: '<PainelOperacional>', onde: 'components/PainelOperacional.vue', regra: 'Um bloco concreto por finalidade: cabeça com contexto e título, conteúdo e ações separados. Contorno discreto, sem sombra; controles mantêm contraste próprio.' },
+  { id: 'BP-ORIENTACAO', nome: 'Orientação de atendimento', classe: '<OrientacaoDaConversa>', onde: 'office/OrientacaoDaConversa.vue', regra: 'Próximo passo, quando agir ou revisar, responsável, como conduzir e resultado esperado à vista. Data sem horário permanece sem hora presumida. Evidências e mensagem ficam em blocos próprios.' },
   { id: 'BP-SPICED', nome: 'Qualificação da venda', classe: '<CrmSpiced>', onde: 'operations/CrmSpiced.vue', regra: 'Faixa S · P · I · C · D com preenchido ou falta. Sugestão citada separada dos fatos confirmados; só confirmação humana grava. Rascunho preservado durante atualização; proposta exige dor, impacto e decisor confirmado.' },
   { id: 'BP-AARRR', nome: 'Origem, perdas e propostas do AARRR', classe: '.crm-aarr-detalhe', onde: 'operations/CrmResultados.vue', regra: 'Abaixo da faixa AARRR de Números. Só o que foi confirmado na Ficha: origem (sem origem é categoria, nunca palpite), motivo da perda e valor de proposta do cardápio. Sem registro diz "sem registro"; taxa só com amostra mínima.' },
   { id: 'BP-CABECALHO', nome: 'Hierarquia de página e bloco', classe: '.cabecalho-pagina, .cabecalho-bloco, .sobretitulo', onde: 'estilos/operacao.css', regra: 'Uma pergunta principal por página; título de bloco abaixo dela. Sobretítulo orienta o contexto, sem competir com a ação.' },
@@ -53,10 +55,11 @@ export const ANATOMIA_DA_FICHA: ReadonlyArray<{ bloco: string; pergunta: string;
   { bloco: 'Ação de agora', pergunta: 'A mensagem que vai sair e o único primário da tela, logo abaixo (sem ficar preso ao rolar).', visivel: 'quando houver' },
   { bloco: 'Avisos', pergunta: 'Trava, ritmo, prazo, divergência, demo: um por linha, num lugar só.', visivel: 'quando houver' },
   { bloco: 'Abrir em outro lugar', pergunta: 'Conversa no WhatsApp, Raio-X, Maps, planilha, página do lead no n8n.', visivel: 'dobrado' },
-  { bloco: 'Desfecho', pergunta: 'Ganhou (com confirmação), Perdeu (com o motivo) ou Proposta enviada, cada um com o desfazer (AC-08).', visivel: 'sempre' },
   { bloco: 'Conversa', pergunta: 'O que ele disse e o que saiu, em balões.', visivel: 'quando houver' },
-  { bloco: 'Como vender', pergunta: 'O que oferecer (abre aqui), Roteiro e Copiloto (em teste).', visivel: 'sempre' },
-  { bloco: 'Anotar', pergunta: 'Notas de contexto que você quer acrescentar. Os envios e as respostas são observados nas integrações, sem confirmação manual.', visivel: 'sempre' },
+  { bloco: 'Qualificação · Contratação · Receita', pergunta: 'O que falta confirmar, qual versão foi aceita e o que realmente foi recebido? Formulários separados, acessíveis quando necessários.', visivel: 'dobrado' },
+  { bloco: 'Desfecho', pergunta: 'Ganhou (com confirmação), Perdeu (com o motivo) ou Proposta enviada, cada um com o desfazer (AC-08).', visivel: 'dobrado' },
+  { bloco: 'Como vender', pergunta: 'O que oferecer (abre aqui), Roteiro e Copiloto (em teste).', visivel: 'dobrado' },
+  { bloco: 'Anotar', pergunta: 'Notas de contexto que você quer acrescentar. Os envios e as respostas são observados nas integrações, sem confirmação manual.', visivel: 'dobrado' },
   { bloco: 'Jornada · Sobre o lead · Linha do tempo', pergunta: 'Consulta: a posição na jornada, de onde veio, o que já aconteceu.', visivel: 'dobrado' },
 ]
 
@@ -66,8 +69,8 @@ export const ANATOMIA_DA_FICHA: ReadonlyArray<{ bloco: string; pergunta: string;
  * fileira de botões iguais, tudo com sombra e 3 px.
  */
 export const REGRAS_DE_COMPOSICAO: ReadonlyArray<{ id: string; titulo: string; texto: string }> = [
-  { id: 'BP-R1', titulo: 'Um nível de contorno', texto: 'Na tela ou na folha, só o bloco tem borda. Dentro dele, agrupe com .zona (fundo) ou --divisor; nunca outra caixa com borda. Cartão dentro de bloco já sai achatado.' },
-  { id: 'BP-R2', titulo: 'Um primário por tela', texto: 'Uma ação em amarelo com sombra por tela ou folha: a que resolve o motivo de estar ali. As outras são secundárias (contorno) ou leves (fundo).' },
+  { id: 'BP-R1', titulo: 'Blocos por finalidade', texto: 'A folha contém blocos irmãos de trabalho, evidência e acompanhamento. PainelOperacional usa contorno discreto e cabeça própria. Dentro de cada bloco, use espaço ou divisor; evite cartões aninhados.' },
+  { id: 'BP-R2', titulo: 'Um primário por tela', texto: 'Uma ação em amarelo resolve o motivo de estar na tela ou folha. Painéis de trabalho usam o botão sem sombra; as demais ações são secundárias ou leves.' },
   { id: 'BP-R3', titulo: 'Secundárias agrupadas', texto: 'À vista, no máximo um secundário ao lado do primário. Três ou mais ações viram "Mais ações" (lista com divisor), nunca uma fileira de botões.' },
   { id: 'BP-R4', titulo: 'Respiro antes de borda', texto: 'Separe por espaço primeiro (--respiro-pilha entre blocos, --respiro-interno dentro), por fundo depois, por linha por último.' },
 ]
@@ -76,10 +79,10 @@ export const REGRAS_DE_COMPOSICAO: ReadonlyArray<{ id: string; titulo: string; t
 export const PRINCIPIOS: ReadonlyArray<{ id: string; titulo: string; texto: string }> = [
   { id: 'BP-P1', titulo: 'Celular primeiro', texto: '390 px, 16 px de margem, sem rolagem lateral, toque de 44 px. O desktop só ganha colunas e respiro.' },
   { id: 'BP-P2', titulo: 'Texto antes da cor', texto: 'Todo estado tem palavra. A cor só reforça; semáforo sempre com rótulo.' },
-  { id: 'BP-P3', titulo: 'Um nível de contorno', texto: 'O bloco tem borda de 2 px e canto de 16 px; dentro dele, divisor ou fundo pastel, nunca outra caixa com borda.' },
+  { id: 'BP-P3', titulo: 'Hierarquia por função', texto: 'Título de página identifica cliente ou tarefa; título de bloco identifica o trabalho. Painéis usam contorno discreto, cabeça e conteúdo; controles recebem contraste próprio.' },
   { id: 'BP-P4', titulo: 'Uma decisão por vez', texto: 'Um primário por tela ou folha; o resto em "Mais ações". Variantes e formulários um de cada vez; consulta dobrada.' },
   { id: 'BP-P5', titulo: 'Só tokens', texto: 'Nada de cor, espaço, tamanho, peso, raio ou sombra solta. O teste do blueprint barra o que foge da escala.' },
   { id: 'BP-P6', titulo: 'Escolhido é amarelo', texto: 'Seleção, aba atual e ação primária em --destaque. Hover é --hover, nunca cor de estado.' },
-  { id: 'BP-P7', titulo: 'A sombra é do primário', texto: 'Sombra dura só no botão primário e na folha que está por cima. Bloco, cabeça de tela e cartão ficam sem.' },
+  { id: 'BP-P7', titulo: 'Elevação com propósito', texto: 'Blocos e controles dos painéis de trabalho não precisam de sombra. A folha mantém a elevação sobre o escritório; amarelo e contraste identificam a ação principal.' },
   { id: 'BP-P8', titulo: 'Respiro e número grande', texto: 'Mais espaço entre os blocos que dentro deles (--respiro-*). O número que importa em --tam-numero, um por bloco.' },
 ]

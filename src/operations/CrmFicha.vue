@@ -9,8 +9,9 @@ import CrmAtendimento from './CrmAtendimento.vue'
 import { temQualificacaoComercial } from './qualificacao-comercial'
 import { cicloDoLead } from './ciclo-comercial'
 import CrmConfirmarPasso from './CrmConfirmarPasso.vue'
+import { orientaContato } from '../office/orientacao-da-conversa'
 import CrmHistorico from './CrmHistorico.vue'
-import { planoDoLead } from './bi-operacao'
+import { planoDoLead, type PlanoBi } from './bi-operacao'
 import CrmRetomadasRevisadas from './CrmRetomadasRevisadas.vue'
 import { classificarResposta, ROTULOS_DA_CLASSIFICACAO } from './classificacao-resposta'
 import CrmRevisarClassificacao from './CrmRevisarClassificacao.vue'
@@ -60,6 +61,7 @@ import { ehSiteProprio, linhasDosSinais, type SinaisDoSite } from '../../server/
 const props = defineProps<{
   lead: CrmLead
   visao: CrmVisao
+  orientacao?: PlanoBi
   aviso?: string | null
   liberados: EnviosLiberados
   /** Trava de ritmo (trava-de-ritmo.ts): segurando, os links de primeiro contato somem sem "Liberar". */
@@ -194,8 +196,9 @@ const primeiroDaFicha = computed(() => primeiroContatoDaFicha(props.lead, {
 const acaoDaFila = computed(() => (props.visao?.estado === 'ok'
   ? acaoDaFicha(props.visao, props.lead, Date.now(), primeiroDaFicha.value, sugestaoDaFila.value)
   : null))
-const planoBi = computed(() => planoDoLead(props.lead))
 const agora = computed(() => historicoPendente.value && !contatoEmPausa.value ? { frase: 'Confira a conversa antes de decidir a retomada.', citaOProximo: false } : agoraDaFicha(props.lead, acaoDaFila.value))
+const planoBi = computed(() => props.orientacao ?? planoDoLead(props.lead))
+const contatoOrientado = computed(() => orientaContato(props.lead, planoBi.value))
 const passoConfirmavel = computed(() => !contatoEmPausa.value && !historicoPendente.value && acaoDaFila.value?.rascunho && acaoDaFila.value.textoDoRegistro && ['cadencia_enviada', 'followup_enviado', 'indicacao_pedida'].includes(acaoDaFila.value.anota ?? '') ? acaoDaFila.value : null)
 
 // As ações de um toque. `principal`: é o passo de hoje (convite, primeira mensagem, 2ª mensagem ou
@@ -563,8 +566,6 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       </p>
     </header>
 
-
-
     <CrmRevisarClassificacao v-if="lead.revisaoComercial || lead.etapa === 'perdido' || lead.etapa === 'ganho'" :key="lead.id" :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
 
     <p v-if="lead.revisaoComercial" class="recado recado--atencao"><strong>Classificação ou prazo a revisar.</strong> {{ lead.revisaoComercial }}</p>
@@ -609,14 +610,14 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
 
 
     <!-- A mensagem que o botão vai abrir, à vista antes do toque (16/10/2026): revisar sem adivinhar. -->
-    <CrmConfirmarPasso v-if="passoConfirmavel" :lead="lead" :acao="passoConfirmavel" :disponivel="disponivel" @registrado="emit('registrado')" />
-    <figure v-if="!passoConfirmavel && rascunho && !contatoEmPausa && !historicoPendente" class="crm-ficha__rascunho">
+    <CrmConfirmarPasso v-if="contatoOrientado && passoConfirmavel" :lead="lead" :acao="passoConfirmavel" :disponivel="disponivel" @registrado="emit('registrado')" />
+    <figure v-if="contatoOrientado && !passoConfirmavel && rascunho && !contatoEmPausa && !historicoPendente" class="crm-ficha__rascunho">
       <figcaption class="crm-muted">Mensagem que vai sair (revise; dá para mudar no WhatsApp antes de enviar)<template v-if="primariaVisivel?.chave === 'proposta' && proposta">. {{ proposta.origem === 'copiloto' ? 'Itens do copiloto, preços do cardápio.' : 'Texto base do Roteiro.' }}</template></figcaption>
       <blockquote>{{ rascunho }}</blockquote>
       <p v-if="primariaVisivel?.chave === 'proposta' && proposta?.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
     </figure>
     <!-- Proposta ao lado (sem o "gostei" registrado): o texto também à vista antes do toque, dobrado. -->
-    <details v-if="propostaAoLado && proposta && !contatoEmPausa" class="dobra crm-ficha__rascunho">
+    <details v-if="contatoOrientado && propostaAoLado && proposta && !contatoEmPausa" class="dobra crm-ficha__rascunho">
       <summary>Proposta que vai sair <span class="crm-muted">({{ proposta.origem === 'copiloto' ? 'itens do copiloto, preços do cardápio' : 'texto base do Roteiro' }})</span></summary>
       <blockquote>{{ proposta.texto }}</blockquote>
       <p v-if="proposta.completar" class="crm-ficha__completar">Complete o que está entre colchetes antes de enviar.</p>
@@ -625,7 +626,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
     <!-- Não fica mais preso ao topo ao rolar (AC-14, 17/10/2026): cobria a primeira linha da Conversa.
          Com o Desfecho logo abaixo e a ordem de decisão, ele já é a segunda coisa da folha. -->
     <a v-if="lead.etapa === 'novo'" class="botao" href="/crm?ver=triagem">Ver avaliação do time →</a>
-    <div v-if="primariaVisivel && !passoConfirmavel" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
+    <div v-if="contatoOrientado && primariaVisivel && !passoConfirmavel" class="crm-ficha__fixa" role="group" aria-label="Ação de agora">
       <!-- Primeiro contato travado (AC-22): o botão fica, desabilitado, e embaixo o recado único das
            travas diz quando volta; o "Liberar" é um link nele, só quando o horário é o que segura. -->
       <template v-if="primarioTravado">
@@ -641,7 +642,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
 
     <div class="crm-ficha__status">
       <AcompanhamentoObservado :lead="lead" />
-      <p v-if="primariaVisivel && dicaDaAcao" class="crm-muted">{{ dicaDaAcao }}</p>
+      <p v-if="contatoOrientado && primariaVisivel && dicaDaAcao" class="crm-muted">{{ dicaDaAcao }}</p>
 
       <!-- As travas do primeiro contato num recado só (horário e ritmo), com o quando; com o primário
            travado ele já está ao lado do botão e não se repete aqui. -->
@@ -672,13 +673,13 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       <details v-if="apoio.length" class="dobra">
         <summary>Abrir em outro lugar <span class="crm-muted">({{ apoio.length }})</span></summary>
         <ul class="crm-ficha__apoio">
-          <li v-for="a in apoio.filter((a) => !historicoPendente || !a.envia)" :key="a.chave"><a :href="a.href" target="_blank" rel="noopener">{{ a.rotulo }} <span aria-hidden="true">↗</span></a></li>
+          <li v-for="a in apoio.filter((a) => (!historicoPendente && contatoOrientado) || !a.envia)" :key="a.chave"><a :href="a.href" target="_blank" rel="noopener">{{ a.rotulo }} <span aria-hidden="true">↗</span></a></li>
         </ul>
       </details>
     </div>
 
     <CrmAtendimento :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
-    <CrmSpiced :lead="lead" :disponivel="disponivel" :sugestao="lida?.spiced" @registrado="emit('registrado')" />
+    <details class="dobra crm-ficha__secao"><summary>Qualificação e preparação da proposta</summary><CrmSpiced :lead="lead" :disponivel="disponivel" :sugestao="lida?.spiced" @registrado="emit('registrado')" /></details>
     <details class="crm-ficha__secao dobra" :open="cicloDoLead(lead).historico.length > 0">
       <summary>Proposta, contrato e pagamento</summary>
       <CrmCicloComercial :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
@@ -737,6 +738,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
         <button type="button" class="crm-mais" aria-label="Atualizar os sinais do site" @click="lerSinais(true)">Atualizar</button>
       </p>
     </details>
+
 
     <!-- Desfecho (AC-08): ganhou, perdeu e proposta enviada em um toque, em todas as ofertas, com o
          estado marcado e o desfazer certo (desfechosDoLead). Sem caixa: seção com título e divisor. -->

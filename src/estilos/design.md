@@ -17,6 +17,36 @@ cliente. Vendas e Minhas decisões usam a mesma prioridade. O cliente que já es
 permanece na tela, e o próximo avanço usa a fila atualizada. Uma nova mensagem humana supera
 a classificação antiga de robô e permite revisar espera ou tarefa interna anterior.
 
+## Painéis de atendimento · 25/10/2026
+
+A entrevista com Rômulo confirmou que o escritório e seus dois quadros orientam
+bem; a dificuldade começa nos painéis seguintes. A conversa continua no WhatsApp.
+Ao abrir um cliente, a interface deve explicar o próximo passo, como conduzi-lo,
+quando agir ou revisar e o que acompanhar depois. Relato e critérios completos em
+`docs/ux/2026-10-25-paineis-e-jornadas.md`.
+
+O padrão novo é `PainelOperacional` (BP-PAINEL): blocos irmãos, com cabeçalho,
+conteúdo e área de ações. Use `--contorno-painel` no bloco de trabalho; borda forte
+continua identificando controles. Dentro do painel, use divisores e espaço. O
+título do cliente usa `--tam-titulo-pagina`; o título do bloco,
+`--tam-titulo-bloco`; instrução principal, `--tam-secao`; texto, `--tam-texto`;
+datas e contexto, `--tam-apoio`. Os botões dentro desses painéis não têm sombra.
+Uma única ação principal usa amarelo; a navegação de etapas usa realce claro e
+indicador amarelo, para se distinguir do botão que executa uma ação.
+
+`OrientacaoDaConversa` (BP-ORIENTACAO) reúne próximo passo, momento, responsável,
+procedimento e resultado esperado. A navegação é Orientação → Mensagem →
+Acompanhamento, com acesso direto às três etapas. Hora não registrada permanece
+desconhecida. Espera, tarefa interna e contexto insuficiente não apresentam um
+rascunho de contato como próxima ação. A mensagem é revisável; o envio permanece
+no WhatsApp e só é confirmado pela evidência correspondente. Atualização de
+contexto bloqueia o link anterior; texto vazio ou com marcadores pendentes não
+abre uma mensagem. O servidor continua validando o preparo.
+
+Essa composição substitui, para os painéis de atendimento, a aplicação uniforme
+de bordas de 2 px, sombras em botões e títulos quase iguais. A navegação imersiva
+de 18/10 continua vigente no perfil operations; a seção histórica “Navegação”
+abaixo descreve a casca anterior e o perfil app.
 
 Acompanhamento automático (21/10/2026): a jornada mostra as mensagens capturadas
 pela integração, sem pedir confirmação de envio ou cópia da resposta. A abertura
@@ -310,3 +340,12 @@ A navegação flutua sobre a sala: amarelo marca somente a página atual; o aces
 
 
 Minhas decisões (21/10/2026): fila com uma linha por cliente, busca, oferta e páginas; Precisa de você, Em acompanhamento e Encerradas. Cada decisão percorre Entender, Agir e Acompanhar. Procedimentos distinguem robô, recepção, áudio sem transcrição, espera e desfecho. Mensagens vêm da fila ou do copiloto com contexto relido antes e depois do preparo; mudança invalida a sugestão. Robô recebe orientação de menu e espera, sem tratar resposta automática como interesse ou liberar retomada fora das travas da ficha. Abrir WhatsApp não grava envio; confirmação e próximo passo são explícitos. Preserva seleção e rascunhos durante atualização.
+### Atendimento compartilhado · 25/10/2026
+
+Os quadros e a fila comercial usam a mesma orientação: tarefa, responsável,
+momento, evidência, condição e resultado esperado. `AtendimentoCliente` mantém
+orientação e ficha completa no mesmo diálogo, sem perder o rascunho ao alternar.
+O detalhe da ficha complementa o fluxo Orientação → Mensagem → Acompanhamento.
+Em telas de até 28 rem, cada etapa ocupa uma linha para manter o nome legível.
+Vendas prioriza Conversas e Primeiros contatos; consultas ficam em Entender.
+Leitura atrasada leva indicador de atenção e bloqueia ações dependentes da fonte.
