@@ -139,3 +139,26 @@ Reversão: restaurar somente os arquivos deste lote a partir de `source-before/`
 - Dependente de evidência: validar uma nova passagem qualificada ao humano com entrada real e conta confirmada; a API e históricos importados não provam interesse atual. A pausa da frente comercial não foi removida.
 - Dependente de Rômulo: confirmar a conta Prumo antes de eventual reconexão/retomada; aprovar os termos concretos de cada proposta (escopo, preço, custo, prazo, recorrência e condições), confirmar envio/aceite e recebimento por evidência. Valores ainda desconhecidos permanecem em aberto; R$99 para o site de Kelisson continua sem aprovação.
 - O objetivo de primeira venda nova e R$10 mil/mês continua aberto; Silmer segue como cliente existente e não conta como primeira venda nova. Nenhum contato foi feito neste lote.
+
+## Auditoria dos 34 registros restantes e conexão Prumo — 24/10/2026, 22h20 BRT
+
+Esta seção conclui a correlação individual pendente da SOS na conferência anterior. A auditoria foi realizada no Dell; textos, contatos e IDs brutos não foram transferidos ao Git.
+
+| Registros revisados | Evidência | Resultado |
+| --- | --- | --- |
+| 30 saídas Prumo | Corpo exato após remover o cabeçalho visual do Hermes, sessão WhatsApp no LID do canal principal e diferença inferior a dois segundos entre sessão/captura | Associação incorreta à SOS comprovada |
+| 2 saídas Prumo | Prefixo exato da resposta integral, captura limitada a 1.000 caracteres, mesma sessão e correlação temporal inferior a dois segundos | Associação incorreta à SOS comprovada |
+| 1 saída pessoal de 22/10 | ID no evento `owner_sent` da bridge, com LID resolvido pela sessão para a SOS e horário consistente | Mantida na ficha |
+| 1 entrada pessoal de 22/10 | Âncora de ID/JID/horário consistente, `fromMe=false`, destinatário resolvido para a SOS e referência no inbox comercial | Mantida na ficha; captura histórica, sem presumir interesse atual |
+
+Os 32 registros Hermes correspondem a respostas do assistente no canal principal. Não constituem prova de envio dessas respostas à SOS. A Evolution não possui mensagens persistidas na tabela `Message`, portanto não foi usada como prova de conteúdo/entrega. A entrada pessoal não tem o mesmo ID no log atual da bridge; sua rastreabilidade é a âncora histórica e o inbox, não um novo recibo de transporte.
+
+A primeira tentativa de retirada da ficha foi bloqueada pela revisão automática, que distinguiu revisão de alteração do histórico ativo. Após aprovação explícita do Rômulo neste chat, os 32 registros comprovados foram retirados da visualização ativa e colocados em quarentena. A cópia integral dos 34 permanece byte a byte igual ao arquivo auditado; não foram apagadas evidências. Os dois registros pessoais foram mantidos. Nenhuma planilha, qualificação, proposta, aceite ou pagamento foi alterado por essa correção.
+
+Evidência privada no Dell: `~/.cache/mel-work/sos-auditoria-34-20261024/`, com `originals/history-34.jsonl`, `originals/quarantined-32.json`, `audit-records-private.json`, `summary-sanitized.json`, `correction-proof.json` e `final-live-verification.json`. Arquivos sensíveis com permissão 600, pasta privada. A auditoria guarda a decisão e a referência de origem para cada um dos 34 registros. O backup anterior dos quatro avisos de desligamento continua na pasta da retomada anterior.
+
+Verificação funcional final: `/api/operations/crm/conversa` retornou HTTP 200 com duas mensagens e nenhum cabeçalho Hermes na ficha SOS; CRM em estado `ok`. A instância `prumo` retornou **`open`** em consulta autenticada à Evolution API, às 22h20 BRT de 24/10. Isso comprova conexão naquele instante, não estabilidade futura nem entrega de mensagens.
+
+A frente comercial permaneceu com **`ativo=false`, `estado=pausado`**, e a configuração persistida também continuou `ativo=false`. O motivo de pausa registrado como `desconectado` é histórico e não descreve a conexão atual; não foi apagado nem usado para liberar aquisição. Mantidos 21 workflows/16 ativos e zero primeiros contatos exibidos no dia. Foram usadas apenas consultas de leitura às integrações: sem envio, QR, logout, reconexão, execução manual ou ativação de workflow.
+
+Não houve alteração de código neste lote. A correção de dados foi verificada pela API viva e por comparação dos bytes preservados, sem criar eventos de teste em produção. Reversão, se necessária: usar o parecer por registro e mesclar a cópia privada com qualquer entrada posterior sob a trava da conversa; não sobrescrever mensagens novas nem restaurar a associação LID incorreta. Resta validar uma entrada comercial atual e a passagem ao humano quando ocorrer naturalmente; os dois registros de 22/10 não comprovam abertura atual, qualificação ou primeira venda nova. Qualquer retomada da prospecção segue dependendo de decisão explícita do Rômulo.
