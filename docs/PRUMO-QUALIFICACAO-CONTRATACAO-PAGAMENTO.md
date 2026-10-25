@@ -1,6 +1,6 @@
 # Prumo — qualificação, contratação e recebimento
 
-Atualização: 24/10/2026, horário de Brasília. Prioridade: a primeira nova venda. Receita já existente da Silmer é R$ 4.100/mês; não confundir o objetivo de R$ 10 mil mensais totais com MRR ou com receita nova já conquistada.
+Atualização: 25/10/2026, horário de Brasília. Prioridade: a primeira nova venda. Receita já existente da Silmer é R$ 4.100/mês; não confundir o objetivo de R$ 10 mil mensais totais com MRR ou com receita nova já conquistada.
 
 ## Operar pelo escritório atual
 
@@ -166,3 +166,51 @@ Não incluir dados bancários, comprovantes ou conversas no Git. Não existe emi
 3. Conferir documento e representação, versão e evidência de aceite; confirmar cada cobrança liberada e cada recebimento observado. Nada disso foi marcado como concluído por esta revisão.
 
 A primeira execução comercial natural continua pendente: uma entrada atual com identidade sustentada, revisão humana e passagem coerente. Não gerar contato, reunião, contrato, cobrança ou pagamento artificial para validá-la. Qualquer retomada da prospecção exige decisão explícita separada.
+
+## Preços conferidos e propostas preparadas — 25/10/2026
+
+Trabalho conjunto de RevOps/Sales Ops, especialista em gestão de automação e consultor de CRM/RevOps. A consulta atual às seis candidatas, às 10h55 BRT, teve CRM `ok` e fonte de 10h50. Não havia nova entrada de 25/10 capturada nesses casos; isso não prova ausência fora da captura e não autoriza retomar esperas.
+
+### Correção do diagnóstico de catálogo
+
+A ausência de `~/prumo/04-venda/piloto-cdl/precos.json` no Dell, registrada na revisão anterior, **não significa catálogo operacional ausente ou desatualizado**. O consumidor usa `~/.local/share/prumo-mapa/precos.json`; a réplica versionada está em `~/SquadOne/deploy/dell/prumo-mapa/precos.json`.
+
+| Fonte ou consumidor | Versão e resultado da conferência |
+| --- | --- |
+| Catálogo canônico no checkout Windows `prumo/04-venda/piloto-cdl/precos.json` | Arquivo tracked e sem alteração local; commit específico `114f9b306dd59e669477ebd9ebc79ae8af7ef793` de 15/10/2026. HEAD Prumo Windows `b2721dcb37e1b0e919c28729c8a0b803b567f30e` |
+| Catálogo instalado e réplica SquadOne no Dell | Mesmos dados JSON do canônico. A diferença bruta é apenas formatação. Nenhuma sincronização de valores foi necessária |
+| Central instalada `dist/server.cjs` | Array `CARDAPIO` com oito itens igual ao fonte Dell; conjunto de preços permitidos confere com o canônico |
+| `colinha.ts` e `precos-iris.ts` | Fontes Windows/Dell iguais após normalizar finais de linha. Íris conserva tabela marginal própria e proveniência do calculador, sem misturar com o cardápio de serviços |
+| Checkout Prumo no Dell | HEAD `3e6ff124e9c713b320117923c99efdbc8f66e96a`, antigo em relação ao Windows; o caminho ausente não é dependência do catálogo consumido |
+
+Hash semântico JSON comum aos catálogos: `85d51820cac33721f0a127bd076e9eabb7e6002c88b625719fe6d6ba48b0a624`. Hash bruto Windows: `756692c7e491efde7264e43611ff198bf1cebfc5a7ace1259ddf7d75129d0691`; bruto Dell: `1cf5ef33ee97c8b12d8ec9592fe3d3b4cd1b3c963fc10a0856ef3af3844d6e97`. Íris confere com a proveniência de seu `billing/calculator.ts` (`d8a8006d8151ef7c5ea54bc3c8622306a4a899175d1ed3ee57f8428a3dae880d`). Estamparia continua sem preço aprovado. Igualdade de preços não certifica todos os textos de escopo nem transforma catálogo em condição individual aceita.
+
+Foi corrigido um fallback real no modelo instalado do Mapa: ausência de investimento/prazo da Fonte podia inserir R$6.500 e 4 a 8 semanas, constantes antigas. Agora a ausência ou branco permanece como campo `[PREENCHER: ... confirmado]`, incrementando as pendências do rascunho. Condições explícitas são preservadas. O catálogo não foi alterado e nenhum documento histórico foi regenerado. A correção foi instalada nos dois arquivos do Dell após 4 testes novos e 17 existentes passarem no Linux, sem skips, com backup e comparação de hashes; sem reinício ou geração real.
+
+### Três materiais concretos para revisão
+
+| Material | Conteúdo sustentado | Decisões que continuam humanas |
+| --- | --- | --- |
+| `01-ControEco-condicoes-para-revisao.pdf` | Rascunho parcial; gestão de tráfego por R$500/mês confirmada pelo usuário, verba de mídia separada. Site e pacote não fechados | Composição/escopo, mensalidade do site, eventual condição histórica de implantação, acessos/custos, responsável, prazo, vigência e próximo passo aceito |
+| `02-Comece-oferta-historica-para-revisao.pdf` | Reconstituição interna da oferta histórica de R$90/mês, sem substituir o original e preservando espera | Versão/documento original, inclusões, implantação e condições individuais; qualificação e passo aceito. Não reenviar nem cobrar pela revisão |
+| `03-Roda-Mais-oferta-historica-para-revisao.pdf` | Reconstituição da mensagem original: R$690 para colocar o site no ar e R$39/mês com domínio, hospedagem e ajustes; pagamento depois de ver funcionando | Documento/validade atual, periodicidade ou parcelamento do valor de colocar no ar, oferta escolhida e escopo; preservar a espera e não presumir contratação de Mapa/site |
+
+Os PDFs ficam na pasta local `output/pdf/prumo-20261025/`, fora deste commit. Cada página identifica rascunho interno não enviado, fontes por tipo/data, lacunas e próximo passo interno. Não contém telefone, e-mail, JID, dados bancários ou trechos de conversa. Foram renderizados e inspecionados visualmente; também foram conferidos o texto, a marca de rascunho e a ausência de identificadores privados.
+
+As fontes completas, três rascunhos editáveis privados, folha de decisões e manifesto permanecem em `~/.cache/mel-work/propostas-revisao-20261025/`, pasta 700/arquivos 600 no Dell. Não criar proposta preenchida para Masque, Favarato e The Best a partir dos dados atuais: respectivamente há contexto/material a conferir; espera após material; e encaminhamento pelo canal do shopping, com registro homônimo distinto. Esses três casos têm apenas próxima decisão interna, não proposta pronta.
+
+### Evento de saída no inbox: evidência preservada, não trabalho bloqueado
+
+A revisão do contrato do processador corrigiu outra interpretação anterior: o evento `mensagem` de direção `saida` ainda marcado `pendente` não é uma resposta comercial aguardando processamento. `AtendimentoComercial` processa somente WhatsApp + entrada + resposta; saídas, entregas e leituras são preservadas fora desse caminho. O teste existente dessa exclusão foi aprovado no Linux. Não é necessário replay, limpeza, conclusão manual ou confirmação do Rômulo para fechar esse item técnico. Seu estado foi mantido e não deve ser apresentado como novo pedido de cliente.
+
+### Limite de conclusão deste lote
+
+Fonte e consumidores de preços conferidos; fallback divergente corrigido; propostas possíveis preparadas com as evidências atuais. Não houve preço negociado novo, qualificação humana fabricada, assinatura, aceite, dívida ou pagamento registrados. A frente permanece pausada. O material pode ser revisado agora; nenhuma das três versões está liberada como proposta final enviada.
+
+Continuam dependentes de fatos humanos/externos a identidade histórica, as confirmações de qualificação, escopo/custo/prazo e as condições individuais ainda abertas, os documentos/aceites e recebimentos reais. O risco de concorrência do Sheets é distinto: antes de ampliar aquisição, será necessária serialização exclusiva das três ofertas ou reserva durável comum com reconciliação, testada separadamente. Não impor limite global no n8n, que afetaria os outros domínios. Esta preparação de propostas e o atendimento do piloto pausado não ampliam aquisição nem demonstram primeira venda.
+
+### Pesquisa das fontes originais antes de pedir decisões
+
+Foram examinados os caminhos já vinculados às três fichas e as pastas locais de entrega. Em Roda Mais, a oferta capturada de 14/10/2026 às 12h07 BRT explicita o segundo valor como mensalidade, suas inclusões e o gatilho de ver funcionando; o rascunho foi atualizado pela fonte original, não por dedução do catálogo. A condição/parcelamento do primeiro valor e a vigência atual ainda exigem conferência. Em ControEco, a pasta local examinada contém Raio-X, conteúdo e fotos, sem `index.html`, print de demo ou URL de site no manifesto: essa busca não comprova demo entregue. Em Comece há site local e registros técnicos de restauração, sem provar escopo contratado ou visualização atual pelo cliente. Em Roda Mais há Mapa HTML/PDF/dados, não documento de proposta. Nenhum arquivo nomeado como proposta/contrato foi localizado nas três pastas pesquisadas; isso não prova inexistência fora dessas fontes. Lista e hashes dos arquivos consultados estão em `busca-fontes-originais.json`, na pasta privada de preparação do Dell. A ausência desses documentos permanece explícita nos materiais, sem fabricar um contrato ou substituir acordo anterior.
+
+A pesquisa complementar também consultou metadados e listagens diretas das três pastas correspondentes no Google Drive conectado, sem leitura de conversas ou pastas pessoais/Silmer. O mesmo acervo técnico foi encontrado, sem proposta/contrato original identificado. Roda Mais está na versão interna 0.2; ControEco explicita a demo não localizada nas fontes consultadas. A versão final dos três PDFs foi novamente renderizada e inspecionada, uma página por rascunho.

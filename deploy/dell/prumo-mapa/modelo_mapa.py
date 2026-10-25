@@ -16,7 +16,6 @@ import re
 import calculo_prumo
 
 MARCA_RODAPE = "Rômulo Sutil Corrêa · Prumo · Espírito Santo"
-FONTE_PRAZO, FONTE_PRECO = "4 a 8 semanas", "R$ 6.500"  # negocio.md: os dois formatos
 POR_EXTENSO = {1: "A trava", 2: "As duas travas", 3: "As três travas", 4: "As quatro travas", 5: "As cinco travas"}
 SOMANDO = {1: "A trava", 2: "Somando as duas", 3: "Somando as três", 4: "Somando as quatro", 5: "Somando as cinco"}
 RISCOS_TITULO = {1: "Um risco que não entra na conta mensal", 2: "Dois riscos que não entram na conta mensal",
@@ -461,8 +460,16 @@ class Documento:
             kicker = "Depois · a Fonte, no formato com IA" if formato == "ia" else "Depois · a Fonte Simplificada"
             terceiro = (("Custo de uso da IA", "pago por você, direto ao provedor") if formato == "ia"
                         else ("Formato", "Notion (ou equivalente)"))
-            fatos = "".join(f'<div><span class="miudo">{k}</span>{e(v)}</div>' for k, v in (
-                ("Prazo", dep.get("prazo") or FONTE_PRAZO), ("Investimento", dep.get("investimento") or FONTE_PRECO), terceiro))
+            # O formato sozinho não confirma prazo nem preço. O rascunho conserva
+            # a lacuna e a contagem de campos pendentes, sem herdar tabela antiga.
+            prazo = dep.get("prazo")
+            investimento = dep.get("investimento")
+            prazo = prazo.strip() if isinstance(prazo, str) else prazo
+            investimento = investimento.strip() if isinstance(investimento, str) else investimento
+            fatos = "".join(f'<div><span class="miudo">{k}</span>{v}</div>' for k, v in (
+                ("Prazo", self.txt(prazo, "prazo da Fonte confirmado")),
+                ("Investimento", self.txt(investimento, "investimento da Fonte confirmado")),
+                (terceiro[0], e(terceiro[1]))))
             titulo_padrao = "O conhecimento da empresa fora da sua cabeça, num lugar que responde perguntas."
             fonte = f"""<div class="fonte"><h3>{rico(dep.get("titulo") or titulo_padrao)}</h3>
     <p>{self.txt(dep.get("texto"), "por que este formato, com o número que justifica")}</p><div class="fatos">{fatos}</div></div>"""

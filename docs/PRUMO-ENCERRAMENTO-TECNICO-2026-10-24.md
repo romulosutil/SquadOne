@@ -1,6 +1,6 @@
 # Reorganização comercial — estado de execução
 
-Atualizado em 24/10/2026. Complementa o plano de 23/10; os checkboxes originais são o escopo planejado, não comprovantes automáticos de aceite.
+Atualizado em 25/10/2026. Complementa o plano de 23/10; os checkboxes originais são o escopo planejado, não comprovantes automáticos de aceite.
 
 ## O que esta entrega conclui
 
@@ -174,3 +174,27 @@ O documento `PRUMO-QUALIFICACAO-CONTRATACAO-PAGAMENTO.md` recebeu a matriz das p
 Validação: API CRM `ok`, regras canônicas aplicadas em processo isolado, contagens confrontadas com a aba de registros e guarda final da frente `ativo=false`, `estado=pausado`, zero primeiros contatos exibidos no dia. Nenhum modelo foi invocado, evento processado, mensagem enviada ou fato humano gravado. Código, workflows, pausas, configuração, históricos e fonte CRM não foram alterados. Não houve necessidade de novos testes de implementação neste lote documental.
 
 Reversão: reverter somente este lote documental se necessário; não remover nem restaurar snapshots sobre o CRM. Próximos passos humanos e os campos concretos a confirmar estão na seção “O que depende de Rômulo” do documento de qualificação. A nova passagem comercial e a primeira venda continuam sem evidência de conclusão. Manter as esperas e restrições; nenhuma retomada automática decorre desta auditoria.
+
+## Conclusão da conferência de preços e preparo comercial — 25/10/2026
+
+Dois especialistas trabalharam com RevOps/Sales Ops: gestão de automação auditou versões, consumidores e riscos; CRM/RevOps conferiu fontes comerciais e produziu os três rascunhos possíveis. A fonte canônica Windows (catálogo sem alterações locais, commit específico `114f9b3`) e os catálogos realmente usados no Dell são semanticamente idênticos, hash `85d51820cac33721f0a127bd076e9eabb7e6002c88b625719fe6d6ba48b0a624`. O caminho esperado ausente no checkout Prumo do Dell não era o caminho do consumidor. Central instalada e tabela separada do Íris conferidas; não foi necessário sincronizar ou alterar valores.
+
+Correção real: `modelo_mapa.py` não herda mais preço R$6.500/prazo de 4 a 8 semanas quando faltam condições da Fonte. Mantém lacunas visíveis e condições explícitas, sem preencher com catálogo por inferência. Homologação Linux privada: 4 regressões novas + 17 testes existentes aprovados, sem skips. Fonte e cópia instalada eram baseline `cb799978fd4abfc8424cc247af41c947fdd3d36332d1ba41b3052c6cb93d446c`; agora ambos conferem com `963388a9c2d28ad5be2958e5cc402429b8159d08b8a227df82e33694536003ae`. Backup e prova em `~/.cache/mel-work/precos-correcao-20261025/`. Sem reinício, geração real ou alteração de documentos antigos. Reverter somente esses dois arquivos a partir do backup, preservando novos dados; não restaurar condições antigas como verdade comercial.
+
+Três PDFs internos preparados e revisados visualmente: ControEco parcial; Comece e Roda Mais como reconstituições históricas, com espera preservada. Fontes privadas e versões editáveis em `~/.cache/mel-work/propostas-revisao-20261025/`; PDFs minimizados em `output/pdf/prumo-20261025/`, fora do Git. Escopo, condições sustentadas, fontes e decisões humanas estão no documento de qualificação atualizado. Masque, The Best e Favarato não recebem propostas preenchidas sem a evidência que falta. Consulta fresca das candidatas em 25/10 às 10h55 BRT: CRM `ok`, fonte de 10h50, sem novas entradas capturadas hoje nos seis casos; ausência fora da captura não foi presumida.
+
+O evento de saída preservado no inbox não é uma pendência comercial bloqueada: o processador exclui saídas/entregas/leituras por contrato. Teste direcionado Linux aprovado sem skips. Fica encerrada a pendência técnica de interpretá-lo como trabalho a reconciliar; o evento continua intacto, sem replay, conclusão manual ou novo aviso. As 68 passagens históricas sem prova e a ausência de marcos humanos continuam sendo lacunas reais, não corrigíveis em massa por inferência.
+
+| Parte do prompt principal | Entrega verificável | Limite que permanece |
+| --- | --- | --- |
+| Pendências reais e rotina comercial | Matriz curta e prioridade canônica, preservando espera, recusa e revisão interna | Operador decide os fatos e próximos combinados reais |
+| Qualificação e passagem | Contratos e validações instalados; leitura atual e modelos de revisão | Nova conversa natural com identidade sustentada e responsabilidade confirmada |
+| Proposta, contratação e pagamento | Três preparações concretas, documentos/registro/evidência separados e campos de decisão explícitos | Versão final, documento para uso, aceite, cobrança liberada e recebimento dependem de provas reais |
+| Preços | Fonte, versão Git, hash semântico, Central e Íris conferidos; fallback antigo removido | Condições individuais e escopos ainda não definidos não são inventados |
+| SOS/Hermes | Associação LID corrigida, 36 registros incorretos em quarentena com originais preservados, dois pessoais na ficha | Captura histórica não confirma abertura comercial atual |
+| Captação | Leituras estritas, persistência por chave e critérios preservados | Unicidade concorrente do Sheets não foi comprovada; bloqueio específico antes de expansão, sem serializar n8n inteiro |
+| Responsabilidades e preservação | Central como fonte comercial, papéis instalados e registros humanos separados de inferência | Pausa VM/Grok declarada pelo usuário, sem inspeção independente; não atribuir controle inexistente à Central |
+
+Guarda final em 25/10: frente `ativo=false`, `estado=pausado`, zero primeiros contatos exibidos; 21 workflows/16 ativos, `prumo-mapa.path` ativo, hashes instalados conferidos. WhatsApp Prumo conectado na consulta deste lote. Nenhuma mensagem, inferência, execução manual, reativação ou novo fato comercial foi produzido. A primeira venda nova e R$10 mil mensais continuam objetivos abertos; Silmer é receita existente e permanece fora da contagem da primeira venda nova.
+
+Pesquisa complementar de fontes originais: a mensagem Roda Mais de 14/10 às 12h07 BRT sustenta mensalidade, inclusões e gatilho de pagamento, incorporados ao rascunho. Arquivos de três pastas de entrega foram auditados por lista/hash, sem proposta/contrato nomeados encontrados. Site local ou Mapa publicado não virou aceite. Detalhes no documento de qualificação e manifesto privado de pesquisa; nenhum documento anterior foi substituído.
