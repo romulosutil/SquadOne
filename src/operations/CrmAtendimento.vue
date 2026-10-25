@@ -34,7 +34,7 @@ async function assumir(responsavel:'romulo'|'time') {
   if(!atual?.identidade||atual.estado==='bloqueado'||ocupado.value||incerto.value) return
   const lead=props.lead
   ocupado.value=true;incerto.value=true;erro.value='';recado.value=''
-  const nota={v:2 as const,id:crypto.randomUUID(),...atual.identidade,responsavel,data:new Date().toISOString(),motivo:responsavel==='romulo'?'Assumir negociação e atendimento.':'Devolver ao time para análise e rascunhos no piloto.',humano:true as const,anterior:atual.registro?.id??null}
+  const nota={v:2 as const,id:crypto.randomUUID(),...atual.identidade,responsavel,data:new Date().toISOString(),motivo:responsavel==='romulo'?'Assumir negociação e atendimento.':'Devolver ao time dentro das permissões ativas, preservando restrições.',humano:true as const,anterior:atual.registro?.id??null}
   tentativaId.value=nota.id
   try {
     const r=await fetch('/api/operations/crm/registro',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({produto:lead.produto,id:lead.chave,tipo:'nota',texto:textoResponsavelConversa(nota),data:''})})
@@ -54,10 +54,10 @@ watch(()=>props.lead.id,()=>{projecao.value=null;recado.value='';erro.value='';i
     <h3>Responsável pelo atendimento</h3>
     <p>{{ projecao?.motivo ?? 'Conferindo a fonte…' }}</p>
     <p v-if="bloqueio" class="recado">{{ bloqueio }}</p>
-    <p class="texto-2 texto-pequeno">Neste piloto, o time analisa e prepara rascunhos. Negociação, proposta final, contrato e pagamento ficam com você.</p>
+    <p class="texto-2 texto-pequeno">{{ lead.produto==='site'?'O time conduz os pedidos padrão do Encontrado dentro das permissões ativas. Condições especiais e decisões que exigem você continuam aqui.':'O time analisa e prepara rascunhos. Negociação, proposta final, contrato e pagamento ficam com você.' }}</p>
     <div class="crm-ficha__acoes">
       <button type="button" class="botao botao--primario" :disabled="!disponivel||!projecao?.identidade||projecao.estado==='bloqueado'||bloqueio?.includes('aguardando')||bloqueio?.startsWith('Responsabilidade anterior')||ocupado||incerto||projecao.registro?.responsavel==='romulo'" @click="assumir('romulo')">Assumir conversa</button>
-      <button type="button" class="botao botao--leve" :disabled="!disponivel||!projecao?.identidade||projecao.estado==='bloqueado'||bloqueio?.includes('aguardando')||bloqueio?.startsWith('Responsabilidade anterior')||ocupado||incerto||projecao.registro?.responsavel==='time'" @click="assumir('time')">Devolver para rascunhos</button>
+      <button type="button" class="botao botao--leve" :disabled="!disponivel||!projecao?.identidade||projecao.estado==='bloqueado'||bloqueio?.includes('aguardando')||bloqueio?.startsWith('Responsabilidade anterior')||ocupado||incerto||projecao.registro?.responsavel==='time'" @click="assumir('time')">Devolver ao time</button>
     </div>
     <p v-if="recado" role="status">{{ recado }}</p><p v-if="erro" role="alert">{{ erro }}</p>
     <div v-if="lead.atendimentoComercial" class="recado">

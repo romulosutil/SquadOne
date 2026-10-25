@@ -1,5 +1,19 @@
 # Arquitetura
 
+## Encontrado — proposta e Autentique (terceiro lote, 25/10/2026)
+
+O modelo comercial tem versão, hash e aprovação global explícita da operação.
+Propostas são artefatos privados imutáveis, com catálogo, condições e referências
+das mensagens que sustentam os dados das partes. Não são novas notas humanas do
+CRM. O cadastro da Prumo e a credencial Autentique ficam fora do Git e dos prompts.
+
+A criação remota é reservada antes do efeito. Uma tentativa ambígua é conciliada
+pela referência única e pelos dados exatos, sem recriar documento por timeout.
+Consultas autenticadas periódicas acompanham os signatários; dispensam webhook
+público. Somente o aceite comprovado da versão vinculada alimenta a projeção
+comercial da ficha. Documento, convite, assinatura, entrega vista e pagamento
+continuam fatos distintos. A operação nunca chama assinatura em nome das partes.
+
 ## Encontrado — qualificação e materiais (segundo lote, 25/10/2026)
 
 A qualificação observada é uma projeção reconstruível das mensagens comprovadas,

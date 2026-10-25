@@ -23,6 +23,7 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import FrenteComercial from '../operations/FrenteComercial.vue'
+import EncontradoPropostaConfig from '../operations/EncontradoPropostaConfig.vue'
 import '../estilos/operacao.css'
 import AccessPanel from '../operations/AccessPanel.vue'
 import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
@@ -44,7 +45,7 @@ const ops = computed(() => props.capacidades.perfil === 'operations')
 
 onMounted(() => {
   const alvo = new URLSearchParams(window.location.search).get('abrir') ?? window.location.hash.slice(1)
-  if (alvo === 'primeiros-contatos' || alvo === 'equipe') void nextTick(() => document.getElementById(alvo)?.scrollIntoView({ block: 'start' }))
+  if (alvo === 'primeiros-contatos' || alvo === 'equipe' || alvo === 'encontrado-proposta') void nextTick(() => document.getElementById(alvo)?.scrollIntoView({ block: 'start' }))
   // O "Ver em Manutenção" da Central e o "Roteiro" de Vendas: a navegação sobe a página
   // antes de montar esta rota, então rolar até a seção fica para depois de ela existir.
   if (pedeManutencao) void nextTick(() => document.getElementById('manutencao')?.scrollIntoView({ block: 'start' }))
@@ -131,6 +132,7 @@ const equipe = computed(() => ag?.roster.value?.squads.flatMap(s => s.dominios.m
     </section>
 
     <section v-if="ops" id="primeiros-contatos"><FrenteComercial configurar /></section>
+    <EncontradoPropostaConfig v-if="ops" />
 
     <!-- O link do robô do Escritório (?fluxo=&passo=) abre direto no fluxo dele. -->
     <details v-if="ops" class="mais__bloco mais__dobra" :open="pedeFluxo || pedeRoteiro">

@@ -2,6 +2,18 @@
 
 ## Automação do Encontrado (25/10/2026)
 
+**Terceiro lote autorizado:** proposta padrão versionada e aceite pela Autentique,
+com automação das etapas repetíveis e somente decisões reais para Rômulo. A Prumo
+prestará o serviço como pessoa jurídica; ainda não há conta Autentique. Preparar o
+cadastro privado, modelo concreto e integração antes da ativação. Aprovação única
+do padrão vincula os bytes e condições exatos; não presumir aprovados os campos
+marcados como sugestão no modelo visual antigo. Dados faltantes do cliente devem
+ser solicitados ao próprio cliente, sem fabricar qualificação humana. Convite e
+documento criado não comprovam assinatura. Aceite exige consulta autenticada da
+versão e dos signatários exatos; nunca assinar pelo cliente ou por Rômulo. Cobrança
+continua separada e exige o cliente ver o site funcionando. Preservar condições
+individuais, pausas e tomada humana. Não usar clientes reais para testar.
+
 **Segundo lote autorizado:** qualificação automática e preparação dos materiais
 solicitados, com intervenção humana somente para decisões reais. O sistema pode
 perguntar a lacuna seguinte, interpretar respostas com citações verificadas e

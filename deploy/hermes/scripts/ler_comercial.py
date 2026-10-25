@@ -110,6 +110,15 @@ def resposta_segura(dados):
         linha["prioridadeTrabalho"] = prioridade_trabalho(item, dados.get("consultadoEm"))
         if resultado == "individual":
             linha["ficha"] = ficha_fonte(item.get("ficha"))
+        if "propostaAutomatica" in item:
+            p = item["propostaAutomatica"]
+            if not isinstance(p, dict) or p.get("origem") != "autentique" or p.get("confirmaPagamento") is not False:
+                raise ValueError("Proposta integrada inválida")
+            estado = opcao(p.get("estado"), {"preparada", "criacao-incerta", "aguardando-assinatura", "assinada", "recusada", "expirada", "conferencia"})
+            aceite = booleano(p.get("aceiteConfirmado"))
+            if aceite and estado != "assinada":
+                raise ValueError("Aceite sem assinatura")
+            linha["propostaAutomatica"] = {"origem": "autentique", "estado": estado, "aceiteConfirmado": aceite, "confirmaPagamento": False}
         saida.append(linha)
     return {"v": 1, "somenteLeitura": True, "contatoAutorizado": False, "resultado": resultado, "fonte": {k: fonte[k] for k in ("geradoEm", "idadeMs", "limiteMs", "atual")}, "total": len(saida) if dados.get("truncado") is not True else "mais-de-20", "truncado": booleano(dados["truncado"]), "oportunidades": saida}
 

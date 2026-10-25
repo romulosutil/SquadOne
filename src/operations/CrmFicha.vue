@@ -6,6 +6,7 @@ import CrmSpiced from './CrmSpiced.vue'
 import CrmReceita from './CrmReceita.vue'
 import CrmCicloComercial from './CrmCicloComercial.vue'
 import CrmAtendimento from './CrmAtendimento.vue'
+import CrmPropostaEncontrado from './CrmPropostaEncontrado.vue'
 import { temQualificacaoComercial } from './qualificacao-comercial'
 import { cicloDoLead } from './ciclo-comercial'
 import CrmConfirmarPasso from './CrmConfirmarPasso.vue'
@@ -679,6 +680,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
     </div>
 
     <CrmAtendimento :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
+    <CrmPropostaEncontrado :lead="lead" @registrado="emit('registrado')" />
     <details v-if="lead.encontradoObservado" class="dobra crm-ficha__secao">
       <summary>O que o time observou na conversa</summary>
       <p class="crm-muted">Leitura automática das mensagens comprovadas. Não confirma compra ou qualificação humana.</p>

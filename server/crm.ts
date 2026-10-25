@@ -546,6 +546,7 @@ export interface CrmLink {
 }
 
 export interface CrmLead {
+  encontradoContratacao?:import('../src/operations/encontrado-proposta').ContratacaoEncontradoVisao;
   atendimentoComercial?: {id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string;identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel';ocorridoEm?:string};
   aarr?: ReceitaDoLead;
   revisaoComercial?: string;

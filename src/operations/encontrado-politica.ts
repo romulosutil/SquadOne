@@ -6,6 +6,7 @@ import { qualificacaoComercialAtual, temQualificacaoComercial } from './qualific
 import { projetarResponsavelConversa } from './responsavel-conversa.ts'
 import type { CrmLead } from './types.ts'
 import { PERGUNTAS_ENCONTRADO, type QualificacaoEncontrado } from './encontrado-qualificacao.ts'
+import {textoSemCadastroEncontrado} from './encontrado-proposta.ts'
 
 export const VERSAO_POLITICA_ENCONTRADO = 'encontrado-respostas-v1'
 const oferta = CARDAPIO.find(s => s.id === 'encontrado')!
@@ -19,16 +20,19 @@ export const CATALOGO_ENCONTRADO = Object.freeze({
 export interface PoliticaEncontrado {
   v: 1; modo: 'pausado' | 'respostas'; desde: string; catalogoHash: string
   qualificacao?: {v:1;desde:string;politicaHash:string}
+  proposta?: {v:1;desde:string;politicaHash:string;modeloHash:string}
 }
 export type DecisaoEncontrado =
   | { acao: 'responder'; motivo: string; modelo: string; texto: string }
   | { acao: 'preparar'; motivo:string; materiais:QualificacaoEncontrado['materiais'] }
-  | { acao: 'humano' | 'aguardar' | 'ignorar' | 'qualificar'; motivo: string }
+  | { acao:'emitir-proposta';motivo:string;propostaId:string }
+  | { acao: 'humano' | 'aguardar' | 'ignorar' | 'qualificar' | 'propor'; motivo: string }
 export interface ContextoPoliticaEncontrado {
   politica: PoliticaEncontrado; catalogoHash: string; agora: number; ocorridoEm: string
   texto: string; identidade: string; papel?: string; fonteAtual: boolean
   respondida?: boolean
   observada?:QualificacaoEncontrado|null
+  propostaSolicitada?:boolean
   lead: CrmLead; leads: readonly CrmLead[]; bloqueio: string | null
   /** Conversa original verificada; não um resumo produzido pelo modelo. */
   historico: readonly { direcao: string; texto: string; em: string }[]
@@ -74,6 +78,12 @@ export function decidirEncontrado(c: ContextoPoliticaEncontrado): DecisaoEncontr
   if (anteriores.some(t=>precosNoTexto(t).some(v=>![oferta.preco,oferta.mensal!.replace('/mês','')].includes(v))
     || /(?:sem (?:custo|mensalidade)|site (?:gratis|gratuito)|site de graca|desconto|condicao especial|pacote|gestao de trafego)/.test(normalizar(t))))
     return humano('Há condição individual ou pacote no histórico; conferir antes de apresentar o padrão.')
+  if(p.proposta&&entrada>=instante(p.proposta.desde)&&c.propostaSolicitada){
+    const especial=normalizar(textoSemCadastroEncontrado(c.texto))
+    if(/(?:desconto|negoci|parcel|barat|caro|paguei|pagamos|comprovante|pix|boleto|cartao|reembols|cancel|reclam|romulo|humano|pessoa de verdade|urgente|amanha|hoje|loja virtual|ecommerce|sistema|aplicativo|integrac|trafego|anunci|google ads|multa|rescis|juridic|clausula|sem mensalidade|sem custo)/.test(especial)
+      ||precosNoTexto(c.texto).some(v=>![oferta.preco,oferta.mensal!.replace('/mês','')].includes(v)))return humano('O pedido altera condições, escopo ou exige uma decisão fora da proposta padrão.')
+    return {acao:'propor',motivo:'Conduzir o pedido comprovado de proposta padrão, sem confirmar aceite por texto.'}
+  }
   if (/(?:desconto|negoci|parcel|barat|caro|contrat|proposta|aceit|assin|paguei|pagamos|comprovante|pix|boleto|cartao|reembols|cancel|reclam|romulo|humano|pessoa de verdade|urgente|amanha|hoje|loja virtual|ecommerce|sistema|aplicativo|integrac|trafego|anunci|google ads)/.test(s))
     return humano('Pedido exige condição, compromisso ou etapa comercial ainda fora da resposta padrão.')
   if (/r\$|\breais\b|\d+\s*paginas|\b(?:blog|portal|login|estoque|agendamento|multilingue|idiomas)\b/.test(s))

@@ -4,6 +4,9 @@ import { SaidasEncontrado } from './server/encontrado-saidas.ts';
 import { transporteEncontradoEvolution } from './server/encontrado-evolution.ts';
 import { QualificadorEncontrado } from './server/encontrado-qualificacao.ts';
 import { MateriaisEncontrado, verificadorMaterialEncontrado } from './server/encontrado-materiais.ts';
+import { ConfiguracaoPropostaEncontrado, gravarPrivadoEncontrado } from './server/encontrado-proposta-config.ts';
+import { ContratacaoEncontrado } from './server/encontrado-contratacao.ts';
+import { montarRotasPropostaEncontrado } from './server/rotas-encontrado-proposta.ts';
 import { GarantiasAgenda, DemandasAgendaDuraveis } from './server/garantias-agenda.ts';
 import { FilaTelegramDuravel } from './server/fila-telegram-duravel.ts';
 import { AtendimentoComercial, criarLeitorFonteAtendimento, criarInventarioCapturasAtendimento } from './server/atendimento-comercial.ts';
@@ -434,15 +437,26 @@ async function startServer() {
       lerFonte:criarLeitorFonteAtendimento(pastaCapturas,lerIdentidadeCaptura),lerIdentidade:lerIdentidadeCaptura,
       inventariarCapturas:criarInventarioCapturasAtendimento(pastaCapturas,lerIdentidadeCaptura),visao:()=>crm.visao(new Date())});
     receberAtendimento = valor => atendimento.receber(valor);
+    const politicaEncontrado=leitorPoliticaEncontrado(path.join(operationsDataDir,'encontrado-automacao.json'));
+    const configuracaoPropostaEncontrado=new ConfiguracaoPropostaEncontrado(operationsDataDir);
+    const contratacaoEncontrado=new ContratacaoEncontrado(path.join(operationsDataDir,'encontrado-propostas'),configuracaoPropostaEncontrado);
     const encontradoAutomatico = new EncontradoAutomatico({atendimento,
       saidas:new SaidasEncontrado(path.join(operationsDataDir,'encontrado-saidas')),
-      politica:leitorPoliticaEncontrado(path.join(operationsDataDir,'encontrado-automacao.json')),
+      politica:politicaEncontrado,
       transporte:transporteEncontradoEvolution(),
       qualificador:new QualificadorEncontrado(path.join(operationsDataDir,'encontrado-qualificacao')),
       materiais:new MateriaisEncontrado(path.join(operationsDataDir,'encontrado-materiais'),verificadorMaterialEncontrado(operationsDataDir)),
+      contratacao:contratacaoEncontrado,
       comConversa:(conversa,acao)=>crm.comConversaExclusiva(conversa,acao),
       bloqueio:(lead,leads)=>crm.bloqueioDaConversa(lead,leads)});
     autorizarMaterialEncontrado=id=>encontradoAutomatico.autorizarMaterial(id);
+    montarRotasPropostaEncontrado(app,{config:configuracaoPropostaEncontrado,contratacao:contratacaoEncontrado,
+      operador:req=>{const login=req.get('Tailscale-User-Login')?.trim().toLowerCase();return identidadeLigada&&login&&loginsDoTailscale.has(login)?login:null},
+      ativar:async(modeloHash,politicaHash)=>{
+        const p=await politicaEncontrado();if(!p||p.modo!=='respostas'||!await configuracaoPropostaEncontrado.aprovada(modeloHash))throw new Error('Preservar pausa ou configuração ainda não aprovada.');
+        if(p.proposta?.modeloHash===modeloHash&&p.proposta.politicaHash===politicaHash)return;
+        await gravarPrivadoEncontrado(path.join(operationsDataDir,'encontrado-automacao.json'),{...p,proposta:{v:1,desde:new Date().toISOString(),politicaHash,modeloHash}});
+      }});
     let atendimentoEmCurso = false;
     const conferirAtendimento = async () => {
       if(atendimentoEmCurso) return;
@@ -459,8 +473,10 @@ async function startServer() {
       const pendencias = await atendimento.listarPendencias(v);
       const automaticos = await encontradoAutomatico.estados().catch(()=>new Map());
       const observacoes = await encontradoAutomatico.observacoes().catch(()=>new Map());
+      const propostas = await contratacaoEncontrado.visoes().catch(()=>new Map());
       return {...v,leads:await Promise.all(v.leads.map(async l=>{
         l={...l,...(observacoes.has(l.id)?{encontradoObservado:observacoes.get(l.id)}:{})};
+        if(propostas.has(l.id))l={...l,encontradoContratacao:propostas.get(l.id)};
         const auto=automaticos.get(l.id);
         if(auto) return {...l,atendimentoComercial:{id:`encontrado-${l.id}`,tipo:auto.acao==='time'?'automatico':'handoff',titulo:auto.acao==='time'?'Time conduz o atendimento do Encontrado':'Decisão necessária no Encontrado',motivo:auto.motivo,alvo:auto.acao==='time'?'time':'operador',estado:auto.estado,identidade:auto.identidade,ocorridoEm:auto.ocorridoEm}};
         const p=pendencias.find(p=>p.leadIds.includes(l.id));if(!p)return l;

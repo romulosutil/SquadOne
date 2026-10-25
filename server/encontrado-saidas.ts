@@ -8,6 +8,7 @@ export interface SaidaEncontrado {
   estado:'reservada'|'incerta'|'enviada'|'cancelada'; recibo?:string
   entradaChave?:string
   materiais?:string[]
+  propostaId?:string
 }
 const sha=(v:unknown):v is string=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v)
 const instante=(v:unknown):v is string=>typeof v==='string'&&Number.isFinite(Date.parse(v))
@@ -16,7 +17,7 @@ function validar(v:unknown):SaidaEncontrado {
   if(!r||r.v!==1||!sha(r.chave)||!sha(r.politicaHash)||!sha(r.contextoHash)||!sha(r.textoHash)
     ||!/^\d{10}$/.test(r.conversa)||typeof r.leadId!=='string'||!r.leadId||!instante(r.em)||!instante(r.entradaEm)
     ||typeof r.modelo!=='string'||!/^[a-z+-]{1,100}$/.test(r.modelo)||!['reservada','incerta','enviada','cancelada'].includes(r.estado)
-    ||r.entradaChave!==undefined&&!sha(r.entradaChave)||r.materiais!==undefined&&(!Array.isArray(r.materiais)||r.materiais.length<1||r.materiais.length>2||!r.materiais.every(sha))||r.estado==='enviada'&&(typeof r.recibo!=='string'||!r.recibo||r.recibo.length>200))throw new Error('Reserva de resposta inválida.')
+    ||r.entradaChave!==undefined&&!sha(r.entradaChave)||r.propostaId!==undefined&&!sha(r.propostaId)||r.materiais!==undefined&&(!Array.isArray(r.materiais)||r.materiais.length<1||r.materiais.length>2||!r.materiais.every(sha))||r.estado==='enviada'&&(typeof r.recibo!=='string'||!r.recibo||r.recibo.length>200))throw new Error('Reserva de resposta inválida.')
   return r
 }
 /** Journal operacional privado. Nunca é outra fonte de negociação nem apaga reservas por prazo. */
