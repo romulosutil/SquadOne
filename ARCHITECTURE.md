@@ -1,5 +1,74 @@
 # Arquitetura
 
+## Camadas do escritório e laboratório PixiJS (26/10/2026)
+
+O escritório mantém o renderizador DOM/CSS como padrão. O build principal valida
+seu grafo antes de escrever `dist`: exige o módulo DOM e recusa imports de PixiJS
+ou do laboratório. Essa verificação também vale para `atualizar-central`, que só
+prossegue após o build. Testes em `renderizador-padrao.test.ts` fixam a política.
+
+A integração mantém os modelos comerciais atuais da main. O resumo compacto
+do CRM permanece para as equipes sem esteira e sem painel aberto. A equipe
+com esteira visível lê o retrato por cliente, necessário às fichas e aos marcos
+de transporte; esse fluxo conserva a leitura compartilhada do servidor. As anotações antigas
+de trabalho são lidas por `trabalho-registrado.ts`, exclusivamente para exibição;
+essa compatibilidade não cria receita, confirmação humana ou autoridade de envio.
+
+`GameMap.vue` compõe a
+interface, os botões acessíveis, os balões e os quadros. A projeção do roster e
+do trabalho observado fica em `src/office/projecao.ts`; os contratos visuais,
+em `modelo.ts`. Nenhuma conclusão de animação grava um fato comercial.
+
+`configuracao.ts`, `geometria-da-cena.ts` e `caminhos-da-cena.ts` concentram
+enquadramento, salas, profundidade, âncoras e trajetos. `simulacao.ts` integra
+movimento no mundo ortogonal; `camera.ts` limita e suaviza a câmera. Essas
+funções não dependem de Vue, DOM, rede ou relógio real. `coreografia.ts`
+coordena buscar/levar/voltar por uma porta de movimento e invalida callbacks
+antigos antes de cancelar um percurso ou desmontar.
+
+`useOffice.ts` integra o roster reativo, o ciclo de vida das salas, passeios,
+observadores de visibilidade e o único loop de animação. Ele fornece quadros ao
+contrato de `renderizador.ts`; `renderizador-dom.ts` possui as escritas de
+transform, classes, profundidade e frames no DOM. Os exports de tipos de
+`useOffice.ts` e os exports de caminhos de `linha-de-producao.ts` conservam
+compatibilidade com os consumidores existentes.
+
+O laboratório isolado está em `prototypes/escritorio-pixi/`. Instalar com
+`npm ci --prefix prototypes/escritorio-pixi` e abrir com
+`npm run dev --prefix prototypes/escritorio-pixi` (127.0.0.1:4178). Usa o mesmo
+GameMap, simulação, câmera, caminhos e sprites, com equipe e clientes fictícios.
+Permite alternar DOM/Pixi, 18/60/120 agentes, ilustração/salas e movimento.
+PixiJS desenha somente os corpos; o cenário, sombras, texto, quadros e controles
+continuam no DOM. É um protótipo híbrido para comparação, não um substituto já
+promovido para produção. WebGL ou textura indisponível mantém o DOM como reserva.
+PixiJS e as ferramentas de teste são dependências exclusivas do laboratório;
+a aplicação principal não importa o protótipo.
+
+`npm run build --prefix prototypes/escritorio-pixi` gera o laboratório otimizado
+em `output/escritorio-pixi/build`. Com o servidor aberto, `npm run verify --prefix
+prototypes/escritorio-pixi` verifica desktop/celular, posições, nomes acessíveis,
+painéis, estações e cadência. `OFFICE_PROTOTYPE_URL` troca a URL de teste;
+`OFFICE_BENCHMARK_URL` permite medir o build otimizado servido por `vite preview`.
+O script exige Chrome. `verify-lifecycle.mjs` exercita transporte completo,
+clique no portador, alternância de renderizadores e recuperação de texturas.
+Relatórios e capturas ficam em `output/escritorio-pixi/qa/`; a comparação com a
+versão anterior só ocorre quando o snapshot local existe, e compartilha a arte
+e a esteira atuais para preservar alterações visuais paralelas.
+
+Os testes puros das camadas estão em `src/office/camadas.test.ts`. Desempenho do
+protótipo deve ser avaliado no build otimizado e no dispositivo alvo; cadência
+de rAF, trabalho da thread principal e heap não são uma medição do tempo de GPU.
+
+Na amostra local otimizada (Chrome 155, SwiftShader, 1440×900, cinco segundos por
+cenário), 18 agentes mantiveram mediana de 16,7 ms e p95 de 16,8 ms nos dois modos.
+O trabalho acumulado da thread principal foi 526,3 ms no DOM e 712,9 ms no Pixi;
+com 60 agentes, 856,9 ms e 1.416 ms; com 120, 1.552,1 ms e 2.754 ms. No cenário
+de 120 agentes, Pixi teve menos intervalos acima de 25 ms (3 contra 11), com
+maior custo de processamento. São amostras exploratórias com GPU por software,
+não evidência de ganho em dispositivos reais. A decisão atual é conservar DOM
+como padrão e manter o protótipo para avaliação posterior no hardware alvo.
+
+
 ## Qualidade da Prumo (21/10/2026)
 
 A Prumo é a fonte dos critérios, nomes e aceite; o SquadOne executa. Leia `docs/referencia/organizacao-prumo.md` e `../prumo/00-contexto/organizacao.md` antes de criar ou alterar ofertas e fluxos. Site e Raio-X passam por `deploy/dell/lib/qualidade_prumo.py` antes de publicar. Homologação é identificada; Profissional exige todos os obrigatórios, IQS completo, referência e manifesto exatos. O gerador não publica diretamente nem assina aceite; avaliações aprovadas ficam na área privada, fora da pasta do lead. O Mapa continua como rascunho, sem envio automático.

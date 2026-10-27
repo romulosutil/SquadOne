@@ -7,7 +7,7 @@
  *
  * Três requisitos não-cosméticos de §4.2, mantidos na versão isométrica:
  *  1. Math.round() nas coordenadas — agora nas de TELA, que são as que viram px.
- *  2. Escrita DIRETA em el.style.transform (ref() = 60 re-renders/s).
+ *  2. Renderizador DOM escreve transform direto (ref() = 60 re-renders/s).
  *  3. Frame do ciclo de caminhada derivado da DISTÂNCIA, não do relógio.
  *
  * O ator anda no mundo ortogonal; `toScreen` projeta só na hora de pintar, e o
@@ -29,184 +29,33 @@
 
 import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef, watch, type Ref } from 'vue'
 import { carregarCatalogoSprites } from './catalogoSprites'
-import {
-  DOOR_SOUTH,
-  INNER_H,
-  INNER_OFFSET,
-  INNER_W,
-  NORTH_TILES,
-  PROP_EMOJI,
-  ROOM_H,
-  ROOM_W,
-  PROP_SIZE,
-  TILE,
-  WALL_H,
-  WEST_TILES,
-  isoBounds,
-  localCenterPx,
-  mapSizeTiles,
-  parseRoom,
-  roomOriginPx,
-  slotKey,
-  toScreen,
-  type PropKind,
-  type RoomId,
-  type Vec2,
-} from './rooms'
+import type { Actor, CharSheet, OfficeDominio, OfficePessoa, RoomView, RoomPhase } from './modelo'
+export type { CharSheet, OfficeDominio, OfficePessoa, RoomView, RoomPhase } from './modelo'
+import { ROOM_PAN_MS, ROOM_BUILD_MS, PASSEIO_ESPERA_MS, PASSEIO_PAUSA_MS, PASSEIO_REPIQUE_MS, PASSEIO_VIZINHO, PASSEIO_FRACAO_MAX, PASSEIO_FOLGA_PX } from './configuracao'
+import { projetarSala } from './geometria-da-cena'
+import { advance } from './simulacao'
+import { clampAxis, avancarCamera } from './camera'
+import { quadroDoAtor, type CriarRenderizadorDoEscritorio } from './renderizador'
+import { criarRenderizadorDom } from './renderizador-dom'
+
+import { DOOR_SOUTH, ROOM_H, ROOM_W, TILE, isoBounds, localCenterPx, mapSizeTiles, slotKey, toScreen, type Vec2 } from './rooms'
 import { bfsSlots, buildRoute, doorCenterPx, slotDoPontoPx } from './path'
 import { postoLocal, tilesLivres } from './postos'
 import { planejarSalas } from './salas'
 
-/** Uma pessoa do squad: o PO de um domínio ou um integrante dele. */
-export interface OfficePessoa {
-  id: string
-  nome: string
-  papel: string
-  /** chave no craftpix.manifest.json */
-  sprite: string
-  /** graus de hue-rotate, para diferenciar papéis que reusam o mesmo sprite */
-  hue?: number
-  /** Compatibilidade com vistas antigas; o mapa não renderiza emojis. */
-  emoji?: string
-}
-
-/** Um domínio = uma sala. O slot é dele, não de quem trabalha dentro. */
-export interface OfficeDominio {
-  id: string
-  nome: string
-  slot: Vec2
-  room: RoomId
-  /** PO na posição 0, integrantes na sequência — a ordem define a cadeira. */
-  pessoas: OfficePessoa[]
-}
-
-/** px-fonte por segundo, no mundo ortogonal. */
-const SPEED = 96
-/** distância andada entre trocas de frame do ciclo de caminhada. */
-const STEP_PX = 6
-const CAM_LAMBDA = 8
-
-/**
- * Crescimento do escritório (§4.4), na ordem em que o usuário enxerga:
- * a câmera pana até o slot vazio, a sala materializa, e só então o personagem
- * entra pela porta e anda até a mesa. Contratar um integrante pula os dois
- * primeiros passos: a sala dele já está lá.
- */
-const ROOM_PAN_MS = 700
-/** Casado com `room-build` em src/index.css. */
-const ROOM_BUILD_MS = 450
-
-/**
- * Perambular (faixas [min, max] sorteadas uniformemente). A espera longa e
- * aleatória é o que escalona: sem ela o escritório inteiro levantaria junto.
- */
-const PASSEIO_ESPERA_MS: Vec2 = [6000, 16000]
-const PASSEIO_PAUSA_MS: Vec2 = [2000, 5000]
-/** Teto de gente passeando cheio: tenta de novo mais cedo, sem esperar um ciclo inteiro. */
-const PASSEIO_REPIQUE_MS: Vec2 = [2000, 6000]
-/** Chance de o passeio ser até a sala vizinha em vez de dentro da própria. */
-const PASSEIO_VIZINHO = 0.2
-/** No máximo esta fração dos atores fora do posto por passeio ao mesmo tempo. */
-const PASSEIO_FRACAO_MAX = 1 / 3
-/**
- * Folga de tela entre o destino do passeio e qualquer outro ator (parado ou
- * indo para algum lugar): passear até o colo de alguém recria a aglomeração.
- */
-const PASSEIO_FOLGA_PX = 40
-
-
-interface CharAnim {
-  file: string
-  frames: number
-}
-
-export interface CharSheet {
-  frameW: number
-  frameH: number
-  anims: Record<string, CharAnim>
-}
-
-interface Actor {
-  id: string
-  /** domínio a que a pessoa pertence: define a sala em que ela está. */
-  dominioId: string
-  x: number
-  y: number
-  slot: Vec2
-  route: Vec2[]
-  dist: number
-  /** direção na TELA: 1 = direita, -1 = esquerda (espelha o billboard) */
-  facing: number
-  walking: boolean
-  /** ator de uma sala que ainda está nascendo: existe, mas não se pinta. */
-  hidden: boolean
-  /**
-   * Movimento mandado de fora (moveTo, entrada). Enquanto true o ator não
-   * passeia, e é só nesse estado que a câmera o segue.
-   */
-  comando: boolean
-  /**
-   * O comando termina ao chegar (voltar à própria cadeira). Visita a outra sala
-   * segura o ator lá até o próximo comando: o GameMap é quem manda voltar.
-   */
-  comandoAcabaAoChegar: boolean
-  /** Passeio ambiente em curso. null = no posto (ou sob comando). */
-  passeio: 'indo' | 'pausa' | 'voltando' | null
-  /** Espera até o próximo passeio ou pausa no destino. Um por ator, para cancelar. */
-  timerPasseio: ReturnType<typeof setTimeout> | null
-}
-
-export interface RoomPropView {
-  kind: PropKind
-  emoji: string
-  left: number
-  top: number
-  width: number
-  height: number
-  z: number
-}
-
-export interface WallView {
-  key: string
-  axis: 'x' | 'y'
-  left: number
-  top: number
-  len: number
-  z: number
-}
-
-export interface RoomView {
-  key: string
-  slot: Vec2
-  /** retângulos em coordenadas de MUNDO (a camada .ground é que projeta) */
-  base: { left: number; top: number; width: number; height: number }
-  floor: { left: number; top: number; width: number; height: number }
-  /** posição de tela da placa da sala */
-  label: { text: string; left: number; top: number }
-  /**
-   * null = sala assentada. 'pending' = slot já reservado, mas a sala espera a
-   * câmera chegar. 'building' = tocando `room-build`. 'closing' = domínio
-   * arquivado: a sala toca `room-build` ao contrário e some.
-   */
-  phase: RoomPhase
-  walls: WallView[]
-  props: RoomPropView[]
-}
-
-export type RoomPhase = 'pending' | 'building' | 'closing' | null
-
-export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolean | null>, margemSuperior?: Ref<number>) {
+export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolean | null>, margemSuperior?: Ref<number>, passeiosPermitidos?: Ref<boolean>, criarRenderizador: CriarRenderizadorDoEscritorio = criarRenderizadorDom) {
+  const renderizador = criarRenderizador()
+  let desmontado = false
   // Setters em vez de refs expostos: no template um ref é auto-unwrapped, então
   // `:ref="worldRef"` passaria null em vez do objeto ref.
   const viewportRef = shallowRef<HTMLElement | null>(null)
-  const worldRef = shallowRef<HTMLElement | null>(null)
 
   function setViewportEl(el: unknown) {
     viewportRef.value = (el as HTMLElement | null) ?? null
   }
 
   function setWorldEl(el: unknown) {
-    worldRef.value = (el as HTMLElement | null) ?? null
+    renderizador.ligarMundo((el as HTMLElement | null) ?? null)
     applyCamera()
   }
 
@@ -312,91 +161,10 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
     return { ...b, minY: b.minY - margem }
   })
 
-  /** Profundidade do pintor: a diagonal do mundo ortogonal. */
-  function depth(wx: number, wy: number): number {
-    return Math.round(wx + wy)
-  }
-
-  const rooms = computed<RoomView[]>(() =>
-    [
-      ...dominios.value.map((d) => ({ d, fase: (roomPhase.get(slotKey(d.slot)) ?? null) as RoomPhase })),
-      // Fora do roster, mas ainda na tela até `room--closing` terminar. As
-      // portas vêm de `unlocked` (só ativas): a sala que fecha já as perde.
-      ...fechando.value.map((d) => ({ d, fase: 'closing' as RoomPhase })),
-    ].map(({ d, fase }) => {
-      const parsed = parseRoom(d.room)
-      const [ox, oy] = roomOriginPx(d.slot)
-      const key = slotKey(d.slot)
-      const x0 = ox + INNER_OFFSET
-      const y0 = oy + INNER_OFFSET
-
-      // Só as paredes de trás são desenhadas: as da frente esconderiam a sala.
-      // Um tile por div — a profundidade de uma parede longa não cabe num único
-      // z-index, e o vão da porta vira simplesmente um tile que não existe.
-      const hasNorthDoor = unlocked.value.has(slotKey([d.slot[0], d.slot[1] - 1]))
-      const hasWestDoor = unlocked.value.has(slotKey([d.slot[0] - 1, d.slot[1]]))
-      const walls: WallView[] = []
-      for (let i = 0; i < NORTH_TILES; i++) {
-        if (hasNorthDoor && i === 2) continue // porta sul do vizinho = local x 3
-        const wx = x0 + i * TILE
-        const [sx, sy] = toScreen(wx, y0)
-        walls.push({
-          key: `${key}-n${i}`,
-          axis: 'x',
-          left: sx,
-          top: sy - WALL_H,
-          len: TILE,
-          z: depth(wx + TILE / 2, y0),
-        })
-      }
-      for (let i = 0; i < WEST_TILES; i++) {
-        if (hasWestDoor && i === 1) continue // porta leste do vizinho = local y 2
-        const wy = y0 + i * TILE
-        const [sx, sy] = toScreen(x0, wy)
-        walls.push({
-          key: `${key}-w${i}`,
-          axis: 'y',
-          left: sx,
-          top: sy - WALL_H,
-          len: TILE,
-          z: depth(x0, wy + TILE / 2),
-        })
-      }
-
-      const [lx, ly] = toScreen(x0, y0)
-      return {
-        key,
-        slot: d.slot,
-        // A base cobre a sala inteira, faixa de parede inclusa: é o topo da
-        // parede. Sem ela a faixa compartilhada entre salas fica vazada.
-        base: { left: ox, top: oy, width: ROOM_W * TILE, height: ROOM_H * TILE },
-        floor: { left: x0, top: y0, width: INNER_W, height: INNER_H },
-        // A placa da sala é UI, não objeto de mundo: não entra no painter's
-        // algorithm, senão o ator da própria sala a cobre.
-        // A placa nomeia o DOMÍNIO: a sala inteira é dele, não de uma pessoa.
-        // A contagem vem da última forma conhecida: a sala que fecha mantém o formato.
-        label: { text: `${d.nome} · ${d.pessoas.length}`, left: lx, top: ly - WALL_H - 16 },
-        phase: fase,
-        walls,
-        props: parsed.props.map((p) => {
-          const [w, h] = PROP_SIZE[p.kind]
-          // Âncora do prop: centro do tile no chão; o desenho sobe a partir dele.
-          const wx = ox + p.local[0] * TILE + TILE / 2
-          const wy = oy + p.local[1] * TILE + TILE / 2
-          const [sx, sy] = toScreen(wx, wy)
-          return {
-            kind: p.kind,
-            emoji: PROP_EMOJI[p.kind],
-            left: Math.round(sx - w / 2),
-            top: Math.round(sy - h),
-            width: w,
-            height: h,
-            z: depth(wx, wy),
-          }
-        }),
-      }
-    })
-  )
+  const rooms = computed<RoomView[]>(() => [
+    ...dominios.value.map(d => projetarSala(d, roomPhase.get(slotKey(d.slot)) ?? null, unlocked.value)),
+    ...fechando.value.map(d => projetarSala(d, 'closing', unlocked.value)),
+  ])
 
   // -------------------------------------------------------------------------
   // Atores
@@ -404,8 +172,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
 
   /** Fora do sistema de reatividade de propósito: o tick escreve no DOM direto. */
   const actors = new Map<string, Actor>()
-  /** Nós do DOM, registrados pelo :ref do template (roda antes de onMounted). */
-  const els = new Map<string, { root: HTMLElement; sprite: HTMLElement | null; walk: HTMLElement | null }>()
+  const chegadasDePercurso = new Map<string, (concluiu: boolean) => void>()
   const focused = ref<string | null>(null)
 
   /**
@@ -518,6 +285,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
         if (!unlocked.value.has(slotKey(a.slot))) {
           // A sala onde ele estava (ou para onde ia) foi arquivada. O BFS parte
           // de um slot desbloqueado, então não há rota de volta: vai direto à cadeira.
+          cancelarPercurso(a.id)
           cancelarPasseio(a)
           a.comando = false
           a.x = x
@@ -546,6 +314,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
       if (alive.has(id)) continue
       cancelarPasseio(a)
       actors.delete(id)
+      const finalizar=chegadasDePercurso.get(id)
+      chegadasDePercurso.delete(id)
+      finalizar?.(false)
     }
   }
 
@@ -565,7 +336,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
 
   /** Arma a espera até o próximo passeio. Idempotente: quem já tem timer mantém o dele. */
   function agendarPasseio(a: Actor, faixa: Vec2 = PASSEIO_ESPERA_MS) {
-    if (movimentoReduzido || a.comando || a.hidden || a.walking || a.passeio || a.timerPasseio) return
+    if (passeiosPermitidos?.value === false || movimentoReduzido || a.comando || a.hidden || a.walking || a.passeio || a.timerPasseio) return
     const t = agendar(() => {
       if (a.timerPasseio !== t) return
       a.timerPasseio = null
@@ -600,7 +371,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
 
   function dispararPasseio(a: Actor) {
     if (actors.get(a.id) !== a) return
-    if (movimentoReduzido || a.comando || a.hidden || a.walking || a.passeio) return
+    if (passeiosPermitidos?.value === false || movimentoReduzido || a.comando || a.hidden || a.walking || a.passeio) return
     // Ninguém vendo: não sai do lugar, só tenta de novo mais tarde.
     if (pausado.value) {
       agendarPasseio(a)
@@ -697,6 +468,13 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
 
   /** Chamado pelo tick no frame em que a rota termina. */
   function chegou(a: Actor) {
+    const finalizar = chegadasDePercurso.get(a.id)
+    if (finalizar) {
+      chegadasDePercurso.delete(a.id)
+      a.comando = false
+      finalizar(true)
+      return
+    }
     if (a.comando) {
       if (!a.comandoAcabaAoChegar) return // visita: fica até o próximo comando
       a.comando = false
@@ -720,6 +498,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
 
   function onPreferenciaDeMovimento(e: MediaQueryListEvent) {
     aplicarMovimento(movimento?.value != null ? !movimento.value : e.matches)
+    kick()
   }
   function aplicarMovimento(reduzido: boolean) {
     movimentoReduzido = reduzido
@@ -733,7 +512,10 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
     }
   }
 
-  if (movimento) watch(movimento, valor => aplicarMovimento(valor === null ? mqMovimento?.matches ?? false : !valor))
+  if (movimento) watch(movimento, valor => {
+    aplicarMovimento(valor === null ? mqMovimento?.matches ?? false : !valor)
+    kick()
+  })
 
   /**
    * Sala nova: pan da câmera, materialização, e só então a entrada de quem
@@ -801,55 +583,19 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
   }
 
   function setActorEl(id: string, el: unknown) {
-    const node = (el as HTMLElement | null) ?? null
-    if (!node) {
-      els.delete(id)
-      return
-    }
-    els.set(id, {
-      root: node,
-      sprite: node.querySelector<HTMLElement>('[data-billboard]'),
-      walk: node.querySelector<HTMLElement>('[data-walk]'),
-    })
+    renderizador.ligarAtor(id, (el as HTMLElement | null) ?? null)
     const a = actors.get(id)
     if (a) paint(a)
   }
 
-  /** Os nós do sprite trocam quando o manifest resolve (sheet <-> emoji). */
   function refreshSpriteEls() {
-    for (const entry of els.values()) {
-      entry.sprite = entry.root.querySelector<HTMLElement>('[data-billboard]')
-      entry.walk = entry.root.querySelector<HTMLElement>('[data-walk]')
-    }
+    renderizador.atualizarSprites()
     for (const a of actors.values()) paint(a)
   }
 
   function paint(a: Actor) {
-    const entry = els.get(a.id)
-    if (!entry) return
-    const sheet = sheetOf(a.id)
-    const w = sheet ? sheet.frameW : TILE
-    const h = sheet ? sheet.frameH : TILE
-    const [sx, sy] = toScreen(a.x, a.y)
-    // (1) Math.round nas coordenadas de tela; (2) escrita direta no style.
-    entry.root.style.transform =
-      'translate3d(' + Math.round(sx - w / 2) + 'px, ' + Math.round(sy - h) + 'px, 0)'
-    // Painter's algorithm: quem tem diagonal maior está mais à frente.
-    entry.root.style.zIndex = String(depth(a.x, a.y))
-    entry.root.classList.toggle('actor--walk', a.walking)
-    // Contrato com o GameMap: o nome aparece em quem a câmera acompanha andando
-    // por COMANDO. Sem `comando`, o PO raiz acenderia o nome a cada passeio.
-    entry.root.classList.toggle('actor--focus', focused.value === a.id && a.walking && a.comando)
-    // Ator de sala em obra não some do DOM (o :ref precisa dele): fica só
-    // invisível até a sala terminar de nascer.
-    entry.root.style.visibility = a.hidden ? 'hidden' : ''
-
-    if (entry.sprite) entry.sprite.style.transform = a.facing < 0 ? 'scaleX(-1)' : ''
-    if (!entry.walk || !sheet || !a.walking) return
-    // (3) frame derivado da distância percorrida, não do relógio.
-    const frames = sheet.anims.walk?.frames ?? 1
-    const col = ((a.dist / STEP_PX) | 0) % frames
-    entry.walk.style.backgroundPositionX = -col * w + 'px'
+    if (desmontado) return
+    renderizador.pintarAtor(quadroDoAtor(a, sheetOf(a.id), focused.value, porPessoa.value.get(a.id)?.pessoa.hue))
   }
 
   /** Manda o ator até a sala de um slot (ou até um tile local específico). */
@@ -865,6 +611,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
     const origem = unlocked.value.has(slotKey(aqui)) ? aqui : a.slot
     const slotPath = bfsSlots(origem, slot, unlocked.value)
     if (!slotPath) return false
+    const anterior = chegadasDePercurso.get(id)
+    chegadasDePercurso.delete(id)
+    anterior?.(false)
 
     // Sem `local`, o ator volta para a PRÓPRIA cadeira: a posição dele na
     // árvore do domínio de destino, nunca a cadeira de outra pessoa.
@@ -889,6 +638,35 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
     return true
   }
 
+  /** Percurso de uma passagem já registrada. Reusa caminhada e profundidade, sem puxar a câmera. */
+  function percorrer(id: string, pontos: Vec2[], aoChegar: (concluiu: boolean) => void): boolean {
+    const a = actors.get(id)
+    if (!a || a.hidden || a.comando || movimentoReduzido || !pontos.length || pontos.some(p => p.some(v => !Number.isFinite(v)))) return false
+    cancelarPasseio(a)
+    a.comando = true
+    a.comandoAcabaAoChegar = false
+    a.route = pontos.map(p => [...p] as Vec2)
+    a.walking = true
+    a.dist = 0
+    chegadasDePercurso.set(id, aoChegar)
+    kick()
+    return true
+  }
+  function postoDaPessoa(id: string): Vec2 | null {
+    const entrada = porPessoa.value.get(id)
+    return entrada ? stationPx(entrada.dominio, entrada.idx) : null
+  }
+  function cancelarPercurso(id: string) {
+    const finalizar = chegadasDePercurso.get(id), a = actors.get(id), posto = postoDaPessoa(id)
+    if (!finalizar || !a) return
+    chegadasDePercurso.delete(id)
+    a.route = []; a.walking = false; a.comando = false
+    if (posto) [a.x, a.y] = posto
+    paint(a)
+    finalizar(false)
+    kick()
+  }
+
   // -------------------------------------------------------------------------
   // Câmera (em coordenadas de tela)
   // -------------------------------------------------------------------------
@@ -903,19 +681,12 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
     view.h = el.clientHeight / scale.value
   }
 
-  function clampAxis(want: number, min: number, max: number, viewSize: number): number {
-    const span = max - min
-    // mapa menor que o viewport nesse eixo: centraliza
-    if (span <= viewSize) return min - (viewSize - span) / 2
-    const hi = max - viewSize
-    return want < min ? min : want > hi ? hi : want
-  }
-
   /**
    * Último ponto de mundo seguido por COMANDO. A câmera fica nele quando
    * ninguém comandado anda: seguir quem passeia a faria tremer o tempo todo.
    */
   let ultimoAlvo: Vec2 | null = null
+  let percursoAcompanhado: string | null = null
 
   function camTarget(): Vec2 {
     const b = bounds.value
@@ -924,8 +695,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
     // seguir o ator.
     let ponto = lookPoint.value
     if (!ponto) {
-      const a = focused.value ? actors.get(focused.value) : undefined
-      if (a && a.comando && !a.hidden && (a.walking || a.route.length)) ultimoAlvo = [a.x, a.y]
+      const id = percursoAcompanhado ?? focused.value
+      const a = id ? actors.get(id) : undefined
+      if (a && a.comando && (percursoAcompanhado === a.id || !chegadasDePercurso.has(a.id)) && !a.hidden && (a.walking || a.route.length)) ultimoAlvo = [a.x, a.y]
       ponto = ultimoAlvo
     }
     const [sx, sy] = ponto ? toScreen(ponto[0], ponto[1]) : [(b.minX + b.maxX) / 2, (b.minY + b.maxY) / 2]
@@ -936,11 +708,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
   }
 
   function applyCamera() {
-    const el = worldRef.value
-    if (!el) return
-    const s = scale.value
-    el.style.transform =
-      'translate3d(' + -Math.round(cam.x * s) + 'px, ' + -Math.round(cam.y * s) + 'px, 0) scale(' + s + ')'
+    renderizador.pintarCamera({ ...cam, escala: scale.value })
   }
 
   function snapCamera() {
@@ -958,40 +726,8 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
   let raf = 0
   let last = 0
 
-  function advance(a: Actor, dt: number): void {
-    let budget = SPEED * dt
-    while (budget > 0 && a.route.length) {
-      const [tx, ty] = a.route[0]
-      const dx = tx - a.x
-      const dy = ty - a.y
-      const d = Math.hypot(dx, dy)
-      if (d < 0.001) {
-        a.route.shift()
-        continue
-      }
-      // billboard: o que importa é o sentido na tela, não no mundo
-      const screenDx = toScreen(dx, dy)[0]
-      if (Math.abs(screenDx) > 0.01) a.facing = screenDx < 0 ? -1 : 1
-      if (d <= budget) {
-        a.x = tx
-        a.y = ty
-        a.dist += d
-        budget -= d
-        a.route.shift()
-      } else {
-        a.x += (dx / d) * budget
-        a.y += (dy / d) * budget
-        a.dist += budget
-        budget = 0
-      }
-    }
-    if (!a.route.length && a.walking) {
-      a.walking = false
-      a.dist = 0
-    }
-  }
-
   function tick(now: number) {
+    if (desmontado) return
     const dt = Math.min((now - last) / 1000, 0.05)
     last = now
     // Leitura barata: o transform de .world não invalida o layout do viewport,
@@ -1008,26 +744,16 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
       paint(a)
     }
 
-    const [wx, wy] = camTarget()
-    // suavização independente de framerate; com movimento reduzido a câmera
-    // salta direto ao alvo (o ator ainda anda: é ele que diz quem atende).
-    const k = movimentoReduzido ? 1 : 1 - Math.exp(-CAM_LAMBDA * dt)
-    cam.x += (wx - cam.x) * k
-    cam.y += (wy - cam.y) * k
-    if (Math.abs(wx - cam.x) < 0.5 && Math.abs(wy - cam.y) < 0.5) {
-      cam.x = wx
-      cam.y = wy
-    } else {
-      busy = true
-    }
+    if (avancarCamera(cam, camTarget(), dt, movimentoReduzido)) busy = true
     applyCamera()
 
     // o loop para sozinho quando ninguém anda
-    raf = busy ? requestAnimationFrame(tick) : 0
+    renderizador.terminarQuadro?.(now)
+    raf = busy || renderizador.continuo ? requestAnimationFrame(tick) : 0
   }
 
   function kick() {
-    if (raf || pausado.value) return
+    if (desmontado || raf || pausado.value) return
     last = performance.now()
     raf = requestAnimationFrame(tick)
   }
@@ -1097,10 +823,13 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
   })
 
   onBeforeUnmount(() => {
+    desmontado = true
     if (raf) cancelAnimationFrame(raf)
     raf = 0
+    renderizador.destruir()
     for (const t of timers) clearTimeout(t)
     timers.clear()
+    chegadasDePercurso.clear()
     for (const a of actors.values()) a.timerPasseio = null
     ro?.disconnect()
     io?.disconnect()
@@ -1145,6 +874,11 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
     bounds,
     setActorEl,
     moveTo,
+    percorrer,
+    postoDaPessoa,
+    cancelarPercurso,
+    olharParaPonto: (ponto: Vec2) => { percursoAcompanhado=null;lookPoint.value=[...ponto];snapCamera();kick() },
+    seguirPercurso: (id: string | null) => { percursoAcompanhado=id;if(id)lookPoint.value=null;kick() },
     pausado,
     focus: (id: string) => {
       focused.value = id

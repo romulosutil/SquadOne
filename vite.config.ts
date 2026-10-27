@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import vue from '@vitejs/plugin-vue';
 import path from 'path';
 import {defineConfig, loadEnv, type Plugin} from 'vite';
+import { validarRenderizadorPadrao } from './scripts/escritorio-renderizador-padrao';
 
 const FORMATO_CLIENT_ID = /^[0-9]+-[0-9a-z]+\.apps\.googleusercontent\.com$/;
 
@@ -29,10 +30,17 @@ function exigirClientId(env: Record<string, string>): Plugin {
   };
 }
 
+/** Valida antes de escrever dist: uma importação experimental não substitui o build servido. */
+function exigirDom(): Plugin {
+  return { name: 'squadone-escritorio-dom', apply: 'build', buildEnd(erro) {
+    if (!erro) validarRenderizadorPadrao(this.getModuleIds());
+  } };
+}
+
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');
   return {
-    plugins: [vue(), tailwindcss(), exigirClientId(env)],
+    plugins: [vue(), tailwindcss(), exigirClientId(env), exigirDom()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

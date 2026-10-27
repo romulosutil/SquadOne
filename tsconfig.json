@@ -31,6 +31,7 @@
     "node_modules",
     "dist",
     "output/**",
-    "brag-output*/**"
+    "brag-output*/**",
+    "prototypes/escritorio-pixi/**"
   ]
 }

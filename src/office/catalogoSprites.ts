@@ -1,4 +1,4 @@
-import type { CharSheet } from './useOffice'
+import type { CharSheet } from './modelo'
 
 let leitura: Promise<Record<string, CharSheet>> | null = null
 const POOL = ['wraith_01', 'wraith_02', 'wraith_03']

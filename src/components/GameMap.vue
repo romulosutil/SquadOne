@@ -25,31 +25,35 @@ import cenarioDoEscritorio from '../office/assets/escritorio-cozy-v1.webp?url'
  * escala) que abre a sala dele. O estado de cada um vai no nome acessível, em
  * texto (`estados`, só com fonte; `Sem sinal` quando não há).
  */
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 import { ESCALA_MAXIMA, escalaInteira } from '../office/vista'
 import type { EstadoDaPessoa } from '../casca/hoje'
 import {
   useOffice,
   type CharSheet,
-  type OfficeDominio,
   type OfficePessoa,
   type RoomPhase,
   type RoomView,
 } from '../office/useOffice'
 import {
   ISO_MATRIX,
-  ROOM_TEMPLATES,
   TILE,
   WALL_H,
   WALL_MATRIX_X,
   WALL_MATRIX_Y,
-  type RoomId,
 } from '../office/rooms'
 import { PE_DO_PROP, PROP_SPRITE, VIES_Z } from '../office/pixelProps'
 import type { BalaoDaSala } from '../office/baloes'
-import type { Pessoa, SquadView } from '../types'
+import type { SquadView } from '../types'
 import { useMovimentoDoEscritorio } from '../office/movimento'
-import { resolverSprite } from '../office/catalogoSprites'
+import { dominiosDoEscritorio, trabalhosPorPessoa } from '../office/projecao'
+import { CENA_ILUSTRADA } from '../office/configuracao'
+import type { CriarRenderizadorDoEscritorio } from '../office/renderizador'
+import { criarCoreografia, type TransporteVisual } from '../office/coreografia'
+import EsteiraNoEscritorio from '../office/EsteiraNoEscritorio.vue'
+import type { EstacaoDaProducao, PassagemDaProducao } from '../office/linha-de-producao'
+import type { FaseDoEscritorio } from '../office/jornada-do-escritorio'
+import { pontosDasEstacoes, pontoDaEsteiraNoMundo } from '../office/caminhos-da-cena'
 
 const props = defineProps<{
   agent?: string
@@ -75,69 +79,45 @@ const props = defineProps<{
   imersivo?: boolean
   painelAgentes?: { resumo: string; detalhe: string }
   painelDecisoes?: { resumo: string; detalhe: string }
+  estacoesProducao?: readonly EstacaoDaProducao[]
+  estacaoSelecionada?: FaseDoEscritorio | null
+  producaoDisponivel?: boolean
+  passagem?: PassagemDaProducao | null
+  /** Porta usada pelo laboratório; a aplicação usa DOM por padrão. */
+  criarRenderizador?: CriarRenderizadorDoEscritorio
 }>()
 
-const emit = defineEmits<{ abrirSala: [dominioId: string]; abrirAgente: [salaId: string, pessoaId: string]; painel: [tipo: 'agentes' | 'decisoes'] }>()
+const emit = defineEmits<{ abrirSala: [dominioId: string]; abrirAgente: [salaId: string, pessoaId: string]; painel: [tipo: 'agentes' | 'decisoes']; estacao:[fase:FaseDoEscritorio]; etapa:[fase:FaseDoEscritorio]; cliente:[id:string]; passagemFinalizada:[id:string]; transporte:[texto:string] }>()
 
 const estadoDoAtor = computed<Record<string, BalaoDaSala>>(() => props.baloes ?? {})
 const imagemDaCenaDisponivel = ref(true)
-const cenarioIlustrado = computed(() => imagemDaCenaDisponivel.value && dominios.value.length <= 6)
+const cenarioIlustrado = computed(() => imagemDaCenaDisponivel.value && dominios.value.length <= CENA_ILUSTRADA.maximoDeSalas)
 
-/** 3 personagens no pacote CraftPix para N papéis: o resto reusa com hue (§5.3). */
-
-function roomIdDe(room: string): RoomId {
-  return (room in ROOM_TEMPLATES ? room : 'ROOM_EMPTY') as RoomId
-}
-
-/**
- * Espelho do manifest do CraftPix. `sheets` nasce DENTRO de useOffice, que por
- * sua vez já precisa de `dominios` pronto — ler `sheets` direto no computed
- * abaixo seria um ciclo. O espelho quebra o ciclo e mantém a reatividade: o
- * computed re-avalia sozinho quando o fetch do manifest resolve.
- */
 const manifest = shallowRef<Record<string, CharSheet> | null>(null)
+const dominios = computed(() => dominiosDoEscritorio(props.squad, !!props.imersivo, manifest.value))
 
-/**
- * Árvore -> vista. A pessoa carrega só aparência; slot e sala são do domínio.
- * `ordem` é um contador global só para distribuir sprites/hue entre quem não
- * trouxe os seus do roster — não tem significado no modelo.
- *
- * O sprite do roster só é honrado se existir em `chars`: um nome morto (roster
- * de uma versão antiga) usa outro sprite do mesmo pacote quando o nome antigo não existe.
- * Quem cai no pool por sprite inválido ganha hue como qualquer outro do pool.
- * Sem manifesto, o mapa exibe um marcador neutro e informa a falha.
- */
-function paraOfficePessoa(
-  p: Pessoa,
-  ordem: number,
-  chars: Record<string, CharSheet> | null
-): OfficePessoa {
-  return {
-    id: p.id,
-    nome: p.nome,
-    papel: p.papel,
-    ...resolverSprite(p.sprite, p.hue, ordem, chars),
-  }
-}
+const { preferencia: preferenciaDeMovimento, animar } = useMovimentoDoEscritorio()
+const { setViewportEl, setWorldEl, scale, sheets, erroSprites, carregarSprites, pessoas, rooms, bounds, setActorEl, moveTo, percorrer, postoDaPessoa, cancelarPercurso, olharParaPonto, seguirPercurso, focus, pausado } =
+  useOffice(dominios, preferenciaDeMovimento, computed(() => props.imersivo ? 180 : 0), computed(() => !props.estacoesProducao), props.criarRenderizador)
 
-const dominios = computed<OfficeDominio[]>(() => {
-  const chars = manifest.value
-  let ordem = 0
-  return (props.squad?.dominios ?? []).map((d, indice) => ({
-    id: d.id,
-    nome: d.nome,
-    // Planta do escritório compartilhado: dois postos por fileira. Os IDs e
-    // a ordem do roster continuam sendo a identidade dos agentes e do trabalho.
-    slot: props.imersivo ? [indice % 2, Math.floor(indice / 2)] as [number, number] : d.slot,
-    room: roomIdDe(d.room),
-    // PO primeiro: a ordem define qual cadeira cada um ocupa na sala.
-    pessoas: [d.po, ...d.integrantes].map((p) => paraOfficePessoa(p, ordem++, chars)),
-  }))
+const caixa = ref({ w: 0, h: 0 })
+const mapaEl = ref<HTMLElement | null>(null)
+const pontosDaProducao = computed(() => pontosDasEstacoes(cenarioIlustrado.value, dominios.value, postoDaPessoa))
+const transporte = ref<TransporteVisual | null>(null)
+const coreografia = criarCoreografia({
+  squad: () => props.squad, pessoas: () => pessoas.value, pontos: () => pontosDaProducao.value,
+  postoDaPessoa, percorrer, cancelarPercurso, seguirPercurso,
+  acompanhar: () => !!mapaEl.value && (mapaEl.value.clientWidth < 768 || scale.value * (bounds.value.maxY - bounds.value.minY) > caixa.value.h),
+  estado: valor => { transporte.value = valor }, texto: valor => emit('transporte', valor),
+  terminou: id => { emit('passagemFinalizada', id); void focarEstacaoDaEsteira() },
 })
-
-const { preferencia: preferenciaDeMovimento } = useMovimentoDoEscritorio()
-const { setViewportEl, setWorldEl, scale, sheets, erroSprites, carregarSprites, pessoas, rooms, bounds, setActorEl, moveTo, focus, pausado } =
-  useOffice(dominios, preferenciaDeMovimento, computed(() => props.imersivo ? 180 : 0))
+watch([() => props.passagem, animar], ([passagem, permitido]) => coreografia.iniciar(passagem ?? null, permitido), { flush: 'post', immediate: true })
+onBeforeUnmount(() => coreografia.destruir())
+function clicarPessoa(p: OfficePessoa) {
+  if (transporte.value?.pessoaId === p.id && transporte.value.etapa === 'levar') { emit('cliente',transporte.value.passagem.leadId); return }
+  const sala = salaDe.value.get(p.id)
+  if (sala) { emit('abrirSala',sala.id); emit('abrirAgente',sala.id,p.id) }
+}
 
 /** Sala de cada pessoa: o toque no personagem abre a sala, não a pessoa. */
 const salaDe = computed(() => {
@@ -148,9 +128,13 @@ const salaDe = computed(() => {
 const slotSelecionado = computed(() => dominios.value.find(d => d.id === props.salaSelecionada)?.slot)
 const salaSelecionadaNoMapa = (slot: [number, number]) => slotSelecionado.value?.[0] === slot[0] && slotSelecionado.value?.[1] === slot[1]
 
+const trabalhosDosAtores = computed(() => trabalhosPorPessoa(pessoas.value, props.estacoesProducao, !!props.producaoDisponivel))
+function proximoDoAtor(p: OfficePessoa) { return trabalhosDosAtores.value.get(p.id) }
 const rotuloDoAtor = (p: OfficePessoa) => {
+  if(transporte.value?.pessoaId === p.id) return `${p.nome}: exibição da passagem já registrada de ${transporte.value.passagem.empresa}. ${transporte.value.passagem.motivo}.`
   const sala = salaDe.value.get(p.id)
-  const estado = props.estados?.[p.id]?.texto ?? 'Sem sinal'
+  const trabalho = proximoDoAtor(p)
+  const estado = trabalho ? `Próximo: ${trabalho.acao}. Cliente: ${trabalho.empresa}.` : props.estados?.[p.id]?.texto ?? (props.estacoesProducao ? 'Sem tarefa atribuída nesta leitura' : 'Sem sinal')
   // O balão também é lido: quem usa leitor de tela não vê o texto em cima do boneco.
   const balao = estadoDoAtor.value[p.id]?.texto
   return `${p.nome}, ${p.papel}${sala ? `, sala ${sala.nome}` : ''}. ${balao ? `${balao}. ` : ''}${estado}. ${sala?.id.startsWith('prumo--') ? 'Conversar com o agente.' : 'Abrir a sala.'}`
@@ -159,8 +143,18 @@ const rotuloDoAtor = (p: OfficePessoa) => {
 // ---------------------------------------------------------------- escala
 
 /** Tamanho do viewport em px de tela, medido por ResizeObserver. */
-const caixa = ref({ w: 0, h: 0 })
-const mapaEl = ref<HTMLElement | null>(null)
+async function focarEstacaoDaEsteira() {
+  await nextTick()
+  const fase=props.estacaoSelecionada
+  const mapa=mapaEl.value
+  if(mapa && fase && (mapa.clientWidth < 768 || scale.value*(bounds.value.maxY-bounds.value.minY)>caixa.value.h-24)) {
+    if(transporte.value?.passagem.para === fase) return
+    olharParaPonto(pontoDaEsteiraNoMundo(fase,pontosDaProducao.value))
+  }
+  const mesa=mapa?.querySelector<HTMLElement>(`[data-fase="${fase}"]`)
+  if(mapa && mesa && mapa.scrollWidth > mapa.clientWidth) { const alvo=mesa.getBoundingClientRect(), vista=mapa.getBoundingClientRect(); mapa.scrollTo({left:mapa.scrollLeft + alvo.left + alvo.width/2 - vista.left - vista.width/2,behavior:'auto'}) }
+}
+watch(() => props.estacaoSelecionada, focarEstacaoDaEsteira)
 let roCaixa: ResizeObserver | null = null
 function ligarViewport(el: unknown) {
   setViewportEl(el)
@@ -172,6 +166,7 @@ function ligarViewport(el: unknown) {
     caixa.value = { w: no.clientWidth, h: no.clientHeight }
     // No celular o cenário mantém os personagens legíveis; o gesto lateral explora a sala.
     if (props.imersivo && mapaEl.value) mapaEl.value.scrollLeft = (mapaEl.value.scrollWidth - mapaEl.value.clientWidth) / 2
+    if(props.estacaoSelecionada) requestAnimationFrame(() => void focarEstacaoDaEsteira())
   })
   roCaixa.observe(no)
 }
@@ -181,7 +176,7 @@ onBeforeUnmount(() => roCaixa?.disconnect())
 const zoom = ref<number | null>(null)
 const encaixe = computed(() =>
   props.imersivo
-    ? Math.max(.1, Math.min(2, (caixa.value.w - 24) / (bounds.value.maxX - bounds.value.minX), (caixa.value.h - 24) / (bounds.value.maxY - bounds.value.minY)))
+    ? Math.max(props.estacoesProducao || caixa.value.w <= 720 ? .72 : .1, Math.min(2, (caixa.value.w - 24) / (bounds.value.maxX - bounds.value.minX), (caixa.value.h - 24) / (bounds.value.maxY - bounds.value.minY)))
     : escalaInteira(caixa.value, { w: bounds.value.maxX - bounds.value.minX, h: bounds.value.maxY - bounds.value.minY })
 )
 watchEffect(() => {
@@ -336,24 +331,25 @@ function actorStyle(p: OfficePessoa) {
       <!-- SCALE aparece em UM lugar: este transform (escrito por useOffice). -->
       <div :ref="setWorldEl" class="office-world" :style="worldBox">
         <template v-if="imersivo">
-          <img v-if="cenarioIlustrado" class="cena-ilustrada" :src="cenarioDoEscritorio" width="1743" height="902" alt="" aria-hidden="true" draggable="false" @error="imagemDaCenaDisponivel = false"/>
+          <img v-if="cenarioIlustrado" class="cena-ilustrada" :src="cenarioDoEscritorio" :width="CENA_ILUSTRADA.nativa.largura" :height="CENA_ILUSTRADA.nativa.altura" :style="{ left: CENA_ILUSTRADA.esquerda + 'px', top: CENA_ILUSTRADA.topo + 'px', width: CENA_ILUSTRADA.largura + 'px', height: CENA_ILUSTRADA.altura + 'px' }" alt="" aria-hidden="true" draggable="false" @error="imagemDaCenaDisponivel = false"/>
           <svg v-else class="cena-plataforma" width="1" height="1" aria-hidden="true"><polygon :points="plataforma.esquerda" fill="#5d5146"/><polygon :points="plataforma.direita" fill="#403f3c"/></svg>
+          <EsteiraNoEscritorio v-if="estacoesProducao" :pontos="pontosDaProducao" :estacoes="estacoesProducao" :selecionada="estacaoSelecionada" :disponivel="!!producaoDisponivel" @selecionar="emit('estacao',$event)" @cliente="emit('cliente',$event)" @etapa="emit('etapa',$event)" />
           <div class="cena-parede cena-parede--oeste" :style="paredeOeste">
-            <button class="cena-tela cena-tela--agentes" type="button" aria-label="Abrir decisões e andamento dos agentes" @click="emit('painel', 'agentes')">
-              <span class="cena-tela__luz" aria-hidden="true"></span><strong>Decisões dos agentes</strong>
+            <button class="cena-tela cena-tela--agentes" type="button" aria-label="Abrir jornada do time e clientes" @click="emit('painel', 'agentes')">
+              <span class="cena-tela__luz" aria-hidden="true"></span><strong>Jornada do time</strong>
               <span class="cena-tela__numero">{{ painelAgentes?.resumo ?? 'Lendo o time…' }}</span>
               <span class="cena-tela__detalhe">{{ painelAgentes?.detalhe ?? 'Acompanhe o trabalho' }}</span>
-              <span class="cena-tela__abrir">Ver andamento →</span>
+              <span class="cena-tela__abrir">Ver jornada →</span>
             </button>
           </div>
           <div class="cena-parede cena-parede--norte" :style="paredeNorte">
             <span v-if="!cenarioIlustrado" class="cena-marca" aria-hidden="true">SQUAD ONE <small>ESTÚDIO DE OPERAÇÕES</small></span>
             <div v-if="!cenarioIlustrado" class="cena-janela" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-            <button class="cena-tela cena-tela--decisoes" type="button" aria-label="Abrir minhas decisões e conversas" @click="emit('painel', 'decisoes')">
-              <span class="cena-tela__luz" aria-hidden="true"></span><strong>Minhas decisões</strong>
+            <button class="cena-tela cena-tela--decisoes" type="button" aria-label="Abrir minha vez na jornada" @click="emit('painel', 'decisoes')">
+              <span class="cena-tela__luz" aria-hidden="true"></span><strong>Sua vez</strong>
               <span class="cena-tela__numero">{{ painelDecisoes?.resumo ?? 'Lendo as conversas…' }}</span>
               <span class="cena-tela__detalhe">{{ painelDecisoes?.detalhe ?? 'O que depende de você' }}</span>
-              <span class="cena-tela__abrir">Abrir conversas →</span>
+              <span class="cena-tela__abrir">Continuar jornada →</span>
             </button>
           </div>
         </template>
@@ -484,7 +480,7 @@ function actorStyle(p: OfficePessoa) {
               class="actor__hit"
               :aria-label="rotuloDoAtor(p)"
               :aria-pressed="salaSelecionada ? salaDe.get(p.id)?.id === salaSelecionada : undefined"
-              @click="salaDe.get(p.id) && (emit('abrirSala', salaDe.get(p.id)!.id), emit('abrirAgente', salaDe.get(p.id)!.id, p.id))"
+              @click="clicarPessoa(p)"
             ></button>
             <div data-billboard class="actor__billboard">
               <template v-if="sheetOf(p)">
@@ -494,6 +490,8 @@ function actorStyle(p: OfficePessoa) {
               <div v-else class="actor__sem-sprite" aria-hidden="true"></div>
             </div>
             <span class="actor__name" aria-hidden="true">{{ imersivo ? p.nome : `${p.nome} · ${p.papel}` }}</span>
+            <span v-if="transporte?.pessoaId === p.id" class="actor__intencao" :data-carregando="transporte.etapa === 'levar' || undefined" aria-hidden="true"><i v-if="transporte.etapa === 'levar'" class="actor__documento"></i>{{ transporte.etapa === 'voltar' ? 'Passagem registrada ✓' : `Registro: ${transporte.passagem.motivo}` }}</span>
+            <span v-else-if="proximoDoAtor(p)" class="actor__intencao actor__intencao--fila" aria-hidden="true">Próximo: {{ proximoDoAtor(p)!.acao }}</span>
             <span
               v-if="estadoDoAtor[p.id] && (!salaSelecionada || salaDe.get(p.id)?.id === salaSelecionada || estadoDoAtor[p.id].destaque)"
               class="actor__estado"
@@ -510,6 +508,9 @@ function actorStyle(p: OfficePessoa) {
 </template>
 
 <style scoped>
+.actor__intencao { position:absolute;z-index:2;left:50%;bottom:100%;transform:translateX(-50%);max-width:calc(170px / var(--escala,1));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:calc(4px / var(--escala,1)) calc(7px / var(--escala,1));background:#233c3d;color:#fff0ca;border:1px solid #d3b775;border-radius:4px;font:700 calc(12px / var(--escala,1))/1.3 var(--fonte);pointer-events:none; }
+.actor__intencao[data-carregando] { background:#f2cf7a;color:#273329; }
+.actor__documento { display:inline-block;width:calc(10px / var(--escala,1));height:calc(12px / var(--escala,1));margin-right:calc(5px / var(--escala,1));background:#fff8db;border:1px solid #736b50;vertical-align:middle; }
 .mapa--imersivo { height: 100%; border: 0 !important; box-shadow: none !important; background: #20283a; }
 .mapa--imersivo .office-viewport { height: 100%; min-height: 0; flex: 1; background: radial-gradient(ellipse at 50% 55%, #34414b, #1b2730 78%); }
 @media(max-width:47.99rem) {
@@ -546,7 +547,7 @@ function actorStyle(p: OfficePessoa) {
 .cena-tela__detalhe { overflow: hidden; color: #c9d9cd; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .cena-tela__abrir { font-size: 8px; text-transform: uppercase; letter-spacing: 1px; color: var(--tela-cor); }
 .cena-tela__luz { position: absolute; width: 6px; height: 6px; right: 7px; top: 7px; background: var(--tela-cor); box-shadow: 0 0 8px var(--tela-cor); }
-.cena-ilustrada { position: absolute; left: -652px; top: -188px; width: 1260px; height: 652px; max-width: none; z-index: -1; pointer-events: none; image-rendering: pixelated; user-select: none; }
+.cena-ilustrada { position: absolute; max-width: none; z-index: -1; pointer-events: none; image-rendering: pixelated; user-select: none; }
 .mapa--ilustrado .cena-parede { background: transparent; border: 0; box-shadow: none; z-index: 0; }
 .mapa--ilustrado .cena-tela { height: 110px; grid-template-rows: auto auto minmax(0, 1fr); gap: 4px; border: 0; outline: 0; box-shadow: none; background: transparent; padding: 10px 11px; }
 .mapa--ilustrado .cena-tela:hover, .mapa--ilustrado .cena-tela:focus-visible { outline: 2px solid var(--tela-cor); background: #ffffff08; }
