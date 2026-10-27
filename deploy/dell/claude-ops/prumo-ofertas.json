@@ -57,7 +57,7 @@
       "nichos": ["terapia ABA", "clínica de autismo", "clínica multidisciplinar infantil", "clínica de desenvolvimento infantil",
                  "clínica de neuropsicologia", "clínica de fonoaudiologia infantil"],
       "cidades": ["São Paulo SP", "Salvador BA", "Porto Alegre RS", "Fortaleza CE", "Goiânia GO", "Curitiba PR", "Recife PE", "Belo Horizonte MG", "Manaus AM", "Florianópolis SC", "Brasília DF", "Belém PA", "Campo Grande MS", "Natal RN", "Rio de Janeiro RJ", "Cuiabá MT", "João Pessoa PB", "Campinas SP", "Maceió AL", "Ribeirão Preto SP", "Teresina PI", "São Luís MA", "Londrina PR", "Uberlândia MG", "Aracaju SE", "Joinville SC", "Porto Velho RO", "Palmas TO", "Vitória ES", "Vila Velha ES"],
-      "mensagem": "{OLA}! Aqui é do Prumo. Trabalhamos com o Iris, um sistema para clínicas de terapia em que as anotações de cada sessão viram o dossiê da reavaliação, pronto para o convênio.\n\nConsigo falar por aqui com quem coordena a {NOME}?",
+      "mensagem": "{OLA}! Sou o Rômulo, do Prumo. O Iris organiza as anotações das sessões para apoiar a preparação dos relatórios de reavaliação.\n\nPosso te mostrar um exemplo com dados fictícios para a equipe da {NOME}?",
       "proxima_enviado": "Aguarde a resposta. Quem responder: marque Em conversa e combine a demonstração do dossiê (caso fictício, nunca dado de paciente). Sem resposta em 3 dias, um lembrete só."
     },
     "estampa": {
@@ -90,7 +90,7 @@
       "_nichos": "Sublimação por último: em Vitória trouxe mais caneca, brinde e fornecedor do que roupa (14/10).",
       "nichos": ["estamparia", "camisetas personalizadas", "uniformes personalizados", "silk screen", "confecção de uniformes", "sublimação"],
       "cidades": ["São Paulo SP", "Salvador BA", "Porto Alegre RS", "Fortaleza CE", "Goiânia GO", "Curitiba PR", "Recife PE", "Belo Horizonte MG", "Manaus AM", "Florianópolis SC", "Brasília DF", "Belém PA", "Campo Grande MS", "Natal RN", "Rio de Janeiro RJ", "Cuiabá MT", "João Pessoa PB", "Campinas SP", "Maceió AL", "Ribeirão Preto SP", "Teresina PI", "São Luís MA", "Londrina PR", "Uberlândia MG", "Aracaju SE", "Joinville SC", "Porto Velho RO", "Palmas TO", "Vitória ES", "Vila Velha ES"],
-      "mensagem": "{OLA}! Aqui é do Prumo. Estamos conversando com estamparias sobre um jeito de organizar os pedidos que chegam pelo WhatsApp: arte, tamanhos e prazo numa ficha só, sem se perder na conversa.\n\nConsigo falar por aqui com o responsável pela {NOME}?",
+      "mensagem": "{OLA}! Sou o Rômulo, do Prumo. Trabalho com um sistema de pedidos para estamparias que reúne arte, tamanhos e prazo em uma ficha para a produção.\n\nPosso te mostrar uma ficha de exemplo para a equipe da {NOME}, sem dados de clientes?",
       "proxima_enviado": "Aguarde a resposta. Quem responder: marque Em conversa e combine uma conversa de 20 minutos sobre como os pedidos chegam hoje. Sem resposta em 3 dias, um lembrete só."
     }
   }

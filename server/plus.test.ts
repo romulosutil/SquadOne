@@ -173,7 +173,8 @@ describe("Plus: a mensagem com a saudação da Ordem", () => {
   it("toda primeira mensagem abre com a saudação maçônica e diz de onde veio o contato", () => {
     for (const oferta of ["site", "prumo", "iris", "estampa"] as const) {
       const { texto } = primeiraDoPlus(lead("Viaconta Contabilidade", oferta));
-      assert.ok(texto.startsWith("Meu Ir.'., tudo bem? Me chamo Rômulo"), oferta);
+      assert.ok(texto.startsWith("Meu Ir.'., sou o Rômulo, do Prumo"), oferta);
+      assert.equal((texto.match(/\?/g) ?? []).length, 1, 'um único pedido no primeiro contato');
       assert.match(texto, /encontrei a Viaconta Contabilidade no Catálogo de Negócios Maçônicos/);
       assert.match(texto, /T\.F\.A\.$/);
     }
@@ -204,15 +205,16 @@ describe("Plus: a mensagem com a saudação da Ordem", () => {
   it("a frase fecha com o artigo certo em cada oferta, no feminino, no masculino e sem nome que se diga", () => {
     const frases = (empresa: string, o: LeadPlus["oferta"]) => [primeiraDoPlus(lead(empresa, o)).texto, followupDoPlus(lead(empresa, o)).texto];
     const [siteF] = frases("Viaconta Contabilidade", "site");
-    assert.match(siteF, /Vi que a Viaconta Contabilidade ainda não tem um site próprio/);
+    assert.match(siteF, /preparar uma demonstração independente de site da Viaconta Contabilidade/);
+    assert.doesNotMatch(siteF, /ainda não tem|já preparei|já montei/);
     assert.match(frases("Viaconta Contabilidade", "site")[1], /demonstração de site da Viaconta Contabilidade:/);
-    assert.match(frases("Rossi Vino Per Te", "prumo")[0], /Olhei como o Rossi Vino Per Te aparece no Google/);
+    assert.match(frases("Rossi Vino Per Te", "prumo")[0], /analisar como o Rossi Vino Per Te aparece no Google/);
     assert.match(frases("Rossi Vino Per Te", "prumo")[1], /raio-x de como o Rossi Vino Per Te aparece/);
-    assert.match(frases("Viaconta Contabilidade", "iris")[0], /quem coordena a Viaconta Contabilidade\?/);
+    assert.match(frases("Viaconta Contabilidade", "iris")[0], /Posso te mostrar um exemplo com dados fictícios\?/);
     assert.match(frases("Rossi Vino Per Te", "iris")[1], /quem coordena o Rossi Vino Per Te\?/);
-    assert.match(frases("Viaconta Contabilidade", "estampa")[0], /o responsável pela Viaconta Contabilidade\?/);
+    assert.match(frases("Viaconta Contabilidade", "estampa")[0], /Posso te mostrar uma ficha de exemplo, sem dados de clientes\?/);
     assert.match(frases("Rossi Vino Per Te", "estampa")[1], /o responsável pelo Rossi Vino Per Te\?/);
-    assert.match(frases("Advogado - Regularização de Imóveis - Inventário e Partilha", "site")[0], /Vi que o seu negócio ainda não tem/);
+    assert.match(frases("Advogado - Regularização de Imóveis - Inventário e Partilha", "site")[0], /demonstração independente de site do seu negócio/);
     for (const empresa of ["Viaconta Contabilidade", "Rossi Vino Per Te", "Advogado - Regularização de Imóveis - Inventário e Partilha"]) {
       for (const oferta of ["site", "prumo", "iris", "estampa"] as const) {
         for (const texto of frases(empresa, oferta)) {
@@ -267,7 +269,7 @@ describe("Plus no CRM: o funil sai só dos registros", () => {
     assert.equal(l.sinal, "pronto");
     assert.equal(l.cidade, "Vitória - ES");
     assert.ok(l.links.enviar?.startsWith("https://wa.me/5527999000001?text=Meu%20Ir."));
-    assert.ok(l.mensagemPronta?.startsWith("Meu Ir.'., tudo bem?"));
+    assert.ok(l.mensagemPronta?.startsWith("Meu Ir.'., sou o Rômulo, do Prumo"));
     assert.equal(l.plus?.oferta, "site");
     assert.match(l.links.maps ?? "", /google\.com\/maps\/search/);
   });

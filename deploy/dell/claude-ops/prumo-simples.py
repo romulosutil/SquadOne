@@ -429,7 +429,7 @@ const link = achou && passo === 'diagnostico' ? (await encurtar({{ url: form, al
 const seg = String(l['Segmento'] ?? '').trim().toLowerCase();
 const distribuidora = /^distribuidoras? /.test(seg);
 const publico = distribuidora ? seg.replace(/^distribuidoras? /, 'distribuidoras ') : 'empresas como a de vocês';
-const areas = !distribuidora ? 'do dia a dia'
+const areas = !distribuidora ? 'de preço, prazo e atendimento'
   : /autope/.test(seg) ? 'de orçamento, preço e compras'
   : /constru/.test(seg) ? 'de preço, desconto e crédito'
   : /aliment|bebida/.test(seg) ? 'de preço, prazo e cobrança'
@@ -439,8 +439,8 @@ const nome = nomeDaEmpresa(empresa);  // a regra de prumo-nome.js, igual à do C
 const hora = Number(new Date().toLocaleString('en-US', {{ timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }}));
 const ola = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
 const mensagem = passo === 'convite'
-  ? ola + '! Aqui é o Rômulo, do Prumo. Ajudo donos de ' + publico + ' a passar para a equipe as decisões '
-    + areas + ' que hoje dependem só deles.\\n\\nConsigo falar com o responsável pela ' + (nome || 'empresa') + ' por aqui?'
+  ? ola + '! Sou o Rômulo, do Prumo. Ajudo empresas a organizar regras '
+    + areas + ' para a equipe consultar no dia a dia.\\n\\nPosso te mostrar um exemplo ilustrativo de como essas regras ficam organizadas?'
   : 'Obrigado! Eu faço um diagnóstico gratuito da rotina: 16 perguntas de marcar, uns 10 minutos, sem nenhum dado financeiro.\\n'
     + link + '\\n\\nEm até 3 dias úteis eu devolvo o resultado, mostrando o que dá para passar para a equipe sem perder o controle.';
 let digitos = String(l['WhatsApp'] ?? '').replace(/\\D/g, '');

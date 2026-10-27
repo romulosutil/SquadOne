@@ -12,11 +12,11 @@ export function mensagemDoConvite(produto: string, empresa: string, segmento: st
   nome ||= 'empresa'
   const hora = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hourCycle: 'h23' }).format(agora))
   const ola = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite'
-  if (produto === 'iris') return `${ola}! Aqui é do Prumo. Trabalhamos com o Iris, um sistema para clínicas de terapia em que as anotações de cada sessão viram o dossiê da reavaliação, pronto para o convênio.\n\nConsigo falar por aqui com quem coordena a ${nome}?`
-  if (produto === 'estampa') return `${ola}! Aqui é do Prumo. Estamos conversando com estamparias sobre um jeito de organizar os pedidos que chegam pelo WhatsApp: arte, tamanhos e prazo numa ficha só, sem se perder na conversa.\n\nConsigo falar por aqui com o responsável pela ${nome}?`
+  if (produto === 'iris') return `${ola}! Sou o Rômulo, do Prumo. O Iris organiza as anotações das sessões para apoiar a preparação dos relatórios de reavaliação.\n\nPosso te mostrar um exemplo com dados fictícios para a equipe da ${nome}?`
+  if (produto === 'estampa') return `${ola}! Sou o Rômulo, do Prumo. Trabalho com um sistema de pedidos para estamparias que reúne arte, tamanhos e prazo em uma ficha para a produção.\n\nPosso te mostrar uma ficha de exemplo para a equipe da ${nome}, sem dados de clientes?`
   const seg = segmento.trim().toLowerCase()
   const distribuidora = /^distribuidoras? /.test(seg)
   const publico = distribuidora ? seg.replace(/^distribuidoras? /, 'distribuidoras ') : 'empresas como a de vocês'
-  const areas = !distribuidora ? 'do dia a dia' : /autope/.test(seg) ? 'de orçamento, preço e compras' : /constru/.test(seg) ? 'de preço, desconto e crédito' : /aliment|bebida/.test(seg) ? 'de preço, prazo e cobrança' : 'de preço, crédito e entregas'
-  return `${ola}! Aqui é o Rômulo, do Prumo. Ajudo donos de ${publico} a passar para a equipe as decisões ${areas} que hoje dependem só deles.\n\nConsigo falar com o responsável pela ${nome} por aqui?`
+  const areas = !distribuidora ? 'de preço, prazo e atendimento' : /autope/.test(seg) ? 'de orçamento, preço e compras' : /constru/.test(seg) ? 'de preço, desconto e crédito' : /aliment|bebida/.test(seg) ? 'de preço, prazo e cobrança' : 'de preço, crédito e entregas'
+  return `${ola}! Sou o Rômulo, do Prumo. Ajudo empresas a organizar regras ${areas} para a equipe consultar no dia a dia.\n\nPosso te mostrar um exemplo ilustrativo de como essas regras ficam organizadas?`
 }

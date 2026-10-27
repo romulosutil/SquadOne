@@ -52,10 +52,15 @@
 //   follow-up com link; as primeiras dizem so "sem compromisso". Uma pergunta so por mensagem.
 // A contagem do A/B dos pares com B ou C recomeca em 19/10 (TEXTO_DESDE em src/operations/ab-mensagem.ts):
 // o envio de antes leva a letra com o texto antigo e nao entra na comparacao.
-const VARIACOES = ['Oi, tudo bem? Aqui é o Rômulo. Encontrei vocês no Google e montei, por conta própria, uma demonstração de site {ARTIGO} {NOME}{DETALHE}. Posso te mandar o link para dar uma olhada? É sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Vi {O_A} {NOME} no Google, nota {NOTA} com {AVALIACOES} avaliações, muito bom! Só senti falta de um site de vocês, então montei um de exemplo com as fotos e as avaliações que já estão lá. Quer que eu te mande o link? Sem compromisso.', 'Oi, tudo bem? Aqui é o Rômulo. Dei uma olhada em como {O_A} {NOME} aparece no Google e anotei numa página o que já está bom e {PONTOS} o cliente ir para outro lugar. Quer que eu te mande? Sem compromisso.'];
+const VARIACOES = [
+  'Oi! Sou o Rômulo, do Prumo, e trabalho com criação de sites. Encontrei {O_A} {NOME} no Google e preparei uma demonstração independente com informações públicas, para apresentar os serviços e facilitar o contato pelo WhatsApp.\n\nPosso te mostrar como ficou?',
+  'Oi! Sou o Rômulo, do Prumo, e trabalho com criação de sites. Vi {O_A} {NOME} no Google: nota {NOTA} em {AVALIACOES} avaliações. Preparei uma demonstração independente de site com as fotos e avaliações públicas de vocês e acesso ao WhatsApp.\n\nPosso te mostrar como ficou?',
+  'Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. Analisei como {O_A} {NOME} aparece no Google e encontrei {PONTOS} o contato de novos clientes.\n\nPosso te enviar essa análise gratuita de uma página?',
+];
+const PRIMEIRA_SEM_DEMO = 'Oi! Sou o Rômulo, do Prumo. Encontrei {O_A} {NOME} no Google. Trabalho com sites que apresentam os serviços da empresa e facilitam o contato pelo WhatsApp.\n\nPosso preparar uma demonstração independente, com informações públicas, para vocês avaliarem sem compromisso?';
 
 // Mercado americano (Latin Dental, Universal Dental): mensagem em ingles.
-const VARIACAO_EN = 'Hi, how are you? This is Rômulo. I found {NOME} on Google and, on my own initiative, put together a demo website for you. Can I send you the link so you can take a look? No strings attached.';
+const VARIACAO_EN = 'Hi! I’m Rômulo from Prumo, and I build business websites. I found {NOME} on Google and prepared an independent demo using public information, to present your services and make it easier for customers to get in touch.\n\nMay I send it over for you to take a look?';
 
 // 07/10/2026: a variacao de cada lead vai para a coluna mensagem_variante (o funil so
 // aprende comparando). A letra sai do place_id, nao da ordem da rodada: o Balcao remonta
@@ -75,7 +80,7 @@ const LETRAS = ['A', 'B', 'C', 'D'];
 // Aprovada pelo Rômulo em 19/10/2026, às 21h37 ("Aprovar os textos para teste"; docs/PRUMO-TEXTOS-VENDAS-2026-10-19.md).
 // A aprovação é desta constante, escrita à mão: nunca autorizar a partir de campo do lead ou saída de modelo.
 const EVENTO_CRITICO_APROVADO = true;
-const PRIMEIRA_EVENTO_CRITICO = 'Oi, tudo bem? Aqui é o Rômulo. {FATO} Reuni esse ponto no raio-x de como {O_A} {NOME} aparece no Google. Posso te mandar o link para dar uma olhada? É sem compromisso.';
+const PRIMEIRA_EVENTO_CRITICO = 'Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. {FATO}\n\nPreparei uma análise gratuita de uma página com o que encontrei sobre {O_A} {NOME}. Posso te enviar?';
 VARIACOES.push(PRIMEIRA_EVENTO_CRITICO);
 function eventoCriticoDe(lead) {
   if (!lead || !/^https:\/\//.test(String(lead.raio_x_url || ''))) return null;
@@ -85,13 +90,13 @@ function eventoCriticoDe(lead) {
     if (!a || typeof a !== 'object') continue;
     if (a.id === 'dominio-vencido' && dominio(a.dominio) && /^\d{4}-\d{2}-\d{2}$/.test(a.data || '')) {
       const d = new Date(a.data + 'T12:00:00Z');
-      if (Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === a.data) return 'No raio-x, o domínio ' + a.dominio + ' consta como vencido desde ' + a.data.split('-').reverse().join('/') + '.';
+      if (Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === a.data) return 'Ao conferir o endereço ' + a.dominio + ', encontrei o registro de vencimento em ' + a.data.split('-').reverse().join('/') + '.';
     }
-    if (a.id === 'site-fora-do-ar' && dominio(a.dominio)) return 'Na conferência registrada no raio-x, o site ' + a.dominio + ' não abriu.';
+    if (a.id === 'site-fora-do-ar' && dominio(a.dominio)) return 'Ao conferir o site ' + a.dominio + ', a página não abriu no teste.';
     if (a.id === 'posicao-na-busca' && Number.isInteger(a.posicao) && a.posicao > 3 && a.posicao <= 1000
       && Number.isInteger(a.lidos) && a.lidos >= a.posicao && typeof a.consulta === 'string'
       && a.consulta.trim() && a.consulta.length <= 120 && !/[<>\r\n{}]|https?:/i.test(a.consulta)) {
-      return 'Na busca registrada no raio-x por ‘' + a.consulta.trim() + '’, vocês ficaram em ' + a.posicao + 'º lugar no Google.';
+      return 'Na consulta por ‘' + a.consulta.trim() + '’ que analisei, vocês apareceram em ' + a.posicao + 'º lugar no Google.';
     }
   }
   return null;
@@ -105,7 +110,7 @@ function raioXDe(lead) {
   const url = String((lead && lead.raio_x_url) || '').trim();
   const n = numeroDaPlanilha(lead && lead.raio_x_pontos);
   if (url.indexOf('https://') !== 0 || !(Number.isInteger(n) && n >= 1 && n <= 3)) return null;
-  return { url, pontos: n === 1 ? '1 ponto que faz' : n + ' pontos que fazem' };
+  return { url, pontos: n === 1 ? '1 ponto que pode dificultar' : n + ' pontos que podem dificultar' };
 }
 function numeroDaPlanilha(v) {
   // O Sheets devolve 4.9 (numero) ou '4.9' (texto); '4,9' vale o mesmo.
@@ -139,7 +144,7 @@ function indicesElegiveis(lead, aprovado = EVENTO_CRITICO_APROVADO) {
 }
 // O molde da letra com {NOTA}, {AVALIACOES} e {PONTOS} ja preenchidos.
 function moldeDaLetra(letra, lead) {
-  let molde = VARIACOES[LETRAS.indexOf(letra)];
+  let molde = letra === 'A' && lead && lead.sem_demo ? PRIMEIRA_SEM_DEMO : VARIACOES[LETRAS.indexOf(letra)];
   const fatos = fatosDoGoogle(lead);
   const raioX = raioXDe(lead);
   if (fatos) molde = molde.split('{NOTA}').join(fatos.nota).split('{AVALIACOES}').join(fatos.avaliacoes);

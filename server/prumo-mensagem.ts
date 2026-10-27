@@ -13,7 +13,7 @@ import { artigoDe, primeiraComEventoCritico, type eventoCriticoDe } from "./site
 
 /** Texto candidato; não participa do envio enquanto a revisão humana não for aplicada. */
 export function primeiraComEventoCriticoDoPrumo(empresa: string, lead: Parameters<typeof eventoCriticoDe>[0], aprovado = false): string {
-  return primeiraComEventoCritico(nomeDaEmpresa(empresa), lead, aprovado).replace('Aqui é o Rômulo.', 'Aqui é o Rômulo, do PRUMO.');
+  return primeiraComEventoCritico(nomeDaEmpresa(empresa), lead, aprovado);
 }
 
 export const SEGUNDA_PRUMO =

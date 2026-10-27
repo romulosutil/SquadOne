@@ -19,11 +19,12 @@ const CONFIG = JSON.parse(fs.readFileSync(new URL("../deploy/dell/claude-ops/pru
 };
 
 describe("prumo-ofertas.json × CRM", () => {
-  it("as ofertas são as do CRM, com a mesma aba", () => {
+  it("as ofertas são as do CRM, com a mesma aba e o mesmo caminho do convite", () => {
     assert.deepEqual(Object.keys(CONFIG.ofertas).sort(), ["estampa", "iris"]);
     for (const [id, o] of Object.entries(CONFIG.ofertas)) {
       const doCrm = OFERTA_DE_PROSPECCAO[id as "iris" | "estampa"];
       assert.equal(o.aba, doCrm.aba, id);
+      assert.equal(o.convite, doCrm.convite, id);
     }
   });
 
@@ -49,11 +50,12 @@ describe("prumo-ofertas.json × CRM", () => {
     }
   });
 
-  it("o convite segue as regras do PRUMO: voz da empresa, sem nome, sem preço, sem link, uma pergunta", () => {
+  it("o convite identifica pessoa e empresa, oferece exemplo e faz um pedido, sem preço nem link", () => {
     for (const [id, o] of Object.entries(CONFIG.ofertas)) {
-      assert.ok(o.mensagem.startsWith("{OLA}! Aqui é do Prumo."), id);
+      assert.ok(o.mensagem.startsWith("{OLA}! Sou o Rômulo, do Prumo."), id);
       assert.ok(o.mensagem.includes("{NOME}"), id);
-      assert.doesNotMatch(o.mensagem, /R\$|r[oô]mulo|fundador|desconto|gr[aá]tis|https?:|www\./i, id);
+      assert.doesNotMatch(o.mensagem, /R\$|fundador|desconto|https?:|www\./i, id);
+      assert.match(o.mensagem, /Posso te mostrar (?:um exemplo|uma ficha de exemplo)/, id);
       assert.equal((o.mensagem.match(/\?/g) ?? []).length, 1, `${id}: uma pergunta só`);
     }
   });

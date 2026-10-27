@@ -13,7 +13,7 @@ import { artigoDe } from "./site-mensagem.ts";
 import type { OfertaDoPlus } from "./plus-catalogo.ts";
 
 /** A saudação que abre toda mensagem Plus. "Ir.'." é a abreviatura de Irmão e T.F.A., o Triplo Fraternal Abraço. */
-export const SAUDACAO_MACONICA = "Meu Ir.'., tudo bem? Me chamo Rômulo";
+export const SAUDACAO_MACONICA = "Meu Ir.'., sou o Rômulo, do Prumo";
 export const DESPEDIDA_MACONICA = "T.F.A.";
 
 const SAIDA_FACIL = "Se não for o momento, é só dizer.";
@@ -24,13 +24,13 @@ const SAIDA_FACIL = "Se não for o momento, é só dizer.";
 // Sem nome que se diga, viram "o seu negócio", "do seu negócio" e "pelo seu negócio".
 export const PRIMEIRA_PLUS: Record<OfertaDoPlus, string> = {
   site:
-    `${SAUDACAO_MACONICA} e {ORIGEM}. Vi que {REF} ainda não tem um site próprio. Posso montar uma demonstração, só com o que já aparece de vocês no Google, para você ver sem compromisso?\n\n${SAIDA_FACIL}\n\n${DESPEDIDA_MACONICA}`,
+    `${SAUDACAO_MACONICA} e {ORIGEM}. Trabalho com sites que apresentam os serviços da empresa e facilitam o contato pelo WhatsApp.\n\nPosso preparar uma demonstração independente de site {DE}, com informações públicas, para você avaliar sem compromisso?\n\n${SAIDA_FACIL}\n\n${DESPEDIDA_MACONICA}`,
   prumo:
-    `${SAUDACAO_MACONICA} e {ORIGEM}. Olhei como {REF} aparece no Google. Posso montar um raio-x de uma página só, com o que já está bom e o que faz o cliente ir para o concorrente, e te mandar o link? É sem compromisso.\n\n${SAIDA_FACIL}\n\n${DESPEDIDA_MACONICA}`,
+    `${SAUDACAO_MACONICA} e {ORIGEM}. Trabalho com sites para empresas. Posso analisar como {REF} aparece no Google e te enviar uma página com o que facilita ou dificulta o contato dos clientes? A análise é gratuita.\n\n${SAIDA_FACIL}\n\n${DESPEDIDA_MACONICA}`,
   iris:
-    `${SAUDACAO_MACONICA} e {ORIGEM}. Trabalho com o Iris, um sistema para clínicas de terapia em que as anotações de cada sessão viram o dossiê da reavaliação, pronto para o convênio. Consigo falar por aqui com quem coordena {REF}?\n\n${SAIDA_FACIL}\n\n${DESPEDIDA_MACONICA}`,
+    `${SAUDACAO_MACONICA} e {ORIGEM}. O Iris organiza as anotações das sessões para apoiar a preparação dos relatórios de reavaliação.\n\nPosso te mostrar um exemplo com dados fictícios?\n\n${SAIDA_FACIL}\n\n${DESPEDIDA_MACONICA}`,
   estampa:
-    `${SAUDACAO_MACONICA} e {ORIGEM}. Estou conversando com estamparias sobre um jeito de organizar os pedidos que chegam pelo WhatsApp: arte, tamanhos e prazo numa ficha só, sem se perder na conversa. Consigo falar por aqui com o responsável {POR}?\n\n${SAIDA_FACIL}\n\n${DESPEDIDA_MACONICA}`,
+    `${SAUDACAO_MACONICA} e {ORIGEM}. Trabalho com um sistema de pedidos para estamparias que reúne arte, tamanhos e prazo em uma ficha para a produção.\n\nPosso te mostrar uma ficha de exemplo, sem dados de clientes?\n\n${SAIDA_FACIL}\n\n${DESPEDIDA_MACONICA}`,
 };
 
 // Follow-up do 3º dia: curto, sem repetir a oferta inteira; a saudação continua, porque é ela que faz o contato soar de quem é.
