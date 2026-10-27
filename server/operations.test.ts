@@ -361,3 +361,21 @@ describe("estados operacionais", () => {
     assert.equal(window.end.toISOString(), "2026-09-17T03:00:00.000Z");
   });
 });
+
+describe('projeções de consulta do CRM', () => {
+  it('compartilha leitura entre resumo e dossiês e invalida após resolução na Central', async () => {
+    const dataDir = await tempDir('squadone-crm-resumo-')
+    let leituras = 0
+    const crm = { config: {}, visao: async () => { leituras++; return { estado: 'ok', leads: [], hoje: [], geradoEm: '2026-10-26T20:00:00Z' } } } as unknown as CrmStore
+    const app = express()
+    app.use('/api/operations', createOperationsRouter({ config: { tools: {} } as OperationsConfig, store: new OperationsProjectStore(dataDir), readings: new HermesReadingsStore(dataDir), dataDir, readAgenda: async () => ({ state: 'disconnected', events: [] }), crm }))
+    const base = await listen(http.createServer(app))
+    const [resumo, completo] = await Promise.all([fetch(base + '/api/operations/crm/escritorio'), fetch(base + '/api/operations/crm')])
+    assert.equal(resumo.status, 200); assert.equal(completo.status, 200)
+    const corpo = await resumo.json(); assert.equal(corpo.decisoes, 0); assert.equal('leads' in corpo, false)
+    assert.deepEqual((await completo.json()).leads, []); assert.equal(leituras, 1)
+    assert.equal((await fetch(base + '/api/operations/crm/venda', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chave: 'site:teste|responder', como: 'pulada' }) })).status, 200)
+    assert.equal((await fetch(base + '/api/operations/crm/escritorio')).status, 200)
+    assert.equal(leituras, 2)
+  })
+})

@@ -1,5 +1,8 @@
 import { acaoInternaComercial } from '../src/operations/acao-interna-comercial.ts';
 import { montarResponsavelAtendimento } from './rotas-atendimento-comercial.ts';
+import { compartilharLeitura } from './leitura-compartilhada.ts';
+import { responderCrm } from './resposta-crm.ts';
+import { resumirCrmEscritorio } from '../src/office/resumo-crm.ts';
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import https from "node:https";
@@ -560,7 +563,16 @@ export function createOperationsRouter(options: {
   // CRM (Site antes da venda + PRUMO). Leitura do retrato que o n8n grava; a
   // única escrita é o registro (nota, próximo passo, proposta), que vai para a
   // planilha pelo próprio n8n. A Central não guarda etapa de lead.
-  router.get("/crm", async (_req, res) => {
+  // Apenas o GET compartilha a projeção. As ações preservam suas leituras e gates.
+  const leituraDoCrmParaTela = compartilharLeitura(async () => {
+    if(!options.crm) throw new Error('CRM indisponível')
+    return options.visaoAtendimento?.() ?? options.crm.visao()
+  })
+  router.use((req,res,next) => {
+    if(!['GET','HEAD'].includes(req.method)) res.once('finish',()=>{ if(res.statusCode < 400) { leituraDoCrmParaTela.invalidar(); resumoDoEscritorio.invalidar() } })
+    next()
+  })
+  router.get("/crm", async (req, res) => {
     if (!options.crm) {
       res.status(503).json({ error: "O CRM não está configurado nesta Central." });
       return;
@@ -568,7 +580,7 @@ export function createOperationsRouter(options: {
     try {
       // no-cache (não no-store): o navegador revalida e o ETag devolve 304 quando nada mudou.
       res.setHeader("Cache-Control", "no-cache");
-      res.json(await (options.visaoAtendimento?.() ?? options.crm.visao()));
+      await responderCrm(req, res, await leituraDoCrmParaTela());
     } catch (error) {
       console.error("[operations] Falha ao ler o CRM:", error);
       res.status(500).json({ error: "Não foi possível ler o CRM agora." });
@@ -582,7 +594,7 @@ export function createOperationsRouter(options: {
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
     res.write('retry: 2000\n\n');
-    const parar = observarCrm(() => { if (!res.destroyed) res.write('event: atualizar\ndata: {}\n\n'); });
+    const parar = observarCrm(() => { leituraDoCrmParaTela.invalidar();resumoDoEscritorio.invalidar(); if (!res.destroyed) res.write('event: atualizar\ndata: {}\n\n'); });
     const pulso = setInterval(() => { if (!res.destroyed) res.write(': conectado\n\n'); }, 20_000);
     res.on('close', () => { clearInterval(pulso); parar(); });
   });
@@ -716,6 +728,20 @@ export function createOperationsRouter(options: {
   // feitas (uma por ação + tipo) e os primeiros contatos do dia das duas superfícies (a trava de ritmo),
   // e (AC-21) os leads liberados fora do expediente.
   const memoriaDaVenda = options.memoriaDaVenda ?? criarMemoriaDaVenda(path.join(options.dataDir, "venda-do-dia.json"));
+  const resumoDoEscritorio = compartilharLeitura(async () => {
+    const [visao, dia] = await Promise.all([leituraDoCrmParaTela(), memoriaDaVenda.ler()])
+    const prontas = await options.copiloto?.prontas(visao.leads)
+    const sugestoes = prontas ? new Map([...prontas].map(([id, s]) => [id, {
+      mensagem: s.sugestao.mensagem, porque: s.sugestao.porque, quando: s.quando,
+      ...(s.sugestao.momento ? { momento: s.sugestao.momento } : {}),
+    }])) : undefined
+    return resumirCrmEscritorio(visao, Date.now(), dia.resolvidas, sugestoes)
+  })
+  router.get('/crm/escritorio', async (req, res) => {
+    if (!options.crm) { res.status(503).json({ error: 'O CRM não está configurado nesta Central.' }); return }
+    try { await responderCrm(req, res, await resumoDoEscritorio()) }
+    catch (error) { console.error('[operations] Falha ao resumir CRM:', error); res.status(500).json({ error: 'Não foi possível ler as conversas.' }) }
+  })
   // `doTime` (19/10/2026): os leads cujo primeiro contato é do time comercial; a Próxima venda não os oferece.
   router.get("/crm/venda", async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");

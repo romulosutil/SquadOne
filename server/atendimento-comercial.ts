@@ -136,8 +136,13 @@ export class AtendimentoComercial {
       const visao=await this.deps.visao().catch(()=>({leads:[] as CrmLead[],estado:'retrato-invalido' as const,geradoEm:''})),existentes=await this.deps.inbox.listar()
       if(visao.estado!=='ok'){c.falhasLeitura++;problema('crm-indisponivel','leitura-indisponivel')}
       const indice=new Map(existentes.map(r=>[r.chave,r.evento]))
+      const oportunidades = new Map<string, number>()
+      for (const lead of visao.leads) {
+        const conversa = identidadeDaConversa(lead)?.conversa
+        if (conversa) oportunidades.set(conversa, (oportunidades.get(conversa) ?? 0) + 1)
+      }
       for(const fonte of inventario.fontes){
-        c.arquivos++;const ligados=visao.leads.filter(l=>identidadeDaConversa(l)?.conversa===fonte.conversa).length
+        c.arquivos++;const ligados=oportunidades.get(fonte.conversa) ?? 0
         let numero=0
         for(const linha of fonte.jsonl.split('\n')){
           numero++;if(!linha.trim())continue

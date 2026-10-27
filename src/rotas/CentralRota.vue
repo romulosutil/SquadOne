@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import GameMap from '../components/GameMap.vue'
 import Sheet from '../components/Sheet.vue'
+import type { ResumoCrmEscritorio } from '../office/resumo-crm'
 import { decisoesDoEscritorio } from '../office/decisoes'
 import { useAtualizacaoViva } from '../casca/atualizacao-viva'
 import { useSinalDoCrm } from '../casca/sinal-do-crm'
@@ -32,6 +33,7 @@ const { overview, resumo } = useOverview()
 const agora = ref(Date.now())
 // O GET substitui o retrato inteiro; não transformar milhares de eventos imutáveis em proxies.
 const visaoDoCrm = shallowRef<CrmVisao | null>(null)
+const resumoCrm = shallowRef<ResumoCrmEscritorio | null>(null)
 const erroDoCrm = ref('')
 const resolvidas = ref<Resolvidas>({})
 const timeLido = ref<TimeLido | null>(null)
@@ -44,9 +46,14 @@ const sugestoes = ref<Map<string, SugestaoDeVenda>>(new Map())
 function armazenamento(): Storage | null { try { return window.localStorage } catch { return null } }
 async function lerCrm(signal: AbortSignal) {
   try {
-    const r = await fetch('/api/operations/crm', { cache: 'no-cache', signal })
+    const completo = painel.value === 'decisoes' || painel.value === 'agente'
+    const r = await fetch(completo ? '/api/operations/crm' : '/api/operations/crm/escritorio', { cache: 'no-cache', signal })
     if (!r.ok) throw new Error('A fonte de vendas não respondeu.')
-    visaoDoCrm.value = await r.json(); erroDoCrm.value = ''
+    const corpo = await r.json()
+    if (signal.aborted) return
+    if (completo && (painel.value === 'decisoes' || painel.value === 'agente')) visaoDoCrm.value = corpo
+    else if (!completo) resumoCrm.value = corpo
+    erroDoCrm.value = ''
   } catch (e) { if (!signal.aborted) erroDoCrm.value = e instanceof Error ? e.message : 'Não foi possível ler as conversas.' }
 }
 // O "Enviei"/"Pular" do dia vem do servidor (o mesmo arquivo do vendedor do Telegram); sem ele, a lista inteira.
@@ -58,6 +65,7 @@ async function lerTime(signal: AbortSignal) {
   try { const r = await fetch('/api/time', { signal }); if (r.ok) timeLido.value = await r.json() } catch { /* Não interrompe a conversa. */ }
 }
 async function lerSugestoes(signal: AbortSignal) {
+  if (painel.value !== 'decisoes' && painel.value !== 'agente') return
   try {
     const r = await fetch('/api/operations/crm/copiloto/prontas', { cache: 'no-store', signal })
     if (!r.ok) return
@@ -83,6 +91,23 @@ const conversasPrioritarias = computed(() => conversasParaVoce(visaoDoCrm.value,
 const recomendacoes = computed(() => !erroFrente.value && frente.value?.ativo && frente.value.estado !== 'sem-sinal' ? recomendacoesDoTime({ avaliados: frente.value.avaliados ?? 0, selecionados: frente.value.selecionados ?? 0, enviados: frente.value.enviados ?? 0, setores: frente.value.setores ?? [] }) : [])
 const acoesDoCrm = computed(() => erroDoCrm.value || visaoDoCrm.value?.estado !== 'ok' ? [] : filaPrioritaria.value.filter(a => !a.primeiroContato))
 const decisoesPendentes = computed(() => decisoesDoEscritorio(visaoDoCrm.value?.leads ?? [], acoesDoCrm.value, agora.value, conversasPrioritarias.value).filter(d => d.estado === 'agora'))
+const totalDecisoes = computed(() => visaoDoCrm.value ? decisoesPendentes.value.length : resumoCrm.value?.decisoes ?? 0)
+const totalConversas = computed(() => visaoDoCrm.value ? conversasPrioritarias.value.length : resumoCrm.value?.conversas ?? 0)
+const crmLido = computed(() => !!visaoDoCrm.value || !!resumoCrm.value)
+let controleDoPainel: AbortController | undefined
+watch(painel, () => {
+  controleDoPainel?.abort()
+  if (painel.value !== 'decisoes' && painel.value !== 'agente') visaoDoCrm.value = null
+  void lerTudoDoPainel()
+})
+async function lerTudoDoPainel() {
+  await sincronizar()
+  if (painel.value === 'decisoes' || painel.value === 'agente') {
+    const controle = new AbortController()
+    controleDoPainel = controle
+    await Promise.allSettled([lerVenda(controle.signal), lerSugestoes(controle.signal)])
+  }
+}
 const dellLido = computed(() => overview.value ? resumo.value : null)
 const andarEscolhido = ref<string | null>(lerAndar(armazenamento()))
 const squads = computed(() => props.capacidades.agentes ? roster.value?.squads ?? [] : [])
@@ -94,7 +119,7 @@ const operacoes = computed<Record<string, OperacaoDaSala>>(() => {
   return Object.fromEntries((andar.value?.dominios ?? []).flatMap(d => { const op = operacaoDaSala(d.id, fontes); return op ? [[d.id, op]] : [] }))
 })
 const agenteDaMissao = computed(() => squads.value.flatMap(s => s.dominios).find(d => d.id === 'prumo--geral')?.po)
-const baloes = computed<Record<string, BalaoDaSala>>(() => conversasPrioritarias.value.length && agenteDaMissao.value ? { [agenteDaMissao.value.id]: { texto: 'Sua vez', tom: 'amarelo', destaque: true } } : {})
+const baloes = computed<Record<string, BalaoDaSala>>(() => totalConversas.value && agenteDaMissao.value ? { [agenteDaMissao.value.id]: { texto: 'Sua vez', tom: 'amarelo', destaque: true } } : {})
 const guardandoContexto = ref(false)
 const turnoDoTime = computed(() => erroFrente.value ? 'Time sem leitura recente' : !frente.value ? 'Lendo o time…' : frente.value.cicloParado ? 'Time ativo, mas o ciclo está parado' : ({ avaliando: 'Turno do time · avaliando', enviando: 'Turno do time · iniciando contato', 'fora-do-horario': 'Fila pronta · próximo expediente', pausado: 'Primeiros contatos pausados', bloqueado: 'Time precisa de atenção', pronto: 'Time acompanhando a fila', concluido: 'Rodada do time concluída' }[frente.value.estado] ?? 'Time acompanhando'))
 function abrirFichaDaMissao(id: string) { painel.value = null; navegar(`/crm?lead=${encodeURIComponent(id)}&detalhe=ficha`) }
@@ -103,10 +128,10 @@ const resumoAgentes = computed(() => ({
   detalhe: erroFrente.value ? 'Aguardando a integração' : frente.value?.cicloParado ? 'Ciclo do time parado' : frente.value?.estado === 'avaliando' ? 'Time avaliando os próximos contatos' : frente.value?.estado === 'pausado' ? 'Primeiros contatos pausados' : frente.value?.fila.find(c => c.estado === 'pronto') ? `Próximo WhatsApp: ${frente.value.fila.find(c => c.estado === 'pronto')!.empresa}` : frente.value?.detalhe ?? 'Decisões e trabalho do time',
 }))
 const resumoDecisoes = computed(() => ({
-  resumo: erroDoCrm.value ? 'Sem leitura recente' : !visaoDoCrm.value ? 'Lendo as conversas…' : `${decisoesPendentes.value.length} decisões pendentes · ${recomendacoes.value.length} alertas`,
-  detalhe: decisoesPendentes.value[0]?.lead.empresa ?? recomendacoes.value[0]?.titulo ?? 'Veja os acompanhamentos e resultados',
+  resumo: erroDoCrm.value ? 'Sem leitura recente' : !crmLido.value ? 'Lendo as conversas…' : `${totalDecisoes.value} decisões pendentes · ${recomendacoes.value.length} alertas`,
+  detalhe: decisoesPendentes.value[0]?.lead.empresa ?? resumoCrm.value?.primeiraEmpresa ?? recomendacoes.value[0]?.titulo ?? 'Veja os acompanhamentos e resultados',
 }))
-const estadoSemMissao = computed(() => erroDoCrm.value ? 'Não foi possível conferir suas conversas. O time tentará novamente.' : !visaoDoCrm.value ? 'Conferindo o que precisa de você…' : 'Nenhuma conversa pede sua ação agora.')
+const estadoSemMissao = computed(() => erroDoCrm.value ? 'Não foi possível conferir suas conversas. O time tentará novamente.' : !crmLido.value ? 'Conferindo o que precisa de você…' : 'Nenhuma conversa pede sua ação agora.')
 const salaAberta = computed(() => andar.value?.dominios.find(d => d.id === pessoaSelecionada.value?.salaId) ?? null)
 const pessoaAberta = computed(() => salaAberta.value ? [salaAberta.value.po, ...salaAberta.value.integrantes].find(p => p.id === pessoaSelecionada.value?.pessoaId) ?? salaAberta.value.po : null)
 function abrirAgente(salaId: string, pessoaId: string) { pessoaSelecionada.value = { salaId, pessoaId, clique: Date.now() }; painel.value = 'agente' }
@@ -119,7 +144,7 @@ onMounted(() => {
   if (pedidoAntigo === 'financas') navegar('/financas')
   if (pedidoAntigo === 'agenda' && props.capacidades.agentes) navegar('/agenda')
 })
-onBeforeUnmount(() => { clearInterval(relogio); atrasos.forEach(clearTimeout) })
+onBeforeUnmount(() => { controleDoPainel?.abort(); clearInterval(relogio); atrasos.forEach(clearTimeout) })
 </script>
 
 <template>
@@ -132,7 +157,7 @@ onBeforeUnmount(() => { clearInterval(relogio); atrasos.forEach(clearTimeout) })
     <GameMap v-if="andar" :key="andar.id" :squad="andar" imersivo :baloes="baloes" :painel-agentes="resumoAgentes" :painel-decisoes="resumoDecisoes" @painel="painel = $event" @abrir-agente="abrirAgente" />
     <p v-else class="central-imersiva__carregando" role="status">{{ semAndar }}</p>
     <span class="central-imersiva__explorar" aria-hidden="true">↔ Deslize para explorar o escritório</span>
-    <div class="central-imersiva__turnos"><button type="button" @click="painel = 'agentes'"><span class="central-imersiva__ponto"></span>{{ turnoDoTime }}</button><button class="central-imersiva__sua-vez" type="button" @click="painel = 'decisoes'">{{ decisoesPendentes.length ? `Sua vez · ${decisoesPendentes.length} ${decisoesPendentes.length === 1 ? 'decisão' : 'decisões'}` : 'Minhas decisões e acompanhamentos' }}</button><span v-if="!decisoesPendentes.length" class="central-imersiva__sem-missao">{{ estadoSemMissao }}</span></div>
+    <div class="central-imersiva__turnos"><button type="button" @click="painel = 'agentes'"><span class="central-imersiva__ponto"></span>{{ turnoDoTime }}</button><button class="central-imersiva__sua-vez" type="button" @click="painel = 'decisoes'">{{ totalDecisoes ? `Sua vez · ${totalDecisoes} ${totalDecisoes === 1 ? 'decisão' : 'decisões'}` : 'Minhas decisões e acompanhamentos' }}</button><span v-if="!totalDecisoes" class="central-imersiva__sem-missao">{{ estadoSemMissao }}</span></div>
 
     <Sheet v-if="painel" :bloqueada="guardandoContexto" flutuante :titulo="painel === 'agentes' ? 'Decisões e andamento dos agentes' : painel === 'decisoes' ? 'Minhas decisões' : pessoaAberta?.nome ?? 'Agente'" :subtitulo="painel === 'agente' ? pessoaAberta?.papel : painel === 'decisoes' ? 'Entenda o contexto, escolha a ação e acompanhe o resultado' : 'Seu escritório continua ao fundo'" @fechar="painel = null">
       <div class="central-imersiva__painel" @click="aoClicarNoPainel">
