@@ -19,12 +19,14 @@ const CONFIG = JSON.parse(fs.readFileSync(new URL("../deploy/dell/claude-ops/pru
 };
 
 describe("prumo-ofertas.json × CRM", () => {
-  it("as ofertas são as do CRM, com a mesma aba e o mesmo caminho do convite", () => {
+  it("as ofertas usam a aba do CRM e o caminho específico do convite no workflow", () => {
     assert.deepEqual(Object.keys(CONFIG.ofertas).sort(), ["estampa", "iris"]);
     for (const [id, o] of Object.entries(CONFIG.ofertas)) {
       const doCrm = OFERTA_DE_PROSPECCAO[id as "iris" | "estampa"];
       assert.equal(o.aba, doCrm.aba, id);
-      assert.equal(o.convite, doCrm.convite, id);
+      // O CRM operacional usa wa.me direto e não expõe mais o campo convite.
+      // O webhook continua sendo contrato da geração dos workflows de cada oferta.
+      assert.equal(o.convite, `convite-${id}`, id);
     }
   });
 
