@@ -83,6 +83,8 @@ const props = defineProps<{
   estacaoSelecionada?: FaseDoEscritorio | null
   producaoDisponivel?: boolean
   passagem?: PassagemDaProducao | null
+  /** Painel em primeiro plano: congela o palco sem perder o percurso. */
+  suspenso?: boolean
   /** Porta usada pelo laboratório; a aplicação usa DOM por padrão. */
   criarRenderizador?: CriarRenderizadorDoEscritorio
 }>()
@@ -98,7 +100,7 @@ const dominios = computed(() => dominiosDoEscritorio(props.squad, !!props.imersi
 
 const { preferencia: preferenciaDeMovimento, animar } = useMovimentoDoEscritorio()
 const { setViewportEl, setWorldEl, scale, sheets, erroSprites, carregarSprites, pessoas, rooms, bounds, setActorEl, moveTo, percorrer, postoDaPessoa, cancelarPercurso, olharParaPonto, seguirPercurso, focus, pausado } =
-  useOffice(dominios, preferenciaDeMovimento, computed(() => props.imersivo ? 180 : 0), computed(() => !props.estacoesProducao), props.criarRenderizador)
+  useOffice(dominios, preferenciaDeMovimento, computed(() => props.imersivo ? 180 : 0), computed(() => !props.estacoesProducao), props.criarRenderizador, computed(() => !!props.suspenso))
 
 const caixa = ref({ w: 0, h: 0 })
 const mapaEl = ref<HTMLElement | null>(null)
@@ -107,7 +109,8 @@ const transporte = ref<TransporteVisual | null>(null)
 const coreografia = criarCoreografia({
   squad: () => props.squad, pessoas: () => pessoas.value, pontos: () => pontosDaProducao.value,
   postoDaPessoa, percorrer, cancelarPercurso, seguirPercurso,
-  acompanhar: () => !!mapaEl.value && (mapaEl.value.clientWidth < 768 || scale.value * (bounds.value.maxY - bounds.value.minY) > caixa.value.h),
+  // A passagem se apresenta no cenário; a estação escolhida continua dona da câmera.
+  acompanhar: () => !props.suspenso && !props.estacaoSelecionada && !!mapaEl.value && (mapaEl.value.clientWidth < 768 || scale.value * (bounds.value.maxY - bounds.value.minY) > caixa.value.h),
   estado: valor => { transporte.value = valor }, texto: valor => emit('transporte', valor),
   terminou: id => { emit('passagemFinalizada', id); void focarEstacaoDaEsteira() },
 })
@@ -145,16 +148,17 @@ const rotuloDoAtor = (p: OfficePessoa) => {
 /** Tamanho do viewport em px de tela, medido por ResizeObserver. */
 async function focarEstacaoDaEsteira() {
   await nextTick()
+  if (props.suspenso) return
   const fase=props.estacaoSelecionada
   const mapa=mapaEl.value
   if(mapa && fase && (mapa.clientWidth < 768 || scale.value*(bounds.value.maxY-bounds.value.minY)>caixa.value.h-24)) {
-    if(transporte.value?.passagem.para === fase) return
     olharParaPonto(pontoDaEsteiraNoMundo(fase,pontosDaProducao.value))
   }
   const mesa=mapa?.querySelector<HTMLElement>(`[data-fase="${fase}"]`)
   if(mapa && mesa && mapa.scrollWidth > mapa.clientWidth) { const alvo=mesa.getBoundingClientRect(), vista=mapa.getBoundingClientRect(); mapa.scrollTo({left:mapa.scrollLeft + alvo.left + alvo.width/2 - vista.left - vista.width/2,behavior:'auto'}) }
 }
 watch(() => props.estacaoSelecionada, focarEstacaoDaEsteira)
+watch(() => props.suspenso, valor => { if (!valor) void focarEstacaoDaEsteira() })
 let roCaixa: ResizeObserver | null = null
 function ligarViewport(el: unknown) {
   setViewportEl(el)

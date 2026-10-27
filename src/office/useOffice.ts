@@ -43,7 +43,7 @@ import { bfsSlots, buildRoute, doorCenterPx, slotDoPontoPx } from './path'
 import { postoLocal, tilesLivres } from './postos'
 import { planejarSalas } from './salas'
 
-export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolean | null>, margemSuperior?: Ref<number>, passeiosPermitidos?: Ref<boolean>, criarRenderizador: CriarRenderizadorDoEscritorio = criarRenderizadorDom) {
+export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolean | null>, margemSuperior?: Ref<number>, passeiosPermitidos?: Ref<boolean>, criarRenderizador: CriarRenderizadorDoEscritorio = criarRenderizadorDom, suspenso?: Ref<boolean>) {
   const renderizador = criarRenderizador()
   let desmontado = false
   // Setters em vez de refs expostos: no template um ref é auto-unwrapped, então
@@ -759,7 +759,7 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
   }
 
   function atualizarPausa() {
-    const agora = abaOculta || foraDaTela
+    const agora = abaOculta || foraDaTela || !!suspenso?.value
     if (agora === pausado.value) return
     pausado.value = agora
     if (agora) {
@@ -776,6 +776,9 @@ export function useOffice(dominios: Ref<OfficeDominio[]>, movimento?: Ref<boolea
     abaOculta = document.hidden
     atualizarPausa()
   }
+
+  // Um painel de decisão conserva o percurso, mas suspende o palco ao fundo.
+  if (suspenso) watch(suspenso, atualizarPausa, { flush: 'sync' })
 
   // -------------------------------------------------------------------------
   // Ciclo de vida

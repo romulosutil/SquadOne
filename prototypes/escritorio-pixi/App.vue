@@ -68,7 +68,7 @@ function entregar() {
     <main>
       <component v-if="componente" :is="componente" :key="`${quantidade}-${modo}-${cenario}`" :squad="squad" :imersivo="cenario" :visita="visita" :estacoes-producao="estacoes"
         :criar-renderizador="modo === 'pixi' && cenario ? criarPixi : undefined" :class="{ congelado }"
-        :estacao-selecionada="selecionada" producao-disponivel :passagem="passagem"
+        :estacao-selecionada="selecionada" producao-disponivel :passagem="passagem" :suspenso="!!modal"
         :painel-agentes="{ resumo: 'Time de demonstração', detalhe: 'Mesmo cenário e sprites do escritório' }"
         :painel-decisoes="{ resumo: '1 decisão', detalhe: 'Conferir próximo passo' }"
         @abrir-agente="(_, id) => modal = `Conversa com ${id}`" @painel="tipo => modal = tipo === 'agentes' ? 'Jornada do time' : 'Sua vez'"
