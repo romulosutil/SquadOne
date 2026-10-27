@@ -2,6 +2,8 @@
 
 Revisão de 27 de outubro de 2026, America/Sao_Paulo. Escopo: Site, serviços do Prumo, CRM de estamparia, Iris e entradas pelo Plus e pela CDL.
 
+Atualização posterior: após o teste adversarial e a autorização do Rômulo, os textos revisados foram [publicados na operação](2026-10-27-publicacao-aberturas.md). Os textos deste levantamento registram a etapa anterior da pesquisa.
+
 A recomendação é abrir com identidade, utilidade específica e uma oferta pequena: ver um exemplo ou receber uma análise. Perguntas sobre a operação e pedidos de reunião ficam para depois da primeira abertura. Cada oferta precisa entregar o que a pergunta promete.
 
 Estas são as melhores candidatas selecionadas nesta revisão, ainda sem validação com participantes ou comprovação de maior conversão no WhatsApp. A pesquisa realizada combina fontes secundárias, documentos históricos do projeto e avaliação heurística dos textos. As alterações estão no código local; este trabalho não publicou fluxos nem enviou mensagens.

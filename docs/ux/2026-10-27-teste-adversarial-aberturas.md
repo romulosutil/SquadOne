@@ -2,6 +2,8 @@
 
 27 de outubro de 2026. Escopo: Site, Prumo, CRM de estamparia, Iris e entradas Plus, CDL e inglês.
 
+Atualização posterior: os ajustes foram aprovados para aplicação e publicados. O [registro da publicação](2026-10-27-publicacao-aberturas.md) distingue a implantação real das propostas avaliadas neste teste.
+
 O teste encontrou dois problemas distintos: argumentos que permitem objeções previsíveis e falhas concretas na leitura de recusas educadas e pedidos de exclusão. A mensagem do Prumo merece a maior revisão editorial, porque sugere dependência do dono antes de conhecer a empresa. A abertura do Site com achado precisa explicitar a intenção comercial para não parecer um aviso técnico oficial.
 
 ## Natureza do teste
