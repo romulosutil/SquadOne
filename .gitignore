@@ -26,3 +26,7 @@ graphify-out/
 CHECKPOINT.md
 __pycache__/
 .claude/worktrees/
+
+# Saídas locais e cópias de trabalho não são fontes do aplicativo.
+output/
+brag-output*/

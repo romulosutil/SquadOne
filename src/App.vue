@@ -15,27 +15,12 @@
  * No desktop o Assistente participa da tela à direita e pode ser recolhido;
  * no celular o mesmo conteúdo abre sob demanda.
  */
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import ArquivoFolha from './components/ArquivoFolha.vue'
-import ContratarFolha from './components/ContratarFolha.vue'
-import EditarFolha from './components/EditarFolha.vue'
-import NovaSquadFolha from './components/NovaSquadFolha.vue'
+import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import BarraInferior from './casca/BarraInferior.vue'
 import Sheet from './components/Sheet.vue'
 import BarraLateral from './casca/BarraLateral.vue'
 import CascaTopo from './casca/CascaTopo.vue'
-import Paleta from './casca/Paleta.vue'
-import PedirFolha from './casca/PedirFolha.vue'
-import AssistentePainel from './casca/AssistentePainel.vue'
 import { useAssistente } from './casca/assistente'
-import AgendaRota from './rotas/AgendaRota.vue'
-import CentralRota from './rotas/CentralRota.vue'
-import EscritorioRota from './rotas/EscritorioRota.vue'
-import HojeRota from './rotas/HojeRota.vue'
-import MaisRota from './rotas/MaisRota.vue'
-import DesignSystemRota from './rotas/DesignSystemRota.vue'
-import CrmPanel from './operations/CrmPanel.vue'
-import FinancasPanel from './operations/financas/FinancasPanel.vue'
 import { useAgentes } from './agentes/estado'
 import { useOverview } from './casca/overview'
 import { caminho, interceptarLink, navegar, ouvirHistorico } from './casca/rota'
@@ -56,6 +41,23 @@ import {
 import './estilos/tokens.css'
 import './estilos/casca.css'
 import './estilos/agentes.css'
+
+// Painéis fechados não carregam código nem CSS na abertura do aplicativo.
+const ArquivoFolha = defineAsyncComponent(() => import('./components/ArquivoFolha.vue'))
+const ContratarFolha = defineAsyncComponent(() => import('./components/ContratarFolha.vue'))
+const EditarFolha = defineAsyncComponent(() => import('./components/EditarFolha.vue'))
+const NovaSquadFolha = defineAsyncComponent(() => import('./components/NovaSquadFolha.vue'))
+const Paleta = defineAsyncComponent(() => import('./casca/Paleta.vue'))
+const PedirFolha = defineAsyncComponent(() => import('./casca/PedirFolha.vue'))
+const AssistentePainel = defineAsyncComponent(() => import('./casca/AssistentePainel.vue'))
+const AgendaRota = defineAsyncComponent(() => import('./rotas/AgendaRota.vue'))
+const CentralRota = defineAsyncComponent(() => import('./rotas/CentralRota.vue'))
+const EscritorioRota = defineAsyncComponent(() => import('./rotas/EscritorioRota.vue'))
+const HojeRota = defineAsyncComponent(() => import('./rotas/HojeRota.vue'))
+const MaisRota = defineAsyncComponent(() => import('./rotas/MaisRota.vue'))
+const DesignSystemRota = defineAsyncComponent(() => import('./rotas/DesignSystemRota.vue'))
+const CrmPanel = defineAsyncComponent(() => import('./operations/CrmPanel.vue'))
+const FinancasPanel = defineAsyncComponent(() => import('./operations/financas/FinancasPanel.vue'))
 
 const props = withDefaults(defineProps<{ perfil: Perfil; agentes: boolean; assistente?: boolean }>(), { assistente: false })
 

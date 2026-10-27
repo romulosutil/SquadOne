@@ -1,4 +1,8 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
+
+/* Só o aplicativo produz classes; saídas e backups ficam fora da varredura. */
+@source "./";
+@source "../index.html";
 
 /* Tailwind v4 não tem utility de image-rendering. Os personagens do CraftPix
    são vetoriais e NÃO usam isto; fica para tiles pixel art, se vierem. */

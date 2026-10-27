@@ -303,7 +303,7 @@ describe("Plus no CRM: o funil sai só dos registros", () => {
   });
 
   it("proposta e \"sem contato\" valem como nos outros funis", () => {
-    const proposta = leadPlus([plus(1)], [{ id: plus(1).id, tipo: "plus_enviado", em: dias(5) }, { id: plus(1).id, tipo: "proposta", em: dias(1) }]);
+    const proposta = leadPlus([plus(1)], [{ id: plus(1).id, tipo: "plus_enviado", em: dias(5) }, { id: plus(1).id, tipo: "proposta", em: dias(1), texto: "Proposta enviada: site institucional com escopo e condições no documento https://example.com/proposta-plus." }]);
     assert.equal(proposta.etapa, "proposta");
     const sem = leadPlus([plus(1)], [{ id: plus(1).id, tipo: "sem_contato", em: dias(1) }]);
     assert.equal(sem.motivoPerda, "sem-contato");

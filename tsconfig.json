@@ -26,5 +26,11 @@
       "node"
     ],
     "noEmit": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "output/**",
+    "brag-output*/**"
+  ]
 }

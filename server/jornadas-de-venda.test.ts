@@ -132,7 +132,7 @@ describe("jornada do Site: do pronto ao 'quero ver'", () => {
   it("proposta marcada há 3 dias: a fila pede o retorno, sem reenviar o preço", () => {
     const v = visaoCom(
       { status: "enviado", enviado_em: dias(6), respondeu_em: dias(5), resposta_tipo: "interesse", resposta_trecho: "gostei", resposta_em: dias(5) },
-      [{ em: dias(3), produto: "site", id: "L", tipo: "proposta", texto: "", data: "2026-10-11" }],
+      [{ em: dias(3), produto: "site", id: "L", tipo: "proposta", texto: "Proposta enviada: site institucional com escopo e condições no documento https://example.com/proposta-L.", data: "2026-10-11" }],
     );
     const tipos = filaDeVenda(v, LIVRE).map((a) => a.tipo);
     assert.ok(tipos.includes("proposta"), tipos.join(","));

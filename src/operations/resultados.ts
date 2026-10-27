@@ -54,9 +54,10 @@ const FUSO = 'America/Sao_Paulo'
 // números do próprio retrato (nada fixo no código além da definição do expediente).
 
 const DIAS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const formatoHoraSP = new Intl.DateTimeFormat('en-US', { timeZone: FUSO, hour: 'numeric', hourCycle: 'h23', weekday: 'short' })
 /** Hora (0–23) e dia da semana (0 = domingo) em São Paulo, qualquer que seja o fuso da máquina. */
 export function horaEmSP(ms: number): { hora: number; diaDaSemana: number } {
-  const partes = new Intl.DateTimeFormat('en-US', { timeZone: FUSO, hour: 'numeric', hourCycle: 'h23', weekday: 'short' }).formatToParts(new Date(ms))
+  const partes = formatoHoraSP.formatToParts(new Date(ms))
   const valor = (tipo: string) => partes.find(p => p.type === tipo)?.value ?? ''
   return { hora: Number(valor('hour')) % 24, diaDaSemana: DIAS.indexOf(valor('weekday')) }
 }

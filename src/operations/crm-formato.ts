@@ -103,27 +103,30 @@ export const ROTULO_DA_OFERTA_DO_PLUS = {
 export const ehConvite = (produto: CrmProduto) => produto !== 'site' && produto !== 'plus'
 
 const FUSO = 'America/Sao_Paulo'
+const formatoDataCurta = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: FUSO })
+const formatoDataHora = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: FUSO })
+const formatoHora = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: FUSO })
+const formatoDiaSP = new Intl.DateTimeFormat('en-CA', { timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit' })
 
 export function dataCurta(iso?: string): string {
   if (!iso) return ''
   const t = Date.parse(iso)
   if (!Number.isFinite(t)) return ''
-  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', timeZone: FUSO }).format(new Date(t))
+  return formatoDataCurta.format(new Date(t))
 }
 
 export function dataHora(iso?: string): string {
   if (!iso) return ''
   const t = Date.parse(iso)
   if (!Number.isFinite(t)) return ''
-  return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: FUSO })
-    .format(new Date(t)).replace(',', '')
+  return formatoDataHora.format(new Date(t)).replace(',', '')
 }
 
 export function hora(iso?: string): string {
   if (!iso) return ''
   const t = Date.parse(iso)
   if (!Number.isFinite(t)) return ''
-  return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: FUSO }).format(new Date(t))
+  return formatoHora.format(new Date(t))
 }
 
 /** "2026-10-02" escolhido num campo de data, mostrado como 02/10. */
@@ -134,7 +137,7 @@ export function diaEscolhido(valor?: string): string {
 
 /** Hoje em São Paulo, no formato do campo de data (AAAA-MM-DD). */
 export function hojeEmSP(agora = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit' }).format(agora)
+  return formatoDiaSP.format(agora)
 }
 
 export function textoDeDias(n?: number): string {

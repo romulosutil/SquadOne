@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useSinalDoCrm } from '../casca/sinal-do-crm'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { shallowRef, computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { navegar } from '../casca/rota'
 import Sheet from '../components/Sheet.vue'
 import AtendimentoCliente from './AtendimentoCliente.vue'
@@ -52,7 +52,7 @@ const emit = defineEmits<{ fechar: []; registrado: [] }>()
 type Vista = VistaDeVendas
 type FiltroProduto = 'todos' | CrmProduto
 
-const visao = ref<CrmVisao | null>(null)
+const visao = shallowRef<CrmVisao | null>(null)
 const carregando = ref(false)
 const erro = ref('')
 const lidoEm = ref<Date | null>(null)

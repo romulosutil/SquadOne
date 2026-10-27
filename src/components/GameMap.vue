@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import cenarioDoEscritorio from '../office/assets/escritorio-cozy-v1.webp?url'
 /**
  * Escritório isométrico — spec §4.1 (tiles), §4.2 (movimento), §4.3 (pathfinding).
  *
@@ -335,7 +336,7 @@ function actorStyle(p: OfficePessoa) {
       <!-- SCALE aparece em UM lugar: este transform (escrito por useOffice). -->
       <div :ref="setWorldEl" class="office-world" :style="worldBox">
         <template v-if="imersivo">
-          <img v-if="cenarioIlustrado" class="cena-ilustrada" src="/office/escritorio-cozy-v1.png" width="1743" height="902" alt="" aria-hidden="true" draggable="false" @error="imagemDaCenaDisponivel = false"/>
+          <img v-if="cenarioIlustrado" class="cena-ilustrada" :src="cenarioDoEscritorio" width="1743" height="902" alt="" aria-hidden="true" draggable="false" @error="imagemDaCenaDisponivel = false"/>
           <svg v-else class="cena-plataforma" width="1" height="1" aria-hidden="true"><polygon :points="plataforma.esquerda" fill="#5d5146"/><polygon :points="plataforma.direita" fill="#403f3c"/></svg>
           <div class="cena-parede cena-parede--oeste" :style="paredeOeste">
             <button class="cena-tela cena-tela--agentes" type="button" aria-label="Abrir decisões e andamento dos agentes" @click="emit('painel', 'agentes')">

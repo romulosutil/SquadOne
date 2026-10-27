@@ -248,7 +248,9 @@ test('monitor pausa sem abrir painel nem fazer requisição HTTP', async () => {
     visao: async () => ({ estado: 'ok', leads: [] }), saude: async () => 'desconectado', vigiar: true });
   try {
     let ativo = true;
-    for (let i = 0; i < 50 && ativo; i++) {
+    // A suíte inteira disputa disco e CPU; aguardar o efeito, sem depender de 500 ms.
+    const prazo = Date.now() + 5_000;
+    while (ativo && Date.now() < prazo) {
       await new Promise(resolve => setTimeout(resolve, 10));
       ativo = JSON.parse(await fs.readFile(path.join(dir, 'frente-comercial-config.json'), 'utf8')).ativo;
     }

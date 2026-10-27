@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import GameMap from '../components/GameMap.vue'
 import Sheet from '../components/Sheet.vue'
-import SalaComando from '../office/SalaComando.vue'
-import MinhasDecisoes from '../office/MinhasDecisoes.vue'
 import { decisoesDoEscritorio } from '../office/decisoes'
-import FrenteComercial from '../operations/FrenteComercial.vue'
 import { useAtualizacaoViva } from '../casca/atualizacao-viva'
 import { useSinalDoCrm } from '../casca/sinal-do-crm'
 import { useAgentes } from '../agentes/estado'
@@ -22,6 +19,11 @@ import type { TimeLido } from '../casca/hoje'
 import type { Capacidades } from '../casca/destinos'
 import { navegar, interceptarLink } from '../casca/rota'
 import '../estilos/operacao.css'
+
+// Painéis fechados não carregam código nem CSS na abertura do aplicativo.
+const SalaComando = defineAsyncComponent(() => import('../office/SalaComando.vue'))
+const MinhasDecisoes = defineAsyncComponent(() => import('../office/MinhasDecisoes.vue'))
+const FrenteComercial = defineAsyncComponent(() => import('../operations/FrenteComercial.vue'))
 
 const props = defineProps<{ capacidades: Capacidades }>()
 const ag = useAgentes()

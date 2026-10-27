@@ -1,4 +1,5 @@
 import type { CrmLead } from './types'
+const formatoDiaSP = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
 
 /** O rótulo não presume que um plano escrito em linguagem livre autoriza contato. */
 export function intencaoDoPasso(texto: string): 'espera' | 'interna' | 'conferir' {
@@ -15,7 +16,7 @@ export function rotuloDoPasso(texto: string, amanha = false): string {
 }
 
 export function diaEmSP(agora: Date) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(agora)
+  return formatoDiaSP.format(agora)
 }
 function passoAtivo(lead: CrmLead) {
   const p = lead.proximoPasso
