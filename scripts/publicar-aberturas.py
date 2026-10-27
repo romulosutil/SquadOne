@@ -223,19 +223,27 @@ def publish(p):
     def active(unit): return subprocess.run(['systemctl', '--user', 'is-active', '--quiet', unit]).returncode == 0
     timers = {u: active(u) for u in ['frente-comercial.timer', 'atualizar-central.timer']}
     save(backup / 'timers.json', timers)
-    for u, was in timers.items():
-        if was: run('systemctl', '--user', 'stop', u)
     lock = (H / '.local/share/frente-comercial/rodada.lock').open('a')
     updated = []
     merged = False
+    stash_created = None
     try:
-        for _ in range(55):
+        # Pausa e restauração pertencem à mesma transação, inclusive em timeout.
+        for u, was in timers.items():
+            if was: run('systemctl', '--user', 'stop', u)
+        for tentativa in range(600):
             try: fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB); break
-            except BlockingIOError: time.sleep(1)
+            except BlockingIOError:
+                if tentativa % 30 == 0: print('Aguardando a rodada terminar; timers serão restaurados no finally.', flush=True)
+                time.sleep(1)
         else: raise RuntimeError('Rodada comercial ainda em execução')
         assert not active('frente-comercial.service')
-        with urllib.request.urlopen('http://127.0.0.1:9120/api/runtime', timeout=5) as response:
-            assert not json.load(response)['ocupado'], 'Central ocupada; repetir publicação quando o turno terminar.'
+        for tentativa in range(60):
+            with urllib.request.urlopen('http://127.0.0.1:9120/api/runtime', timeout=5) as response:
+                if not json.load(response)['ocupado']: break
+            if tentativa % 3 == 0: print('Aguardando o turno da Central terminar; sem interromper ações.', flush=True)
+            time.sleep(10)
+        else: raise RuntimeError('Central segue ocupada; timers serão restaurados, sem publicação parcial.')
         for f, digest in baseline.items(): assert sha(REPO / f) == digest, 'Alteração concorrente: ' + f
         for f in FILES:
             dest = backup / 'source' / f; dest.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(REPO / f, dest)
@@ -258,8 +266,13 @@ def publish(p):
         # com apenas os deltas de mensagens e leitura operacional aplicados acima.
         changed = run('git', '-C', str(REPO), 'status', '--porcelain', '--', *FILES, *p['extras'])
         if changed:
-            run('git', '-C', str(REPO), 'stash', 'push', '--include-untracked', '-m', 'backup-before-aberturas-20261027', '--', *FILES, *p['extras'])
-            (backup / 'stash.txt').write_text(run('git', '-C', str(REPO), 'rev-parse', 'stash@{0}'))
+            # Não passar nomes novos do pacote que ainda não existem no checkout:
+            # Git pode criar o stash, mas falhar ao limpar um pathspec inexistente.
+            paths = [f for f in [*FILES, *p['extras']] if (REPO / f).exists()
+                     and run('git', '-C', str(REPO), 'status', '--porcelain', '--', f)]
+            run('git', '-C', str(REPO), 'stash', 'push', '--include-untracked', '-m', 'backup-before-aberturas-20261027', '--', *paths)
+            stash_created = run('git', '-C', str(REPO), 'rev-parse', 'stash@{0}')
+            (backup / 'stash.txt').write_text(stash_created)
         run('git', '-C', str(REPO), 'merge', '--ff-only', BRANCH)
         merged = True
         for f in FILES: assert sha(REPO / f) == validation['source'][f], 'Merge divergiu: ' + f
@@ -288,6 +301,8 @@ def publish(p):
                 body['settings'] = {k: v for k, v in old.get('settings', {}).items() if k in n8n.SETTINGS_OK}
                 n8n.api('PUT', '/workflows/' + ident, body)
                 if old.get('active'): n8n.api('POST', '/workflows/' + ident + '/activate')
+            if stash_created:
+                run('git', '-C', str(REPO), 'stash', 'apply', '--index', stash_created)
         raise
     finally:
         fcntl.flock(lock, fcntl.LOCK_UN); lock.close()
