@@ -101,15 +101,16 @@ COLUNAS_NOVAS = ["visto_em", "clique_em"]
 OFERTAS_CFG = json.loads((Path(__file__).resolve().parent / "prumo-ofertas.json").read_text(encoding="utf-8"))["ofertas"]
 # O que a conversa precisa de cada oferta além do JSON: o convite resumido para o Gemini (sem dado de
 # ninguém) e o passo de quem respondeu com interesse, o mesmo que a Próxima ação do convite pede.
-CONVERSA_DAS_OFERTAS = {
-    "iris": {"o_que_foi": "Um convite de uma empresa (Prumo) que oferece o Iris, um sistema para clínicas de terapia em que as "
-                          "anotações das sessões viram o dossiê da reavaliação para o convênio, perguntando se consegue falar com "
-                          "quem coordena a clínica.",
-             "interesse": "Combine a demonstração do dossiê (caso fictício, nunca dado de paciente)."},
-    "estampa": {"o_que_foi": "Um convite de uma empresa (Prumo) sobre um jeito de organizar os pedidos de uma estamparia que chegam "
-                             "pelo WhatsApp (arte, tamanhos e prazo numa ficha só), perguntando se consegue falar com o responsável.",
-                "interesse": "Combine uma conversa de 20 minutos sobre como os pedidos chegam hoje."},
-}
+CONVERSA_DAS_OFERTAS = {'iris': {'o_que_foi': 'A abertura atual apresenta Rômulo, do Prumo, e oferece um exemplo do Iris com dados '
+                       'fictícios para relatórios de reavaliação. Um sim autoriza apenas esse exemplo. '
+                       'Versões anteriores perguntavam pela coordenação da clínica: use a pergunta realmente '
+                       'enviada para distinguir acesso, permissão e interesse comercial.',
+          'interesse': 'Combine a demonstração do dossiê (caso fictício, nunca dado de paciente).'},
+ 'estampa': {'o_que_foi': 'A abertura atual apresenta Rômulo, do Prumo, e oferece uma ficha de pedido de '
+                          'exemplo sem dados de clientes. Um sim autoriza apenas o exemplo. Versões '
+                          'anteriores perguntavam pelo responsável: use a pergunta realmente enviada para '
+                          'distinguir acesso, permissão e interesse comercial.',
+             'interesse': 'Combine uma conversa de 20 minutos sobre como os pedidos chegam hoje.'}}
 OFERTAS = [{"planilha": k, "aba": o["aba"], "no": "Ler " + o["aba"], "marcar": "Marcar em " + o["aba"], "rotulo": o["rotulo"],
             "convite": o["proxima_enviado"], **CONVERSA_DAS_OFERTAS[k]} for k, o in OFERTAS_CFG.items()]
 # O que o fluxo marca (o "planilha" de cada item); "nenhuma" e o resto não batem em saída nenhuma do switch.
