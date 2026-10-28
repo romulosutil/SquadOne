@@ -29,7 +29,7 @@ porque o Gemini também erra. Promover exige ainda o DPA da TypeSafe (ver deploy
 Uso: python3 jev-respostas-resumo.py                    resumo, lendo a tabela pelo n8n
      python3 jev-respostas-resumo.py --arquivo X.csv      resumo de um CSV/JSON exportado da Data Table
      python3 jev-respostas-resumo.py --revisar            linhas sem revisão, das mais úteis às menos (perigosas, divergentes,
-                                                          pouca confiança, resto), com o trecho (do crm.json: prumo, iris, estampa)
+                                                          pouca confiança, resto), com o trecho (do crm.json: prumo e as ofertas)
      python3 jev-respostas-resumo.py --hash 27999887766   hash de um número (para achar o lead na tabela)
      python3 jev-respostas-resumo.py --testar
 """
@@ -43,6 +43,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ofertas as registro  # noqa: E402
 
 TABELA = "jev_sombra_respostas"
 # O mesmo sal de whatsapp-conversa.py (JEV_SAL); o --testar de lá confere que os dois batem.
@@ -139,9 +142,10 @@ def trechos_do_retrato(retrato: dict) -> dict:
         h, t = hash_do_lead(m.group(1) if m else l.get("telefone")), instante(l.get("resposta_em"))
         if h and t is not None:
             achados[(h, t)] = str(l.get("resposta_trecho") or "")
-    # PRUMO, Iris e estamparias têm o mesmo contrato de colunas (Prospects, OFERTA_DE_PROSPECCAO em server/crm.ts);
+    # PRUMO e as ofertas têm o mesmo contrato de colunas (Prospects, OFERTA_DE_PROSPECCAO em server/crm.ts);
     # ler só "prumo" deixava a resposta de uma clínica ou de uma estamparia sempre "fora do retrato".
-    for fonte in ("prumo", "iris", "estampa"):
+    # As ofertas vêm de prumo-ofertas.json (ofertas.py) desde 28/10/2026.
+    for fonte in ("prumo", *registro.ids()):
         for l in fontes.get(fonte, {}).get("linhas", []):
             h, t = hash_do_lead(l.get("WhatsApp")), instante(l.get("Resposta em"))
             if h and t is not None:

@@ -66,54 +66,64 @@ Dual é área regulada. Prospectar sem a ficha mínima faz a abordagem prometer 
 
 ---
 
-## 2. Passo a passo de hoje
+## 2. Passo a passo
+
+### 2.0 Com o comando (desde 28/10/2026)
+
+```bash
+cd deploy/dell/claude-ops
+python3 nova-oferta.py pdv --como iris --rotulo "Prisma PDV" --plural lojas --aba Lojas   # cria o bloco
+# preencha os "TODO: ..." do bloco (segmento, perfil, nichos, cidades, mensagem, conversa...)
+python3 nova-oferta.py --conferir pdv                                                      # diz o que falta
+```
+
+O primeiro copia a estrutura da oferta-modelo para `ofertas.<id>` com os nomes derivados (`convite-<id>`,
+caçador e clique `PRUMO · <rótulo> — ...`, `webhook_id` novo, sala `prumo--<id>`, `planilha<Id>`,
+`tipo: "propria"`, teto 15) e `TODO` em todo campo de negócio; nunca sobrescreve oferta e só insere texto
+no JSON. O `--conferir` faz o lint (contrato, regex, texto do convite, glossário, sem `TODO`), monta o
+código de **todas** as ofertas e do 08 · CRM e passa no `node --check`, roda os testes Python de contrato,
+mostra as listas escritas fora de `claude-ops` que faltam e imprime o resto, na ordem: lado TS, decisões,
+documentação e os passos na Mel. Sai com 1 enquanto houver o que corrigir. **Nunca publica nem liga.**
+
+O lado Python/n8n deriva do JSON por `deploy/dell/claude-ops/ofertas.py` (falta do JSON ou JSON inválido
+é exceção, nunca lista vazia). Os itens abaixo marcados **✓ automático** já não pedem edição. O lado TS é
+o `npx tsx scripts/ofertas-gerar.ts` (seções 2.4 e 2.5).
 
 Marcado **⚠ calada** onde esquecer não dá erro: a oferta só some ou sai errada.
 
 ### 2.1 n8n: o bloco da oferta
 
-1. `deploy/dell/claude-ops/prumo-ofertas.json:71-275`: acrescente `ofertas.<id>` (modelo na seção 3).
-   `convite` é sempre `"convite-<id>"`; `webhook_id` é um UUID novo; `fluxo` começa com "PRUMO" (é
-   isso que faz o `prumo_contexto` injetar o contexto).
-2. `deploy/dell/claude-ops/prumo-ofertas-triar.js:160` e `:178`: **⚠ calada.** Os motivos de
-   `fora_entidade`/`site_diretorio` dizem "Fora do perfil do Iris" fixo. Se a oferta nova usar esses
-   campos, os descartes dela sairão com o nome do Iris. Troque por `CONFIG.rotulo`.
-3. `deploy/dell/claude-ops/prumo-ofertas.py:426-429`: **⚠ calada.** `--codigo` imprime só o código do
-   `iris`; o `node --check` não cobre a oferta nova. Itere por `CONFIG["ofertas"]`.
-4. `deploy/dell/claude-ops/prumo-ofertas.py:1-39` e `:358-359`: docstrings ("Iris e CRM de
-   estamparia", `--ativar [iris|estampa]`).
-5. `deploy/dell/claude-ops/prospeccao_contrato.py:17-39`: **⚠ calada.** O contrato não confere
-   `clique`, `webhook_id` (UUID único), `empresa`, `convite == "convite-<id>"` nem o formato do id, e
-   o `prumo-ofertas.py` usa todos (`:322`, `:337`). Um `webhook_id` repetido colide no n8n sem aviso.
+1. `prumo-ofertas.json`: o bloco `ofertas.<id>` (`nova-oferta.py` cria; modelo na seção 3).
+2. ✓ automático. `prumo-ofertas-triar.js`: os motivos de `fora_entidade`/`site_diretorio` vêm de
+   `fora_entidade_motivo`/`site_diretorio_motivo` da oferta (o Iris guarda lá o texto de sempre); sem
+   eles, um texto genérico, nunca mais "do Iris".
+3. ✓ automático. `prumo-ofertas.py --codigo` imprime o código de todas as ofertas.
+4. ✓ feito (docstrings). `--ativar` agora **exige o nome** da oferta: sem nome ligaria a oferta nova.
+5. ✓ automático. `prospeccao_contrato.py` confere `webhook_id` (UUID, único), `clique` e `fluxo`
+   (únicos, começam com "PRUMO"), `convite == "convite-<id>"`, `empresa`, o id e os campos novos
+   (`sigla`, `tipo`, `sala`, `cacador_rotulo`, `fonte`, `link_retrato`, `conversa`). `prumo-ofertas.py`,
+   `crm.py` e `whatsapp-conversa.py` rodam esse contrato antes de tocar o n8n.
 
-O caçador lê o dedupe de todas as abas do JSON (`prumo-ofertas.py:235-237`): a oferta nova entra no
-dedupe das antigas na próxima republicação, sem código.
+O caçador lê o dedupe de todas as abas do JSON: a oferta nova entra no dedupe das antigas na próxima
+republicação, sem código. A posse exclusiva (`serializacao_aquisicao.NOMES`) também deriva do JSON.
 
 ### 2.2 Retrato do CRM (`deploy/dell/claude-ops/crm.py`, fluxo 08)
 
-6. `crm.py:76` `ABAS_DAS_OFERTAS`: acrescente a aba.
-7. `crm.py:87-90` `montar_js()`: um placeholder de link por oferta (como `%(IRIS_LINK)s`).
-8. `crm.py:127-151` (MONTAR_JS): `ler('Ler <Aba>')`, contagem, `links.planilha<X>`, `fontes.<x>`.
-9. `crm.py:164` (VALIDAR_JS): **⚠ calada, crítico.** `['site','prumo','iris','estampa','plus']`: sem
-   o id, **todo registro da oferta** (nota, convite confirmado, ganho, dispensado) volta "Produto
-   inválido".
-10. `crm.py:186-195` (VALIDAR_JS, regra em `:194`): tabela de preços duplicada e "a condição pertence
-    à oferta". Oferta sem preço: bloqueie como a estampa.
-11. `crm.py:337-338` (nó `ler("ler-…", "Ler <Aba>")`) e `:356` (a cadeia de leituras).
-12. `crm.py:459-531` (autoteste): casos da oferta nova.
+6–9, 11–12. ✓ automático. A leitura `Ler <aba>`, a cadeia, a contagem, `links.<link_retrato>`,
+   `fontes.<id>` e a lista de produtos do VALIDAR_JS saem do JSON (para Iris e estampa, o código
+   publicado é byte a byte o de antes). O `--testar` itera as ofertas.
+10. **Decisão.** Preço: só as ofertas em `crm.py` `OFERTAS_COM_TABELA` (hoje `iris`) aceitam
+    `valor_proposta`/`pagamento_confirmado`; a oferta nova nasce bloqueada, como a estampa.
 
 ### 2.3 Fluxos do WhatsApp
 
-13. `deploy/dell/claude-ops/whatsapp-conversa.py:104-113` `CONVERSA_DAS_OFERTAS`: `o_que_foi` (o que
-    o convite ofereceu, para o Gemini) e `interesse` (o passo de quem respondeu). **`:114-115` faz
-    `CONVERSA_DAS_OFERTAS[k]`: oferta no JSON sem entrada aqui derruba o gerador com `KeyError`.**
-14. `whatsapp-conversa.py:2026-2039`: o teste fixa `{"iris": "Clínicas", "estampa": "Estamparias"}`.
-15. `deploy/dell/claude-ops/workflow_contexto_whatsapp.py:15` `LEITURAS`: **⚠ crítico.** A guarda da
-    Fase 4 exige exatamente as 4 leituras (`:97-101`, `:165-179`). Com uma 5ª aba, o fluxo regenerado
-    tem "cadeia inesperada" e a simplificação recusa, ou a aba nova fica fora da guarda de completude
-    (o fluxo poderia confirmar "não é lead" sem ter lido a aba). Mexer aqui pede baseline e
-    homologação próprias.
-16. `deploy/dell/whatsapp-observador/observador.py:196` `ROTULO`: rótulo do aviso.
+13–14. ✓ automático. `whatsapp-conversa.py` lê `conversa.o_que_foi`/`conversa.interesse` do JSON; oferta
+    sem `conversa` para com o nome da oferta (não mais `KeyError`).
+15. ✓ automático. `workflow_contexto_whatsapp.LEITURAS` é Prospects + Leads do site + uma leitura por
+    oferta (para Iris e estampa, a mesma tupla e o mesmo GUARDA_JS); o lote (`workflow_contexto_lote.py`)
+    agrupa todas as abas do PRUMO. Uma aba nova soma uma leitura de Sheets por chamada.
+16. `observador.py` `ROTULO`: lista escrita (roda de `~/.local/bin`); `ofertas.test.py` falha até ter o
+    rótulo do JSON.
 
 ### 2.4 Servidor da Central (`server/`)
 
@@ -169,28 +179,34 @@ dedupe das antigas na próxima republicação, sem código.
 
 ### 2.6 Python da Mel e Hermes
 
-46. `deploy/hermes/scripts/ler_comercial.py:15, 109`: ofertas comerciais e produtos; fora deles, a
-    consulta do secretário devolve vazio.
-47. `deploy/hermes/skills/conversa-do-lead/SKILL.md:3` (e o SOUL, se citar ofertas).
-48. `deploy/dell/frente-comercial.py:145, 212, 565`: linhas do funil e "oferta com convite".
-49. `deploy/dell/publicador-crm.py:26` `FONTES`: fonte fora do conjunto não é publicada.
-50. `deploy/dell/claude-ops/jev-respostas-resumo.py:144`.
+Listas escritas de propósito (rodam fora de `claude-ops`, sem o JSON ao lado):
+`deploy/dell/claude-ops/ofertas.test.py` falha até a oferta nova entrar nelas, e o `--conferir` mostra o
+valor certo. Instaladas por `dell-status --instalados`.
+
+46. `deploy/hermes/scripts/ler_comercial.py` `PRODUTOS` (lista escrita). `OFERTAS` (ofertas comerciais)
+    só se a oferta tiver ciclo comercial próprio.
+47. `deploy/hermes/skills/conversa-do-lead/SKILL.md:3` (e o SOUL, se citar ofertas): texto.
+48. `deploy/dell/frente-comercial.py` `PRODUTOS_DO_FUNIL` (lista escrita). `OFERTAS_DO_EXECUTOR` é
+    **opt-in**: oferta nova não entra no envio automático do time comercial sem decisão do Rômulo (com
+    `perfil_do_lead`/`justificativa_comercial` próprios).
+49. `deploy/dell/publicador-crm.py` `FONTES` (lista escrita): sem a fonte nova, todo retrato é recusado.
+    `deploy/dell/aquisicao-guarda.py` `WORKFLOWS` (lista escrita): sem o caçador novo, a posse é recusada.
+50. ✓ automático. `jev-respostas-resumo.py` lê as ofertas do JSON.
 51. `scripts/publicar-aberturas.py:124, 152` (só se for reusar o publicador de aberturas).
-52. Opcional: `deploy/dell/dell-status.py:417-429` `DICAS_DO_FLUXO`.
+52. Opcional: `deploy/dell/dell-status.py` `DICAS_DO_FLUXO`.
 
 ### 2.7 Testes que fixam a lista
 
 53. `server/prumo-ofertas.test.ts:23` `deepEqual(keys, ["estampa","iris"])` e `:25`.
 54. `server/decisoes-comerciais.test.ts:65` (`for (const produto of ['iris','estampa'])`).
-55. `deploy/dell/claude-ops/prospeccao_contrato.test.py:45, 132` (gids `{'iris':101,'estampa':102}`).
-56. `whatsapp-conversa.py:2039` (ver passo 14).
+55–56. ✓ Os testes Python derivam do JSON (`prospeccao_contrato.test.py`, `crm.test.py`,
+    `serializacao_aquisicao.test.py`, `whatsapp-conversa.py --testar`); regra de uma oferta só
+    (Iris, estampa) continua testada como dela.
 57. `server/crm.test.ts`, `src/office/operacao.test.ts`, `src/operations-*.test.ts`: seguem válidos;
     acrescente um caso da oferta nova onde houver regra.
 
-Rode no PC: `npx vue-tsc --noEmit`, `npm test`. Na Mel ou com HOME falso: `python3
-prospeccao_contrato.test.py`, `python3 crm.py --testar`, `python3 whatsapp-conversa.py --testar`,
-`python3 prumo-ofertas.py --codigo` com a saída conferida por `node --check` (só cobre a oferta nova
-depois do passo 3).
+Rode no PC: `python3 nova-oferta.py --conferir <id>`, `npx vue-tsc --noEmit`, `npm test`. Só na Mel
+(fcntl, tzdata): `frente-comercial*.test.py`, `crm.py --testar`, `whatsapp-conversa.py --testar-n8n`.
 
 ### 2.8 Documentação
 
@@ -206,8 +222,9 @@ depois do passo 3).
 ### 2.9 Passos manuais em produção (só na Mel, depois do merge)
 
 63. Reinstalar o que mudou: `dell-status --instalados` diz o que está atrás. O `prumo-ofertas.json`
-    tem entrada própria em `deploy/dell/instalados.json:69`; `crm.py` e `whatsapp-conversa.py` o leem
-    do próprio diretório.
+    tem entrada própria em `deploy/dell/instalados.json`; `ofertas.py` (e por ele `crm.py`,
+    `whatsapp-conversa.py`, a guarda do contexto e a da aquisição) o lê do próprio diretório. Antes de
+    publicar, `cd ~/SquadOne/deploy/dell/claude-ops && python3 nova-oferta.py --conferir <id>` (só lê).
 64. `cd ~/.local/share/claude-ops && python3 prumo-ofertas.py`: cria a aba na planilha "PRUMO — Fila
     de revisão" (`planilha()`, `:104-149`), publica o caçador **desligado** (`publicar_cacador`,
     `:343`) e o clique `GET /webhook/convite-<id>` (`clique`, `:332`; construtor em
@@ -225,18 +242,20 @@ depois do passo 3).
 ## 3. Modelo comentado do bloco de oferta
 
 O JSON não aceita comentário; o arquivo usa chaves `_campo` como nota. Os campos sem marca **já
-existem** e são lidos por `prumo-ofertas.py`/`prumo-ofertas-triar.js`. Os marcados **PROPOSTO** não
-existem: são a proposta da seção 4 e hoje não são lidos por ninguém.
+existem** e são lidos por `prumo-ofertas.py`/`prumo-ofertas-triar.js`/`ofertas.py` (e pelo gerador TS).
+Os marcados **PROPOSTO** ainda não existem nem são lidos por ninguém.
 
 ```jsonc
 "pdv": {
   // ---- identidade
   "rotulo": "Prisma PDV",              // nome longo: Ficha, aviso do caçador, prefixo do Motivo em Descartados
-  "sigla": "PDV",                       // PROPOSTO: rótulo curto único (hoje 3 cópias: crm-formato, proxima-venda, office/decisoes)
+  "sigla": "PDV",                       // rótulo curto único (gerador TS); único entre as ofertas
   "catalogo_prumo": "pdv",              // PROPOSTO: id em prumo/06-qualidade/catalogo.json (pode diferir: estampa ↔ crm)
-  "tipo": "propria",                    // PROPOSTO: caminho curto sem Raio-X/Mapa/cardápio; substitui os `iris || estampa`
-  "sala": "prumo--pdv",                 // PROPOSTO: sala do Escritório (operacao.ts, linha-de-producao.ts)
-  "cacador_rotulo": "Encontrado pelo Caçador de lojas",  // PROPOSTO: hoje OFERTA_DE_PROSPECCAO.cacador em server/crm.ts
+  "tipo": "propria",                    // só "propria": caminho curto sem Raio-X/Mapa/cardápio
+  "sala": "prumo--pdv",                 // sala do Escritório ("prumo--<slug>", única); criar no roster à mão
+  "cacador_rotulo": "Encontrado pelo Caçador de lojas",  // o "de onde veio" da Ficha
+  "fonte": "PRUMO — Lojas (Prisma PDV)",  // nome da fonte na Central
+  "link_retrato": "planilhaPdv",        // chave do link da aba no crm.json ("planilha<Nome>", única)
 
   // ---- planilha e n8n
   "aba": "Lojas",                       // aba na planilha do PRUMO; criada por prumo-ofertas.py; única
@@ -257,8 +276,10 @@ existem: são a proposta da seção 4 e hoje não são lidos por ninguém.
   "fora_sem_perfil_motivo": "Fora do perfil (…)",
   "solo": "",                           // opcional: profissional sozinho → entra marcado, prioridade menor
   "instituicao": "",                    // opcional: o que desfaz o "solo"
-  "fora_entidade": "",                  // opcional: entidade que não é cliente final (motivo ainda diz "Iris": passo 2)
+  "fora_entidade": "",                  // opcional: entidade que não é cliente final
+  "fora_entidade_motivo": "",           // opcional: motivo desse descarte (sem ele, um texto genérico)
   "site_diretorio": "",                 // opcional: site de diretório; o WhatsApp dele não é da empresa
+  "site_diretorio_motivo": "",          // opcional: motivo desse descarte
   "sinais": [["um caixa", "…"], ["NFC-e", "nfc-?e"]],  // [rótulo, regex]: coluna Sinais e Prioridade
   "nichos": ["…"],                      // a frase curta que rende mais vem primeiro (busca = nicho × cidade, menos usada antes)
   "cidades": ["Vitória ES", "…"],
@@ -268,7 +289,7 @@ existem: são a proposta da seção 4 e hoje não são lidos por ninguém.
                                         // {OLA} = Bom dia/Boa tarde/Boa noite; {NOME} = nome limpo (prumo-nome.js)
                                         // HOJE: copie também em server/convite-mensagem.ts (passo 25)
   "proxima_enviado": "Aguarde a resposta. …",  // o que o OBSERVADOR grava na Próxima ação quando o convite sai de verdade
-  "conversa": {                         // PROPOSTO: hoje CONVERSA_DAS_OFERTAS em whatsapp-conversa.py (passo 13)
+  "conversa": {                         // lido por whatsapp-conversa.py (resumo para o Gemini e o passo do interesse)
     "o_que_foi": "A abertura atual apresenta Rômulo, do Prumo, e oferece …. Um sim autoriza apenas o exemplo.",
     "interesse": "Combine a demonstração …"
   },
@@ -279,18 +300,20 @@ existem: são a proposta da seção 4 e hoje não são lidos por ninguém.
 }
 ```
 
-Obrigatórios hoje no contrato (`prospeccao_contrato.py:17-39`): `rotulo`, `aba`, `fluxo`, `plural`,
+Obrigatórios no contrato (`prospeccao_contrato.contrato_oferta`): `rotulo`, `aba`, `fluxo`, `plural`,
 `segmento`, `fora`, `perfil`, `perfil_motivo`, `fora_sem_perfil`, `fora_sem_perfil_motivo`,
-`convite`, `proxima_enviado`, `mensagem`, `teto_por_rodada` (inteiro > 0), `nichos` e `cidades`
-(listas não vazias) e `sinais` (pares). `clique`, `webhook_id` e `empresa` são usados pelo gerador
-mas **não** são conferidos.
+`convite` (`convite-<id>`), `proxima_enviado`, `mensagem`, `clique` e `fluxo` (únicos, começam com
+"PRUMO"), `webhook_id` (UUID único), `empresa`, `sigla`, `tipo`, `sala`, `cacador_rotulo`, `fonte`,
+`link_retrato`, `conversa`, `teto_por_rodada` (inteiro > 0), `nichos` e `cidades` (listas não vazias) e
+`sinais` (pares). O id tem 3 a 12 letras minúsculas. O `--conferir` soma o lint do texto do convite, o
+teto até 15, as regex e o glossário.
 
 O nível de cima do JSON é comum a todas as ofertas: `colunas` (só acrescentar no fim), `ocultas`,
 `descartados`, `etapas`, `clientes` e `proxima_revisar`.
 
 ---
 
-## 4. Para ficar fácil (proposta, não implementada)
+## 4. Para ficar fácil
 
 Objetivo: uma oferta nova = um bloco de config + um comando.
 
@@ -306,21 +329,21 @@ as ~10 listas de validação passam a derivar dele; um predicado `ehOfertaPropri
 desconhecido. Gerar (e não importar o JSON) mantém a união literal `CrmProduto`, então o `vue-tsc`
 continua apontando `Record` incompleto. Um teste falha se o gerado ficar atrás do JSON.
 
-**Lado Python: `deploy/dell/claude-ops/ofertas.py`** (`carregar()`), usado por `crm.py` (abas, nós
-`Ler <aba>`, cadeia, MONTAR_JS e a lista do VALIDAR_JS), `workflow_contexto_whatsapp.LEITURAS`,
-`whatsapp-conversa.py` (`conversa` vindo do JSON), `frente-comercial.py`, `publicador-crm.py`,
-`jev-respostas-resumo.py`, `observador.py`, `ler_comercial.py`. O observador e o Hermes rodam de
-outras pastas: o JSON precisa ir para lá também (`instalados.json`), e a falta dele tem de derrubar o
-boot, não virar lista vazia.
+**Lado Python: feito em 28/10/2026.** `deploy/dell/claude-ops/ofertas.py` (`carregar()`, `ids()`,
+`oferta()`, `leituras()`, `conversa()`...) é usado por `crm.py`, `whatsapp-conversa.py`,
+`workflow_contexto_whatsapp.py` (e o lote), `serializacao_aquisicao.py`, `jev-respostas-resumo.py` e
+`nova-oferta.py`; falta do JSON derruba o gerador. Para Iris e estampa, o que os geradores mandam ao n8n
+saiu idêntico ao de antes (comparado corpo a corpo, com e sem os opt-ins do contexto e da aquisição),
+exceto o código do Triar (motivos de identidade vindos da oferta, mesmo texto para o Iris). Os scripts
+que rodam fora de `claude-ops` (observador, publicador do CRM, guarda de aquisição, frente comercial,
+Hermes) ficaram com a lista escrita e um teste de paridade (`ofertas.test.py`): copiar o JSON para cinco
+lugares de instalação custava mais que uma linha por oferta.
 
-**Comando `python3 deploy/dell/claude-ops/nova-oferta.py <id> --como iris`** (PC ou Mel, sem rede):
-copia o bloco modelo com os nomes derivados (`convite-<id>`, `fluxo`, `clique`, `webhook_id` novo,
-`teto_por_rodada: 15`) e `TODO` nos campos de negócio; faz o lint da config (id, unicidade de aba,
-fluxo, clique e webhook, regex que compilam, regras do texto do convite, glossário, sala com vaga,
-`catalogo_prumo` existente); roda o `node --check` e os testes de contrato; e imprime a ordem de
-publicação na Mel. **Nunca publica sozinho e nunca chama `--ativar`.**
+**Comando: feito.** `nova-oferta.py` (seção 2.0). Não confere ainda a vaga de sala no roster (fica no
+servidor da Mel) nem `catalogo_prumo` quando o campo não existe.
 
-**Ordem em lotes** (cada um com `npm test` verde):
+**Ordem em lotes** (cada um com `npm test` verde; do lado Python, a parte de 1 e os lotes 3, 5 e 6 foram
+feitos em 28/10/2026):
 
 1. Corrigir as falhas caladas: `convite-mensagem.ts` lendo o JSON, motivos "do Iris" no
    `triar.js`, `--codigo` para todas, contrato com `webhook_id`/`clique`/`convite`.

@@ -71,6 +71,12 @@
   "ofertas": {
     "iris": {
       "rotulo": "Iris · Clínicas",
+      "sigla": "Iris",
+      "tipo": "propria",
+      "sala": "prumo--iris",
+      "cacador_rotulo": "Encontrado pelo Caçador do Iris",
+      "fonte": "PRUMO — Clínicas (Iris)",
+      "link_retrato": "planilhaIris",
       "aba": "Clínicas",
       "fluxo": "PRUMO · Iris — Caçador de clínicas",
       "clique": "PRUMO · Iris — Clique em Enviar convite",
@@ -84,6 +90,8 @@
       "_identidade": "21/10/2026: centro comercial não é clínica. Página de lojista não comprova que o WhatsApp do rodapé pertence à clínica; descartar para conferência manual, preservando o telefone do Google para resgate.",
       "fora_entidade": "^\\s*(?:(?:centro|condominio|complexo|empreendimento)\\s+(?:comercial|empresarial)|shopping\\b|mall\\b|trade\\s+center\\b|comercial\\b)|\\bshopping[_ ]mall\\b",
       "site_diretorio": "\\b(?:sou|seja(?: um)?) lojista\\b|\\bnossas lojas\\b|\\bconheca (?:as|nossas) lojas\\b|\\blocacao de (?:lojas|salas comerciais)\\b",
+      "fora_entidade_motivo": "Fora do perfil do Iris (centro comercial ou empreendimento, não clínica)",
+      "site_diretorio_motivo": "Fora do perfil do Iris (site de centro comercial/diretório: contato da clínica não confirmado)",
       "_perfil": "Só público infantil/TEA conta (14/10/2026): 'multidisciplinar' sozinho deixava entrar reabilitação de adulto (Clínica da Mão, Rehabili) na reavaliação. Clínica sem site com 'multidisciplinar' no nome entra como 'perfil não confirmado'.",
       "perfil": "infantil|crian[cç]a|beb[eê]s?\\b|autis|\\btea\\b|\\baba\\b|neurodesenvolv|neurodiverg|desenvolvimento infantil|atraso no desenvolvimento|\\btdah\\b|denver|\\bpei\\b|interven[cç][aã]o comportamental",
       "perfil_motivo": "Fora do perfil do Iris (sem público infantil/TEA no nome nem no site)",
@@ -172,10 +180,20 @@
         "Vila Velha ES"
       ],
       "mensagem": "{OLA}! Sou o Rômulo, do Prumo. O Iris organiza as anotações das sessões para apoiar a preparação dos relatórios de reavaliação.\n\nPosso te mostrar um exemplo com dados fictícios para a equipe da {NOME}?",
-      "proxima_enviado": "Aguarde a resposta. Quem responder: marque Em conversa e combine a demonstração do dossiê (caso fictício, nunca dado de paciente). Sem resposta em 3 dias, um lembrete só."
+      "proxima_enviado": "Aguarde a resposta. Quem responder: marque Em conversa e combine a demonstração do dossiê (caso fictício, nunca dado de paciente). Sem resposta em 3 dias, um lembrete só.",
+      "conversa": {
+        "o_que_foi": "A abertura atual apresenta Rômulo, do Prumo, e oferece um exemplo do Iris com dados fictícios para relatórios de reavaliação. Um sim autoriza apenas esse exemplo. Versões anteriores perguntavam pela coordenação da clínica: use a pergunta realmente enviada para distinguir acesso, permissão e interesse comercial.",
+        "interesse": "Combine a demonstração do dossiê (caso fictício, nunca dado de paciente)."
+      }
     },
     "estampa": {
       "rotulo": "CRM de estamparia",
+      "sigla": "Estamparia",
+      "tipo": "propria",
+      "sala": "prumo--estamparias",
+      "cacador_rotulo": "Encontrado pelo Caçador de estamparias",
+      "fonte": "PRUMO — Estamparias (CRM de estamparia)",
+      "link_retrato": "planilhaEstampa",
       "aba": "Estamparias",
       "fluxo": "PRUMO · CRM de estamparia — Caçador de estamparias",
       "clique": "PRUMO · CRM de estamparia — Clique em Enviar convite",
@@ -270,7 +288,11 @@
         "Vila Velha ES"
       ],
       "mensagem": "{OLA}! Sou o Rômulo, do Prumo. Trabalho com um sistema de pedidos para estamparias que reúne arte, tamanhos e prazo em uma ficha para a produção.\n\nPosso te mostrar uma ficha de exemplo para a equipe da {NOME}, sem dados de clientes?",
-      "proxima_enviado": "Aguarde a resposta. Quem responder: marque Em conversa e combine uma conversa de 20 minutos sobre como os pedidos chegam hoje. Sem resposta em 3 dias, um lembrete só."
+      "proxima_enviado": "Aguarde a resposta. Quem responder: marque Em conversa e combine uma conversa de 20 minutos sobre como os pedidos chegam hoje. Sem resposta em 3 dias, um lembrete só.",
+      "conversa": {
+        "o_que_foi": "A abertura atual apresenta Rômulo, do Prumo, e oferece uma ficha de pedido de exemplo sem dados de clientes. Um sim autoriza apenas o exemplo. Versões anteriores perguntavam pelo responsável: use a pergunta realmente enviada para distinguir acesso, permissão e interesse comercial.",
+        "interesse": "Combine uma conversa de 20 minutos sobre como os pedidos chegam hoje."
+      }
     }
   }
 }

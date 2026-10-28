@@ -45,11 +45,13 @@ class Transformacao(unittest.TestCase):
     def workflows(self):
         raw=json.loads((BASE.parents[2]/'ops/n8n/workflows/01-Cacador.sanitizado.json').read_text());site=fixture_utf8(raw[0] if isinstance(raw,list) else raw)
         site=reliable.preparar(site);site['active']=True
-        iris=self.factory.cacador('iris',{'iris':101,'estampa':102},103,'fixture-error');iris['active']=False
-        estampa=self.factory.cacador('estampa',{'iris':101,'estampa':102},103,'fixture-error');estampa['active']=False
-        for w in [site,iris,estampa]:
+        # Um caçador por oferta do JSON (28/10/2026: a guarda vale para todas, não só Iris e estampa).
+        ids=list(self.factory.CONFIG['ofertas']);gids={k:101+i for i,k in enumerate(ids)}
+        ofertas=[self.factory.cacador(k,gids,101+len(ids),'fixture-error') for k in ids]
+        for w in ofertas:w['active']=False
+        for w in [site,*ofertas]:
             w['settings']['callerPolicy']='workflowsFromAList';w['settings']['callerIds']='fixture-caller'
-        return [site,iris,estampa]
+        return [site,*ofertas]
     def test_tres_grafos_preservam_criterios_gatilhos_settings_estados_e_idempotencia(self):
         for wf in self.workflows():
             with self.subTest(wf=wf['name']):

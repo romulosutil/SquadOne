@@ -8,10 +8,17 @@ publicado sem a configuração válida. O cliente n8n aplica esta etapa por últ
 import copy
 import json
 import re
+import sys
 from pathlib import Path
 
-NOMES = frozenset(('01 · Caçador', 'PRUMO · Iris — Caçador de clínicas',
-                  'PRUMO · CRM de estamparia — Caçador de estamparias'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ofertas as registro  # noqa: E402
+
+# O caçador do Site e o de cada oferta do registro (prumo-ofertas.json). Até 28/10/2026 os dois das ofertas
+# estavam escritos aqui: o caçador de uma oferta nova seria publicado sem a posse exclusiva. O daemon
+# (deploy/dell/aquisicao-guarda.py, WORKFLOWS) roda fora de claude-ops e mantém a lista escrita;
+# ofertas.test.py falha se ela divergir desta.
+NOMES = frozenset(('01 · Caçador', *registro.fluxos()))
 PREFIXO = 'aquisicao-guarda-'
 CLAIM = 'Reservar aquisição exclusiva'
 IF = 'Posse da aquisição confirmada?'

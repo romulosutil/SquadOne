@@ -20,6 +20,10 @@ from pathlib import Path
 from contextlib import closing
 import urllib.request
 
+# O caçador do Site e o `fluxo` de cada oferta de prumo-ofertas.json: o mesmo conjunto de
+# serializacao_aquisicao.NOMES, que deriva do JSON. Escrito aqui porque o daemon roda de ~/.local/bin;
+# deploy/dell/claude-ops/ofertas.test.py falha se divergir. Caçador fora daqui tem a posse recusada
+# ('identidade-invalida') e não roda: falha alta, nunca aquisição sem guarda.
 WORKFLOWS = frozenset(('01 · Caçador', 'PRUMO · Iris — Caçador de clínicas',
                       'PRUMO · CRM de estamparia — Caçador de estamparias'))
 MAX_BODY = 2048

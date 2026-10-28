@@ -31,8 +31,11 @@ class Prospeccao(unittest.TestCase):
     def terceira(self):
         cfg = copy.deepcopy(self.config_original)
         oferta = copy.deepcopy(cfg['ofertas']['iris'])
-        oferta.update(rotulo='Oferta sintética',aba='Sintéticos',fluxo='HOMOLOGAÇÃO · Oferta sintética',
-                      convite='fixture-sem-publicacao',clique='HOMOLOGAÇÃO · Convite sintético',
+        # Nomes no padrão que o contrato exige desde 28/10/2026 (convite-<id>, PRUMO no começo, UUID próprio).
+        oferta.update(rotulo='Oferta sintética',sigla='Sintética',aba='Sintéticos',sala='prumo--fixture',link_retrato='planilhaFixture',
+                      cacador_rotulo='Encontrado pelo Caçador sintético',fonte='PRUMO — Sintéticos (fixture)',
+                      fluxo='PRUMO · Oferta sintética — Caçador de testes',webhook_id='00000000-0000-4000-8000-00000000f1c7',
+                      convite='convite-fixture',clique='PRUMO · Oferta sintética — Clique em Enviar convite',
                       segmento='clinica',perfil='comprovacao-sintetica',sinais=[['teste','comprovacao-sintetica']],
                       nichos=['clínica de teste'],cidades=['Cidade Sintética'],teto_por_rodada=2,
                       mensagem='{OLA}! Aqui é do Prumo. Consigo falar com quem coordena a {NOME}?')
@@ -40,13 +43,18 @@ class Prospeccao(unittest.TestCase):
         self.factory.CONFIG = cfg
         return cfg
 
+    @staticmethod
+    def gids(cfg):
+        """Uma aba por oferta do JSON (101, 102...) e Descartados logo depois: nada de lista escrita."""
+        return {k: 101 + i for i, k in enumerate(cfg['ofertas'])}, 101 + len(cfg['ofertas'])
+
     def test_terceira_oferta_usa_mesma_fabrica_criterios_leitores_e_persistencia_sem_workflow_copiado(self):
         cfg = self.terceira(); antes = copy.deepcopy(cfg)
-        gids={'iris':101,'estampa':102,'fixture':103}
+        gids, descartados = self.gids(cfg)
         assinatura=None
         for oferta in cfg['ofertas']:
             contract=c.contrato_oferta(cfg,oferta)
-            wf=self.factory.cacador(oferta,gids,104,'erro-fixture')
+            wf=self.factory.cacador(oferta,gids,descartados,'erro-fixture')
             out=c.auditar_adaptador(wf,contract)
             self.assertTrue(out['componentesPresentes']); self.assertTrue(out['geracaoCompleta'])
             self.assertFalse(out['ativacaoAutorizada']); self.assertNotIn('active',wf)
@@ -54,7 +62,7 @@ class Prospeccao(unittest.TestCase):
             for nome in contract['leiturasDedupe']:
                 self.assertIn(nome,por); self.assertEqual(por[nome]['parameters']['operation'],'read')
             self.assertEqual(por[f"Gravar na aba {cfg['ofertas'][oferta]['aba']}"]['parameters']['sheetName']['value'],str(gids[oferta]))
-            self.assertEqual(por['Gravar em Descartados']['parameters']['sheetName']['value'],'104')
+            self.assertEqual(por['Gravar em Descartados']['parameters']['sheetName']['value'],str(descartados))
             self.assertEqual(por['Buscar no Google Places']['parameters']['options']['pagination']['pagination']['maxRequests'],3)
             js=por['Triar e checar sites']['parameters']['jsCode']
             constante=next(line for line in js.splitlines() if line.startswith('const CONFIG = '))
@@ -88,8 +96,10 @@ class Prospeccao(unittest.TestCase):
             return {'id':id_,'displayName':{'text':'Clínica comprovacao-sintetica'},
                     'primaryTypeDisplayName':{'text':'Clínica de teste'},'nationalPhoneNumber':phone}
         nodes={n:[{'json':{}}] for n in contrato['leiturasDedupe']}
-        nodes['Ler Clínicas']=[{'json':{'ID':'existente-sintetico','Empresa':'Fixture'}}]
-        nodes['Ler Estamparias']=[{'json':{'WhatsApp':'(11) 90000-0002','Empresa':'Fixture contato'}}]
+        # As duas primeiras abas reais do JSON (depois da própria): o dedupe vale contra qualquer oferta.
+        outra1,outra2=contrato['leiturasDedupe'][1:3]
+        nodes[outra1]=[{'json':{'ID':'existente-sintetico','Empresa':'Fixture'}}]
+        nodes[outra2]=[{'json':{'WhatsApp':'(11) 90000-0002','Empresa':'Fixture contato'}}]
         nodes['Escolher a busca']=[{'json':{'query':'clínica de teste em Cidade Sintética','cidade':'Cidade Sintética','nicho':'clínica de teste'}}]
         nodes['Buscar no Google Places']=[{'json':{'places':[place('existente-sintetico','11900000001'),place('novo-sintetico','11900000000')]}},
                                          {'json':{'places':[place('novo-sintetico','11900000000'),place('unidade-sintetica','11900000000'),place('contato-existente','11900000002')]}}]
@@ -114,6 +124,45 @@ class Prospeccao(unittest.TestCase):
             cfg=copy.deepcopy(self.config_original);change(cfg);antes=copy.deepcopy(cfg)
             with self.assertRaises(ValueError):c.contrato_oferta(cfg,'iris')
             self.assertEqual(cfg,antes)
+
+    def test_contrato_confere_nomes_webhook_e_campos_do_registro(self):
+        """28/10/2026: o que prumo-ofertas.py, crm.py, whatsapp-conversa.py e a Central usam de cada oferta."""
+        for oferta in self.config_original['ofertas']:
+            c.contrato_oferta(self.config_original, oferta)  # as ofertas reais passam
+        outra = lambda x: [k for k in x['ofertas'] if k != 'iris'][0]
+        mudancas = {
+            'webhook repetido': lambda x: x['ofertas']['iris'].update(webhook_id=x['ofertas'][outra(x)]['webhook_id']),
+            'webhook fora do formato': lambda x: x['ofertas']['iris'].update(webhook_id='nao-e-uuid'),
+            'convite fora do padrão': lambda x: x['ofertas']['iris'].update(convite='convite-clinicas'),
+            'clique sem PRUMO': lambda x: x['ofertas']['iris'].update(clique='Iris — Clique em Enviar convite'),
+            'fluxo sem PRUMO': lambda x: x['ofertas']['iris'].update(fluxo='Iris — Caçador'),
+            'clique repetido': lambda x: x['ofertas']['iris'].update(clique=x['ofertas'][outra(x)]['clique']),
+            'clique igual ao fluxo': lambda x: x['ofertas']['iris'].update(clique=x['ofertas']['iris']['fluxo']),
+            'sem empresa': lambda x: x['ofertas']['iris'].pop('empresa'),
+            'sem sigla': lambda x: x['ofertas']['iris'].update(sigla=' '),
+            'tipo desconhecido': lambda x: x['ofertas']['iris'].update(tipo='consultoria'),
+            'sala fora do formato': lambda x: x['ofertas']['iris'].update(sala='iris'),
+            'sala repetida': lambda x: x['ofertas']['iris'].update(sala=x['ofertas'][outra(x)]['sala']),
+            'link do PRUMO': lambda x: x['ofertas']['iris'].update(link_retrato='planilhaPrumo'),
+            'link fora do formato': lambda x: x['ofertas']['iris'].update(link_retrato='iris'),
+            'sem cacador_rotulo': lambda x: x['ofertas']['iris'].pop('cacador_rotulo'),
+            'sem fonte': lambda x: x['ofertas']['iris'].pop('fonte'),
+            'sem conversa': lambda x: x['ofertas']['iris'].pop('conversa'),
+            'conversa sem interesse': lambda x: x['ofertas']['iris']['conversa'].pop('interesse'),
+            'aba do PRUMO': lambda x: x['ofertas']['iris'].update(aba='Prospects'),
+            'aba com aspas': lambda x: x['ofertas']['iris'].update(aba="Clínica's"),
+        }
+        for nome, change in mudancas.items():
+            with self.subTest(nome):
+                cfg=copy.deepcopy(self.config_original);change(cfg);antes=copy.deepcopy(cfg)
+                with self.assertRaises(ValueError):c.contrato_oferta(cfg,'iris')
+                self.assertEqual(cfg,antes)
+        for oferta_id in ('site', 'plus', 'registros', 'const', 'Iris', 'ab', 'oferta_nova'):
+            with self.subTest(oferta_id):
+                cfg=copy.deepcopy(self.config_original)
+                bloco=copy.deepcopy(cfg['ofertas']['iris']);cfg['ofertas']={oferta_id:bloco}
+                bloco['convite']='convite-'+oferta_id
+                with self.assertRaises(ValueError):c.contrato_oferta(cfg,oferta_id)
 
     def test_site_e_adaptador_legado_explicito_e_nunca_fabrica_inventada(self):
         contract=c.contrato_site_legado();self.assertFalse(contract['geracaoCompleta'])
@@ -143,7 +192,7 @@ class Prospeccao(unittest.TestCase):
     def test_fonte_dedupe_ou_persistencia_trocada_nao_passa_auditoria(self):
         cfg=self.config_original;contract=c.contrato_oferta(cfg,'iris')
         for name in ['Ler Clínicas','Gravar na aba Clínicas']:
-            wf=self.factory.cacador('iris',{'iris':101,'estampa':102},104,'erro-fixture')
+            wf=self.factory.cacador('iris',*self.gids(cfg),'erro-fixture')
             next(n for n in wf['nodes'] if n['name']==name)['parameters']['operation']='update'
             with self.assertRaises(ValueError):c.auditar_adaptador(wf,contract)
 

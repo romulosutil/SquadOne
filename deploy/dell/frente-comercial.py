@@ -136,6 +136,15 @@ def setor(lead):
 
 VERSAO_AVALIACAO = 'marina-curadoria-v1-20261026'
 
+# Produtos do funil (métricas da avaliação): os do CRM, na ordem das telas. Lista escrita porque este arquivo
+# roda de ~/.local/bin, sem prumo-ofertas.json ao lado; deploy/dell/claude-ops/ofertas.test.py falha se ela
+# divergir do JSON (oferta nova: acrescente aqui e reinstale).
+PRODUTOS_DO_FUNIL = ('site', 'prumo', 'iris', 'estampa', 'plus')
+# Ofertas de convite que o time comercial pode abordar sozinho. OPT-IN DE PROPÓSITO (28/10/2026): oferta nova
+# NÃO entra aqui pelo JSON, porque o executor envia de verdade; entrar é decisão do Rômulo, oferta por oferta,
+# com perfil_do_lead e justificativa_comercial próprios. O teste só confere que cada uma existe no JSON.
+OFERTAS_DO_EXECUTOR = ('prumo', 'iris', 'estampa')
+
 # Prioridade aprovada por Rômulo em 26/10. É uma direção comercial, não uma
 # estimativa de conversão. O tamanho da carteira e respostas não decidem a oferta.
 ACHADOS_COMERCIAIS_SITE = {
@@ -280,7 +289,7 @@ def intercalar_ofertas(itens, pontuacao):
 def metricas_do_funil(crm):
     """O retrato inteiro, inclusive Em contato, Proposta, Ganho e Perdido, orienta a seleção."""
     linhas={p:{'produto':p,'novo':0,'contato':0,'proposta':0,'ganho':0,'perdido':0,'elegiveis':0,'contatosObservados':0,'respostasWhatsapp':0}
-        for p in ('site','prumo','iris','estampa','plus')}
+        for p in PRODUTOS_DO_FUNIL}
     for l in crm['leads']:
         m=linhas.get(l.get('produto'))
         if not m:continue
@@ -353,7 +362,7 @@ def elegivel(lead):
     produto=lead.get('produto');sinal=lead.get('sinal')
     # Fase 0 (19/10): Plus é rede quente enviada pelo Rômulo, nunca pelo executor.
     pronto=(produto=='site' and sinal=='pronto'
-        or produto in ('prumo','iris','estampa') and sinal=='revisar' and origem_confirmada(lead))
+        or produto in OFERTAS_DO_EXECUTOR and sinal=='revisar' and origem_confirmada(lead))
     return bool(pronto and lead.get('etapa')=='novo' and numero(lead) and destino_do_lead(lead) and texto_do_lead(lead)
         and not lead.get('conversa') and not any((lead.get('marcos') or {}).values())
         and not lead.get('proximoPasso') and not lead.get('resposta') and numero(lead)
@@ -708,7 +717,7 @@ def marcar_no_crm(l, texto):
 def anotar_na_central(l, texto=None, em=None):
     """Depois do recibo confirmado, registra o estágio real no CRM; nunca repete o envio."""
     produto=l['produto'];tipo='plus_enviado' if produto=='plus' else 'nota'
-    if produto in ('prumo','iris','estampa'):
+    if produto in OFERTAS_DO_EXECUTOR:
         registro={'enviadoEm':em or iso(),'mensagem':texto}
         ab=l.get('abordagem') or {}
         if (produto=='prumo' and texto==texto_do_lead(l) and ab.get('mensagem') in ('A','D')

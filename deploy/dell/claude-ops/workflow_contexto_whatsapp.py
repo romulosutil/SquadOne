@@ -1,4 +1,4 @@
-"""Contexto WhatsApp comum, puro e fresco: quatro Sheets por chamada, sem cache.
+"""Contexto WhatsApp comum, puro e fresco: um Sheets por fonte (quatro com Iris e estampa), sem cache.
 
 Move as leituras e o Code consumidor para um subfluxo aguardado. O nome do
 consumidor fica no pai: referências e shapes legados continuam iguais, sem
@@ -11,8 +11,18 @@ import copy
 import hashlib
 import json
 import re
+import sys
+from pathlib import Path
 
-LEITURAS = ('Ler Prospects', 'Ler Leads do site', 'Ler Clínicas', 'Ler Estamparias')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ofertas as registro  # noqa: E402
+
+# Prospects, Leads do site e uma aba por oferta do registro (prumo-ofertas.json), na ordem dele. Era a
+# tupla escrita ('Ler Prospects', 'Ler Leads do site', 'Ler Clínicas', 'Ler Estamparias') até 28/10/2026:
+# uma 5ª aba ficava fora da guarda de completude, e o fluxo podia confirmar "não é lead" sem tê-la lido.
+# Para Iris e estampa o resultado é o mesmo, e o GUARDA_JS publicado também.
+LEITURAS = ('Ler Prospects', 'Ler Leads do site', *registro.leituras())
+_QUANTAS = {4: 'Quatro', 5: 'Cinco', 6: 'Seis', 7: 'Sete', 8: 'Oito', 9: 'Nove', 10: 'Dez'}
 MARCA = '[contexto-whatsapp-fontes-v1]'
 GUARDA = 'Contexto WhatsApp: conferir fontes'
 ESPECIFICACOES = {
@@ -211,7 +221,7 @@ def preparar(workflow):
              'settings': {'executionOrder': 'v1', 'timezone': wf.get('settings', {}).get('timezone', 'America/Sao_Paulo')}}
     chamada = {k: copy.deepcopy(v) for k, v in final.items() if k not in ('type', 'typeVersion', 'parameters', 'credentials', 'alwaysOutputData', 'onError', 'continueOnFail', 'retryOnFail', 'maxTries', 'waitBetweenTries')}
     chamada.update(type='n8n-nodes-base.executeWorkflow', typeVersion=1.3, retryOnFail=False,
-                   notes=(final.get('notes', '') + '\n' + MARCA + ' consumidorSHA256=' + hashlib.sha256(final['parameters']['jsCode'].encode()).hexdigest() + ' Quatro Sheets frescos; sem cache ou redução de chamadas.').strip(),
+                   notes=(final.get('notes', '') + '\n' + MARCA + ' consumidorSHA256=' + hashlib.sha256(final['parameters']['jsCode'].encode()).hexdigest() + ' ' + _QUANTAS.get(len(LEITURAS), str(len(LEITURAS))) + ' Sheets frescos; sem cache ou redução de chamadas.').strip(),
                    parameters={'source': 'parameter', 'mode': 'once', 'workflowJson': json.dumps(filho, ensure_ascii=False), 'options': {'waitForSubWorkflow': True}})
     wf['nodes'] = [chamada if n['name'] == consumidor else n for n in wf['nodes'] if n['name'] not in internas]
     for entrada in entradas:

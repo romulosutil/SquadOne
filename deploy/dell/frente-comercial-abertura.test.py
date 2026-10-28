@@ -6,11 +6,14 @@ import unittest
 
 fonte = Path(__file__).with_name('frente-comercial.py').read_text(encoding='utf-8')
 funcao = next(n for n in ast.parse(fonte).body if isinstance(n, ast.FunctionDef) and n.name == 'anotar_na_central')
+# As ofertas de convite do executor (constante do módulo desde 28/10/2026), lidas do próprio arquivo.
+EXECUTOR = next(ast.literal_eval(n.value) for n in ast.parse(fonte).body if isinstance(n, ast.Assign)
+                and any(isinstance(t, ast.Name) and t.id == 'OFERTAS_DO_EXECUTOR' for t in n.targets))
 
 class AberturaConfirmada(unittest.TestCase):
     def registrar(self, produto='prumo', texto='MENSAGEM', preview='MENSAGEM', abordagem=None):
         chamadas = []
-        namespace = {'json': json, 'CENTRAL': 'http://central-ficticia', 'ORIGEM': {}, 'iso': lambda: '2026-10-19T20:00:00Z',
+        namespace = {'json': json, 'CENTRAL': 'http://central-ficticia', 'ORIGEM': {}, 'OFERTAS_DO_EXECUTOR': EXECUTOR, 'iso': lambda: '2026-10-19T20:00:00Z',
                      'texto_do_lead': lambda l: preview, 'http': lambda url, body, headers, timeout: chamadas.append(body)}
         exec(compile(ast.Module(body=[funcao], type_ignores=[]), '<anotacao-isolada>', 'exec'), namespace)
         lead = {'id': f'{produto}:teste', 'produto': produto, 'abordagem': abordagem or {'mensagem': 'D', 'elegiveis': 'AD'}}

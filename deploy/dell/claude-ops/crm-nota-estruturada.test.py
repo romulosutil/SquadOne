@@ -1,14 +1,26 @@
-"""Executa só VALIDAR_JS extraído por AST: sem importar/publicar crm.py, rede ou planilhas."""
-import ast
+"""Executa só o VALIDAR_JS de crm.py: sem publicar, rede ou planilhas."""
+import importlib.util
 import json
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-ARQUIVO = Path(__file__).with_name('crm.py')
-ARVORE = ast.parse(ARQUIVO.read_text(encoding='utf-8'))
-VALIDAR = next(ast.literal_eval(n.value) for n in ARVORE.body if isinstance(n, ast.Assign)
-               and any(isinstance(t, ast.Name) and t.id == 'VALIDAR_JS' for t in n.targets))
+
+def validar_js():
+    """VALIDAR_JS montado por crm.py (a lista de produtos vem de prumo-ofertas.json desde 28/10/2026).
+    crm.py lê a chave do n8n ao importar: HOME temporário com uma chave falsa; nada é chamado."""
+    with tempfile.TemporaryDirectory() as tmp:
+        chave = Path(tmp) / '.config/claude-ops/n8n-api-key'
+        chave.parent.mkdir(parents=True); chave.write_text('fixture-sem-acesso')
+        with patch.object(Path, 'home', return_value=Path(tmp)):
+            spec = importlib.util.spec_from_file_location('crm_fixture_validar', Path(__file__).with_name('crm.py'))
+            m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    return m.VALIDAR_JS
+
+
+VALIDAR = validar_js()
 
 
 def validar_nota(texto):

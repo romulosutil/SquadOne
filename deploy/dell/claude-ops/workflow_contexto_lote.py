@@ -55,6 +55,12 @@ def _compact(valor):
     return json.dumps(valor, ensure_ascii=False, separators=(',', ':'))
 
 
+def _do_prumo(leitores):
+    """Prospects (0) e as abas das ofertas (2 em diante) na planilha do PRUMO; o 1 é o Site. Eram os
+    índices fixos (0, 2, 3) até 28/10/2026: uma 5ª leitura ficaria fora do lote, sem ser consultada."""
+    return [leitores[0], *leitores[2:]]
+
+
 def _leitores(filho):
     leitores = [copy.deepcopy(v1._no(filho, n)) for n in v1.LEITURAS]
     documentos = []
@@ -84,8 +90,8 @@ def _leitores(filho):
                 or n.get('retryOnFail') is not True or n.get('maxTries', 3) != 3
                 or n.get('waitBetweenTries') not in (None, 1000)):
             raise ValueError('Orçamento/falha de leitor fora do contrato auditado.')
-    if not (documentos[0] == documentos[2] == documentos[3] and documentos[1] != documentos[0]):
-        raise ValueError('Agrupamento exige três abas PRUMO e uma Site, em dois documentos.')
+    if not (all(d == documentos[0] for d in _do_prumo(documentos)) and documentos[1] != documentos[0]):
+        raise ValueError('Agrupamento exige as abas PRUMO (Prospects e ofertas) e uma Site, em dois documentos.')
     if any(n['credentials'] != leitores[0]['credentials'] for n in leitores):
         raise ValueError('Lote não pode misturar identidades Google.')
     return leitores
@@ -109,7 +115,7 @@ def _http(nome, id_, leitores):
 
 
 def _normalizador(leitores):
-    grupos = [(PRUMO, [leitores[i] for i in (0, 2, 3)]), (SITE, [leitores[1]])]
+    grupos = [(PRUMO, _do_prumo(leitores)), (SITE, [leitores[1]])]
     contrato = [{'node': nome, 'documento': ns[0]['parameters']['documentId']['value'],
                  'fontes': [{'nome': n['name'], 'filtro': _filtro(n)} for n in ns]} for nome, ns in grupos]
     codigo = CONVERTER_JS + '\nconst contrato = ' + _compact(contrato) + r""";
@@ -162,7 +168,7 @@ def _converter(wf, spec):
         aliases.append(alias)
     substitutos = {n['name']: n for n in aliases}
     filho['nodes'] = [substitutos.get(n['name'], n) for n in filho['nodes']]
-    filho['nodes'] += [_http(PRUMO, 'contexto-lote-prumo', [leitores[i] for i in (0, 2, 3)]),
+    filho['nodes'] += [_http(PRUMO, 'contexto-lote-prumo', _do_prumo(leitores)),
                        _http(SITE, 'contexto-lote-site', [leitores[1]]), _normalizador(leitores)]
     org = 'Prumo · organização · ' + gatilho
     filho['connections'] = _conexoes(gatilho, fim, org if any(n['name'] == org for n in filho['nodes']) else None)

@@ -1,4 +1,7 @@
-"""Ofertas do PRUMO além da consultoria: Iris (clínicas) e CRM de estamparia. 14/10/2026. Idempotente.
+"""Ofertas do PRUMO além da consultoria (as de prumo-ofertas.json: Iris, CRM de estamparia...). 14/10/2026. Idempotente.
+
+Oferta nova (28/10/2026): `python3 nova-oferta.py <id> --como iris` cria o bloco no JSON e
+`python3 nova-oferta.py --conferir <id>` diz o que falta, na ordem; este arquivo não muda.
 
 Pedido do Rômulo (14/10/2026): o PRUMO fica sob o SquadOne, e o Site antes da
 venda, os serviços do PRUMO, o Iris e o CRM de estamparia ficam sob o PRUMO,
@@ -32,9 +35,10 @@ no mesmo funil (server/crm.ts, OFERTA_DE_PROSPECCAO).
 
 Uso: python3 prumo-ofertas.py              abas + caçadores (desligados) + cliques
      python3 prumo-ofertas.py --rodar iris  roda o caçador agora (efeito real: grava na planilha e avisa)
-     python3 prumo-ofertas.py --codigo      só imprime o código dos nós Code (para node --check)
+     python3 prumo-ofertas.py --codigo [<oferta>]  só imprime o código dos nós Code de todas as ofertas (para node --check)
      python3 prumo-ofertas.py --estado      mostra se cada caçador está ligado
-     python3 prumo-ofertas.py --ativar [iris|estampa]   liga o agendamento (dias úteis, 9h); --desativar desliga
+     python3 prumo-ofertas.py --ativar [<oferta> ...]   liga o agendamento (dias úteis, 9h); --desativar desliga.
+                                            Ligar é decisão do Rômulo, oferta por oferta: nenhum script chama --ativar.
                                             (16/10/2026: ligados pelo Rômulo, "pode automatizar")
 """
 import importlib.util
@@ -222,6 +226,8 @@ def triar_js(oferta, o, leitores):
            "perfil": o["perfil"], "perfil_motivo": o["perfil_motivo"], "fora_sem_perfil": o["fora_sem_perfil"],
            "fora_sem_perfil_motivo": o["fora_sem_perfil_motivo"], "solo": o.get("solo", ""), "instituicao": o.get("instituicao", ""),
            "fora_entidade": o.get("fora_entidade", ""), "site_diretorio": o.get("site_diretorio", ""),
+           # Motivos desses dois descartes (28/10/2026): da oferta; sem eles, o texto genérico do triar.js.
+           "fora_entidade_motivo": o.get("fora_entidade_motivo", ""), "site_diretorio_motivo": o.get("site_diretorio_motivo", ""),
            "teto_por_rodada": o["teto_por_rodada"], "proxima_revisar": CONFIG["proxima_revisar"], "leitores": leitores,
            "convite_url": f"{WEBHOOK}/{o['convite']}?id="}
     return TRIAR.replace("__CONFIG__", json.dumps(cfg, ensure_ascii=False))
@@ -353,16 +359,20 @@ def publicar_cacador(wf):
 
 
 def estado_dos_cacadores(argv):
-    """`--estado` lista; `--ativar [iris|estampa ...]` liga o agendamento (dias úteis, 9h) e `--desativar`
-    desliga; sem nome, vale para as duas ofertas. Autorizado pelo Rômulo em 16/10/2026 ("pode automatizar").
+    """`--estado` lista; `--ativar [<oferta> ...]` liga o agendamento (dias úteis, 9h) e `--desativar`
+    desliga; --estado e --desativar sem nome valem para todas as ofertas do JSON, --ativar exige o nome. Autorizado pelo Rômulo em 16/10/2026 ("pode automatizar").
     Os caçadores só enchem a aba em Revisar (até o teto por rodada) e avisam pelo Hermes: nada é enviado
     a ninguém, o convite continua sendo um toque dele. Republicar (`prumo-ofertas.py` sem flags) troca os
     nós e preserva o estado ligado/desligado, mas confira com --estado depois."""
     from n8n import api
     ofertas = list(CONFIG["ofertas"])
+    ligar = "--ativar" in argv
+    # --ativar sem nome ligaria também a oferta que acabou de entrar no JSON (28/10/2026): exige o nome.
+    if ligar and not [a for a in argv if a in ofertas]:
+        print(f"--ativar precisa do nome de cada oferta (há: {', '.join(ofertas)}). Nada foi ligado.")
+        return 1
     pedidas = [a for a in argv if a in ofertas] or ofertas
     ids = ids_dos_cacadores()
-    ligar = "--ativar" in argv
     mudar = ligar or "--desativar" in argv
     for oferta in pedidas:
         wid = ids.get(oferta)
@@ -419,12 +429,29 @@ def tirar_para_reavaliar(oferta, desde):
             print(f"{aba}: {len(fora)} linha(s) de {o['rotulo']} desde {desde} tiradas para reavaliar")
 
 
+def codigo_das_ofertas():
+    """{(oferta, nó): código} dos nós Code de TODAS as ofertas, com os leitores reais de cada caçador.
+    Até 28/10/2026 o --codigo só imprimia o do Iris: o node --check não via a oferta nova."""
+    saida = {}
+    for oferta, o in CONFIG["ofertas"].items():
+        propria = f"Ler {o['aba']}"
+        leitores = [propria, *[f"Ler {v['aba']}" for k, v in CONFIG["ofertas"].items() if k != oferta],
+                    "Ler Descartados", "Ler Prospects", "Ler Leads do Site"]
+        saida[(oferta, "Triar e checar sites")] = triar_js(oferta, o, leitores)
+        saida[(oferta, "Escolher a busca")] = escolher_js(o, propria)
+        saida[(oferta, "Decidir")] = decidir_js(o, 0)
+    return saida
+
+
 if __name__ == "__main__":
     if "--codigo" in sys.argv:
-        o = CONFIG["ofertas"]["iris"]
-        print(triar_js("iris", o, ["Ler Clínicas"]))
-        print(escolher_js(o, "Ler Clínicas"))
-        print(decidir_js(o, 0))
+        # Cada nó num bloco próprio ({ ... }): o arquivo inteiro passa no `node --check` sem uma oferta
+        # redeclarar a const da outra. `--codigo <oferta>` imprime só a dela.
+        pedidas = [a for a in sys.argv[1:] if a in CONFIG["ofertas"]]
+        for (oferta, no), js in codigo_das_ofertas().items():
+            if pedidas and oferta not in pedidas:
+                continue
+            print(f"// ==== {oferta} · {no}\n(async function () {{\n{js}\n}});")
         sys.exit(0)
     if "--rodar" in sys.argv and "--busca" not in sys.argv:
         oferta = sys.argv[sys.argv.index("--rodar") + 1]
@@ -432,6 +459,8 @@ if __name__ == "__main__":
         sys.exit(0 if _modulo("rodar_agora", "rodar-agora.py").main(wid) else 1)
     if "--ativar" in sys.argv or "--desativar" in sys.argv or "--estado" in sys.argv:
         sys.exit(estado_dos_cacadores(sys.argv[1:]))
+    # Oferta fora do contrato (convite, webhook_id repetido, aba de outro dono...) para antes de tocar n8n e planilha.
+    _modulo("ofertas", "ofertas.py").conferir(CONFIG)
     from n8n import api
     erro = next(w["id"] for w in api("GET", "/workflows?limit=250")["data"] if w["name"] == "00 · Avisar falha pelo Hermes")
     if "--rodar" in sys.argv or "--reavaliar" in sys.argv:

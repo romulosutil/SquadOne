@@ -6,19 +6,61 @@ fronteiras; não substitui suas regras, não decide cadência e não ativa nada.
 """
 import copy
 import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ofertas as registro  # noqa: E402
 
 ETAPAS = ('busca', 'normalizacao', 'identificacaoDedupe', 'criterios', 'persistencia')
+UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+SALA = re.compile(r'^prumo--[a-z0-9]+(?:-[a-z0-9]+)*$')
+LINK = re.compile(r'^planilha[A-Z][A-Za-z0-9]*$')
+# Nós de leitura que os geradores já usam: "ler-<slug da aba>" de uma oferta não pode cair num deles.
+SLUGS_DE_ABA_RESERVADOS = frozenset({'leads', 'prospects', 'crm', 'descartados', 'aba-crm', 'leads-do-site'})
+
+
+def _unicos(config, campo, msg):
+    valores = [v.get(campo) for v in config['ofertas'].values()]
+    if len(valores) != len(set(valores)):
+        raise ValueError(msg)
 
 
 def contrato_oferta(config, oferta):
-    """Uma oferta nova usa a fábrica existente; não exige cópia de workflow."""
+    """Uma oferta nova usa a fábrica existente; não exige cópia de workflow.
+
+    28/10/2026: confere também o que prumo-ofertas.py, crm.py, whatsapp-conversa.py e a Central usam
+    de cada oferta (antes um webhook_id repetido ou um convite fora do padrão passavam calados)."""
     try:
         o = config['ofertas'][oferta]
         obrigatorios = ('rotulo', 'aba', 'fluxo', 'plural', 'segmento', 'fora', 'perfil',
                         'perfil_motivo', 'fora_sem_perfil', 'fora_sem_perfil_motivo',
-                        'convite', 'proxima_enviado', 'mensagem')
+                        'convite', 'proxima_enviado', 'mensagem',
+                        'clique', 'webhook_id', 'empresa', 'sigla', 'tipo', 'sala', 'cacador_rotulo', 'fonte', 'link_retrato')
         if any(not isinstance(o.get(k), str) or not o[k].strip() for k in obrigatorios):
             raise ValueError('Configuração de oferta incompleta.')
+        if not isinstance(oferta, str) or not registro.ID.fullmatch(oferta) or oferta in registro.RESERVADOS:
+            raise ValueError('Id de oferta deve ter 3 a 12 letras minúsculas e não colidir com site, prumo, plus ou o código gerado.')
+        if o['aba'] in registro.ABAS_RESERVADAS or registro.slug(o['aba']) in SLUGS_DE_ABA_RESERVADOS:
+            raise ValueError('Aba de oferta não pode ser Prospects, Descartados, CRM ou Leads.')
+        for k in ('aba', 'rotulo', 'fluxo', 'clique'):
+            registro.js_texto(o[k])  # vai literal para o código do n8n: sem aspas, barra ou quebra de linha
+        if o['convite'] != 'convite-' + oferta:
+            raise ValueError('Convite deve ser "convite-<id>".')
+        if not UUID.fullmatch(o['webhook_id']):
+            raise ValueError('webhook_id deve ser um UUID em minúsculas.')
+        if not o['fluxo'].startswith('PRUMO') or not o['clique'].startswith('PRUMO') or o['fluxo'] == o['clique']:
+            raise ValueError('Caçador e clique começam com "PRUMO" (contexto canônico) e têm nomes diferentes.')
+        if o['tipo'] != 'propria':
+            raise ValueError('Tipo de oferta desconhecido (só "propria").')
+        if not SALA.fullmatch(o['sala']):
+            raise ValueError('Sala deve ser "prumo--<slug>".')
+        if not LINK.fullmatch(o['link_retrato']) or o['link_retrato'] in registro.LINKS_RESERVADOS:
+            raise ValueError('link_retrato deve ser "planilha<Nome>" e não pode ser de Site, PRUMO ou CRM.')
+        c = o.get('conversa')
+        if not isinstance(c, dict) or any(not isinstance(c.get(k), str) or not c[k].strip() for k in ('o_que_foi', 'interesse')):
+            raise ValueError('Conversa da oferta exige o_que_foi e interesse.')
         if type(o.get('teto_por_rodada')) is not int or o['teto_por_rodada'] <= 0:
             raise ValueError('Teto por rodada deve ser inteiro positivo explícito.')
         for k in ('nichos', 'cidades'):
@@ -37,7 +79,16 @@ def contrato_oferta(config, oferta):
         fluxos = [v['fluxo'] for v in config['ofertas'].values()]
         if len(abas) != len(set(abas)) or len(fluxos) != len(set(fluxos)):
             raise ValueError('Ofertas não podem compartilhar aba ou identidade de workflow.')
-    except (KeyError, TypeError) as erro:
+        nomes = [*fluxos, *[v['clique'] for v in config['ofertas'].values()]]
+        if len(nomes) != len(set(nomes)):
+            raise ValueError('Ofertas não podem compartilhar aba ou identidade de workflow.')
+        if len({registro.slug(a) for a in abas}) != len(abas):
+            raise ValueError('Ofertas não podem compartilhar aba ou identidade de workflow.')
+        # Dois nós Webhook com o mesmo id colidem no n8n sem aviso.
+        _unicos(config, 'webhook_id', 'Ofertas não podem compartilhar webhook_id.')
+        for campo in ('sala', 'link_retrato', 'sigla', 'rotulo'):
+            _unicos(config, campo, f'Ofertas não podem compartilhar {campo}.')
+    except (KeyError, TypeError, AttributeError) as erro:
         raise ValueError('Configuração de aquisição inválida.') from erro
     leitores = [f"Ler {o['aba']}", *[f"Ler {v['aba']}" for k, v in config['ofertas'].items() if k != oferta],
                 'Ler Descartados', 'Ler Prospects', 'Ler Leads do Site']

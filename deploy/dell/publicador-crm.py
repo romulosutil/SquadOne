@@ -23,6 +23,9 @@ except ImportError:
     fcntl = None
 
 MAX_BYTES = 32 * 1024 * 1024
+# As fontes do crm.json (crm.py): site, prumo, uma por oferta de prumo-ofertas.json e registros. Escrito aqui
+# porque este arquivo roda de ~/.local/bin, sem o JSON ao lado; deploy/dell/claude-ops/ofertas.test.py falha
+# se divergir. Sem a oferta nova, TODO retrato vira 'fontes-incompletas' e nada é publicado (falha alta).
 FONTES = {'site', 'prumo', 'iris', 'estampa', 'registros'}
 NOME = re.compile(r'crm-([1-9][0-9]{0,29})\.json')
 HASH = re.compile(r'[a-f0-9]{64}')

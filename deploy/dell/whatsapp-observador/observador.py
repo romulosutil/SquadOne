@@ -193,6 +193,9 @@ MAX_MENSAGENS_POR_CONVERSA = 20
 MOTIVO = "self_chat_mode_rejects_non_self"
 MARCAS_DO_REMENDO = ("squadone:envios", "squadone:recibos", "squadone:respostas")
 # iris/estampa (14/10/2026): as abas Clínicas e Estamparias do PRUMO (whatsapp-conversa.py, OFERTAS).
+# Escrito aqui porque o observador roda de ~/.local/bin, sem prumo-ofertas.json ao lado: oferta nova entra
+# com o mesmo `rotulo` do JSON (deploy/dell/claude-ops/ofertas.test.py falha se divergir). Sem ela o aviso
+# sai com o id cru no lugar do nome, nada pior.
 ROTULO = {"site": "Site antes da venda", "prumo": "PRUMO", "iris": "Iris · Clínicas", "estampa": "CRM de estamparia"}
 FEITO = {"entrada": "respondeu", "saida": "recebeu mensagem sua", "lido": "leu"}
 COMANDO_REMENDO = "python3 ~/SquadOne/deploy/hermes/scripts/patch_bridge_envios.py --reiniciar"

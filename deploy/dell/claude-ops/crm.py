@@ -7,6 +7,12 @@ Prospects seguram): a Central mostra a fonte com o erro. O nome do fluxo fica o
 mesmo de propósito: publicar() troca pelo nome, e um nome novo deixaria o antigo
 ligado ao lado.
 
+28/10/2026: as ofertas saem de prumo-ofertas.json (ofertas.py). A leitura "Ler <aba>",
+a contagem, `links.<link_retrato>`, `fontes.<id>` e a lista de produtos do registro
+(VALIDAR_JS) derivam do registro; antes, oferta fora da lista escrita aqui tinha
+todo registro recusado como "Produto inválido". Oferta sem tabela de preço própria
+(OFERTAS_COM_TABELA) tem valor e pagamento recusados, como a estampa.
+
 Pedido do Rômulo: "não sei quem viu, quem não viu, quem já respondeu, quem
 recusou" e "pense numa forma simplificada de um CRM" para os leads do Site
 antes da venda e os prospects do PRUMO. A fonte da verdade continua sendo as
@@ -61,6 +67,7 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
+import ofertas as registro
 from n8n import api
 
 AQUI = Path(__file__).resolve().parent
@@ -72,8 +79,16 @@ NOME = "08 · CRM: retrato e registros (Site antes da venda + PRUMO)"
 SITE, SHEETS = sv.PLANILHA, sv.SHEETS
 LEADS_GID = "396728619"
 PRUMO, PROSPECTS_GID = "1rkUJ41FguxIjibkEHS1paZdTxEXtelcqqYyBQqHhp7U", "1838781376"
-# Ofertas novas do PRUMO (prumo-ofertas.py): lidas pelo nome da aba, o gid só serve ao link.
-ABAS_DAS_OFERTAS = {"iris": "Clínicas", "estampa": "Estamparias"}
+# Ofertas do PRUMO (prumo-ofertas.json via ofertas.py): lidas pelo nome da aba, o gid só serve ao link.
+# Falta ou erro no JSON derruba o gerador aqui: publicar o 08 sem as ofertas as tiraria do funil caladas.
+REGISTRO = registro.carregar()
+OFERTAS = registro.ids(REGISTRO)
+ABAS_DAS_OFERTAS = registro.abas(REGISTRO)
+# Ofertas com preço na tabela do VALIDAR_JS (o Iris por faixa de clínicas). As outras não têm preço
+# aprovado: valor_proposta e pagamento_confirmado são recusados ("A condição não pertence à oferta"),
+# como a estampa desde o começo. Oferta nova entra assim até o Rômulo aprovar um preço.
+OFERTAS_COM_TABELA = ("iris",)
+PLANILHA_DO_PRUMO = "PRUMO — Fila de revisão"
 ABA_CRM = "CRM"
 COLUNAS_CRM = ["em", "produto", "id", "empresa", "tipo", "texto", "data", "origem"]
 LINKS = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net/webhook"
@@ -83,11 +98,27 @@ SEGREDO = Path.home() / ".config/claude-ops/crm-segredo"
 CREDENCIAL = "CRM Central"
 BACKUPS = Path.home() / ".local/share/claude-ops/backups" / date.today().isoformat()
 
-def montar_js(gids=None):
-    """O código do "Montar retrato"; `gids` ({"iris": "123"...}) só completa os links das abas novas."""
+def montar_js(gids=None, config=None):
+    """O código do "Montar retrato"; `gids` ({"iris": "123"...}) só completa os links das abas das ofertas.
+
+    Um trecho por oferta do registro, na ordem do JSON: `const <id> = ler('Ler <aba>', 'ID')`, a contagem no
+    arquivo, `links.<link_retrato>` e `fontes.<id>`. Para Iris e estampa o texto sai igual ao escrito à mão até
+    28/10/2026 (conferido byte a byte antes da troca)."""
     gids = gids or {}
+    config = REGISTRO if config is None else config
+    ids = registro.ids(config)
     link = lambda oferta: f"https://docs.google.com/spreadsheets/d/{PRUMO}/edit" + (f"#gid={gids[oferta]}" if gids.get(oferta) else "")
-    return MONTAR_JS.replace("%(IRIS_LINK)s", link("iris")).replace("%(ESTAMPA_LINK)s", link("estampa"))
+    aba = lambda k: registro.js_texto(registro.campo(k, "aba", config))
+    trechos = {
+        "OFERTAS_LER": "\n".join(f"const {k} = ler({registro.js_texto('Ler ' + registro.campo(k, 'aba', config))}, 'ID');" for k in ids),
+        "OFERTAS_CONTAGEM": ",\n  ".join(f"{k}: {k}.linhas.length" for k in ids) + ",",
+        "OFERTAS_LINKS": ", ".join(f"{registro.campo(k, 'link_retrato', config)}: {registro.js_texto(link(k))}" for k in ids) + ",",
+        "OFERTAS_FONTES": "\n".join(f"    {k}: {{ planilha: {registro.js_texto(PLANILHA_DO_PRUMO)}, aba: {aba(k)}, ...{k} }}," for k in ids),
+    }
+    js = MONTAR_JS
+    for chave, trecho in trechos.items():
+        js = js.replace(f"__{chave}__", trecho)
+    return js
 
 
 MONTAR_JS = """// Retrato para a Central (server/crm.ts decide as etapas). Linhas como vieram da planilha,
@@ -125,12 +156,10 @@ const ler = (no, chave, extra) => {
 const site = ler('Ler Leads', 'place_id');
 const prumo = ler('Ler Prospects', 'ID', (l) => ({ porte: porteDoBriefing(l) }));
 // Iris e estamparias (14/10/2026): aba que falha vira fonte com erro, sem segurar o retrato.
-const iris = ler('Ler Clínicas', 'ID');
-const estampa = ler('Ler Estamparias', 'ID');
+__OFERTAS_LER__
 const registros = ler('Ler aba CRM', 'id');
 const agora = new Date().toISOString();
-const arquivo = (nome, dados) => [{ json: { arquivo: nome, site: site.linhas.length, prumo: prumo.linhas.length, iris: iris.linhas.length,
-  estampa: estampa.linhas.length, registros: registros.linhas.length,
+const arquivo = (nome, dados) => [{ json: { arquivo: nome, site: site.linhas.length, prumo: prumo.linhas.length, __OFERTAS_CONTAGEM__ registros: registros.linhas.length,
   porte: prumo.linhas.filter(l => l.porte).length, erro: dados.erro ?? '' }, binary: { data: { data: Buffer.from(JSON.stringify(dados), 'utf8').toString('base64'),
   mimeType: 'application/json', fileName: nome } } }];
 // Sem Leads ou sem Prospects o retrato ficaria vazio: o anterior continua valendo e a Central mostra a falha.
@@ -141,18 +170,19 @@ return arquivo('crm.json', {
   versao: 1, geradoEm: agora, origem: $execution.mode,
   links: { webhook: '%(LINKS)s', planilhaSite: 'https://docs.google.com/spreadsheets/d/%(SITE)s/edit#gid=%(LEADS_GID)s',
     planilhaPrumo: 'https://docs.google.com/spreadsheets/d/%(PRUMO)s/edit#gid=%(PROSPECTS_GID)s',
-    planilhaIris: '%%(IRIS_LINK)s', planilhaEstampa: '%%(ESTAMPA_LINK)s',
+    __OFERTAS_LINKS__
     planilhaCrm: 'https://docs.google.com/spreadsheets/d/%(SITE)s/edit' },
   fontes: {
     site: { planilha: 'Leads — Site antes da venda', aba: 'Leads', ...site },
     prumo: { planilha: 'PRUMO — Fila de revisão', aba: 'Prospects', ...prumo },
-    iris: { planilha: 'PRUMO — Fila de revisão', aba: 'Clínicas', ...iris },
-    estampa: { planilha: 'PRUMO — Fila de revisão', aba: 'Estamparias', ...estampa },
+__OFERTAS_FONTES__
     registros: { planilha: 'Leads — Site antes da venda', aba: '%(ABA_CRM)s', ...registros },
   },
 });""" % {"LINKS": LINKS, "SITE": SITE, "LEADS_GID": LEADS_GID, "PRUMO": PRUMO, "PROSPECTS_GID": PROSPECTS_GID, "ABA_CRM": ABA_CRM}
 
-VALIDAR_JS = """// Registro da Central. O servidor dela já validou; aqui confere de novo antes da planilha.
+# __PRODUTOS__ e __SEM_PRECO__ vêm do registro (validar_js): a lista de produtos aceitos e a recusa de
+# preço para oferta sem tabela. Os testes (crm.test.py, crm-nota-estruturada.test.py) usam VALIDAR_JS já montado.
+VALIDAR_JS_MODELO = """// Registro da Central. O servidor dela já validou; aqui confere de novo antes da planilha.
 const b = $('Registro da Central').first().json.body ?? {};
 const txt = (v, n) => String(v ?? '').replace(/[\\u0000-\\u0008\\u000b-\\u001f\\u007f]/g, ' ').trim().slice(0, n);
 const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita', 'sem_contato', 'sem_contato_desfeito',
@@ -161,7 +191,7 @@ const TIPOS = ['nota', 'proximo_passo', 'proposta', 'proposta_desfeita', 'sem_co
   'segunda_enviada', 'followup_enviado', 'plus_enviado', 'plus_respondeu', 'recusou', 'recusou_desfeito',
   'ganhou', 'ganhou_desfeito', 'dispensado', 'dispensado_desfeito'];
 const recusa = (erro) => [{ json: { ok: false, erro } }];
-if (!['site', 'prumo', 'iris', 'estampa', 'plus'].includes(b.produto)) return recusa('Produto inválido.');
+if (!__PRODUTOS__.includes(b.produto)) return recusa('Produto inválido.');
 const id = txt(b.id, 200);
 if (!/^[A-Za-z0-9_-]{3,200}$/.test(id)) return recusa('Lead inválido.');
 if (!TIPOS.includes(b.tipo)) return recusa('Tipo de registro inválido.');
@@ -191,7 +221,7 @@ if (AARR.includes(b.tipo)) {
       let valor = tabela[v.oferta+':'+v.componente];
       if (v.oferta === 'iris' && v.componente === 'mensalidade' && Number.isSafeInteger(v.quantidade) && v.quantidade > 0) valor = Math.min(v.quantidade,15)*3900+Math.max(0,Math.min(v.quantidade,40)-15)*3200+Math.max(0,v.quantidade-40)*2500;
       if (!Number.isSafeInteger(valor) || valor <= 0 || (v.valor_centavos !== undefined && v.valor_centavos !== valor) || (v.oferta !== 'iris' && v.quantidade !== undefined)) return recusa('Valor fora do catálogo.');
-      if (b.produto === 'estampa' || b.produto === 'iris' && v.oferta !== 'iris' || b.produto === 'site' && v.oferta !== 'encontrado' || b.produto === 'prumo' && v.oferta === 'iris') return recusa('A condição não pertence à oferta.');
+      if (__SEM_PRECO__b.produto === 'iris' && v.oferta !== 'iris' || b.produto === 'site' && v.oferta !== 'encontrado' || b.produto === 'prumo' && v.oferta === 'iris') return recusa('A condição não pertence à oferta.');
       v = {versao:1,oferta:v.oferta,componente:v.componente,...(v.oferta==='iris'?{quantidade:v.quantidade}:{}),valor_centavos:valor,referencia:v.referencia.trim(),data:v.data};
     } else if (b.tipo === 'receita_desfeita') {
       if (!keys(['versao','tipo','referencia','data']) || !['pagamento_confirmado','valor_proposta'].includes(v.tipo)) return recusa('Reversão inválida.');
@@ -245,6 +275,17 @@ const em = new Date().toISOString();
 return [{ json: { ok: true, em, linha: { em, produto: b.produto, id, empresa: txt(b.empresa, 120), tipo: b.tipo, texto, data, origem: 'Central' } } }];"""
 
 
+def validar_js(config=None):
+    """VALIDAR_JS com os produtos do registro e a recusa de preço das ofertas sem tabela."""
+    config = REGISTRO if config is None else config
+    produtos = "[" + ", ".join(registro.js_texto(p) for p in registro.produtos_do_crm(config)) + "]"
+    sem_preco = "".join(f"b.produto === {registro.js_texto(k)} || " for k in registro.ids(config) if k not in OFERTAS_COM_TABELA)
+    return VALIDAR_JS_MODELO.replace("__PRODUTOS__", produtos).replace("__SEM_PRECO__", sem_preco)
+
+
+VALIDAR_JS = validar_js()
+
+
 # ------------------------------------------------------------------ nós
 
 def rl(planilha, gid=None, nome=None):
@@ -294,7 +335,7 @@ def liga(con, a, b, saida=0):
 
 
 def gids_das_ofertas():
-    """gid das abas Clínicas e Estamparias, só para o link; sem a credencial viva, link sem gid."""
+    """gid da aba de cada oferta, só para o link; sem a credencial viva, link sem gid."""
     try:
         from sheets_proxy import SheetsProxy
         with SheetsProxy([PRUMO]) as s:
@@ -307,6 +348,9 @@ def gids_das_ofertas():
 
 
 def fluxo(erro, auth, gids=None):
+    abas = registro.abas(REGISTRO)
+    # x das leituras e do resto da cadeia: a 1ª oferta em 1980, uma coluna de 220 por oferta.
+    x_depois = 1980 + 220 * len(abas)
     gravar_registro = {
         "id": "registro-gravar", "name": "Gravar na aba CRM", "type": "n8n-nodes-base.googleSheets", "typeVersion": 4.7,
         "position": [880, 300], "credentials": SHEETS, "onError": "continueRegularOutput", "retryOnFail": True, "maxTries": 2,
@@ -334,13 +378,18 @@ def fluxo(erro, auth, gids=None):
                   1320, 450, 502),
         ler("ler-leads", "Ler Leads", SITE, 1540, 0, gid=LEADS_GID),
         ler("ler-prospects", "Ler Prospects", PRUMO, 1760, 0, gid=PROSPECTS_GID),
-        ler("ler-clinicas", "Ler Clínicas", PRUMO, 1980, 0, aba=ABAS_DAS_OFERTAS["iris"]),
-        ler("ler-estamparias", "Ler Estamparias", PRUMO, 2200, 0, aba=ABAS_DAS_OFERTAS["estampa"]),
-        ler("ler-crm", "Ler aba CRM", SITE, 2420, 0, aba=ABA_CRM),
-        code("montar", "Montar retrato", montar_js(gids), 2640, 0),
-        {"id": "gravar", "name": "Gravar retrato", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1, "position": [2860, 0],
+        # Uma leitura por oferta do registro ("Ler Clínicas", "Ler Estamparias"...), pelo nome da aba.
+        *(ler("ler-" + registro.slug(aba), "Ler " + aba, PRUMO, 1980 + 220 * i, 0, aba=aba)
+          for i, aba in enumerate(abas.values())),
+        ler("ler-crm", "Ler aba CRM", SITE, x_depois, 0, aba=ABA_CRM),
+        code("montar", "Montar retrato", montar_js(gids), x_depois + 220, 0),
+        {"id": "gravar", "name": "Gravar retrato", "type": "n8n-nodes-base.readWriteFile", "typeVersion": 1.1,
+         "position": [x_depois + 440, 0],
          "parameters": {"operation": "write", "dataPropertyName": "data", "fileName": "={{ '" + ESTADO + "' + $json.arquivo }}"}},
     ]
+    nomes = [n["name"] for n in nos]
+    if len(nomes) != len(set(nomes)) or len({n["id"] for n in nos}) != len(nos):
+        raise registro.RegistroInvalido("aba de oferta gera nó com nome ou id repetido no 08 · CRM")
     con = {}
     liga(con, "A cada 10 min", "Ler Leads")
     liga(con, "Atualizar agora", "Ler Leads")
@@ -353,7 +402,7 @@ def fluxo(erro, auth, gids=None):
     liga(con, "Gravou?", "Responder falha", 1)
     # Depois de responder, o retrato é refeito: a Central vê a nota em segundos.
     liga(con, "Responder ok", "Ler Leads")
-    cadeia = ["Ler Leads", "Ler Prospects", "Ler Clínicas", "Ler Estamparias", "Ler aba CRM", "Montar retrato", "Gravar retrato"]
+    cadeia = ["Ler Leads", "Ler Prospects", *registro.leituras(REGISTRO), "Ler aba CRM", "Montar retrato", "Gravar retrato"]
     for a, b in zip(cadeia, cadeia[1:]):
         liga(con, a, b)
     return {"name": NOME, "nodes": nos, "connections": con,
@@ -453,12 +502,16 @@ def testar(erro, auth):
     wf = fluxo(erro, auth)
     falhar_prumo = ("let falhar = false;\ntry { falhar = $('Atualizar agora').first().json.body?.falhar === true; } catch (e) {}\n"
                     "if (falhar) return [{ json: { error: { message: 'credencial de mentira caída' } } }];\n")
+    primeira = OFERTAS[0]
     troca = {
         "Ler Leads": "return " + json.dumps([{"json": l} for l in site], ensure_ascii=False) + ";",
         "Ler Prospects": falhar_prumo + "return " + json.dumps([{"json": l} for l in prumo], ensure_ascii=False) + ";",
-        "Ler Clínicas": "return " + json.dumps([{"json": {**prumo[0], "ID": "teste-iris-1", "Empresa": "Clínica teste"}}], ensure_ascii=False) + ";",
-        # Aba ainda inexistente: o retrato sai igual, com a fonte marcada.
-        "Ler Estamparias": "return [{ json: { error: { message: 'aba Estamparias não encontrada' } } }];",
+        # A 1ª oferta do registro com uma linha; as outras como aba ainda inexistente: o retrato sai igual,
+        # com a fonte marcada.
+        **{f"Ler {aba}": ("return " + json.dumps([{"json": {**prumo[0], "ID": f"teste-{k}-1", "Empresa": "Empresa teste"}}],
+                                                  ensure_ascii=False) + ";" if k == primeira
+                          else f"return [{{ json: {{ error: {{ message: {json.dumps('aba ' + aba + ' não encontrada', ensure_ascii=False)} }} }} }}];")
+           for k, aba in ABAS_DAS_OFERTAS.items()},
         "Ler aba CRM": "return " + json.dumps([{"json": l} for l in crm], ensure_ascii=False) + ";",
         "Gravar na aba CRM": "return $input.all().map(i => ({ json: i.json.linha }));",
     }
@@ -506,11 +559,10 @@ def testar(erro, auth):
         print("retrato:", post(f"{LOCAL}/zz-teste-crm-atualizar", {}, chave)[0])
         status, saidas = ultima_execucao(antes)
         m = (saidas.get("Montar retrato") or [{}])[0]
-        conferir(f"execução {status}, arquivo {m.get('arquivo')}, site={m.get('site')} prumo={m.get('prumo')} iris={m.get('iris')}"
-                 f" estampa={m.get('estampa')} registros={m.get('registros')} porte={m.get('porte')}",
+        contagem = ("site", "prumo", *OFERTAS, "registros", "porte")
+        conferir(f"execução {status}, arquivo {m.get('arquivo')}, " + " ".join(f"{k}={m.get(k)}" for k in contagem),
                  status == "success" and m.get("arquivo") == "crm.json"
-                 and (m.get("site"), m.get("prumo"), m.get("iris"), m.get("estampa"), m.get("registros"), m.get("porte"))
-                 == (3, 1, 1, 0, 1, 1))
+                 and tuple(m.get(k) for k in contagem) == (3, 1, *(1 if k == primeira else 0 for k in OFERTAS), 1, 1))
 
         antes = ultimo_id()
         post(f"{LOCAL}/zz-teste-crm-atualizar", {"falhar": True}, chave)
@@ -522,13 +574,16 @@ def testar(erro, auth):
                              {"produto": "site", "id": "TESTE-SITE-1", "empresa": "Loja teste 1", "tipo": "proximo_passo",
                               "texto": "=ligar amanhã", "data": "2026-10-01"}, chave)
         conferir(f"registro válido -> {codigo} {corpo[:80]}", codigo == 200 and json.loads(corpo).get("ok") is True)
-        codigo, corpo = post(f"{LOCAL}/zz-teste-crm-registro",
-                             {"produto": "iris", "id": "teste-iris-1", "empresa": "Clínica teste", "tipo": "nota", "texto": "ok"}, chave)
-        conferir(f"registro do Iris -> {codigo} {corpo[:80]}", codigo == 200)
+        # Toda oferta do registro tem o registro aceito (antes de 28/10 a lista era escrita aqui e no VALIDAR_JS).
+        for k in OFERTAS:
+            codigo, corpo = post(f"{LOCAL}/zz-teste-crm-registro",
+                                 {"produto": k, "id": f"teste-{k}-1", "empresa": "Empresa teste", "tipo": "nota", "texto": "ok"}, chave)
+            conferir(f"registro de {k} -> {codigo} {corpo[:80]}", codigo == 200)
         # OT-06 (recusou) e AC-08/AC-10, 17/10/2026 (ganhou, dispensado): texto opcional, data do dia ou vazia.
         for tipo, produto, extra in (("recusou", "plus", {}), ("recusou_desfeito", "prumo", {}),
                                      ("ganhou", "plus", {"data": "2026-10-17"}), ("ganhou_desfeito", "site", {}),
-                                     ("dispensado", "iris", {"texto": "é franquia", "data": "2026-10-17"}), ("dispensado_desfeito", "estampa", {})):
+                                     ("dispensado", OFERTAS[0], {"texto": "é franquia", "data": "2026-10-17"}),
+                                     ("dispensado_desfeito", OFERTAS[-1], {})):
             codigo, corpo = post(f"{LOCAL}/zz-teste-crm-registro",
                                  {"produto": produto, "id": "TESTE-SITE-1", "empresa": "Loja teste 1", "tipo": tipo, **extra}, chave)
             conferir(f"registro {tipo} -> {codigo} {corpo[:80]}", codigo == 200 and json.loads(corpo).get("ok") is True)
@@ -551,6 +606,8 @@ if __name__ == "__main__":
         codigo, corpo = post(f"{LOCAL}/crm-atualizar", {}, {"X-CRM": segredo()})
         print("crm-atualizar ->", codigo, corpo[:120])
         sys.exit(0 if codigo == 200 else 1)
+    # Registro fora do contrato (aba repetida, id que colide com o código gerado...) para antes de tocar o n8n.
+    registro.conferir(REGISTRO)
     erro = sv.erro_wf()
     auth = credencial()
     if "--testar" in sys.argv:

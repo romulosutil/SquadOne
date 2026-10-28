@@ -18,8 +18,9 @@ holding): as abas Clínicas (Iris, planilha "iris") e Estamparias (CRM de
 estamparia, "estampa") da mesma planilha, com o contrato do Prospects. Nelas a
 resposta também grava "Respondeu em" (apagado se a classificação disser robô),
 gente que responde passa a Etapa "Em conversa" (antes marcada à mão) e o
-interesse pede combinar a demonstração, não o Raio-X. Abas e convites em
-prumo-ofertas.json; aba que não lê é pulada, sem segurar Site e Prospects.
+interesse pede combinar a demonstração, não o Raio-X. Abas, convites e o resumo
+da conversa (`conversa`) em prumo-ofertas.json, lido por ofertas.py; aba que não
+lê é pulada, sem segurar Site e Prospects.
 
 `direcao`:
 - "saida" (30/09/2026): o Rômulo escreveu (linha owner_sent da bridge,
@@ -98,21 +99,20 @@ COLUNAS_NOVAS = ["visto_em", "clique_em"]
 # mais "Respondeu em". Lidas pelo NOME da aba (o gid nasceu no Dell, como no 08 · CRM) e tolerantes: aba
 # que falta ou não lê vira item com "error" e é pulada, sem segurar o Site e o Prospects. Até 14/10 quem
 # respondia ao convite delas era marcado à mão ("Em conversa" na Etapa).
-OFERTAS_CFG = json.loads((Path(__file__).resolve().parent / "prumo-ofertas.json").read_text(encoding="utf-8"))["ofertas"]
-# O que a conversa precisa de cada oferta além do JSON: o convite resumido para o Gemini (sem dado de
-# ninguém) e o passo de quem respondeu com interesse, o mesmo que a Próxima ação do convite pede.
-CONVERSA_DAS_OFERTAS = {'iris': {'o_que_foi': 'A abertura atual apresenta Rômulo, do Prumo, e oferece um exemplo do Iris com dados '
-                       'fictícios para relatórios de reavaliação. Um sim autoriza apenas esse exemplo. '
-                       'Versões anteriores perguntavam pela coordenação da clínica: use a pergunta realmente '
-                       'enviada para distinguir acesso, permissão e interesse comercial.',
-          'interesse': 'Combine a demonstração do dossiê (caso fictício, nunca dado de paciente).'},
- 'estampa': {'o_que_foi': 'A abertura atual apresenta Rômulo, do Prumo, e oferece uma ficha de pedido de '
-                          'exemplo sem dados de clientes. Um sim autoriza apenas o exemplo. Versões '
-                          'anteriores perguntavam pelo responsável: use a pergunta realmente enviada para '
-                          'distinguir acesso, permissão e interesse comercial.',
-             'interesse': 'Combine uma conversa de 20 minutos sobre como os pedidos chegam hoje.'}}
-OFERTAS = [{"planilha": k, "aba": o["aba"], "no": "Ler " + o["aba"], "marcar": "Marcar em " + o["aba"], "rotulo": o["rotulo"],
-            "convite": o["proxima_enviado"], **CONVERSA_DAS_OFERTAS[k]} for k, o in OFERTAS_CFG.items()]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ofertas as registro  # noqa: E402
+
+# Falta do JSON ou oferta sem `conversa` derruba o gerador com o nome da oferta (ofertas.RegistroInvalido),
+# nunca uma lista vazia nem um KeyError cru.
+REGISTRO = registro.carregar()
+OFERTAS_CFG = REGISTRO["ofertas"]
+# O que a conversa precisa de cada oferta (campo `conversa` do JSON desde 28/10/2026; antes, um dicionário
+# escrito aqui): o convite resumido para o Gemini (sem dado de ninguém) e o passo de quem respondeu com
+# interesse, o mesmo que a Próxima ação do convite pede.
+CONVERSA_DAS_OFERTAS = {k: registro.conversa(k, REGISTRO) for k in OFERTAS_CFG}
+_campo = lambda k, nome: registro.campo(k, nome, REGISTRO)  # noqa: E731
+OFERTAS = [{"planilha": k, "aba": _campo(k, "aba"), "no": "Ler " + _campo(k, "aba"), "marcar": "Marcar em " + _campo(k, "aba"),
+            "rotulo": _campo(k, "rotulo"), "convite": _campo(k, "proxima_enviado"), **CONVERSA_DAS_OFERTAS[k]} for k in OFERTAS_CFG]
 # O que o fluxo marca (o "planilha" de cada item); "nenhuma" e o resto não batem em saída nenhuma do switch.
 PLANILHAS = ["prumo", "site", *(o["planilha"] for o in OFERTAS)]
 COLUNAS_MARCA_PRUMO = ["ID", "Etapa", "Convite enviado em", "Próxima ação"]
@@ -1619,7 +1619,8 @@ def testar() -> int:
                                              [self.lead_site()])
             self.assertTrue(montado["tem"])
             self.assertIn('[8 s] "Olá! Em breve retornaremos."', montado["prompt"])
-            self.assertIn("site de demonstração", montado["prompt"])
+            # O resumo do convite do Site mudou na revisão de 27/10 (demonstração pronta, sob pedido ou análise).
+            self.assertIn("prestador de serviços de site", montado["prompt"])
             montado, itens, resp = self.classificar("{}", [{"em": "x", "texto": "oi"}], [self.lead_site()], chave=OUTRO)
             self.assertEqual((montado["tem"], itens, resp), (False, [], {"ok": True, "marcados": []}))
 
@@ -2036,8 +2037,19 @@ def testar() -> int:
         def test_ofertas_sao_as_do_json(self):
             cfg = json.loads((Path(__file__).resolve().parent / "prumo-ofertas.json").read_text(encoding="utf-8"))["ofertas"]
             self.assertEqual(set(CONVERSA_DAS_OFERTAS), set(cfg))
-            self.assertEqual({o["planilha"]: o["aba"] for o in OFERTAS}, {"iris": "Clínicas", "estampa": "Estamparias"})
+            self.assertEqual({o["planilha"]: o["aba"] for o in OFERTAS}, {k: o["aba"] for k, o in cfg.items()})
+            self.assertEqual({o["planilha"]: (o["o_que_foi"], o["interesse"]) for o in OFERTAS},
+                             {k: (o["conversa"]["o_que_foi"], o["conversa"]["interesse"]) for k, o in cfg.items()})
             self.assertEqual(PLANILHAS, ["prumo", "site", *cfg])
+
+        def test_oferta_sem_conversa_para_com_o_nome_dela(self):
+            # Antes de 28/10 era KeyError cru no import; agora o erro diz a oferta e o campo.
+            cfg = {"ofertas": {"teste": {"aba": "Testes", "rotulo": "Teste", "proxima_enviado": "x"}}}
+            with self.assertRaisesRegex(registro.RegistroInvalido, "'teste'.*'conversa'"):
+                registro.conversa("teste", cfg)
+            cfg["ofertas"]["teste"]["conversa"] = {"o_que_foi": "x"}
+            with self.assertRaisesRegex(registro.RegistroInvalido, "interesse"):
+                registro.conversa("teste", cfg)
 
         def test_numeros_incluem_as_ofertas_e_pulam_aba_que_nao_leu(self):
             dados = {"Ler Prospects": [], "Ler Leads do site": [],
@@ -2088,7 +2100,8 @@ def testar() -> int:
         def test_interesse_vira_em_conversa_com_o_passo_da_oferta(self):
             linha = self.linha("Convite enviado", **{"Convite enviado em": self.ENVIO})
             montado, itens, resp = self.classificar('{"tipo": "interesse", "trecho": "pode sim, como funciona?"}', "pode sim, como funciona?", linha)
-            self.assertIn("Iris, um sistema para clínicas de terapia", montado["prompt"])
+            # O resumo do convite vem do campo `conversa` do JSON (28/10/2026), o texto aprovado em 27/10.
+            self.assertIn(CONVERSA_DAS_OFERTAS["iris"]["o_que_foi"], montado["prompt"])
             i = itens[0]
             self.assertEqual((i["planilha"], i["Etapa"], i["Respondeu em"], i["Tipo da resposta"], i["Resposta"], i["Resposta em"]),
                              ("iris", "Em conversa", "2026-10-05T12:40:00Z", "interesse", "pode sim, como funciona?", "2026-10-05T12:40:00Z"))
@@ -2101,7 +2114,7 @@ def testar() -> int:
             self.assertNotIn("Raio-X", aviso)
             # Estamparias: o próprio passo e o próprio convite no prompt.
             montado, itens, resp = self.classificar('{"tipo": "neutra", "trecho": "quem é?"}', "quem é?", linha, self.ESTAMPA)
-            self.assertIn("estamparia", montado["prompt"])
+            self.assertIn(CONVERSA_DAS_OFERTAS["estampa"]["o_que_foi"], montado["prompt"])
             self.assertEqual((itens[0]["planilha"], itens[0]["Etapa"], itens[0]["Tipo da resposta"]), ("estampa", "Em conversa", "neutra"))
             self.assertIn("(CRM de estamparia) respondeu", resp["marcados"][0]["aviso"])
 
@@ -2270,6 +2283,7 @@ if __name__ == "__main__":
                                   " registro: { lead_hash: 'teste', planilha: 'teste', n_mensagens: 1, resposta_em: '',"
                                   " tipo_gemini: 'negativa' }, inicio_ms: null }));"), ensure_ascii=False, indent=2))
         sys.exit(0)
+    registro.conferir(REGISTRO)  # oferta fora do contrato para aqui, antes de tocar o n8n
     auth = credencial()
     telefones(auth)
     conversa(auth)

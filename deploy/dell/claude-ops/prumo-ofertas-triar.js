@@ -32,6 +32,10 @@ const FORA = re(CONFIG.fora);
 // Identidade da empresa, separada do endereço: uma clínica dentro de um shopping continua clínica.
 const FORA_ENTIDADE = CONFIG.fora_entidade ? re(CONFIG.fora_entidade) : null;
 const SITE_DIRETORIO = CONFIG.site_diretorio ? re(CONFIG.site_diretorio) : null;
+// Motivo de cada um, da oferta (prumo-ofertas.json). Até 28/10/2026 os dois diziam "Fora do perfil do Iris"
+// para qualquer oferta que usasse esses campos; o Iris guarda o texto de sempre nos campos *_motivo.
+const MOTIVO_FORA_ENTIDADE = CONFIG.fora_entidade_motivo || 'Fora do perfil (centro comercial ou empreendimento, não ' + CONFIG.plural + ')';
+const MOTIVO_SITE_DIRETORIO = CONFIG.site_diretorio_motivo || 'Fora do perfil (site de centro comercial/diretório: contato da empresa não confirmado)';
 const CLIENTES = re(CONFIG.clientes);
 const PERFIL = re(CONFIG.perfil);
 const FORA_SEM_PERFIL = re(CONFIG.fora_sem_perfil);
@@ -157,7 +161,7 @@ async function checar(p) {
   if (FORA.test(nomeTipo)) return { ...base, descarte: 'Fora do perfil (' + (tipo || 'ramo') + ')' };
 
   if (FORA_ENTIDADE && (FORA_ENTIDADE.test(norm(nome)) || FORA_ENTIDADE.test(norm(tipo)))) {
-    return { ...base, descarte: 'Fora do perfil do Iris (centro comercial ou empreendimento, não clínica)' };
+    return { ...base, descarte: MOTIVO_FORA_ENTIDADE };
   }
 
   let whats = null;
@@ -175,7 +179,7 @@ async function checar(p) {
     // Não atribuir esse contato à clínica, nem usar o celular do Google como fallback neste site.
     const titulo = textoVisivel((html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i) ?? [])[1] ?? '');
     if (SITE_DIRETORIO && (SITE_DIRETORIO.test(texto) || (FORA_ENTIDADE && FORA_ENTIDADE.test(titulo)))) {
-      return { ...base, descarte: 'Fora do perfil do Iris (site de centro comercial/diretório: contato da clínica não confirmado)' };
+      return { ...base, descarte: MOTIVO_SITE_DIRETORIO };
     }
     whats = await whatsDoHtml(html, texto);
     // Botão de WhatsApp só na página de contato é comum em site pequeno.
