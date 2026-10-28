@@ -16,6 +16,9 @@
   "arquivos": [
     {"repo": "deploy/dell/lib/qualidade_prumo.py", "instalado": "~/.local/lib/mel/", "modo": "644"},
     {"repo": "deploy/dell/frente-comercial.py", "instalado": "~/.local/bin/frente-comercial"},
+    {"repo": "deploy/dell/filtro_leads.py", "instalado": "~/.local/bin/", "modo": "600"},
+    {"repo": "deploy/dell/curadoria-leads.py", "instalado": "~/.local/bin/curadoria-leads"},
+    {"repo": "deploy/dell/aquisicao-guarda.py", "instalado": "~/.local/bin/aquisicao-guarda", "modo": "700", "reiniciar": "aquisicao-guarda"},
     {"repo": "deploy/dell/dell-status.py", "instalado": "~/.local/bin/dell-status"},
     {"repo": "deploy/dell/socorro.py", "instalado": "~/.local/bin/socorro"},
     {"repo": "deploy/dell/atualizar-central.sh", "instalado": "~/.local/bin/atualizar-central"},

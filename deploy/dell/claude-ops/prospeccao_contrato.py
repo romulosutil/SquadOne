@@ -47,7 +47,7 @@ def contrato_oferta(config, oferta):
                        'criterios': ['Triar e checar sites', 'É prospect?'],
                        'persistencia': [f"Gravar na aba {o['aba']}", 'Gravar em Descartados']},
             'leiturasDedupe': leitores, 'tetoPorRodada': o['teto_por_rodada'],
-            'identidade': ['place_id', 'whatsapp-legado-ddd-ultimos8'],
+            'chavePersistencia': 'ID', 'identidade': ['place_id', 'whatsapp-legado-ddd-ultimos8'],
             'colunas': copy.deepcopy(config['colunas']), 'colunasDescarte': copy.deepcopy(config['descartados']),
             'geracaoCompleta': True, 'ativacaoAutorizada': False}
 
@@ -60,7 +60,8 @@ def contrato_site_legado():
                        'criterios': ['Dentro do raio', 'Tem telefone', '5+ avaliações', 'Não é rede/franquia',
                                     'Portão', 'Checar site próprio', 'Site no ar?', 'Pontuar', 'Aprovado?'],
                        'persistencia': ['Salvar lead na planilha', 'Salvar descartado na planilha', 'Entregar content.md', 'Entregar foto']},
-            'leiturasDedupe': ['Ler leads existentes'], 'identidade': ['place_id', 'normalizacao-legada-site'],
+            'leiturasDedupe': ['Ler leads existentes'], 'chavePersistencia': 'place_id',
+            'identidade': ['place_id', 'normalizacao-legada-site'],
             'geracaoCompleta': False, 'ativacaoAutorizada': False}
 
 
@@ -102,11 +103,21 @@ def auditar_adaptador(workflow, contrato):
             riscos.append('leitura-dedupe-tolerante')
     for nome in contrato['etapas']['persistencia']:
         n = unico(nome); p = n.get('parameters', {})
-        esperado = 'write' if nome in ('Entregar content.md', 'Entregar foto') else 'append'
-        tipo = 'n8n-nodes-base.readWriteFile' if esperado == 'write' else 'n8n-nodes-base.googleSheets'
+        arquivo = nome in ('Entregar content.md', 'Entregar foto')
+        esperado = 'write' if arquivo else 'appendOrUpdate'
+        tipo = 'n8n-nodes-base.readWriteFile' if arquivo else 'n8n-nodes-base.googleSheets'
         if n.get('type') != tipo or p.get('operation') != esperado:
             raise ValueError('Destino de persistência fora do contrato.')
-        if n.get('retryOnFail'): riscos.append('persistencia-com-retry-requer-recibo')
+        if not arquivo:
+            colunas = p.get('columns', {})
+            chave = contrato.get('chavePersistencia')
+            schema = colunas.get('schema', [])
+            if (not chave or colunas.get('matchingColumns') != [chave]
+                    or not any(c.get('id') == chave and c.get('canBeUsedToMatch') for c in schema)):
+                raise ValueError('Persistência exige upsert pela identidade durável do prospect.')
+            if n.get('retryOnFail'):
+                raise ValueError('Upsert de aquisição não pode repetir automaticamente após resultado ambíguo.')
+            riscos.append('concorrencia-google-sheets-upsert')
     busca = unico('Buscar no Google Places')
     if busca.get('type') != 'n8n-nodes-base.httpRequest' or busca.get('parameters', {}).get('url') != 'https://places.googleapis.com/v1/places:searchText':
         raise ValueError('Provedor de busca fora do contrato.')

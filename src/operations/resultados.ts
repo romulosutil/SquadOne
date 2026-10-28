@@ -96,7 +96,8 @@ export function enviadoNosUltimos(lead: Pick<CrmLead, 'marcos'>, dias: number, a
  * Respondeu de gente: `respondeu_em` (o Plus só tem este) ou a resposta classificada pelo n8n (às vezes
  * chega antes da coluna), nunca a saudação automática (classificação "bot").
  */
-export function respondeuDeGente(lead: Pick<CrmLead, 'marcos' | 'resposta'> & Partial<Pick<CrmLead, 'conversa'>>): boolean {
+export function respondeuDeGente(lead: Pick<CrmLead, 'marcos' | 'resposta'> & Partial<Pick<CrmLead, 'conversa' | 'classificacaoResposta'>>): boolean {
+  if (lead.classificacaoResposta) return lead.classificacaoResposta.houveRespostaHumana
   return (Boolean(lead.marcos.respondeu) || Boolean(lead.resposta)) && lead.resposta?.tipo !== 'bot' && quemRespondeu(lead) !== 'robo'
 }
 
@@ -141,8 +142,9 @@ export function leu(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'leitura'>): boo
  * classificador já leu com o papel na mão, e excluí-la aqui rebaixava interesse de verdade; só o robô fica
  * de fora (respondeuDeGente). A recepção com resposta neutra não conta, como qualquer neutra.
  */
-export function quisVer(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'etapa'> & Partial<Pick<CrmLead, 'conversa'>>): boolean {
+export function quisVer(lead: Pick<CrmLead, 'marcos' | 'resposta' | 'etapa'> & Partial<Pick<CrmLead, 'conversa' | 'classificacaoResposta'>>): boolean {
   if (!respondeuDeGente(lead)) return false
+  if (lead.classificacaoResposta) return lead.classificacaoResposta.materialSolicitado || lead.classificacaoResposta.classe === 'interesse'
   if (lead.etapa === 'proposta' || lead.etapa === 'ganho') return true
   return pedeMaterial(lead.resposta)
 }

@@ -32,6 +32,16 @@ class Resposta:
         return self.bruto[:tamanho]
 
 class LeituraTests(unittest.TestCase):
+    def test_aceite_integrado_nao_repassa_documentos_dados_partes_ou_confirma_pagamento(self):
+        d = dados()
+        d["oportunidades"][0]["propostaAutomatica"] = {"origem": "autentique", "estado": "assinada", "aceiteConfirmado": True, "confirmaPagamento": False, "token": "token-privado", "cnpj": "documento-privado", "link": "link-privado"}
+        p = m.resposta_segura(d)["oportunidades"][0]["propostaAutomatica"]
+        self.assertEqual(p, {"origem": "autentique", "estado": "assinada", "aceiteConfirmado": True, "confirmaPagamento": False})
+        for estado, aceite, pagamento in [("preparada", True, False), ("assinada", True, True), ("inventado", False, False)]:
+            d["oportunidades"][0]["propostaAutomatica"].update(estado=estado, aceiteConfirmado=aceite, confirmaPagamento=pagamento)
+            with self.assertRaises(ValueError):
+                m.resposta_segura(d)
+
     def test_transporte_get_fixo_sem_headers_de_segredos_e_query_codificada(self):
         chamadas = []
         def abrir(req, timeout):
@@ -161,6 +171,21 @@ class LeituraTests(unittest.TestCase):
             d = dados(); p = d["oportunidades"][0]["prioridadeTrabalho"]; p["grupo"] = grupo
             with self.assertRaises(ValueError):
                 m.resposta_segura(d)
+
+    def test_atendimento_automatico_preserva_leitura_e_nao_pede_envio_humano(self):
+        d = dados()
+        item = d['oportunidades'][0]
+        item['atendimento'] = {'presente': True, 'tipo': 'automatico', 'alvo': 'time'}
+        item['proximaAcao'] = 'aguardar'
+        item['prioridadeTrabalho'].update({'grupo': 'aguardar', 'ordem': 80, 'nivel': 5,
+            'acao': 'Aguardar a resposta ou a condição combinada',
+            'resultado': 'Não repetir apresentação, proposta ou pergunta já respondida.',
+            'evidencia': {'fonte': 'atendimento', 'tipo': 'pendente', 'estado': 'atual'},
+            'destaque': False, 'urgente': False})
+        r = m.resposta_segura(d)['oportunidades'][0]
+        self.assertEqual(r['atendimento']['alvo'], 'time')
+        self.assertEqual(r['proximaAcao'], 'aguardar')
+        self.assertFalse(r['contatoAutorizado'])
 
 if __name__ == "__main__":
     unittest.main()

@@ -86,6 +86,7 @@ export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly 
   const ordem = new Map([...new Set([...porAcao.keys(), ...conversas.map(c => c.lead.id)])].map((id, i) => [id, i]))
   const prioridade = (d: Decisao) => d.lead.atendimentoComercial ? planosComerciais.get(d.lead.id)!.ordem/10 : porConversa.get(d.lead.id)?.prioridade ?? observadas.get(d.lead.id)?.prioridade ?? (d.acao ? prioridadeDaAcao(d.acao) : undefined) ?? PRIORIDADE_DA_FILA.combinado
   return leads.flatMap((lead): Decisao[] => {
+    if(lead.atendimentoComercial?.alvo==='time') return [{lead,estado:'acompanhando',motivo:lead.atendimentoComercial.motivo,acao:null}]
     if(lead.atendimentoComercial||planoPedeConferenciaInterna(planosComerciais.get(lead.id)!)) return [{lead,estado:'agora',motivo:lead.atendimentoComercial?.titulo??planosComerciais.get(lead.id)!.acao,acao:porAcao.get(lead.id)??null}]
     const atendida = respostaJaAtendida(lead)
     const candidata = porAcao.get(lead.id) ?? null

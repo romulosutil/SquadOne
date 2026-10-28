@@ -603,7 +603,7 @@ export const prioridadeDaAcao = (a: Pick<AcaoDeVenda, 'tipo' | 'revisao' | 'prio
  */
 export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | undefined, ctx: ContextoDaVenda, pulados: ReadonlySet<string> = new Set()): AcaoDeVenda[] {
   if (!visao) return []
-  const escopo = ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads
+  const escopo = (ctx.soDoLead ? visao.leads.filter((l) => l.id === ctx.soDoLead) : visao.leads).filter(l=>l.atendimentoComercial?.alvo!=='time')
   const elegiveis = escopo.filter((l) => !contatoPausado(l))
   const revisaoDeQualificacao = (l: CrmLead) => { const q = qualificacaoComercialAtual(l, ctx.agora); return q?.intencao === 'sem-interesse' || q?.adequacao.estado === 'inadequada' }
   const agoraDaPrioridade=ctx.agora??Date.now()

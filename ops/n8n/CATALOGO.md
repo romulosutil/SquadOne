@@ -382,11 +382,10 @@ convite tiveram 0.
    Também no `jsCode`: 18 IDs de planilha em 11 nós, o host do Tailscale em 9 nós, o IP da bridge
    `172.23.0.1` e o host do Easypanel. Abas Clínicas/Estamparias vão por nome em uns fluxos e por gid
    em outros: renomear a aba quebra só metade.
-10. **Guarda de aquisição fora da `main`.** O envelope dos caçadores está **ativo em produção** desde
-    25/10, mas o código que o gera (`serializacao_aquisicao.py`, `deploy/dell/aquisicao-guarda.py` e
-    `.service`) e a doc `docs/revops/n8n.md` estão só no commit `48e6af6` da branch
-    `codex/prumo-preservar-escritorio`. Um `prumo-ofertas.py` rodado da `main` não conhece a guarda.
-    Precisa de merge e de entrada em `instalados.json`.
+10. **Guarda de aquisição.** O envelope dos caçadores está ativo em produção desde 25/10. O código
+    (`serializacao_aquisicao.py`, `deploy/dell/aquisicao-guarda.py` e `.service`) e a doc
+    `docs/revops/n8n.md` estavam só no checkout da Mel e entraram na `main` em 28/10/2026, com a entrada
+    em `instalados.json`.
 11. **Resíduos menores.** `DESLIGADOS` (`n8n.py:28`) ainda só com o Lead Scout; a dica do 05 em
     `dell-status.DICAS_DO_FLUXO` está desatualizada (fala em follow-up do 3º dia e expiração no 10º) e
     os prefixos não pegam os fluxos `PRUMO · …`; o comentário de `whatsapp-conversa.py:1056` sobre a

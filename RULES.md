@@ -1,5 +1,99 @@
 # Regras do repositório
 
+## Conferência das 19 conversas de Estamparia (26/10/2026)
+
+A conferência operacional foi concluída por solicitação do Rômulo neste chat.
+Quinze das 19 entradas foram comprovadas pela sessão existente; quatro legados
+já respondidos só podem aguardar novo retorno, sem fabricar prova nem liberar
+transporte pelo histórico. A nova entrada precisa de comprovação normal. Duas
+divergências comprovadas de um segundo foram conciliadas com backup e auditoria,
+preservando IDs, conteúdo e recibos. Recusas recuperadas suspendem contato.
+Saudação automática não equivale a pessoa nem gera qualificação ou encaminhamento.
+Uma resposta indevida à saudação da Ultra Placas foi conservada com seu recibo;
+o tratamento do bot foi corrigido, sem apagar ou repetir o envio.
+
+O escritório exibe cada responsável e próximo passo. A projeção da tela compartilha
+uma leitura; o executor continua conferindo fontes atuais antes de qualquer envio.
+
+
+## Atendimento automático de Estamparia (26/10/2026)
+
+Rômulo autorizou os agentes a continuar as conversas de Estamparia quando o cliente
+responder, com responsável e próximo passo visíveis no escritório. A capacidade usa
+o inbox, a identidade verificada, a conta profissional e a trava por conversa já
+existentes. A ativação tem data explícita. Rômulo também autorizou neste chat
+incluir as respostas anteriores, inclusive Stamp Fast. Essa retomada usa uma
+lista persistida de entradas originais, sem retroagir a ativação. Só responde
+onde a última entrada humana ainda está pendente e a identidade está conferida;
+saída posterior aguarda novo retorno e histórico sem prova pede conferência.
+Não reativa caçadores, não faz retomadas por silêncio nem muda primeiros contatos.
+
+Carla pode explicar a oferta e perguntar sobre rotina, gargalo, equipe e decisão,
+com textos versionados da fonte Prumo. As observações não são confirmação humana
+de SPICED. Preço, fiscal, integração específica, demonstração, contratação e agenda
+pedem encaminhamento ao Rômulo; não há preço aprovado de Estamparia nem envio de
+Raio-X/Mapa como se pertencessem a essa oferta. Pausa, recusa, desfecho, compromisso,
+responsabilidade humana e resultado de envio incerto continuam protegidos.
+
+## Automação do Encontrado (25/10/2026)
+
+**Terceiro lote autorizado:** proposta padrão versionada e aceite pela Autentique,
+com automação das etapas repetíveis e somente decisões reais para Rômulo. A Prumo
+prestará o serviço como pessoa jurídica; ainda não há conta Autentique. Preparar o
+cadastro privado, modelo concreto e integração antes da ativação. Aprovação única
+do padrão vincula os bytes e condições exatos; não presumir aprovados os campos
+marcados como sugestão no modelo visual antigo. Dados faltantes do cliente devem
+ser solicitados ao próprio cliente, sem fabricar qualificação humana. Convite e
+documento criado não comprovam assinatura. Aceite exige consulta autenticada da
+versão e dos signatários exatos; nunca assinar pelo cliente ou por Rômulo. Cobrança
+continua separada e exige o cliente ver o site funcionando. Preservar condições
+individuais, pausas e tomada humana. Não usar clientes reais para testar.
+
+**Segundo lote autorizado:** qualificação automática e preparação dos materiais
+solicitados, com intervenção humana somente para decisões reais. O sistema pode
+perguntar a lacuna seguinte, interpretar respostas com citações verificadas e
+preparar Raio-X/demo especificamente pedidos, reutilizando os geradores e a régua
+de qualidade existentes. Leituras automáticas são derivadas da conversa, com
+origem e referência; nunca usam `humano:true` nem substituem notas humanas.
+Material solicitado tem prioridade sobre completar questionário. Preparar não
+comprova envio; material pronto só sai após nova conferência do contexto e do
+pacote exato. Preservar pausas, condições individuais, tomada humana e o corte
+próprio da nova capacidade. Não criar contato ou geração real para testar.
+
+Rômulo autorizou implementar em ordem a operação automática, começando pelo
+Encontrado, com intervenção humana somente nas exceções. Para essa oferta,
+respostas padronizadas a novas entradas verificadas podem ser executadas pela
+política versionada, sem aprovação por mensagem. Essa autorização substitui o
+limite de somente rascunho exclusivamente nas ações homologadas desse caminho.
+Preservar condições individuais, recusas, esperas e tomada humana da conversa.
+Prospecção continua pausada; eventos anteriores à ativação não autorizam retomada.
+Preço e escopo vêm da fonte canônica, nunca de texto livre do modelo. Proposta,
+contratação e recebimento exigem suas evidências e integrações próprias; FAQ de
+preço não cria nenhum desses fatos. Rômulo autorizou escolher os provedores:
+Asaas para cobrança e Autentique para assinatura, inicialmente sem efeitos reais.
+Não alterar o escritório para implantar essa automação.
+
+## BI e rodada comercial (23/10/2026)
+
+Por decisão do Rômulo: BI investigável de público, mensagem, sequência e escolhas dos agentes; ação por cliente com evidência, responsável e resultado esperado. Até 15 primeiros contatos/dia, 2/h e 30 min. Até dez sem resposta humana desde o início da rodada; sem expiração automática. Resposta humana posterior libera vaga; revisão humana com motivo inicia outra rodada e conserva auditoria. Substitui a pausa proporcional por silêncio; preserva restrições, desconexão, pausas e gates. Reservas persistidas antes de liberar executor; falha fecha a rodada. Vendas e as conversas existentes continuam fontes comerciais.
+
+## Classificação contextual das respostas (22/10/2026)
+
+Por pedido do Rômulo, separar interesse comercial explícito, permissão para material,
+acesso/encaminhamento, curiosidade, resposta automática e silêncio. Identidade ou
+“sim” ao pedido de falar com o responsável não confirmam interesse. Permissão
+continua permitindo preparar o material específico, sem confirmar compra ou
+qualificação. Esta decisão substitui a equivalência histórica entre licença e
+interesse nas métricas; o indicador legado de pedido de material mantém seu escopo.
+
+A leitura contextual leva motivo, trecho e pergunta anterior. Falta de contexto,
+áudio não transcrito e entrada posterior ao robô ainda não classificada ficam
+pendentes de revisão. Ausência de papel não comprova humanidade; silêncio sem
+recibo não significa mensagem ignorada. Preservar fonte, eventos, recusas, pedidos
+de exclusão e condições históricas. A leitura não grava na planilha, reabre perdas,
+envia mensagens ou muda limites. Atualizar o classificador não autoriza responder
+automaticamente. A rotina do Grok duas vezes ao dia continua fora do controle do Dell.
+
 ## Qualidade da Prumo (21/10/2026)
 
 A Prumo é a fonte dos critérios, nomes e aceite; o SquadOne executa. Leia `docs/referencia/organizacao-prumo.md` e `../prumo/00-contexto/organizacao.md` antes de criar ou alterar ofertas e fluxos. Site e Raio-X passam por `deploy/dell/lib/qualidade_prumo.py` antes de publicar. Homologação é identificada; Profissional exige todos os obrigatórios, IQS completo, referência e manifesto exatos. O gerador não publica diretamente nem assina aceite; avaliações aprovadas ficam na área privada, fora da pasta do lead. O Mapa continua como rascunho, sem envio automático.

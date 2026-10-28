@@ -223,6 +223,9 @@ test('marcador de robô reconhecido pelo procedimento também retira abordagem a
 
 test('rótulo antigo, evidência sem data ou leitura que pede revisão não escondem uma decisão', () => {
   const base = conversaAutomatica()
+  // Este caso testa leitura complementar incerta; um marcador textual confirmado tem teste próprio.
+  base.conversa!.ultima.trecho = 'Retorno recebido no canal'
+  assert.notEqual(procedimentoDaDecisao(base).tipo, 'robo')
   const leituras = [undefined, { ...base.classificacaoResposta!, evidencia: undefined },
     { ...base.classificacaoResposta!, evidencia: { trecho: 'Resposta automática anterior', em: '2026-10-20T15:00:00Z' } },
     { ...base.classificacaoResposta!, revisar: true }, { ...base.classificacaoResposta!, houveRespostaHumana: true }]

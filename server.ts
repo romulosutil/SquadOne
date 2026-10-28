@@ -1,4 +1,15 @@
+import { EstampariaAutomatico, leitorPoliticaEstamparia } from './server/estamparia-automatico.ts';
+import { identidadeDaConversa } from './src/operations/responsavel-conversa.ts';
+import { mensagemDaCaptura, conferirIdentidadeCaptura } from './server/identidade-captura.ts';
 import { montarGarantiasAgenda } from './server/rotas-garantias-agenda.ts';
+import { EncontradoAutomatico, leitorPoliticaEncontrado } from './server/encontrado-automatico.ts';
+import { SaidasEncontrado } from './server/encontrado-saidas.ts';
+import { transporteEncontradoEvolution } from './server/encontrado-evolution.ts';
+import { QualificadorEncontrado } from './server/encontrado-qualificacao.ts';
+import { MateriaisEncontrado, verificadorMaterialEncontrado } from './server/encontrado-materiais.ts';
+import { ConfiguracaoPropostaEncontrado, gravarPrivadoEncontrado } from './server/encontrado-proposta-config.ts';
+import { ContratacaoEncontrado } from './server/encontrado-contratacao.ts';
+import { montarRotasPropostaEncontrado } from './server/rotas-encontrado-proposta.ts';
 import { GarantiasAgenda, DemandasAgendaDuraveis } from './server/garantias-agenda.ts';
 import { FilaTelegramDuravel } from './server/fila-telegram-duravel.ts';
 import { AtendimentoComercial, criarLeitorFonteAtendimento, criarInventarioCapturasAtendimento } from './server/atendimento-comercial.ts';
@@ -36,6 +47,7 @@ import { QuestRecusada } from "./server/quest.ts";
 import { AgendaIndisponivel } from "./server/agenda.ts";
 import { ehModo } from "./server/capabilities.ts";
 import { aplicarContratacao, criarSquad, substituirPo } from "./server/hire.ts";
+import { lerFiltroLeads } from './server/filtro-leads.ts';
 import {
   arquivarDominio,
   arquivarPessoa,
@@ -51,7 +63,7 @@ import { interpretarPedidoDeRedacao, RedacaoInvalida, redigirTreino } from "./se
 import { guardaDeIdentidade, guardaDeOrigem, lerLoginsPermitidos, porteiroDeIp, veioPeloServe } from "./server/acesso.ts";
 import { criarRepasseDaEntrada, ENTRADA_PREFIXO } from "./server/entrada-proxy.ts";
 import { descreverJanela, FUSO, JanelaMalConfigurada, lerInstante, lerJanela, SemHorarioLivre } from "./server/alocador.ts";
-import { avisosPessoaisPeloTelegram, criarRegistroDeEnviados, publicarAviso, publicarAvisoPessoal, type Aviso } from "./server/avisos.ts";
+import { avisosPessoaisPeloTelegram, criarRegistroDeEnviados, enviarAvisoPessoalAosDestinos, publicarAviso, publicarAvisoPessoal, type Aviso, type DestinoDoAvisoPessoal } from "./server/avisos.ts";
 import { diretorioDeDados, motivoParaAgendaDesligada } from "./server/dados.ts";
 import { arquivoDeOffset, criarPollingDoTelegram } from "./server/telegram-polling.ts";
 import { criarSinalDeVida, lerUrlDoSinal, pingarHealthchecks } from "./server/sinal-de-vida.ts";
@@ -274,16 +286,13 @@ async function startServer() {
   const filaDeAvisos = (process.env.SQUADONE_AVISOS_FILA ?? "").trim() || path.join(os.homedir(), ".local", "share", "avisos", "fila");
   // O bot ao chat do dono: espelho do P0 e, desde 16/10/2026 (OT-14, exceção da regra 20), o canal
   // dos lembretes da agenda e dos alertas de finanças, para tirá-los do número que fala com os leads.
-  // Sucesso se AO MENOS UM chat recebeu: lançar com um chat entregue mandaria o aviso de novo pela fila.
+  // Cada destino conserva resultado proprio; entrega parcial ou timeout nunca aciona fallback.
   const telegramDoDono = configDeTelegram
-    ? async (texto: string, opcoes?: { silencioso?: boolean }) => {
-        const chats = [...configDeTelegram!.chatsPermitidos];
-        if (chats.length === 0) throw new Error("nenhum chat na allowlist do Telegram");
-        const resultados = await Promise.allSettled(chats.map((chat) => enviarMensagem(configDeTelegram!, chat, texto, undefined, undefined, opcoes)));
-        const falhas = resultados.filter((r): r is PromiseRejectedResult => r.status === "rejected");
-        if (falhas.length === chats.length) throw falhas[0].reason;
-        if (falhas.length > 0) console.error(`[avisos] Telegram: ${falhas.length} de ${chats.length} chat(s) não receberam o aviso`);
-      }
+    ? async (texto: string, opcoes?: { silencioso?: boolean }, registrar?: (destinos: DestinoDoAvisoPessoal[]) => Promise<void>) =>
+        enviarAvisoPessoalAosDestinos([...configDeTelegram!.chatsPermitidos].map(chat => ({
+          identidade: chat,
+          enviar: () => enviarMensagem(configDeTelegram!, chat, texto, undefined, undefined, opcoes),
+        })), registrar)
     : undefined;
   const pessoalPeloTelegram = avisosPessoaisPeloTelegram(process.env);
   // Chaves já enviadas pelo caminho pessoal, em disco: a Central reinicia a cada merge e a vigia varre no
@@ -359,9 +368,11 @@ async function startServer() {
 
   let crmDoAtendimento: CrmStore | undefined;
   let receberAtendimento: ((valor: unknown) => Promise<{novo:boolean;registro:{chave:string}}>) | undefined;
+  let autorizarMaterialEncontrado:((id:string)=>Promise<unknown|null>)|undefined;
   if (squadOneMode === 'operations') app.use(entradaTecnicaAtendimento({
     autenticar: valor => crmDoAtendimento?.autenticarAtendimento(valor) ?? Promise.resolve(false),
     receber: valor => receberAtendimento?.(valor) ?? Promise.resolve(null),
+    autorizarMaterial:id=>autorizarMaterialEncontrado?.(id)??Promise.resolve(null),
   }));
 
   // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
@@ -404,9 +415,10 @@ async function startServer() {
   // é para o atualizar-central do Dell esperar o turno (ou a fila do bot)
   // terminar antes de reiniciar o processo. `agenda` diz se o app (Pedir,
   // Escritório) mora neste processo: no Dell, só depois do cutover.
+  let atendimentoComercialOcupado = false;
   app.get("/api/runtime", (_req, res) => {
     // A vigia no meio de uma volta também conta: reiniciar agora largaria um lembrete a meio caminho.
-    const ocupado = haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false) || (assistenteDoProcesso?.ocupado() ?? false) || (vigia?.ocupada() ?? false);
+    const ocupado = atendimentoComercialOcupado || haTurnoEmAndamento() || (botDoTelegram?.ocupado() ?? false) || (assistenteDoProcesso?.ocupado() ?? false) || (vigia?.ocupada() ?? false);
     // `assistente`: o painel do Assistente substitui o Pedir só quando ele está ligado aqui.
     res.json({ mode: squadOneMode, avaliacoes: avaliacoesAtivas, ocupado, agenda: agendaAtiva, assistente: assistenteDoProcesso !== null });
   });
@@ -415,7 +427,7 @@ async function startServer() {
     const operationsStore = new OperationsProjectStore(operationsDataDir);
     const readings = new HermesReadingsStore(operationsDataDir);
     // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
-    const crm = new CrmStore(configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory));
+    const crm = new CrmStore({...configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory),guardaConversas:path.join(operationsDataDir,'atendimento-conversas')});
     crmDoAtendimento = crm;
     const inboxComercial = new EntradaAtendimentoComercialDuravel(path.join(operationsDataDir,'atendimento-comercial-inbox.json'));
     await inboxComercial.recuperarInterrompidos();
@@ -425,12 +437,45 @@ async function startServer() {
       lerFonte:criarLeitorFonteAtendimento(pastaCapturas,lerIdentidadeCaptura),lerIdentidade:lerIdentidadeCaptura,
       inventariarCapturas:criarInventarioCapturasAtendimento(pastaCapturas,lerIdentidadeCaptura),visao:()=>crm.visao(new Date())});
     receberAtendimento = valor => atendimento.receber(valor);
+    const politicaEncontrado=leitorPoliticaEncontrado(path.join(operationsDataDir,'encontrado-automacao.json'));
+    const configuracaoPropostaEncontrado=new ConfiguracaoPropostaEncontrado(operationsDataDir);
+    const contratacaoEncontrado=new ContratacaoEncontrado(path.join(operationsDataDir,'encontrado-propostas'),configuracaoPropostaEncontrado);
+    const encontradoAutomatico = new EncontradoAutomatico({atendimento,
+      saidas:new SaidasEncontrado(path.join(operationsDataDir,'encontrado-saidas')),
+      politica:politicaEncontrado,
+      transporte:transporteEncontradoEvolution(),
+      qualificador:new QualificadorEncontrado(path.join(operationsDataDir,'encontrado-qualificacao')),
+      materiais:new MateriaisEncontrado(path.join(operationsDataDir,'encontrado-materiais'),verificadorMaterialEncontrado(operationsDataDir)),
+      contratacao:contratacaoEncontrado,
+      comConversa:(conversa,acao)=>crm.comConversaExclusiva(conversa,acao),
+      bloqueio:(lead,leads)=>crm.bloqueioDaConversa(lead,leads)});
+    // atendimento-estamparia-v1
+    const estampariaAutomatico = new EstampariaAutomatico({atendimento,
+      saidas:new SaidasEncontrado(path.join(operationsDataDir,'estamparia-saidas')),
+      politica:leitorPoliticaEstamparia(path.join(operationsDataDir,'estamparia-automacao.json')),
+      transporte:transporteEncontradoEvolution(),
+      comConversa:(conversa,acao)=>crm.comConversaExclusiva(conversa,acao),
+      identidadeLead:lead=>identidadeDaConversa(lead)?.conversa??null,
+      verificarMensagem:(m,identidade,agora)=>{
+        const tuple=mensagemDaCaptura(m)
+        return tuple&&conferirIdentidadeCaptura(tuple,identidade as Parameters<typeof conferirIdentidadeCaptura>[1],agora).estado==='verificada'?tuple:null
+      },
+      bloqueio:(lead,leads)=>crm.bloqueioDaConversa(lead,leads)});
+    autorizarMaterialEncontrado=id=>encontradoAutomatico.autorizarMaterial(id);
+    montarRotasPropostaEncontrado(app,{config:configuracaoPropostaEncontrado,contratacao:contratacaoEncontrado,
+      operador:req=>{const login=req.get('Tailscale-User-Login')?.trim().toLowerCase();return identidadeLigada&&login&&loginsDoTailscale.has(login)?login:null},
+      ativar:async(modeloHash,politicaHash)=>{
+        const p=await politicaEncontrado();if(!p||p.modo!=='respostas'||!await configuracaoPropostaEncontrado.aprovada(modeloHash))throw new Error('Preservar pausa ou configuração ainda não aprovada.');
+        if(p.proposta?.modeloHash===modeloHash&&p.proposta.politicaHash===politicaHash)return;
+        await gravarPrivadoEncontrado(path.join(operationsDataDir,'encontrado-automacao.json'),{...p,proposta:{v:1,desde:new Date().toISOString(),politicaHash,modeloHash}});
+      }});
     let atendimentoEmCurso = false;
     const conferirAtendimento = async () => {
       if(atendimentoEmCurso) return;
       atendimentoEmCurso=true;
-      try { await atendimento.reconciliarCapturas(); await atendimento.atualizar(); } catch { console.warn('[atendimento] conferência pendente; nenhum envio autorizado.'); }
-      finally {atendimentoEmCurso=false;}
+      atendimentoComercialOcupado=true;
+      try { await atendimento.reconciliarCapturas(); await atendimento.atualizar(); const visaoDoCiclo=await crm.visao(new Date()); const ofertas=await Promise.allSettled([encontradoAutomatico.executar(visaoDoCiclo),estampariaAutomatico.executar(visaoDoCiclo)]);if(ofertas.some(r=>r.status==='rejected'))console.warn('[atendimento] Uma oferta aguarda conferência; as demais continuam independentes.'); } catch { console.warn('[atendimento] etapa pendente; preservar reservas e conferir a automação do Encontrado.'); }
+      finally {atendimentoEmCurso=false;atendimentoComercialOcupado=false;}
     };
     const relogioAtendimento = setInterval(()=>{void conferirAtendimento()},30000);relogioAtendimento.unref();
     paradores.push(()=>clearInterval(relogioAtendimento));
@@ -438,7 +483,15 @@ async function startServer() {
     const visaoAtendimento = async () => {
       const v = await crm.visao();
       const pendencias = await atendimento.listarPendencias(v);
+      const automaticos = await encontradoAutomatico.estados(v).catch(()=>new Map());
+      const automaticosEstamparia = await estampariaAutomatico.estados(v).catch(()=>new Map()); // leitura-estamparia-v1
+      const observacoes = await encontradoAutomatico.observacoes(v).catch(()=>new Map());
+      const propostas = await contratacaoEncontrado.visoes().catch(()=>new Map());
       return {...v,leads:await Promise.all(v.leads.map(async l=>{
+        l={...l,...(observacoes.has(l.id)?{encontradoObservado:observacoes.get(l.id)}:{})};
+        if(propostas.has(l.id))l={...l,encontradoContratacao:propostas.get(l.id)};
+        const auto=automaticos.get(l.id)??automaticosEstamparia.get(l.id);
+        if(auto) return {...l,atendimentoComercial:{id:`${l.produto==='estampa'?'estampa':'encontrado'}-${l.id}`,tipo:auto.acao==='time'?'automatico':'handoff',titulo:auto.acao==='time'?`Time conduz o atendimento de ${l.produto==='estampa'?'Estamparia':'Site/Encontrado'}`:`Decisão necessária em ${l.produto==='estampa'?'Estamparia':'Site/Encontrado'}`,motivo:auto.motivo,texto:'proximoPasso' in auto?auto.proximoPasso:undefined,alvo:auto.acao==='time'?'time':'operador',estado:auto.estado,identidade:auto.identidade,ocorridoEm:auto.ocorridoEm}};
         const p=pendencias.find(p=>p.leadIds.includes(l.id));if(!p)return l;
         const bloqueio=await crm.bloqueioDaConversa(l,v.leads);
         return {...l,atendimentoComercial:bloqueio ? {id:p.id,tipo:'handoff',titulo:'Conferir atendimento com Rômulo',motivo:bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm} : {id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,alvo:p.alvo,texto:p.texto ?? p.orientacao,estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm}};
@@ -447,6 +500,14 @@ async function startServer() {
     montarLeituraComercial(app, {visao:visaoAtendimento,
       bloqueioConversa:(lead,leads)=>crm.bloqueioDaConversa(lead,leads),
       origemCentral:(process.env.SQUADONE_ORIGEM_CENTRAL ?? '').trim() || undefined});
+    app.get('/api/operations/crm/estamparia/automacao',async(_req,res)=>{
+      res.set('Cache-Control','no-store');
+      try{res.json(await estampariaAutomatico.resumo())}catch{res.status(503).json({oferta:'estampa',estado:'indisponivel',error:'Conferir a política e o journal de Estamparia.'})}
+    });
+    app.get('/api/operations/crm/encontrado/automacao',async(_req,res)=>{
+      res.set('Cache-Control','no-store');
+      try{res.json(await encontradoAutomatico.resumo())}catch{res.status(503).json({oferta:'encontrado',estado:'indisponivel',error:'Conferir a configuração e as reservas; nenhum reenvio foi liberado.'})}
+    });
     // Só leitura sob o mesmo porteiro das APIs da Central; sem identidade/contatos na resposta.
     app.get('/api/operations/crm/atendimento/cobertura', async (_req,res) => {
       res.set('Cache-Control','no-store');
@@ -513,6 +574,7 @@ async function startServer() {
       fontes: {
         visao: visaoAtendimento,
         roster: readRoster,
+        filtroLeads: () => lerFiltroLeads(operationsDataDir),
         conversa: (lead) => lerConversaDoNumero(lead.links.whatsapp, crm.config.conversas),
         agenda: readAgenda,
         dell: () => lerStatusDoDell(operationsDataDir),

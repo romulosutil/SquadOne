@@ -108,7 +108,7 @@ export function elegivelParaOTime(lead: LeadDoTime | undefined): boolean {
   return !Object.values(lead.marcos ?? {}).some(Boolean)
 }
 
-export type RecusaDoTime = 'fora-do-expediente' | MotivoDoRitmo | 'nao-elegivel' | 'nao-e-do-time' | 'ja-tocado' | 'mensagem-barrada'
+export type RecusaDoTime = 'fora-do-expediente' | MotivoDoRitmo | 'nao-elegivel' | 'nao-e-do-time' | 'ja-tocado' | 'mensagem-barrada' | 'sem-resposta' | 'rodada-nao-iniciada' | 'ja-reservado'
 
 export type ReservaDoTime =
   | { ok: true }
@@ -116,7 +116,7 @@ export type ReservaDoTime =
   | { ok: false; motivo: RecusaDoTime; ate: number | null }
 
 /** As recusas que valem para qualquer lead: o time para a rodada e tenta de novo depois. */
-export const RECUSAS_GERAIS: ReadonlySet<RecusaDoTime> = new Set(['fora-do-expediente', 'pausa', 'dia', 'hora', 'intervalo'])
+export const RECUSAS_GERAIS: ReadonlySet<RecusaDoTime> = new Set(['fora-do-expediente', 'pausa', 'dia', 'hora', 'intervalo', 'sem-resposta', 'rodada-nao-iniciada'])
 
 export interface PedidoDoTime {
   leadId: string

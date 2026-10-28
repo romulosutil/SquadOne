@@ -28,8 +28,9 @@ export interface OportunidadeLeituraComercial {
   qualificacao:Omit<ReturnType<typeof resumoComercialParaContexto>['qualificacao'],'proximaPergunta'>
   ciclo:ReturnType<typeof resumoComercialParaContexto>['ciclo']
   responsavel:{estado:'definido'|'ausente'|'bloqueado';quem:'romulo'|'time'|null}
-  atendimento:{presente:boolean;tipo:'rascunho'|'handoff'|'aguardando-fonte'|null;alvo:'operador'|'cliente'|null}
+  atendimento:{presente:boolean;tipo:'rascunho'|'handoff'|'aguardando-fonte'|'automatico'|null;alvo:'operador'|'cliente'|'time'|null}
   prioridadeTrabalho:PlanoPrioridadeComercial
+  propostaAutomatica?:{origem:'autentique';estado:NonNullable<CrmLead['encontradoContratacao']>['estado'];aceiteConfirmado:boolean;confirmaPagamento:false}
   bloqueios:MotivoLeituraComercial[]
   proximaAcao:'preservar-desfecho'|'aguardar'|'conferir-com-romulo'|'conferir-qualificacao-na-ficha'
   contatoAutorizado:false;somenteLeitura:true;revisaoContexto:string;ficha:string|null
@@ -70,11 +71,13 @@ export async function projetarLeituraComercial(lead:CrmLead,visao:FonteLeituraCo
   if(lead.proposta||qualificacao.intencao==='contratar'||acaoInternaComercial(acao))bloqueios.add('decisao-comercial-humana')
   const prioridadeTrabalho=planoComercialDoLead(lead,agora)
   const proximaAcao=prioridadeTrabalho.grupo==='encerrado'?'preservar-desfecho':prioridadeTrabalho.grupo==='aguardar'?'aguardar':prioridadeTrabalho.grupo==='qualificar'&&!bloqueios.size?'conferir-qualificacao-na-ficha':'conferir-com-romulo'
+  const integrado=lead.encontradoContratacao
+  const propostaAutomatica:OportunidadeLeituraComercial['propostaAutomatica']=integrado?.origem==='encontrado-autentique'&&/^[a-f0-9]{64}$/.test(integrado.referencia)&&['preparada','criacao-incerta','aguardando-assinatura','assinada','recusada','expirada','conferencia'].includes(integrado.estado)?{origem:'autentique',estado:integrado.estado,aceiteConfirmado:integrado.estado==='assinada'&&Number.isFinite(Date.parse(integrado.aceiteEm??''))&&Date.parse(integrado.aceiteEm!)<=agora,confirmaPagamento:false}:undefined
   return {referencia:referenciaLeituraComercial(lead),empresa:empresaSegura(lead.empresa),produto:lead.produto,etapa:lead.etapa,
     autoridade:resumo.autoridade,qualificacao,ciclo:resumo.ciclo,responsavel:{estado:dono.estado,quem:dono.registro?.responsavel??null},
-    atendimento:{presente:!!att,tipo:att?['rascunho','handoff','aguardando-fonte'].includes(att.tipo)?att.tipo as 'rascunho'|'handoff'|'aguardando-fonte':'handoff':null,alvo:att?.alvo==='cliente'?'cliente':att?'operador':null},
-    prioridadeTrabalho,bloqueios:[...bloqueios].sort(),proximaAcao,contatoAutorizado:false,somenteLeitura:true,
-    revisaoContexto:createHash('sha256').update(JSON.stringify([resumo.revisaoContexto,dono.estado,dono.registro?.id??null,att?.contextoHash??null,prioridadeTrabalho,[...bloqueios].sort()])).digest('hex'),ficha:fichaDaFonteComercial(lead,deps.origemCentral)}
+    atendimento:{presente:!!att,tipo:att?['rascunho','handoff','aguardando-fonte','automatico'].includes(att.tipo)?att.tipo as 'rascunho'|'handoff'|'aguardando-fonte'|'automatico':'handoff':null,alvo:att?.alvo==='time'?'time':att?.alvo==='cliente'?'cliente':att?'operador':null},
+    prioridadeTrabalho,...(propostaAutomatica?{propostaAutomatica}:{}),bloqueios:[...bloqueios].sort(),proximaAcao,contatoAutorizado:false,somenteLeitura:true,
+    revisaoContexto:createHash('sha256').update(JSON.stringify([resumo.revisaoContexto,dono.estado,dono.registro?.id??null,att?.contextoHash??null,prioridadeTrabalho,[...bloqueios].sort(),propostaAutomatica??null])).digest('hex'),ficha:fichaDaFonteComercial(lead,deps.origemCentral)}
 }
 export function montarLeituraComercial(router:Pick<Router,'get'>,deps:DependenciasLeituraComercial){
   router.get(ROTA_LEITURA_COMERCIAL,async(req,res)=>{

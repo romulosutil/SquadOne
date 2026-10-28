@@ -11,7 +11,7 @@
  * só-robô). Resposta, 2ª mensagem e follow-up de quem leu não contam: são conversa.
  *  - intervalo mínimo entre dois primeiros contatos;
  *  - teto por hora (janela móvel de 60 min);
- *  - teto por dia (dia de São Paulo). Retomada de 22/10/2026 a 50%: 5 compartilhados, 2/h e 30 min.
+ *  - teto por dia (dia de São Paulo). Retomada de 22/10/2026 a 50%: 15 compartilhados, 2/h e 30 min; dez pendentes por rodada.
  * E `pausadoAte`: depois de um aviso ou restrição do WhatsApp, nada sai até a data (editar e
  * fazer push; a Central se atualiza sozinha em até 10 min).
  *
@@ -46,10 +46,10 @@ export interface RegrasDoRitmo {
 }
 
 export const REGRAS_DO_RITMO: RegrasDoRitmo = {
-  // Retomada de 22/10 com 50% do esforço anterior; não representa um limite seguro da Meta.
+  // 23/10: teto 15/dia e rodada de dez sem resposta humana, por decisão do Rômulo.
   intervaloMs: 30 * 60_000,
   porHora: 2,
-  tetosPorSemana: [5],
+  tetosPorSemana: [15],
   // Data histórica preservada; o teto único não cresce com a idade do número.
   inicioDoNumero: '2026-10-16',
   pausadoAte: null,

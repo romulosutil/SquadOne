@@ -868,6 +868,8 @@ class MarcadorDeAudio(unittest.TestCase):
         self.assertEqual(len(ob.texto_com_transcricao("[áudio 9s]", "a" * 5000)), ob.MAX_TEXTO_NA_CONVERSA)
 
     def test_melhora_o_audio(self):
+        self.assertTrue(ob.so_marcador_de_audio("[áudio não transcrito]"))
+        self.assertTrue(ob.melhora_o_audio("[áudio não transcrito]", "[áudio 20s] pode falar amanhã"))
         self.assertTrue(ob.melhora_o_audio("[áudio]", "[áudio 27s] não quero"))
         self.assertTrue(ob.melhora_o_audio("[áudio 27s]", "[áudio 27s] não quero"))
         self.assertTrue(ob.melhora_o_audio("[áudio]", "[áudio 27s]"))  # ganhou a duração

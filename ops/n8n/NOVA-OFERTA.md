@@ -330,9 +330,7 @@ publicação na Mel. **Nunca publica sozinho e nunca chama `--ativar`.**
 5. `LEITURAS` derivada, em lote próprio com baseline (mexe na guarda da Fase 4).
 6. `nova-oferta.py`.
 
-**Dependência.** Isto só começa depois que o trabalho em andamento na Mel entrar na `main`. Em
-28/10/2026 o checkout da Mel tem alterações não commitadas em `prumo-ofertas.py`,
-`prumo-ofertas-triar.js`, `n8n.py`, `prospeccao_contrato.py` e `server/crm.ts`, e a guarda de
-aquisição (`serializacao_aquisicao.py`, `aquisicao-guarda.py`) está numa branch fora da `main` (ver
-`CATALOGO.md`, seção 5). Refatorar esses arquivos antes gera conflito e pode publicar um caçador sem a
-guarda.
+**Dependência.** O trabalho que estava sem commit no checkout da Mel (inclusive a guarda de aquisição,
+`serializacao_aquisicao.py` e `aquisicao-guarda.py`) entrou na `main` em 28/10/2026. Antes de refatorar,
+confira que o `~/SquadOne` da Mel está limpo (`git status`): um caçador publicado sem a guarda perde a
+exclusão entre caçadores.

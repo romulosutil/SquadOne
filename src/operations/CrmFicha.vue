@@ -6,6 +6,7 @@ import CrmSpiced from './CrmSpiced.vue'
 import CrmReceita from './CrmReceita.vue'
 import CrmCicloComercial from './CrmCicloComercial.vue'
 import CrmAtendimento from './CrmAtendimento.vue'
+import CrmPropostaEncontrado from './CrmPropostaEncontrado.vue'
 import { temQualificacaoComercial } from './qualificacao-comercial'
 import { cicloDoLead } from './ciclo-comercial'
 import CrmConfirmarPasso from './CrmConfirmarPasso.vue'
@@ -679,6 +680,17 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
     </div>
 
     <CrmAtendimento :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
+    <CrmPropostaEncontrado :lead="lead" @registrado="emit('registrado')" />
+    <details v-if="lead.encontradoObservado" class="dobra crm-ficha__secao">
+      <summary>O que o time observou na conversa</summary>
+      <p class="crm-muted">Leitura automática das mensagens comprovadas. Não confirma compra ou qualificação humana.</p>
+      <dl>
+        <template v-if="lead.encontradoObservado.qualificacao.necessidade"><dt>Necessidade relatada</dt><dd>{{ lead.encontradoObservado.qualificacao.necessidade.trecho }}</dd></template>
+        <template v-if="lead.encontradoObservado.qualificacao.decisao"><dt>Aprovação e conteúdo</dt><dd>{{ lead.encontradoObservado.qualificacao.decisao.trecho }}</dd></template>
+        <template v-if="lead.encontradoObservado.qualificacao.intencao"><dt>Intenção observada</dt><dd>{{ lead.encontradoObservado.qualificacao.intencao.tipo }} — “{{ lead.encontradoObservado.qualificacao.intencao.evidencia.trecho }}”</dd></template>
+        <template v-for="material in lead.encontradoObservado.qualificacao.materiais" :key="material.tipo"><dt>{{ material.tipo === 'demo' ? 'Prévia de site solicitada' : 'Raio-X solicitado' }}</dt><dd>“{{ material.evidencia.trecho }}”</dd></template>
+      </dl>
+    </details>
     <details class="dobra crm-ficha__secao"><summary>Qualificação e preparação da proposta</summary><CrmSpiced :lead="lead" :disponivel="disponivel" :sugestao="lida?.spiced" @registrado="emit('registrado')" /></details>
     <details class="crm-ficha__secao dobra" :open="cicloDoLead(lead).historico.length > 0">
       <summary>Proposta, contrato e pagamento</summary>

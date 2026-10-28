@@ -133,12 +133,12 @@ test('Fase 0: Plus não pode ser reservado pelo time, mesmo pronto numa fila ant
   } finally { await m.fechar(); }
 });
 
-test('mitigação: o 11º contato do time é barrado pela soma das cinco linhas e superfícies', async () => {
+test('mitigação: o 16º contato do time é barrado pela soma das cinco linhas e superfícies', async () => {
   const m = await montar([lead('site:novo')], [{ id: 'site:novo', estado: 'pronto' }]);
   try {
     const produtos = ['site', 'prumo', 'iris', 'estampa', 'plus'];
-    for (let i = 0; i < 10; i++) {
-      m.relogio.agora = AGORA - (10 - i) * 15 * 60_000;
+    for (let i = 0; i < 15; i++) {
+      m.relogio.agora = AGORA - (15 - i) * 30 * 60_000;
       await m.memoriaDaVenda.primeiroContato(`${produtos[i % produtos.length]}:${i}`, i % 2 ? 'central' : 'telegram');
     }
     m.relogio.agora = AGORA;
@@ -154,7 +154,7 @@ test('sem retrato não inventa avaliações nem envios; snapshot não expõe cam
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA).toISOString(), estado: 'pronto', setores: [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1, segredo: 'nao-sai' }], funil: [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167, numero: 'segredo' }], fila: [{ id: 'site:1', setor: 'Advocacia', numero: 'segredo', recibo: 'privado', nota: 80 }], apikey: 'nao-sai' }));
     const v = await lerFrente(dir, AGORA); assert.equal(v.estado, 'pronto');
     // O teto mostrado é o da trava de ritmo da Central, não uma cota do time.
-    assert.equal(v.limite, 5);
+    assert.equal(v.limite, 15);
     assert.deepEqual(v.setores, [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1 }]);
     assert.deepEqual(v.funil, [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167 }]);
     assert.doesNotMatch(JSON.stringify(v), /segredo|privado|nao-sai/);
@@ -171,7 +171,7 @@ test('painel calcula a coorte atual do CRM, ignora contador antigo e mantém pau
     const r = await fetch(`${m.base}/crm/frente`); const v = await r.json();
     assert.equal(v.ativo, false); assert.equal(v.estado, 'pausado'); assert.equal(v.respondidos, 1);
     assert.deepEqual(v.respostasHoje, { dia: '2026-10-19', enviados: 1, humanas: 1, robos: 0, semResposta: 0 });
-    assert.equal(v.intervaloMinutos, 30); assert.equal(v.porHora, 2); assert.equal(v.limite, 5);
+    assert.equal(v.intervaloMinutos, 30); assert.equal(v.porHora, 2); assert.equal(v.limite, 15);
     assert.equal((await lerFrente(m.dir, AGORA)).respostasHoje, null, 'sem CRM não inventa zero nem reutiliza contador antigo');
   } finally { await m.fechar(); }
 });

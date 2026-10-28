@@ -23,9 +23,11 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import FrenteComercial from '../operations/FrenteComercial.vue'
+import EncontradoPropostaConfig from '../operations/EncontradoPropostaConfig.vue'
 import '../estilos/operacao.css'
 import AccessPanel from '../operations/AccessPanel.vue'
 import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
+import ModeloOperacionalPanel from '../operations/ModeloOperacionalPanel.vue'
 import CrmColinha from '../operations/CrmColinha.vue'
 import DellConferePanel from '../operations/DellConferePanel.vue'
 import { useOverview } from '../casca/overview'
@@ -44,11 +46,12 @@ const ops = computed(() => props.capacidades.perfil === 'operations')
 
 onMounted(() => {
   const alvo = new URLSearchParams(window.location.search).get('abrir') ?? window.location.hash.slice(1)
-  if (alvo === 'primeiros-contatos' || alvo === 'equipe') void nextTick(() => document.getElementById(alvo)?.scrollIntoView({ block: 'start' }))
+  if (alvo === 'primeiros-contatos' || alvo === 'equipe' || alvo === 'encontrado-proposta') void nextTick(() => document.getElementById(alvo)?.scrollIntoView({ block: 'start' }))
   // O "Ver em Manutenção" da Central e o "Roteiro" de Vendas: a navegação sobe a página
   // antes de montar esta rota, então rolar até a seção fica para depois de ela existir.
   if (pedeManutencao) void nextTick(() => document.getElementById('manutencao')?.scrollIntoView({ block: 'start' }))
   if (pedeRoteiro) void nextTick(() => document.getElementById('roteiro')?.scrollIntoView({ block: 'start' }))
+  if (pedeOperacao) void nextTick(() => { const alvo = document.getElementById('modelo-operacional'); alvo?.scrollIntoView({ block: 'start' }); alvo?.focus({ preventScroll: true }) })
 })
 onBeforeUnmount(() => window.clearTimeout(desarmar))
 
@@ -68,6 +71,9 @@ const pedeFluxo = pedido.fluxo
 const pedeManutencao = pedido.abrir === 'manutencao'
 /** `?abrir=roteiro`: o antigo `/crm?ver=roteiro` (AC-20) abre o Entender com o roteiro à mostra. */
 const pedeRoteiro = pedido.abrir === 'roteiro'
+const pedeOperacao = pedido.abrir === 'operacao'
+const operacaoAberta = ref(pedeOperacao)
+const aoAlternarOperacao = (e: Event) => { if ((e.target as HTMLDetailsElement).open) operacaoAberta.value = true }
 // O roteiro é longo (cardápio, momentos, objeções, CDL): só monta quando a dobra abre.
 const roteiroAberto = ref(pedeRoteiro)
 const aoAlternarRoteiro = (e: Event) => {
@@ -130,7 +136,13 @@ const equipe = computed(() => ag?.roster.value?.squads.flatMap(s => s.dominios.m
       <details v-for="sala in equipe" :key="sala.id" class="dobra"><summary><strong>{{ sala.po.nome }}</strong> · {{ sala.po.papel }} <span class="etiqueta">{{ sala.squad }} · {{ sala.nome }}</span></summary><p>{{ sala.po.escopo }}</p><ul v-if="sala.integrantes.length"><li v-for="pessoa in sala.integrantes" :key="pessoa.id"><strong>{{ pessoa.nome }} · {{ pessoa.papel }}</strong><p>{{ pessoa.escopo }}</p></li></ul></details>
     </section>
 
+    <details v-if="ops" class="mais__bloco mais__dobra" :open="pedeOperacao" @toggle="aoAlternarOperacao">
+      <summary><span class="mais__grupo">Como vender e operar</span><small>catálogo, passagens, rotina, capacidade, indicadores e automação</small></summary>
+      <ModeloOperacionalPanel v-if="operacaoAberta" />
+    </details>
+
     <section v-if="ops" id="primeiros-contatos"><FrenteComercial configurar /></section>
+    <EncontradoPropostaConfig v-if="ops" />
 
     <!-- O link do robô do Escritório (?fluxo=&passo=) abre direto no fluxo dele. -->
     <details v-if="ops" class="mais__bloco mais__dobra" :open="pedeFluxo || pedeRoteiro">

@@ -4,6 +4,7 @@ import { useAtualizacaoViva } from '../casca/atualizacao-viva'
 import { esquecerAFrente, lerFrente, useFrente } from '../casca/frente'
 import { dataHora, hora } from './crm-formato'
 import { recomendacoesDoTime } from './recomendacoes-do-time'
+import RevisarRodada from './RevisarRodada.vue'
 const props = defineProps<{ configurar?: boolean }>()
 // O estado e a leitura são compartilhados com a Central (casca/frente.ts): uma leitura por ciclo.
 const { frente, erro } = useFrente()
@@ -66,7 +67,7 @@ async function alterarConfiguracao() {
 <template>
   <section class="frente-comercial painel-venda" aria-labelledby="frente-titulo">
     <header class="cabecalho-bloco"><div><p class="sobretitulo">Prospecção pelo time</p><h2 id="frente-titulo">Primeiros contatos</h2></div><span class="etiqueta" :data-tom="erro || frente?.estado === 'bloqueado' ? 'atencao' : 'neutro'" role="status">{{ rotulo }}</span></header>
-    <p class="texto-2">Diego, Elisa e Carla comparam Site, PRUMO, Iris, Estamparia e Plus. O funil completo e as respostas observadas orientam a prioridade; só leads novos com destino e mensagem validados recebem o primeiro contato.</p>
+    <p class="texto-2">Site/Encontrado é a frente principal. CRM de estamparia entra com necessidade, impacto e decisor confirmados. Cada escolha explica o motivo comercial e o que ainda falta validar.</p>
     <div v-if="frente?.respostasHoje" class="metricas-venda frente-comercial__metricas" aria-label="Respostas aos disparos de hoje">
       <div><strong>{{ frente.respostasHoje.enviados }}<small> / {{ frente.limite }}</small></strong><span>disparos confirmados hoje</span></div>
       <div><strong>{{ frente.respostasHoje.humanas }}</strong><span>respostas humanas</span></div>
@@ -85,6 +86,8 @@ async function alterarConfiguracao() {
     <p v-else-if="frente?.cicloParado" class="recado recado--atencao" role="status"><strong>Ativo, mas o ciclo está parado {{ desdeQuando }}.</strong> O time não está avaliando nem enviando; o timer do Dell (frente-comercial.timer) precisa voltar.</p>
     <p v-else-if="frente?.detalhe && !frente.pausaAutomatica" class="frente-comercial__detalhe">{{ frente.detalhe }}</p>
     <p v-else-if="!frente?.atualizadoEm" class="texto-2">As avaliações e os envios aparecem aqui assim que o serviço iniciar. Nenhum contato é considerado enviado antes da confirmação da integração.</p>
+    <div v-if="frente?.rodada" class="recado"><strong>{{ frente.rodada.pendentes }} de {{ frente.rodada.limite }} aguardando resposta humana</strong><p>{{ frente.rodada.motivo }}</p></div>
+    <RevisarRodada v-if="props.configurar && frente?.rodada" :inicio="frente.rodada.inicio" :pendentes="frente.rodada.pendentes" :disponivel="!erro && frente.estado !== 'sem-sinal'" @atualizado="esquecerAFrente(); sincronizar()" />
     <section class="frente-comercial__quem" aria-labelledby="frente-quem">
       <h3 id="frente-quem">Quem envia hoje</h3>
       <ul>
@@ -102,12 +105,20 @@ async function alterarConfiguracao() {
     <details v-if="frente?.fila.length" class="dobra frente-comercial__fila"><summary>Ver escolhas do time <span class="etiqueta">{{ frente.selecionados }} selecionados</span></summary>
       <ol class="lista-prioridades"><li v-for="(c, i) in frente.fila.slice(0, limite)" :key="c.id">
         <div class="frente-comercial__linha"><span class="ordem-venda">{{ i + 1 }}</span><div><a :href="`/crm?lead=${encodeURIComponent(c.id)}`"><strong>{{ c.empresa }}</strong></a><p v-if="c.setor" class="texto-2">{{ c.setor }}</p><p class="texto-2">{{ c.motivo }}</p></div><span class="etiqueta" :aria-label="`Pontuação ${c.nota} de 100`">{{ c.nota }}/100</span></div>
-        <details class="frente-comercial__avaliacoes"><summary>Avaliação dos agentes · {{ c.estado === 'enviado' ? 'Mensagem enviada' : c.estado === 'incerto' ? 'Envio em conferência' : 'Em preparação' }}</summary><ul><li v-for="a in c.avaliacoes" :key="a.agente"><strong>{{ a.agente }} · {{ a.nota }}/100</strong><p>{{ a.motivo }}</p></li></ul><blockquote v-if="c.mensagem">{{ c.mensagem }}</blockquote></details>
+        <details class="frente-comercial__avaliacoes"><summary>Justificativa comercial e avaliações · {{ c.estado === 'enviado' ? 'Mensagem enviada' : c.estado === 'incerto' ? 'Envio em conferência' : 'Em preparação' }}</summary>
+          <dl v-if="c.justificativaComercial" class="frente-comercial__justificativa">
+            <div><dt>Por que compraria</dt><dd>{{ c.justificativaComercial.porQueComprar }}</dd></div>
+            <div><dt>Por que esta oferta</dt><dd>{{ c.justificativaComercial.porQueOferta }}</dd></div>
+            <div><dt>Por que agora</dt><dd>{{ c.justificativaComercial.porQueAgora }}</dd></div>
+            <div><dt>Viabilidade</dt><dd>{{ c.justificativaComercial.viabilidade }}</dd></div>
+          </dl>
+          <p v-else class="texto-2">Escolha anterior à nova regra; justificativa comercial ainda não disponível.</p>
+          <ul><li v-for="a in c.avaliacoes" :key="a.agente"><strong>{{ a.agente }} · {{ a.nota }}/100</strong><p>{{ a.motivo }}</p></li></ul><blockquote v-if="c.mensagem">{{ c.mensagem }}</blockquote></details>
       </li></ol>
       <button v-if="frente.fila.length > limite" class="botao botao--leve" type="button" @click="limite += 10">Ver mais escolhas</button>
     </details>
     <p v-if="frente" class="texto-2 texto-pequeno">Limites compartilhados: {{ frente.limite }} primeiros contatos por dia, {{ frente.porHora }} por hora e {{ frente.intervaloMinutos }} minutos entre contatos. Limites internos não garantem ausência de bloqueio. Inicie contato apenas com autorização do destinatário.</p>
-    <p class="texto-2 texto-pequeno">Pausa automática: bloqueio ou recusa da integração, conta desconectada ou pelo menos 5 contatos enviados há 1 hora ou mais, nas últimas 24 horas, com 80% sem resposta humana. Robôs não são respostas humanas.</p>
+    <p class="texto-2 texto-pequeno">Pausa automática: bloqueio ou recusa da integração e conta desconectada. Dez aguardando resposta humana na rodada param novas aberturas até resposta ou revisão humana. Robôs não liberam vaga.</p>
     <footer class="frente-comercial__rodape"><template v-if="props.configurar"><button class="botao" type="button" :disabled="!frente || salvando" @click="alterarConfiguracao">{{ salvando ? 'Salvando…' : frente?.ativo ? 'Pausar primeiros contatos' : 'Ativar primeiros contatos' }}</button><p class="texto-2 texto-pequeno">Conta: WhatsApp do PRUMO. A pausa impede novos envios e exige ativação manual; as conversas continuam disponíveis.</p></template><a v-else class="link-discreto" href="/mais?abrir=primeiros-contatos">Configurar primeiros contatos →</a></footer>
   </section>
 </template>
@@ -120,6 +131,9 @@ async function alterarConfiguracao() {
 .frente-comercial__linha p { font-size: var(--tam-apoio); margin-top: var(--esp-1); }
 .frente-comercial__avaliacoes { margin: var(--esp-2) 0 0 var(--esp-6); font-size: var(--tam-apoio); }
 .frente-comercial__avaliacoes summary { min-height: var(--toque); align-content: center; cursor: pointer; }
+.frente-comercial__justificativa { display: grid; gap: var(--esp-3); padding: var(--esp-3) 0; }
+.frente-comercial__justificativa dt { font-weight: var(--peso-medio); }
+.frente-comercial__justificativa dd { margin: 0; overflow-wrap: anywhere; }
 .frente-comercial__avaliacoes ul { display: grid; gap: var(--esp-3); padding: var(--esp-3); background: var(--superficie-2); list-style: none; border-radius: var(--raio-controle); }
 .frente-comercial__avaliacoes blockquote { margin: var(--esp-3) 0; padding-left: var(--esp-3); border-left: var(--linha-fina); white-space: pre-wrap; }
 .frente-comercial__rodape { display: grid; gap: var(--esp-2); padding-top: var(--esp-2); }

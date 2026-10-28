@@ -68,6 +68,51 @@ maior custo de processamento. São amostras exploratórias com GPU por software,
 não evidência de ganho em dispositivos reais. A decisão atual é conservar DOM
 como padrão e manter o protótipo para avaliação posterior no hardware alvo.
 
+## Encontrado — proposta e Autentique (terceiro lote, 25/10/2026)
+
+O modelo comercial tem versão, hash e aprovação global explícita da operação.
+Propostas são artefatos privados imutáveis, com catálogo, condições e referências
+das mensagens que sustentam os dados das partes. Não são novas notas humanas do
+CRM. O cadastro da Prumo e a credencial Autentique ficam fora do Git e dos prompts.
+
+A criação remota é reservada antes do efeito. Uma tentativa ambígua é conciliada
+pela referência única e pelos dados exatos, sem recriar documento por timeout.
+Consultas autenticadas periódicas acompanham os signatários; dispensam webhook
+público. Somente o aceite comprovado da versão vinculada alimenta a projeção
+comercial da ficha. Documento, convite, assinatura, entrega vista e pagamento
+continuam fatos distintos. A operação nunca chama assinatura em nome das partes.
+
+## Encontrado — qualificação e materiais (segundo lote, 25/10/2026)
+
+A qualificação observada é uma projeção reconstruível das mensagens comprovadas,
+separada da confirmação humana do CRM. Um leitor local de padrões e respostas às
+perguntas originais prepara observações e pedidos com referências; o código escolhe
+perguntas, aplica restrições e conserva preço/escopo no catálogo. A projeção é
+persistida somente pelo executor; GETs leem e validam resultados. Nenhuma conversa
+é enviada a um novo modelo ou serviço externo para essa leitura.
+
+Pedidos de material têm registro operacional durável, identidade da mensagem de
+origem e execução restrita aos geradores existentes. O worker técnico recebe
+autorização atual da Central antes de reservar o trabalho. Resultado técnico não
+é envio, proposta ou aceite; a entrega pelo canal revalida contexto, identidade e
+recibo de qualidade dos bytes finais. Não há novo CRM editável, permissão de
+prospecção ou aprovação da própria qualidade pelo gerador.
+
+## Automação restrita do Encontrado (25/10/2026)
+
+A Central decide a política por oferta e os executores aplicam seu resultado.
+O primeiro lote reutiliza a inbox e a prova de identidade do atendimento para
+responder perguntas padronizadas do Encontrado a novas entradas, com política
+privada explícita, corte temporal, catálogo versionado, reserva durável anterior
+ao transporte e trava compartilhada com a tomada humana da conversa. n8n não
+ganha outro parser de condições. A fila humana recebe exceções; execução e
+esperas técnicas ficam com o time. Recibo de envio não cria qualificação humana,
+proposta, aceite, cobrança nem recebimento. As integrações futuras de Asaas e
+Autentique permanecem separadas da execução de mensagens.
+
+## BI e rodada comercial (23/10/2026)
+
+Por decisão do Rômulo: BI investigável de público, mensagem, sequência e escolhas dos agentes; ação por cliente com evidência, responsável e resultado esperado. Até 15 primeiros contatos/dia, 2/h e 30 min. Até dez sem resposta humana desde o início da rodada; sem expiração automática. Resposta humana posterior libera vaga; revisão humana com motivo inicia outra rodada e conserva auditoria. Substitui a pausa proporcional por silêncio; preserva restrições, desconexão, pausas e gates. Reservas persistidas antes de liberar executor; falha fecha a rodada. Vendas e as conversas existentes continuam fontes comerciais.
 
 ## Qualidade da Prumo (21/10/2026)
 

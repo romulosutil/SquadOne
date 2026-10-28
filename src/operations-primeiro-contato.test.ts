@@ -113,8 +113,8 @@ describe('reservaDoTime: a janela e o ritmo da Central, para todos', () => {
     assert.equal(r.ok === false && r.motivo, 'hora')
   })
   it('o teto do dia é o da trava de ritmo, somando Central, Telegram e time', () => {
-    // 10 no dia, todos antes da última hora: só o do dia segura.
-    const primeiros = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`p${i}`, { em: AGORA - (65 + i) * MIN }]))
+    // 15 no dia, todos antes da última hora: só o do dia segura.
+    const primeiros = Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`p${i}`, { em: AGORA - (65 + i) * MIN }]))
     const r = reservaDoTime(base({ primeiros }))
     assert.equal(r.ok === false && r.motivo, 'dia')
   })

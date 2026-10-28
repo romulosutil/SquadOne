@@ -8,15 +8,17 @@
  * overview (casca/overview.ts): o mesmo objeto para quem o importa.
  */
 import { ref } from 'vue'
+import type { JustificativaComercial } from '../operations/justificativa-comercial'
 
 export interface AvaliacaoDaFrente { agente: string; nota: number; motivo: string }
-export interface ContatoDaFrente { id: string; empresa: string; produto: string; setor?: string; nota: number; estado: string; motivo: string; avaliacoes: AvaliacaoDaFrente[]; mensagem: string }
+export interface ContatoDaFrente { id: string; empresa: string; produto: string; setor?: string; nota: number; estado: string; motivo: string; avaliacoes: AvaliacaoDaFrente[]; mensagem: string; justificativaComercial?: JustificativaComercial | null }
 export interface SetorDaFrente { setor: string; avaliados: number; selecionados: number; enviados: number }
 export interface FunilDaFrente { produto: string; novo: number; contato: number; proposta: number; ganho: number; perdido: number; elegiveis: number; contatosObservados: number; respostasWhatsapp: number; taxaResposta: number | null }
 export interface FrenteLida {
   ativo: boolean
   estado: string
   limite: number
+  rodada?: { inicio: string | null; pendentes: number; limite: number; motivo: string; bloqueado: boolean } | null
   /** `ativo` mas sem rodada recente dentro do expediente: o timer do Dell está parado (server/frente-comercial.ts). */
   cicloParado?: boolean
   /** A hora da última rodada que o script gravou (ISO); null sem nenhuma. */

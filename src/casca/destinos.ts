@@ -198,6 +198,7 @@ const ATALHOS_DO_DELL: Atalho[] = [
   { id: 'mais-manutencao', rotulo: 'O que o Dell confere', dica: 'Manutenção › Dell', href: '/mais?abrir=manutencao' },
   { id: 'mais-escritorio', rotulo: 'Escritório completo', dica: 'Manutenção › contratar, editar e arquivar', href: '/squadone', soComAgentes: true },
   { id: 'mais-roteiro', rotulo: 'Roteiro de venda', dica: 'Manutenção › Roteiro de venda', href: '/mais?abrir=roteiro' },
+  { id: 'linear-pessoal', rotulo: 'Linear Pessoal', dica: 'Issues dos projetos Pessoal e do GitHub, no Dell', href: 'http://127.0.0.1:8787/' },
 ]
 
 /** O que a paleta oferece: o Assistente (ou o Pedir), ir a cada destino e atalho, trocar de squad. */

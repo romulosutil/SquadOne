@@ -10,6 +10,7 @@ import { noExpedienteDeVenda } from '../src/operations/trava-de-horario.ts';
 import { conferirMensagem } from './gate-de-envio.ts';
 import type { MemoriaDaVenda } from './venda-do-dia.ts';
 import type { RodadaComercial } from './rodada-comercial.ts';
+import { lerJustificativaComercial } from '../src/operations/justificativa-comercial.ts';
 
 /**
  * O time comercial na Central (19/10/2026). O time em si roda no Dell (deploy/dell/frente-comercial.py,
@@ -89,6 +90,7 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
     fila: (Array.isArray(bruto.fila) ? bruto.fila : []).slice(0, 100).map((l: Record<string, unknown>) => ({
       id: l.id, empresa: l.empresa, produto: l.produto, setor: l.setor, nota: l.nota, estado: l.estado, motivo: l.motivo,
       avaliacoes: l.avaliacoes, enviadoEm: l.enviadoEm, mensagem: l.mensagem,
+      justificativaComercial: lerJustificativaComercial(l.justificativaComercial),
     })),
   };
 }

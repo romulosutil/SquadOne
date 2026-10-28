@@ -1,4 +1,5 @@
 import { validarPublicacaoCrm, falhaMaisRecenteQueRetrato, type CrmPublicacao, type CrmUltimaFalha } from './publicacao-crm.ts';
+import { comGuardaConversa } from './guarda-conversa.ts';
 import { resumirSinaisComerciais } from '../src/operations/sinais-comerciais.ts';
 import { PREFIXO_RESPONSAVEL, lerResponsavelConversa, textoResponsavelConversa, projetarResponsavelConversa, validarSucessaoResponsavel, identidadeDaConversa } from '../src/operations/responsavel-conversa.ts';
 import { timingSafeEqual } from 'node:crypto';
@@ -545,6 +546,7 @@ export interface CrmLink {
 }
 
 export interface CrmLead {
+  encontradoContratacao?:import('../src/operations/encontrado-proposta').ContratacaoEncontradoVisao;
   atendimentoComercial?: {id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string;identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel';ocorridoEm?:string};
   aarr?: ReceitaDoLead;
   revisaoComercial?: string;
@@ -2353,6 +2355,7 @@ export interface ConfigDoCrm {
   /** A pasta das conversas que o observador grava (WHATSAPP_CONVERSAS_DIR); ausente = a visão sem conversa. */
   conversas?: string;
   journalComercial?: string;
+  guardaConversas?: string;
 }
 
 function ehLoopback(url: URL): boolean {
@@ -2539,6 +2542,10 @@ function chaveComercialDoRegistro(registro: { tipo: string; texto: string }, opo
 }
 
 export class CrmStore {
+  /** A tomada humana e o transporte automático usam a mesma exclusão por conversa. */
+  comConversaExclusiva<T>(conversa: string, acao: () => Promise<T>): Promise<T> {
+    return comGuardaConversa(this.config.guardaConversas ?? path.join(path.dirname(this.config.journalComercial ?? this.config.retrato), 'atendimento-conversas'), conversa, acao);
+  }
   private readonly aarrEmCurso = new Map<string, Promise<RespostaDoRegistro>>();
   private readonly journalComercial: RegistroComercialDuravel;
   private readonly cadenciasConfirmadas = new Map<string, Promise<RespostaDoRegistro>>();
@@ -2720,7 +2727,7 @@ export class CrmStore {
       const chave = dono ? `conversa:${dono.conta}:${dono.conversa}` : `${registro.produto}:${registro.id}`;
       const anterior = this.aarrEmCurso.get(chave);
       if (anterior) { await anterior.catch(() => undefined); return this.registrar(entrada, agora) }
-      const resposta = this.gravar(registro, agora);
+      const resposta = dono ? this.comConversaExclusiva(dono.conversa, () => this.gravar(registro, agora)) : this.gravar(registro, agora);
       this.aarrEmCurso.set(chave, resposta);
       try { return await resposta } finally { if (this.aarrEmCurso.get(chave) === resposta) this.aarrEmCurso.delete(chave) }
     }

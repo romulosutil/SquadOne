@@ -36,6 +36,11 @@ test('resumo não publica conversa, notas, contato, links WhatsApp ou condiçõe
  for(const segredo of ['99999-1234','contato@example.test','nota privada','123.456.789-00','Texto privado','recibo-sensivel','987654','123456','condicao-secreta','wa.me','5511999991234'])assert.ok(!texto.includes(segredo),segredo)
  assert.equal(p.ciclo.estado,'rascunho');assert.ok(p.bloqueios.includes('ciclo-comercial'));assert.equal(p.contatoAutorizado,false);assert.equal(JSON.stringify(l),antes)
 })
+test('aceite da Autentique chega como observação distinta, sem documento privado ou confirmação financeira',async()=>{
+ const l=lead({encontradoContratacao:{referencia:'a'.repeat(64),estado:'assinada',criadaEm:EM,validaAte:'2026-11-08T14:00:00.000Z',modeloHash:'b'.repeat(64),documentoId:'documento-privado',aceiteEm:EM,origem:'encontrado-autentique',motivo:'motivo-privado'}})
+ const p=await projetar(l);assert.deepEqual(p.propostaAutomatica,{origem:'autentique',estado:'assinada',aceiteConfirmado:true,confirmaPagamento:false})
+ assert.equal(JSON.stringify(p).includes('documento-privado'),false);assert.equal(JSON.stringify(p).includes('motivo-privado'),false)
+})
 test('nota nova inválida governa em vez de recuperar qualificação anterior ou SPICED',async()=>{
  const q={...qualificacaoComercialVazia(Date.parse(EM)),id:'q-anterior',fonte:'Fonte privada',evidencia:'Evidência privada',necessidade:'necessidade privada',adequacao:{estado:'confirmada' as const,oferta:'encontrado' as const,motivo:'adequado'},intencao:'avaliar' as const,decisao:'Sócios decidem juntos',proximoPasso:{aceito:true,descricao:'Avaliar escopo'}}
  const l=lead({qualificacaoComercial:q,eventos:[nota(PREFIXO_QUALIFICACAO_COMERCIAL+JSON.stringify(q),'2026-10-23T14:00:00Z'),nota(PREFIXO_QUALIFICACAO_COMERCIAL+'inválida')]})

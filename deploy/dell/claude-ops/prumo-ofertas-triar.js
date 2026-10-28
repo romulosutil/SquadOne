@@ -71,7 +71,7 @@ const idsVistos = new Set();
 const whatsVistos = new Map();
 for (const no of CONFIG.leitores) {
   let linhas = [];
-  try { linhas = $(no).all().map((i) => i.json ?? {}); } catch (e) { linhas = []; }
+  try { linhas = $(no).all().map((i) => i.json ?? {}); } catch (e) { throw new Error('Falha ao ler fonte de deduplicação: ' + no + '. Triagem cancelada.'); }
   for (const l of linhas) {
     for (const k of ['ID', 'place_id', 'Google Place ID']) if (l[k]) idsVistos.add(String(l[k]).trim().toLowerCase());
     for (const k of ['WhatsApp', 'whatsapp', 'telefone', 'Telefone']) {

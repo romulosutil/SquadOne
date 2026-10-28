@@ -33,7 +33,7 @@ def outro_produto(produto,n='5511998887766'):
     if produto=='plus':
         l['plus']={'fixo':False};l['links']['enviar']='https://wa.me/'+n+'?text='+urllib.parse.quote(MSG)
     else:
-        l['sinal']='revisar';l['triagem']={'origemWhatsapp':'cadastro confirmado'}
+        l['sinal']='revisar';l['triagem']={'origemWhatsapp':'cadastro confirmado','sinais':'ABA · TEA' if produto=='iris' else 'camisetas · silk'}
         l['links']['convite']='https://wa.me/'+n+'?text='+urllib.parse.quote(MSG)
     return l
 
@@ -107,11 +107,11 @@ class Frente(unittest.TestCase):
     def test_taxa_historica_so_pesa_com_dez_contatos_observados(self):
         ls=[]
         for i in range(10):
-            l=outro_produto('iris',f'55119988877{i:02}')|{'etapa':'contato','nicho':'terapia','marcos':{'enviado':f.iso(self.now)}}
-            if i<3:l['conversa']={'ultimaEntrada':f.iso(self.now)}
+            l=outro_produto('iris',f'55119988877{i:02}')|{'etapa':'contato','nicho':'terapia','marcos':{'enviado':f.iso(self.now-dt.timedelta(days=3))}}
+            if i<3:l['conversa']={'ultimaEntrada':f.iso(self.now)};l['classificacaoResposta']={'houveRespostaHumana':True,'classe':'acesso'}
             ls.append(l)
         taxas=f.taxas_por_setor({'leads':ls})
-        novo=outro_produto('iris')|{'nicho':'terapia','triagem':{'prioridade':70,'origemWhatsapp':'confirmado'}}
+        novo=outro_produto('iris')|{'nicho':'terapia','triagem':{'prioridade':70,'origemWhatsapp':'confirmado','sinais':'ABA · TEA'}}
         self.assertEqual(taxas[('iris','terapia')],0.3)
         self.assertEqual(f.prioridade_do_candidato(novo,taxas),76)
         self.assertEqual(f.taxas_por_setor({'leads':ls[:9]}),{})
@@ -430,7 +430,7 @@ class Frente(unittest.TestCase):
         leads=[lead(f'site:{i}',f'5511998{i:06}') for i in range(61)]
         ultimo=leads[-1]
         anterior={'dia':'2026-10-19','fila':[{'id':ultimo['id'],'empresa':ultimo['empresa'],'produto':'site',
-            'setor':f.setor(ultimo),'nota':80,'estado':'pronto','hash':f.fingerprint(ultimo)}]}
+            'setor':f.setor(ultimo),'nota':80,'estado':'pronto','hash':f.fingerprint(ultimo),'avaliacaoVersao':f.VERSAO_AVALIACAO}]}
         (self.data/'frente-comercial.json').write_text(json.dumps(anterior))
         x=self.rodar({'estado':'ok','leads':leads},lambda l:{'reservado':False,'motivo':'intervalo'})
         self.assertIn(ultimo['id'],[c['id'] for c in x.estados[-1]['fila']])

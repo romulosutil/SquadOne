@@ -10,6 +10,10 @@ import {
   type Criterio, type LinhaDeResultado, type Periodo,
 } from './resultados'
 import type { CrmLead } from './types'
+import { resumoDasRespostas } from './classificacao-resposta'
+import CrmClassificacaoRespostas from './CrmClassificacaoRespostas.vue'
+import CrmRetomadasRevisadas from './CrmRetomadasRevisadas.vue'
+import { enviadoNoPeriodo } from './resultados'
 import PorQueNaoVende from './PorQueNaoVende.vue'
 import { aprendizadosDosLeads, ROTULO_DO_TESTE } from './aprendizado-comercial'
 import { MINIMO_POR_BRACO_DO_RECIBO, leituraDoTesteDoRecibo } from './ab-recibo'
@@ -33,6 +37,7 @@ const taxaDaOrigem = (taxa: number | null) => (taxa === null ? `amostra pequena 
 const dinheiro = (centavos: number) => (centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 const periodo = ref<Periodo>('30')
+const respostas = computed(() => resumoDasRespostas(props.leads.filter(l => enviadoNoPeriodo(l, periodo.value, props.agora)), props.agora))
 const testePlus = computed(() => leituraDoTestePlus(props.leads, props.agora))
 const testeFollowup = computed(() => leituraDoFollowup(props.leads))
 const aprendizados = computed(() => aprendizadosDosLeads(props.leads))
@@ -102,6 +107,8 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
       </p>
     </div>
 
+    <CrmClassificacaoRespostas v-if="parte === 'resultados'" :resumo="respostas" :periodo="periodo" />
+
     <template v-if="parte === 'numeros'">
       <section class="crm-grupo" aria-labelledby="crm-aarr-titulo">
         <header class="crm-grupo__cabeca"><h2 id="crm-aarr-titulo">AARRR · da conversa ao pagamento</h2></header>
@@ -134,6 +141,8 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
           <p class="crm-nota-pequena">Só o que foi confirmado na Ficha, com o valor do cardápio. Proposta enviada não é pagamento, e a soma mistura todas as ofertas da seleção.</p>
         </div>
       </section>
+      <CrmClassificacaoRespostas :resumo="respostas" :periodo="periodo" />
+      <CrmRetomadasRevisadas :leads="leads" />
       <section class="crm-grupo" aria-labelledby="crm-plus-teste">
         <header class="crm-grupo__cabeca"><h2 id="crm-plus-teste">Plus · teste de {{ TAMANHO_DO_TESTE_PLUS }} envios</h2></header>
         <p class="crm-grupo__explicacao">Primeiros envios confirmados desde {{ dataCurta(new Date(testePlus.inicio).toISOString()) }}. {{ testePlus.plus.enviados }} de {{ TAMANHO_DO_TESTE_PLUS }} no lote. Somente o Rômulo envia. Comparação com o Site enviado no mesmo período, até {{ dataHora(new Date(testePlus.fim).toISOString()) }}; respostas observadas até {{ dataHora(new Date(testePlus.observacaoAte).toISOString()) }}.</p>

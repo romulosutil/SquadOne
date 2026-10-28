@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { timingSafeEqual } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { registrarProvaHermes } from './identidade_captura.mjs'
+import { jidCanonico, registrarProvaHermes } from './identidade_captura.mjs'
 
 export function chaveDoNumero(valor) {
   let d = String(valor || '').split('@')[0].split(':')[0].replace(/\D/g, '')
@@ -13,6 +13,9 @@ export function chaveDoNumero(valor) {
 
 export function createSquadoneHistory({ home, session, getSocket, getContent, baixarAudio, agora = Date.now, arquivar }) {
   const pedidos = new Map()
+  // squadone:identidade-historico-v1 — a correlação com o socket nunca vai à resposta HTTP.
+  const socketsDosPedidos = new Map()
+  const pedidosOriginais = new Map()
   const validadeDoPedido = 10 * 60_000
   const diagnostico = { eventos: 0, mensagens: 0, solicitadas: 0, semCorrelacao: 0, foraDaJanela: 0, semTexto: 0, semTextoPorFormato: {}, falhasAncoras: 0 }
   const audios = new Map()
@@ -100,17 +103,19 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
     for (const campo of ['buttonsMessage', 'templateMessage', 'interactiveMessage', 'listMessage', 'highlyStructuredMessage', 'interactiveResponseMessage', 'richResponseMessage']) ler(c[campo])
     return partes.join('\n')
   }
-  function receber({ messages = [] } = {}) {
+  function receber({ messages = [] } = {}, captura) {
     diagnostico.eventos++
     diagnostico.mensagens += messages.length
     let lista
     try { lista = permitidos() } catch { return }
     const lotes = new Map()
+    const provasDosLotes = new Map()
     for (const m of messages.slice(0, 5000)) {
       const chave = resolver(m.key)
       const pedido = pedidos.get(chave)
       if (!lista.has(chave) || !pedido) { diagnostico.semCorrelacao++; continue }
       if (agora() - pedido.solicitadoEm > validadeDoPedido) { diagnostico.foraDaJanela++; continue }
+      if(captura && (captura.socket!==getSocket()||captura.socket!==socketsDosPedidos.get(chave)))continue
       if (typeof m.key?.fromMe !== 'boolean') continue
       diagnostico.solicitadas++
       const ts = Number(m.messageTimestamp)
@@ -136,6 +141,18 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
       if (lote.length >= 200) continue
       lote.push({ chave, ts, direcao: m.key.fromMe ? 'saida' : 'entrada', texto, id: String(m.key.id).slice(0, 200) })
       lotes.set(chave, lote)
+      if(captura) {
+        let pn=jidCanonico(m.key.remoteJid)||jidCanonico(m.key.remoteJidAlt)
+        // Para LID sem PN, somente o mapa da própria sessão autenticada pode resolver o alias.
+        if(!pn&&/^\d+@lid$/.test(m.key.remoteJid))try {
+          const valor=JSON.parse(fs.readFileSync(path.join(session,`lid-mapping-${m.key.remoteJid.split('@')[0]}_reverse.json`),'utf8'))
+          const numero=String(valor).split('@')[0]
+          if(/^55\d{10,11}$/.test(numero)&&chaveDoNumero(numero)===chave)pn=numero+'@s.whatsapp.net'
+        } catch { /* Não adivinhar um telefone sem mapa da sessão. */ }
+        const provas=provasDosLotes.get(chave)||[]
+        provas.push({...captura,chave,ts,texto,id:String(m.key.id),direcao:m.key.fromMe?'saida':'entrada',destinatario:pn,destinatarioAlternativo:m.key.remoteJidAlt})
+        provasDosLotes.set(chave,provas)
+      }
     }
     for (const [chave, lote] of lotes) {
       const pedido = pedidos.get(chave)
@@ -143,7 +160,13 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
         const r = arquivar ? arquivar(lote) : spawnSync('python3', [path.join(home, '.local/bin/squadone-historico-arquivar')], { input: JSON.stringify(lote), encoding: 'utf8', timeout: 8000, maxBuffer: 100_000 })
         if (r.status !== 0) throw new Error('Falha ao arquivar o retorno.')
         const salvo = JSON.parse(r.stdout)
-        pedidos.set(chave, { ...pedido, recebidoEm: agora(), recebidas: (pedido.recebidas || 0) + lote.length, gravadas: (pedido.gravadas || 0) + salvo.gravadas })
+        let comprovadas=0,semProva=0
+        for(const prova of provasDosLotes.get(chave)||[]) {
+          const resultado=registrarProvaHermes({...prova,home,socketAtual:getSocket,agora:agora()})
+          if(['gravada','repetida'].includes(resultado.estado))comprovadas++;else semProva++
+        }
+        pedidos.set(chave, { ...pedido, recebidoEm: agora(), recebidas: (pedido.recebidas || 0) + lote.length, gravadas: (pedido.gravadas || 0) + salvo.gravadas,
+          comprovadas:(pedido.comprovadas||0)+comprovadas,semProva:(pedido.semProva||0)+semProva })
       } catch { pedidos.set(chave, { ...pedido, erro: 'O histórico retornou, mas não foi arquivado.' }) }
     }
   }
@@ -152,6 +175,23 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
     const chave = req.body?.chave
     try {
       if (typeof chave !== 'string' || !/^\d{10}$/.test(chave) || !permitidos().has(chave)) return res.status(404).json({ error: 'Lead não encontrado.' })
+      if(req.body?.conferirOriginais===true) {
+        const antes=pedidosOriginais.get(chave)
+        if(antes&&agora()-antes.iniciadoEm<validadeDoPedido)return res.json({...antes,cobertura:'parcial'})
+        const sock=getSocket()
+        if(!sock?.requestPlaceholderResend)return res.status(503).json({error:'A sessão não oferece releitura de mensagem original.'})
+        const lista=JSON.parse(fs.readFileSync(ancoras,'utf8'))[chave]||[]
+        const exatas=lista.filter(a=>typeof a.id==='string'&&/^[A-Za-z0-9_-]{3,200}$/.test(a.id)&&typeof a.fromMe==='boolean'&&Number.isFinite(a.ts)&&a.ts>0&&a.ts*1000<=agora()&&resolver({remoteJid:a.jid})===chave).slice(0,10)
+        if(!exatas.length)return res.status(409).json({error:'Nenhum identificador original conferido está disponível.'})
+        const estado={iniciadoEm:agora(),solicitadas:0,concluidas:0,erros:0}
+        pedidosOriginais.set(chave,estado)
+        for(const a of exatas) {
+          if(getSocket()!==sock){estado.erros++;break}
+          const key={remoteJid:a.jid,id:a.id,fromMe:a.fromMe}
+          try {await sock.requestPlaceholderResend(key,{key,messageTimestamp:a.ts});estado.solicitadas++;estado.concluidas++}catch{estado.erros++}
+        }
+        return res.json({...estado,cobertura:'parcial',aviso:'Releitura solicitada ao aparelho; conferir a prova capturada antes de agir.'})
+      }
       const numero = String(req.body?.numero || '')
       const numeroConferido = /^55\d{10,11}$/.test(numero) && chaveDoNumero(numero) === chave
       // Uma âncora antiga pagina para trás e perde respostas posteriores à queda.
@@ -160,16 +200,19 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
       if (req.body?.somenteConsultar === true) return res.json({ ...(anterior || { recebidas: 0, gravadas: 0 }), solicitado: Boolean(anterior), diagnostico, cobertura: 'parcial' })
       if (anterior && Boolean(anterior.janelaRecente) === janelaRecente && agora() - anterior.solicitadoEm < validadeDoPedido && !(req.body?.audio === true && !anterior.comAudio)) return res.json({ ...anterior, cobertura: 'parcial' })
       const lista = JSON.parse(fs.readFileSync(ancoras, 'utf8'))[chave] || []
-      const ancora = janelaRecente ? null : lista.filter((a) => a.id && a.jid && Number.isFinite(a.ts)).sort((a, b) => b.ts - a.ts)[0]
+      const conhecida = lista.filter((a) => a.id && a.jid && Number.isFinite(a.ts)).sort((a, b) => b.ts - a.ts)[0]
+      const ancora = janelaRecente ? null : conhecida
       const semAncora = !ancora && numeroConferido
       if (!ancora && !semAncora) return res.status(409).json({ error: 'Sem identificador real nem telefone completo conferido para pedir o histórico deste lead.' })
-      if (ancora && resolver({ remoteJid: ancora.jid }) !== chave) return res.status(409).json({ error: 'Identidade da âncora não conferida para este lead.' })
+      if (conhecida && resolver({ remoteJid: conhecida.jid }) !== chave) return res.status(409).json({ error: 'Identidade da âncora não conferida para este lead.' })
       const sock = getSocket()
       if (!sock?.fetchMessageHistory) return res.status(503).json({ error: 'Hermes sem conexão de histórico.' })
-      if (pedidos.size >= 100) pedidos.delete(pedidos.keys().next().value)
+      if (pedidos.size >= 100) {const antiga=pedidos.keys().next().value;pedidos.delete(antiga);socketsDosPedidos.delete(antiga)}
+      socketsDosPedidos.set(chave,sock)
       pedidos.set(chave, { solicitadoEm: agora(), recebidas: 0, gravadas: 0, metodo: janelaRecente ? 'janela-recente' : ancora ? 'ancora-real' : 'janela-sem-id', janelaRecente, comAudio: req.body?.audio === true })
       // Campo oldestMsgId opcional no protocolo instalado. Nunca inventa um identificador.
-      const jid = ancora?.jid?.endsWith('@lid') ? ancora.jid : jidDaSessao(chave) || ancora?.jid || `${numero}@s.whatsapp.net`
+      // A janela recente também precisa do LID do chat: PN pode devolver vazio em conversas migradas.
+      const jid = conhecida?.jid?.endsWith('@lid') ? conhecida.jid : jidDaSessao(chave) || ancora?.jid || `${numero}@s.whatsapp.net`
       await sock.fetchMessageHistory(50, ancora ? { remoteJid: jid, id: ancora.id, fromMe: ancora.fromMe } : { remoteJid: jid }, ancora ? ancora.ts * 1000 : agora())
       return res.status(202).json({ ...pedidos.get(chave), cobertura: 'parcial', aviso: 'Pedido enviado ao aparelho. Ainda não confirma recebimento do histórico.' })
     } catch { return res.status(503).json({ error: 'Não foi possível consultar o histórico agora.' }) }

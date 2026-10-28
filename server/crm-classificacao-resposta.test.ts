@@ -43,4 +43,10 @@ describe('CRM usa evidência contextual sem reescrever a origem',()=>{
     const {l}=montar('Posso enviar o vídeo?','Pode enviar','licenca','Sem interesse')
     assert.equal(l.etapa,'perdido');assert.equal(l.motivoPerda,'sem-interesse')
   })
+  it('bot com positivo legado não libera cadência de conversa e preserva a fonte',()=>{
+    const {l}=montar('Consigo falar com o responsável?','Empresa agradece seu contato. Como podemos ajudar?','interesse')
+    assert.equal(l.classificacaoResposta?.classe,'robo');assert.equal(l.classificacaoResposta?.houveRespostaHumana,false)
+    assert.equal(l.resposta?.tipo,'bot');assert.equal(l.respostaFonte?.tipo,'interesse')
+    assert.equal(l.interesseParado,undefined);assert.equal(quisVer(l as never),false)
+  })
 })

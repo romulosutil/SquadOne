@@ -279,29 +279,38 @@ def _id_da_mensagem(item: dict) -> str:
 
 
 def jid_da_conversa(item: dict, mapas: "Mapas | None" = None) -> tuple[str, str, str]:
-    """(jid com telefone, motivo do descarte, usuário @lid visto). O telefone sai do remoteJid ou, nos
-    campos alternativos, de remoteJidAlt/senderPn/participantAlt; um @lid sozinho (recibo de leitura)
-    só vale se `mapas` já aprendeu o telefone dele ou da mensagem."""
+    """Resolve o CHAT 1:1, nunca o remetente/participante como destinatário.
+
+    Para remoteJid em LID, a correlação confirmada da sessão precede hints e caches.
+    senderPn e participantAlt identificam participantes e não provam qual é o chat.
+    """
     chave = item.get("key") if isinstance(item.get("key"), dict) else {}
     principal = chave.get("remoteJid") or item.get("remoteJid") or ""
     if not isinstance(principal, str) or not principal:
         return "", "sem_chat", ""
-    # Os campos alternativos só valem para conversa 1:1. Em grupo ou status o participantAlt é o REMETENTE,
-    # e a mensagem não foi escrita a nós: sem esta trava, o lead que fala num grupo viraria "respondeu".
     if principal.partition("@")[2] not in ("lid", "s.whatsapp.net", "c.us"):
         return "", "nao_e_conversa_1a1", ""
-    candidatos = [principal] + [onde.get(c) for onde in (chave, item)
-                                for c in ("remoteJidAlt", "senderPn", "participantAlt")]
+    candidatos = [principal] + [onde.get("remoteJidAlt") for onde in (chave, item)]
     lid = next((u for c in candidatos if (u := _usuario_lid(c))), "")
-    jid = next((j for c in candidatos if (j := jid_de_telefone(c))), "")
-    if jid:
-        return jid, "", lid
-    dominio = principal.partition("@")[2]
-    if dominio == "lid":
+    confirmado = mapas.da_sessao(lid) if mapas is not None and lid else ""
+    jid_principal = jid_de_telefone(principal)
+    if jid_principal:
+        # Um alt LID contraditório não pode envenenar o mapa deste chat em telefone.
+        return jid_principal, "", "" if confirmado and confirmado != jid_principal else lid
+    if confirmado:
+        return confirmado, "", lid
+    jids = {j for c in candidatos if (j := jid_de_telefone(c))}
+    if len(jids) > 1:
+        return "", "lid_conflitante", lid
+    if jids:
+        return next(iter(jids)), "", lid
+    if principal.partition("@")[2] == "lid":
         if mapas is not None:
-            achado = mapas.lid.get(lid) or mapas.msg.get(_id_da_mensagem(item)) or mapas.da_sessao(lid)
-            if achado:
-                return achado, "", lid
+            achados = {j for j in (mapas.lid.get(lid), mapas.msg.get(_id_da_mensagem(item))) if j}
+            if len(achados) > 1:
+                return "", "lid_conflitante", lid
+            if achados:
+                return next(iter(achados)), "", lid
         return "", "lid_sem_telefone", lid
     return "", "nao_e_conversa_1a1", lid
 
@@ -964,7 +973,7 @@ class Adaptador:
         if id_msg and not id_valido(id_msg): raise ValueError('id de mensagem inválido')
         limpo = {'key': {'remoteJid': jid, 'fromMe': de_mim, 'id': id_msg},
                  'messageTimestamp': hora_do_evento(item.get('messageTimestamp'), agora)}
-        for campo in ('remoteJidAlt', 'senderPn', 'participantAlt'):
+        for campo in ('remoteJidAlt',):
             valor = key.get(campo) or item.get(campo)
             if jid_de_telefone(valor) or _usuario_lid(valor): limpo['key'][campo] = valor
         if evento == 'MESSAGES_UPDATE': limpo['status'] = 'READ'
@@ -1046,7 +1055,7 @@ class Adaptador:
                             if len(contextos) >= 8: raise OSError('limite de identidades da captura')
                             contextos.append(novo_contexto)
                     antiga = estado['pendentes'][chave]['corpo']['data']['key']
-                    for campo in ('remoteJidAlt','senderPn','participantAlt'):
+                    for campo in ('remoteJidAlt',):
                         if campo in compacto['data']['key']: antiga[campo] = compacto['data']['key'][campo]
                     if jid_de_telefone(compacto['data']['key']['remoteJid']) and not jid_de_telefone(antiga['remoteJid']):
                         antiga['remoteJidAlt'] = compacto['data']['key']['remoteJid']

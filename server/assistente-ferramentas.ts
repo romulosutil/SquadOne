@@ -27,7 +27,7 @@ import type { ConsultaAoHermes } from "./hermes-consulta.ts";
 
 export const LER_SUGESTAO_DO_COPILOTO = "ler_sugestao_do_copiloto";
 export const LEITURAS = [
-  "ler_hoje", "ler_funil", "ler_proxima_venda", "buscar_lead", "ler_lead", "ler_agenda_do_dia", "ler_estado_do_dell", LER_SUGESTAO_DO_COPILOTO,
+  "ler_hoje", "ler_funil", "ler_filtro_leads", "ler_proxima_venda", "buscar_lead", "ler_lead", "ler_agenda_do_dia", "ler_estado_do_dell", LER_SUGESTAO_DO_COPILOTO,
 ] as const;
 export type NomeDaLeitura = (typeof LEITURAS)[number];
 export const CONSULTAR_HERMES = "consultar_hermes";
@@ -36,6 +36,7 @@ const PRODUTO = { type: Type.STRING, enum: ["site", "prumo", "iris", "estampa", 
 const ID = { type: Type.STRING, description: "O id do lead, como buscar_lead devolve. Nunca invente." };
 
 const DECLARACOES_DE_LEITURA: FunctionDeclaration[] = [
+  { name: "ler_filtro_leads", description: "Curadoria diária da Marina: cobertura dos contatos de hoje, recusas, acesso, robôs, silêncio, avanços confirmados e padrões maduros que orientam a seleção. Sem envio ou escrita." },
   { name: "ler_hoje", description: "O que precisa do Rômulo hoje em Vendas: os grupos da Hoje do CRM (responder, follow-up, combinados, propostas), com os primeiros de cada." },
   { name: "ler_funil", description: "Quantos leads há em cada etapa do funil (novo, contato, proposta, ganho, perdido), por oferta, e as perdas." },
   { name: "ler_proxima_venda", description: "As 5 primeiras ações da fila de venda, na ordem de quem está mais perto de comprar, com o porquê e a tática." },
@@ -122,6 +123,7 @@ export function declaracoesDoAssistente(opcoes: { hermes: boolean; copiloto?: bo
 // --- As fontes -----------------------------------------------------------------
 
 export interface FontesDoAssistente {
+  filtroLeads?: () => Promise<Record<string, unknown>>;
   /** Só para resolver a identidade escolhida; não é ferramenta do modelo. */
   roster?: () => Promise<import('./squad.ts').Roster>;
   /** A visão do CRM (CrmStore.visao); ausente = CRM não configurado nesta Central. */
@@ -243,6 +245,12 @@ export class LeiturasDaMensagem {
             })),
           })),
         };
+      }
+      case "ler_filtro_leads": {
+        const r = await this.fontes.filtroLeads?.();
+        if (!r || r.semSinal) return r ?? { semSinal: true, motivo: 'Curadoria diária indisponível nesta Central.' };
+        this.anotar({ tipo: 'crm', geradoEm: typeof r.geradoEm === 'string' ? r.geradoEm : undefined });
+        return r;
       }
       case "ler_funil": {
         const v = await this.visao();

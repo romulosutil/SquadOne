@@ -5,6 +5,23 @@ description: Consultar os estados comerciais atuais da Central para Site, PRUMO,
 
 # Conversa do lead
 
+## Modelo geral e consulta individual — 25/10/2026
+
+Para perguntas sobre o funcionamento comercial, comece por **Como vender e
+operar** na Central, acessível em Configurações e no topo de Vendas
+(`/mais?abrir=operacao#modelo-operacional`). O modelo reúne catálogo, passagens,
+rotina, capacidade, indicadores e gates; não é outra base de clientes.
+
+Só depois, quando houver uma oportunidade específica, use a leitura GET abaixo.
+O modelo geral explica o procedimento; a leitura atual informa regra aplicada,
+frescor, autoridade, lacunas, dono e bloqueios daquela oportunidade. Não copie
+catálogo, preço, conversa ou fatos humanos para memória como substituto da fonte.
+
+Resuma ao Rômulo: fonte/frescor, estado e evidência, lacuna, próxima ação interna,
+quem confirma e condição de conclusão/espera. A disponibilidade qualitativa dele
+está confirmada; não invente horas ou prazo. A pausa de aquisição não proíbe seu
+atendimento manual legítimo e não libera envio automático ou negociação Hermes.
+
 ## Escopo comercial atual — 24/10/2026
 
 Esta seção rege o atendimento comercial quando houver divergência com a descrição

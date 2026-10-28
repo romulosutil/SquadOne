@@ -110,6 +110,53 @@ describe('classificação comercial contextual', () => {
     const negativa=resposta('Não, obrigado','negativa')
     assert.equal(respostaParaAcompanhamento(negativa,{...c,classe:'permissao'}),negativa,'nunca reabre a recusa')
   })
+  it('agradecimento com resposta específica não vira robô nem apaga a recusa da fonte',()=>{
+    for(const texto of [
+      '*Atendente Exemplo*\nBom dia! Agradecemos o contato, contudo já possuímos nosso próprio sistema.',
+      'Agradecemos o contato, mas não oferecemos atendimento; somos uma instituição educacional de formação profissional.',
+      'Olá Rômulo! Agradecemos o contato! Mas utilizamos um sistema criado pelo nosso diretor e desenvolvedor.',
+    ]) {
+      const c=classificarResposta(lead(resposta(texto,'negativa')),conversa('Posso apresentar o sistema?',texto),AGORA)
+      assert.equal(c.classe,'recusa',texto);assert.equal(c.houveRespostaHumana,true,texto)
+    }
+  })
+  it('assinatura de atendente e agradecimento posterior preservam a recusa',()=>{
+    const ms=[...conversa('Posso apresentar o serviço?','*Secretária Geral*:\nNão temos interesse no momento'),
+      {em:'2026-10-21T11:02:01Z',direcao:'entrada' as const,texto:'*Secretária Geral*:\nObrigada'}]
+    const c=classificarResposta(lead({...resposta(ms[2].texto,'neutra'),em:ms[2].em}),ms,AGORA)
+    assert.equal(c.classe,'recusa');assert.match(c.evidencia?.trecho??'',/Não temos interesse/)
+    assert.equal(respostaParaAcompanhamento(resposta(ms[2].texto,'neutra'),c)?.tipo,'negativa')
+  })
+  it('por nada após encaminhamento não apaga a indicação nem autoriza abordar outro contato',()=>{
+    for(const texto of ['Boa tarde, segue o contato','Contato dele 27 99999-0000','Ele é a pessoa que cuida da divulgação da empresa.']) {
+      const ms=[...conversa('Quem cuida da empresa?',texto),{em:'2026-10-21T11:10:00Z',direcao:'entrada' as const,texto:'Por nada'}]
+      const c=classificarResposta(lead({...resposta('Por nada','neutra'),em:ms[2].em}),ms,AGORA)
+      assert.equal(c.classe,'acesso',texto);assert.equal(c.materialSolicitado,false)
+    }
+  })
+  it('destinatário errado permanece em conferência depois de um ok',()=>{
+    const ms=[...conversa('Falo com a empresa?','[áudio 22s] Não tenho nada a ver com essa empresa. Tem alguma coisa errada no número.'),
+      {em:'2026-10-21T11:03:00Z',direcao:'entrada' as const,texto:'Ok'}]
+    const c=classificarResposta(lead({...resposta('Ok','neutra'),em:ms[2].em}),ms,AGORA)
+    assert.equal(c.classe,'pendente');assert.equal(c.revisar,true);assert.match(c.evidencia?.trecho??'',/errada no número/)
+    assert.equal(c.materialSolicitado,false)
+    assert.equal(classificarResposta(lead(resposta('Não sou o responsável pela empresa','neutra')),conversa('Quem decide?','Não sou o responsável pela empresa'),AGORA).revisar,false)
+  })
+  it('agradecimento ou telefone encaminhado não confirmam uma negativa antiga contraditória',()=>{
+    for(const texto of ['agradecemos o contato.','Centro Exemplo – Fone: (48) 33810000 Ramal 6966']) {
+      const r=resposta(texto,'negativa'),c=classificarResposta(lead(r),conversa('Com quem falo?',texto),AGORA)
+      assert.equal(c.classe,'pendente',texto);assert.equal(c.revisar,true)
+      assert.equal(respostaParaAcompanhamento(r,c),r,'preserva a restrição até revisão, sem reabrir contato')
+    }
+  })
+  it('trecho sem histórico conserva encaminhamento de marketing e pedido de exclusão de conteúdo',()=>{
+    const texto='Para fazer parcerias com nosso time de marketing é necessário apresentar seu portfólio enviando para nosso e-mail marketing@example.com'
+    const encaminhou=classificarResposta(lead(resposta(texto,'neutra')),undefined,AGORA)
+    assert.equal(encaminhou.classe,'acesso');assert.equal(encaminhou.materialSolicitado,false)
+    const r=resposta('Já temos uma agência, se puder excluir esse conteúdo por gentileza','negativa')
+    const excluir=classificarResposta(lead(r),undefined,AGORA)
+    assert.equal(excluir.classe,'exclusao');assert.equal(respostaParaAcompanhamento(r,excluir),r)
+  })
   it('resumo particiona só enviados, ignora futuros e separa leituras', () => {
     const ls=[lead(),lead(undefined,{marcos:{enviado:ENVIO,visto:RESPOSTA}}),lead(resposta('Quanto custa?')),lead(resposta('Pode mandar','licenca')),lead(resposta('','bot')),lead(undefined,{marcos:{}}),lead(undefined,{marcos:{enviado:'2027-01-01T12:00:00Z'}})]
     const r=resumoDasRespostas(ls,AGORA)
@@ -117,4 +164,45 @@ describe('classificação comercial contextual', () => {
     assert.equal(r.classes.interesse,1);assert.equal(r.classes.permissao,1);assert.equal(r.classes.robo,1)
     assert.equal(r.leituraSemResposta,1);assert.equal(r.semLeituraSemResposta,1)
   })
+  it('agradecimento posterior não apaga recusa explícita recuperada no histórico', () => {
+    const ms=[...conversa('Podemos conversar?','infelizmente não estamos interessado tá'),
+      {em:'2026-10-21T11:02:30Z',direcao:'saida' as const,texto:'Obrigado pelo retorno'},
+      {em:'2026-10-21T11:02:40Z',direcao:'entrada' as const,texto:'de nadaa'}]
+    const l=lead({...resposta('de nadaa','neutra'),em:ms[3].em})
+    const c=classificarResposta(l,ms,AGORA)
+    assert.equal(c.classe,'recusa');assert.match(c.evidencia?.trecho??'',/não estamos interessado/)
+    assert.equal(c.materialSolicitado,false)
+    assert.equal(respostaParaAcompanhamento(l.resposta,c)?.tipo,'negativa')
+    assert.equal(classificarResposta(lead(resposta('Não','neutra')),conversa('Vocês usam CRM?','Não'),AGORA).classe,'neutra')
+  })
+  it('contato de loja indicado pelo shopping é encaminhamento, sem presumir interesse',()=>{
+    const texto='BORDADOS EXEMPLO\n43 99999-0000 | TÉRREO'
+    const ms=[...conversa('Consigo falar com o responsável?','Obrigado por entrar em contato com o Shopping Exemplo'),
+      {em:'2026-10-21T11:10:00Z',direcao:'entrada' as const,texto}]
+    const c=classificarResposta(lead({...resposta(texto,'neutra'),em:ms[2].em}),ms,AGORA)
+    assert.equal(c.classe,'acesso');assert.equal(c.materialSolicitado,false)
+  })
+  it('saudações do lote não viram resposta humana mesmo com rótulo legado incorreto',()=>{
+    for(const texto of [
+      'Empresa Exemplo agradece seu contato. Como podemos ajudar?',
+      'Olá! Seja bem vindo (a). Qual produto deseja? Qual quantidade? Qual data de entrega?',
+      'Olá, seja muito bem vindo à empresa. Trabalhamos com uma diversidade de materiais!',
+      'A empresa agradece sua preferência. Nosso horário de funcionamento é de Segunda a sexta. Assim que nossa equipe estiver disponível, retornaremos seu contato.',
+      'Entraremos em contato. Horário comercial de: Seg. a Sexta 9 às 18h',
+      '*1/3* Olá, seja bem-vindo(a). Escolha uma das opções abaixo: 1 - Quero fazer um orçamento',
+    ])for(const tipo of ['interesse','licenca','neutra'] as const) {
+      const l=lead(resposta(texto,tipo)),antes=JSON.stringify(l)
+      const c=classificarResposta(l,conversa('Consigo falar com o responsável?',texto,'gente'),AGORA)
+      assert.equal(c.classe,'robo',texto);assert.equal(c.houveRespostaHumana,false,texto)
+      assert.equal(respostaParaAcompanhamento(l.resposta,c)?.tipo,'bot',texto)
+      assert.equal(JSON.stringify(l),antes)
+    }
+  })
+  it('robô anterior não apaga o acesso humano posterior da Stamp Fast',()=>{
+    const ms=[...conversa('Consigo falar com o responsável?','Olá, seja muito bem vindo à empresa!'),
+      {em:'2026-10-21T11:20:00Z',direcao:'entrada' as const,texto:'Pode falar por aqui sim!'}]
+    const c=classificarResposta(lead({...resposta(ms[2].texto,'neutra'),em:ms[2].em}),ms,AGORA)
+    assert.equal(c.classe,'acesso');assert.equal(c.houveRespostaHumana,true);assert.equal(c.materialSolicitado,false)
+  })
+
 })

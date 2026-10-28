@@ -22,6 +22,12 @@ const links = computed(() => ferramentasDoMais(props.tools))
           <span v-if="l.ponto" class="dell-dot" :class="l.ponto" aria-hidden="true" />
         </a>
       </li>
+      <li>
+        <a href="http://127.0.0.1:8787/" target="_blank" rel="noopener">
+          <span class="access__icone" aria-hidden="true">LP</span>
+          <span><strong>Linear Pessoal</strong><small>Issues dos projetos Pessoal e do GitHub · só no Dell</small></span>
+        </a>
+      </li>
     </ul>
   </section>
 </template>

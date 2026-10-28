@@ -19,9 +19,16 @@ const chave = (l: CrmLead) => {
   return createHash('sha256').update(destino).digest('hex')
 }
 function respostaHumana(l: CrmLead, depois: number, agora: number) {
-  const candidatos = [l.conversa?.ultimaEntrada,
-    l.classificacaoResposta?.houveRespostaHumana ? l.classificacaoResposta.evidencia?.em : undefined,
-    l.resposta && l.resposta.tipo !== 'bot' ? l.resposta.em : undefined]
+  const classificacao = l.classificacaoResposta
+  // Uma entrada sem papel pode ser um menu automático. Sua data, sozinha,
+  // não comprova humanidade, mesmo que o resumo legado a conte como gente.
+  if (classificacao && !classificacao.houveRespostaHumana) return false
+  const fonte = l.respostaFonte ?? l.resposta
+  const candidatos = [
+    classificacao?.houveRespostaHumana && classificacao.classe !== 'robo' ? classificacao.evidencia?.em : undefined,
+    fonte && fonte.tipo !== 'bot' ? fonte.em : undefined,
+    ...(l.conversa?.recentes ?? []).filter(m => m.direcao === 'entrada' && m.papel === 'recepcao').map(m => m.em),
+  ]
   return candidatos.some(v => { const em = Date.parse(v ?? ''); return em >= depois && em <= agora })
 }
 /** Junta reservas conservadoras e envios observados. Nem silêncio, prazo, perda automática ou robô liberam vaga. */

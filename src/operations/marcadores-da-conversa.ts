@@ -9,7 +9,9 @@
  * Assistente) leem daqui, para o mesmo marcador nunca ser lido de dois jeitos.
  */
 
-/** Quem escreveu uma mensagem de entrada que não é o lead falando por si. Ausente = gente (quem decide, até prova em contrário). */
+import { textoDeMensagemAutomatica } from './mensagem-automatica'
+
+/** Quem escreveu uma mensagem de entrada. Ausência de marcador não confirma humanidade ou decisão. */
 export type PapelDaMensagem = 'recepcao' | 'robo'
 
 /**
@@ -21,7 +23,8 @@ export type PapelDaMensagem = 'recepcao' | 'robo'
  * Valor gravado que não é um dos dois é ignorado (cai na leitura do texto).
  */
 export function papelDaMensagem(texto: string | undefined, gravado?: unknown): PapelDaMensagem | undefined {
-  if (gravado === 'recepcao' || gravado === 'robo') return gravado
+  if (gravado === 'robo' || textoDeMensagemAutomatica(texto??'')) return 'robo'
+  if (gravado === 'recepcao') return gravado
   const t = (texto ?? '').trimStart()
   if (RE_ROBO.test(t)) return 'robo'
   if (RE_RECEPCAO.test(t)) return 'recepcao'

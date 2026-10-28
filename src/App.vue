@@ -136,7 +136,7 @@ function executar(c: Comando) {
   paletaAberta.value = false
   const a = c.acao
   if (a.tipo === 'ir') {
-    if (a.href.startsWith('/entrada/')) window.location.assign(a.href)
+    if (a.href.startsWith('/entrada/') || /^https?:\/\//.test(a.href)) window.location.assign(a.href)
     else {
       // A mesma tela com outra busca (um lead ou a Triagem estando em Vendas, a Manutenção
       // estando no Mais) não remonta nada sozinha: ver reaberturaDepoisDeIr em casca/paleta.ts.

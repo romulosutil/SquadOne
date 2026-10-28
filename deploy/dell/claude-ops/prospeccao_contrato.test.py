@@ -64,8 +64,17 @@ class Prospeccao(unittest.TestCase):
             comum=js.replace(constante,'const CONFIG = __CONFIG__;')
             if assinatura is None: assinatura=comum
             else: self.assertEqual(comum,assinatura)
-            self.assertIn('leitura-dedupe-tolerante',out['riscosLegados'])
-            self.assertIn('persistencia-com-retry-requer-recibo',out['riscosLegados'])
+            # Desde 24/10/2026 (PRUMO-ENCERRAMENTO-TECNICO): leitura de dedupe falha fechada e a
+            # gravação é upsert pelo ID, sem repetição automática; sobra só a concorrência do Sheets.
+            self.assertNotIn('leitura-dedupe-tolerante',out['riscosLegados'])
+            self.assertNotIn('persistencia-com-retry-requer-recibo',out['riscosLegados'])
+            self.assertIn('concorrencia-google-sheets-upsert',out['riscosLegados'])
+            for nome in contract['leiturasDedupe']:
+                self.assertNotIn('onError',por[nome])
+            gravar=por[f"Gravar na aba {cfg['ofertas'][oferta]['aba']}"]
+            self.assertEqual(gravar['parameters']['operation'],'appendOrUpdate')
+            self.assertEqual(gravar['parameters']['columns']['matchingColumns'],['ID'])
+            self.assertFalse(gravar.get('retryOnFail'))
         self.assertEqual(cfg,antes)
         on_disk=json.loads(Path(__file__).with_name('prumo-ofertas.json').read_text(encoding='utf-8'))
         self.assertEqual(on_disk,self.config_original)
@@ -115,13 +124,18 @@ class Prospeccao(unittest.TestCase):
             if nome in contract['leiturasDedupe']:n.update(type='n8n-nodes-base.googleSheets',parameters={'operation':'read'})
             elif nome in contract['etapas']['persistencia']:
                 arquivo=nome.startswith('Entregar ')
-                n.update(type='n8n-nodes-base.readWriteFile' if arquivo else 'n8n-nodes-base.googleSheets',parameters={'operation':'write' if arquivo else 'append'})
+                if arquivo:n.update(type='n8n-nodes-base.readWriteFile',parameters={'operation':'write'})
+                else:
+                    # Upsert pela identidade durável do Site (place_id), sem retryOnFail.
+                    n.update(type='n8n-nodes-base.googleSheets',parameters={'operation':'appendOrUpdate','columns':{
+                        'matchingColumns':['place_id'],'schema':[{'id':'place_id','canBeUsedToMatch':True}]}})
             elif nome=='Buscar no Google Places':n.update(type='n8n-nodes-base.httpRequest',parameters={'url':'https://places.googleapis.com/v1/places:searchText'})
             nodes.append(n)
         # Contrato atravessa inline; não reescreve nem perde o export legado.
         wf={'name':'01 · Caçador','active':False,'nodes':[{'name':'Concluir processamento da busca','parameters':{'workflowJson':json.dumps({'nodes':nodes})}}]}
         before=copy.deepcopy(wf);r=c.auditar_adaptador(wf,contract)
         self.assertEqual(wf,before);self.assertFalse(r['geracaoCompleta']);self.assertFalse(r['ativacaoAutorizada'])
+        self.assertEqual(r['riscosLegados'],['concorrencia-google-sheets-upsert'])
         nodes=[n for n in nodes if n['name']!='Checar site próprio']
         wf['nodes'][0]['parameters']['workflowJson']=json.dumps({'nodes':nodes})
         with self.assertRaises(ValueError):c.auditar_adaptador(wf,contract)

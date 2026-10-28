@@ -148,7 +148,7 @@ export function promptDoRoteador(contexto: ContextoDoRoteador): string {
     'Responda em texto curto, em português do Brasil, como um colega de vendas: direto, sem enrolar, sem emoji, sem markdown pesado.',
     '',
     'O que você sabe vem só das ferramentas de leitura (ler_hoje, ler_funil, ler_proxima_venda, buscar_lead, ler_lead,',
-    'ler_agenda_do_dia, ler_estado_do_dell). Leia antes de afirmar; o que não leu, diga que não sabe. Leitura que volta',
+    'ler_filtro_leads, ler_agenda_do_dia, ler_estado_do_dell). Leia antes de afirmar; o que não leu, diga que não sabe. Leitura que volta',
     '"semSinal" é "sem sinal", nunca zero nem "tudo certo".',
     '',
     'Para agir, só as ferramentas propor_pedido_ao_time, propor_anotacao_no_crm e propor_mensagem_ao_lead: elas criam um',

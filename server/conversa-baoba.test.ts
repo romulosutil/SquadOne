@@ -45,6 +45,14 @@ const fila = (v: CrmVisao, agora = AGORA) => filaDeVenda(v as unknown as Paramet
   .filter((a) => a.leadId === "iris:B");
 
 describe("a leitura da conversa: papel, áudio e material", () => {
+  it('saudação sem marcador não reinicia o relógio humano nem gera conversa de cobrança',()=>{
+    const humana=msg(48,'entrada','Pode falar por aqui sim!')
+    const bot=msg(1,'entrada','Empresa agradece seu contato. Como podemos ajudar?')
+    const resumo=resumirConversa([humana,bot])!
+    assert.equal(resumo.ultimaEntrada,humana.em);assert.equal(resumo.ultimaEntradaRobo,bot.em)
+    const sozinho=resumirConversa([bot])!
+    assert.equal(sozinho.ultimaEntrada,undefined);assert.equal(sozinho.ultimaEntradaRobo,bot.em)
+  })
   it("o arquivo traz o papel gravado; sem ele, o texto decide; valor fora do contrato cai no texto", () => {
     const linhas = [
       { em: horas(3), direcao: "entrada", texto: "pode falar", papel: "recepcao" },
