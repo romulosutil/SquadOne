@@ -5,6 +5,10 @@ import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
 import { leituraDoAbMensagem } from "../src/operations/ab-mensagem.ts";
+import { OFERTAS_PROPRIAS, PRODUTOS_DE_PROSPECCAO } from "./ofertas.ts";
+
+// Uma oferta nova do prumo-ofertas.json entra zerada nas contagens fixadas abaixo.
+const ZERO_NAS_OFERTAS = Object.fromEntries(OFERTAS_PROPRIAS.map((o) => [o, 0]));
 import {
   ACAO_DO_REENVIO,
   CrmStore,
@@ -638,7 +642,7 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
     assert.equal(lead(v.leads, "estampa:estampa-ganho").etapa, "ganho");
     assert.equal(lead(v.leads, "estampa:revisar").etapa, "perdido");
     assert.equal(lead(v.leads, "prumo:revisar").etapa, "novo", "o lead do PRUMO com o mesmo ID não muda");
-    assert.deepEqual(v.contagens.ganho, { total: 3, site: 1, prumo: 1, iris: 0, estampa: 1, plus: 0 });
+    assert.deepEqual(v.contagens.ganho, { ...ZERO_NAS_OFERTAS, total: 3, site: 1, prumo: 1, iris: 0, estampa: 1, plus: 0 });
   });
 
   it("sem texto aprovado das ofertas novas: nada de Raio-X, 2ª mensagem nem reenvio; a Hoje pede a demonstração", () => {
@@ -686,7 +690,7 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
   });
 
   it("registro aceita as quatro ofertas e recusa o resto", () => {
-    for (const produto of ["site", "prumo", "iris", "estampa"]) {
+    for (const produto of ["site", ...PRODUTOS_DE_PROSPECCAO]) {
       assert.equal(validarRegistro({ produto, id: "abc", tipo: "nota", texto: "a" }, AGORA).produto, produto);
     }
     assert.throws(() => validarRegistro({ produto: "silmer", id: "abc", tipo: "nota", texto: "a" }, AGORA), /Produto inválido/);
@@ -723,9 +727,9 @@ describe("CRM: lista Hoje e contagens", () => {
 
   it("conta por etapa e produto e separa os motivos de perda", () => {
     const v = visao();
-    assert.deepEqual(v.contagens.novo, { total: 4, site: 3, prumo: 1, iris: 0, estampa: 0, plus: 0 });
-    assert.deepEqual(v.contagens.contato, { total: 12, site: 7, prumo: 5, iris: 0, estampa: 0, plus: 0 });
-    assert.deepEqual(v.contagens.perdido, { total: 7, site: 6, prumo: 1, iris: 0, estampa: 0, plus: 0 });
+    assert.deepEqual(v.contagens.novo, { ...ZERO_NAS_OFERTAS, total: 4, site: 3, prumo: 1, iris: 0, estampa: 0, plus: 0 });
+    assert.deepEqual(v.contagens.contato, { ...ZERO_NAS_OFERTAS, total: 12, site: 7, prumo: 5, iris: 0, estampa: 0, plus: 0 });
+    assert.deepEqual(v.contagens.perdido, { ...ZERO_NAS_OFERTAS, total: 7, site: 6, prumo: 1, iris: 0, estampa: 0, plus: 0 });
     assert.deepEqual(v.perdas, { recusou: 2, expirou: 2, esfriou: 0, descartado: 2, semInteresse: 1 });
     assert.equal(v.geradoEm, "2026-10-02T14:55:00.000Z");
     assert.equal(JSON.stringify(v), JSON.stringify(visao()), "mesma entrada, mesma resposta (ETag estável)");
@@ -734,7 +738,7 @@ describe("CRM: lista Hoje e contagens", () => {
   it("retrato antigo, sem as abas do Iris e das estamparias: fontes vazias com o aviso, o resto igual", () => {
     const v = visao();
     const fonte = (id: string) => v.fontes.find((f) => f.id === id)!;
-    assert.deepEqual(v.fontes.map((f) => f.id), ["site", "prumo", "iris", "estampa", "plus", "registros"]);
+    assert.deepEqual(v.fontes.map((f) => f.id), ["site", "prumo", ...OFERTAS_PROPRIAS, "plus", "registros"]);
     assert.equal(fonte("iris").linhas, 0);
     assert.match(fonte("iris").erro ?? "", /iris ausente/);
     assert.match(fonte("estampa").erro ?? "", /estampa ausente/);

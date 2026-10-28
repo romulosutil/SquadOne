@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import type { NextFunction, Request, Response } from "express";
 import { FUSO } from "./alocador.ts";
+import { PRODUTOS } from "./ofertas.ts";
 
 /**
  * Contador de uso da Central (AC-28, 17/10/2026). Até aqui ninguém sabia que tela do Dell era usada:
@@ -49,7 +50,7 @@ const VISTAS_DO_CRM: Record<string, string> = {
   roteiro: "roteiro",
   colinha: "roteiro",
 };
-const PRODUTOS_DO_CRM = new Set(["site", "prumo", "iris", "estampa", "plus"]);
+const PRODUTOS_DO_CRM: ReadonlySet<string> = new Set(PRODUTOS);
 const TELAS_SEM_QUERY = new Set(["/", "/mais", "/agenda", "/squadone", "/design-system", "/financas", "/financas/lancamentos", "/financas/organizar"]);
 
 // Depois destas palavras vem um id (pessoa, domínio, squad, lançamento, projeto, evento, turno).

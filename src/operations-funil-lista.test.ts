@@ -5,6 +5,7 @@ import {
   opcoesDeNicho, opcoesDePasso, ordenarLista, sinalMaisForte, textoDaColunaProximo, textoDosDescartados, textoDoProximoPasso, type Guardador,
 } from './operations/funil-lista.ts'
 import { SIGLA_DO_PRODUTO } from './operations/crm-formato.ts'
+import { porOferta } from '../server/ofertas.ts'
 import { acaoDoLead } from './operations/proxima-venda.ts'
 import type { CrmLead, CrmVisao } from './operations/types.ts'
 
@@ -113,7 +114,8 @@ describe('apoio da Lista', () => {
   })
 
   it('o rótulo curto da oferta é um só, sem "Organizar" nem "Estampa" (AC-19)', () => {
-    assert.deepEqual(SIGLA_DO_PRODUTO, { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' })
+    // As de hoje fixadas à mão; uma oferta nova entra com a sigla do prumo-ofertas.json.
+    assert.deepEqual(SIGLA_DO_PRODUTO, { ...porOferta((_, o) => o.sigla), site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' })
   })
 
   it('a vista guardada só vale se for "lista"; storage que lança vira quadro', () => {

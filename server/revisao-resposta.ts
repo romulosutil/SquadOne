@@ -1,5 +1,6 @@
 import type { Router } from 'express'
 import type { CrmVisao } from '../src/operations/types.ts'
+import { ehProduto } from './ofertas.ts'
 import { hashDoContexto } from '../src/operations/revisao-resposta.ts'
 import { ajusteDoPasso } from '../src/operations/ajuste-do-passo.ts'
 
@@ -10,7 +11,7 @@ export function montarRevisaoDeResposta(router: Router, crm?: { visao(): Promise
   router.post('/crm/proximo-passo/ajustar', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     const { produto, id, contextoHash, acao, texto, data } = req.body ?? {}
-    if (typeof id !== 'string' || id.length > 300 || !['site', 'prumo', 'iris', 'estampa', 'plus'].includes(produto) || typeof contextoHash !== 'string' || !/^[a-f0-9]{64}$/.test(contextoHash)) { res.status(400).json({ error: 'Confira o lead e atualize o contexto.' }); return }
+    if (typeof id !== 'string' || id.length > 300 || !ehProduto(produto) || typeof contextoHash !== 'string' || !/^[a-f0-9]{64}$/.test(contextoHash)) { res.status(400).json({ error: 'Confira o lead e atualize o contexto.' }); return }
     if (!crm?.registrar) { res.status(503).json({ error: 'Registro indisponível.' }); return }
     let ajuste
     try { ajuste = ajusteDoPasso(acao, texto, data) } catch (e) { res.status(400).json({ error: (e as Error).message }); return }
@@ -37,7 +38,7 @@ export function montarRevisaoDeResposta(router: Router, crm?: { visao(): Promise
     res.setHeader('Cache-Control', 'no-store')
     const produto = typeof req.query.produto === 'string' ? req.query.produto : ''
     const id = typeof req.query.id === 'string' ? req.query.id : ''
-    if (!['site', 'prumo', 'iris', 'estampa', 'plus'].includes(produto) || !id || id.length > 300) { res.status(400).json({ error: 'Lead inválido.' }); return }
+    if (!ehProduto(produto) || !id || id.length > 300) { res.status(400).json({ error: 'Lead inválido.' }); return }
     if (!crm) { res.status(503).json({ error: 'Vendas não está disponível.' }); return }
     try {
       const visao = await crm.visao()

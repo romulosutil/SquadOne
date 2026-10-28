@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { PRODUTOS, ehProduto } from './ofertas.ts';
 
 /** Projeção agregada, sem memória privada, números de telefone ou texto de conversas. */
 export async function lerFiltroLeads(dataDir: string, agora = Date.now()): Promise<Record<string, unknown>> {
@@ -15,11 +16,11 @@ export async function lerFiltroLeads(dataDir: string, agora = Date.now()): Promi
   return {
     agente: 'Marina', geradoEm: v.geradoEm, dia: v.dia,
     ...Object.fromEntries(['leadsNaFonte', 'contatadosHoje', 'tentativasSemWhatsappHoje', 'casosMaduros', 'casosRotulados', 'ambiguosExcluidos'].map(k => [k, numero(v[k])])),
-    ofertasHoje: contagens(v.ofertasHoje, ['site', 'prumo', 'iris', 'estampa', 'plus']),
+    ofertasHoje: contagens(v.ofertasHoje, [...PRODUTOS]),
     resultadosHoje: contagens(v.resultadosHoje, ['recusa', 'acesso', 'permissao', 'robo', 'silencio', 'qualificado', 'proposta', 'pagamento', 'revisar', 'neutra', 'interesse', 'conversa', 'curiosidade']),
     motivosDeRevisaoNaBase: contagens(v.motivosDeRevisaoNaBase, ['recusa-ou-exclusao', 'destino-sem-whatsapp-confirmado', 'falta-achado-de-site', 'texto-afirma-demo-pronta-sem-evidencia', 'falta-publico-infantil-ou-tea', 'falta-necessidade-impacto-decisor']),
     padroesAtivos: (Array.isArray(v.padroesAtivos) ? v.padroesAtivos : []).slice(0, 60).filter((p: any) =>
-      p && ['site', 'prumo', 'iris', 'estampa', 'plus'].includes(p.oferta) && ['setor', 'lacuna'].includes(p.dimensao)
+      p && ehProduto(p.oferta) && ['setor', 'lacuna'].includes(p.dimensao)
       && typeof p.valor === 'string' && /^[a-z -]{1,60}$/.test(p.valor) && [-5, 5].includes(p.ajuste)
       && numero(p.casosRotulados) >= 10 && numero(p.comparacaoRotulada) >= 10).map((p: any) => ({
         oferta: p.oferta, dimensao: p.dimensao, valor: p.valor, ajuste: p.ajuste,

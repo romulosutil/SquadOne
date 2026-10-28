@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import express, { type Router } from 'express';
 import type { CrmVisao, CrmLead } from '../src/operations/types.ts';
+import { ehProduto } from './ofertas.ts';
 import { frenteDosArquivos, primeirosDoTime, mensagemDoPrimeiroContato, reservaDoTime, type FrenteDoPrimeiro, type ReservaDoTime } from '../src/operations/primeiro-contato.ts';
 import { tetoDoDia, REGRAS_DO_RITMO } from '../src/operations/trava-de-ritmo.ts';
 import { respostasDoDia } from './respostas-do-dia.ts';
@@ -75,7 +76,7 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
     avaliados: bruto.avaliados ?? 0, selecionados: bruto.selecionados ?? 0,
     enviados: bruto.enviados ?? 0, respondidos: respostasHoje?.humanas ?? null,
     funil: (Array.isArray(bruto.funil) ? bruto.funil : []).slice(0, 5).map((m: Record<string, unknown>) => ({
-      produto: ['site', 'prumo', 'iris', 'estampa', 'plus'].includes(String(m.produto)) ? m.produto : 'desconhecido',
+      produto: ehProduto(m.produto) ? m.produto : 'desconhecido',
       ...Object.fromEntries(['novo', 'contato', 'proposta', 'ganho', 'perdido', 'elegiveis', 'contatosObservados', 'respostasWhatsapp'].map(k => [k, typeof m[k] === 'number' ? m[k] : 0])),
       taxaResposta: typeof m.taxaResposta === 'number' ? m.taxaResposta : null,
     })),

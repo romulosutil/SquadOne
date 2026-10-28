@@ -14,7 +14,7 @@ import CrmBi from './CrmBi.vue'
 import { planoDoLead } from './bi-operacao'
 import { conversasParaVoce } from './conversas-para-conduzir'
 import { coberturaDoHistorico } from './historico-comercial'
-import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataHora, hora } from './crm-formato'
+import { ABAS_DAS_OFERTAS_PROPRIAS, ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import { lerFiltroDePasso, type FiltroDePasso } from './funil-lista'
 import type { Resolvidas } from './proxima-venda'
 import { avisoDeHorario } from './resultados'
@@ -499,8 +499,7 @@ function abrirColinha() {
         <span v-for="f in visao.fontes" :key="f.id">{{ f.nome }}: {{ f.linhas }} linha{{ f.linhas === 1 ? '' : 's' }}<template v-if="f.erro"> ({{ f.erro }})</template></span>
         <a v-if="visao.links.planilhaSite" :href="visao.links.planilhaSite" target="_blank" rel="noopener">Planilha do Site ↗</a>
         <a v-if="visao.links.planilhaPrumo" :href="visao.links.planilhaPrumo" target="_blank" rel="noopener">Planilha do PRUMO ↗</a>
-        <a v-if="visao.links.planilhaIris" :href="visao.links.planilhaIris" target="_blank" rel="noopener">Aba Clínicas (Iris) ↗</a>
-        <a v-if="visao.links.planilhaEstampa" :href="visao.links.planilhaEstampa" target="_blank" rel="noopener">Aba Estamparias ↗</a>
+        <template v-for="a in ABAS_DAS_OFERTAS_PROPRIAS" :key="a.chave"><a v-if="visao.links[a.chave]" :href="visao.links[a.chave]" target="_blank" rel="noopener">{{ a.rotulo }} ↗</a></template>
         <a :href="ENDERECO_DO_ROTEIRO" @click.prevent="abrirColinha">Roteiro de venda →</a>
         </footer>
       </details>

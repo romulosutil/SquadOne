@@ -26,8 +26,8 @@ import { MAX_CORPO_DO_BEACON, telaDoCorpo, type ContadorDeUso } from "./uso.ts";
 import { lerPedidoDeMensagem, PedidoDoAssistenteInvalido, TetoDoAssistente, type Assistente } from "./assistente.ts";
 import type { EstadoDoAssistente } from "../src/operations/assistente-contrato.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
+import { ehProduto } from "./ofertas.ts";
 
-const PRODUTOS_DO_CRM: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
 /** O que a Próxima venda anota num toque (AnotacaoDeVenda de src/operations/proxima-venda.ts). */
 const TIPOS_DA_ANOTACAO_DE_VENDA: ReadonlySet<string> = new Set(["segunda_enviada", "followup_enviado", "plus_enviado", "proposta", "recusou", "cadencia_enviada", "indicacao_pedida"]);
 import { lerStatusDoDell } from "./dell-status.ts";
@@ -680,7 +680,7 @@ export function createOperationsRouter(options: {
   const leadDoPedido = (fonte: Record<string, unknown>): { produto: CrmProduto; id: string } | null => {
     const produto = typeof fonte.produto === "string" ? fonte.produto : "";
     const id = typeof fonte.id === "string" ? fonte.id.trim() : "";
-    return PRODUTOS_DO_CRM.includes(produto as CrmProduto) && /^[A-Za-z0-9_:.-]{1,200}$/.test(id) ? { produto: produto as CrmProduto, id } : null;
+    return ehProduto(produto) && /^[A-Za-z0-9_:.-]{1,200}$/.test(id) ? { produto: produto as CrmProduto, id } : null;
   };
   const responderErroDoCopiloto = (res: express.Response, error: unknown) => {
     if (error instanceof LeadForaDoCrm) res.status(404).json({ error: error.message });

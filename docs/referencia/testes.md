@@ -39,7 +39,17 @@ os achados do Raio-X no recibo: só ids conhecidos e números com sentido),
 `server/prumo-ofertas.test.ts` (14/10/2026: contrato entre `deploy/dell/claude-ops/prumo-ofertas.json`, o que
 os caçadores do Iris e das estamparias gravam, e o CRM: aba e caminho do convite iguais aos de
 `OFERTA_DE_PROSPECCAO`, cabeçalho com toda coluna que o CRM lê, cada Etapa da lista com lugar no funil, convite
-sem nome, R$, link nem segunda pergunta, cliente do PRUMO e não-cliente-final fora),
+sem nome, R$, link nem segunda pergunta, cliente do PRUMO e não-cliente-final fora; desde 28/10/2026 a lista de
+ofertas sai do JSON, sem `iris`/`estampa` fixos),
+`server/ofertas.test.ts` (28/10/2026, registro único das ofertas próprias: `server/ofertas.gerado.ts` igual ao que
+`scripts/ofertas-gerar.ts` gera do `prumo-ofertas.json` (falha se ficar para trás: rode o script), `PRODUTOS`,
+`PRODUTOS_DE_PROSPECCAO` e `ehOfertaPropria` derivados na ordem do JSON; não-regressão com os literais de 27/10
+(rótulo longo e sigla no servidor e na tela, nomes de fonte, aba/caçador/link do retrato, links "Aba Clínicas (Iris)" e
+"Aba Estamparias", sala no Escritório, `nomesDasOfertas`, o retrato de hoje lido nas mesmas chaves, o convite com
+saudação e nome, "$&" no nome intacto); produto sem convite aprovado lança `ConviteDesconhecido` em vez de cair no
+texto da consultoria; oferta sintética `pdv` gerada num diretório temporário e importada, sem tocar no JSON real, e o
+gerador recusando o bloco que quebraria o CRM calado: sem mensagem ou sem `{NOME}`, sala fora de `prumo--` ou
+repetida, sigla repetida, link de outra fonte, tipo desconhecido, id reservado ou fora de `[a-z][a-z0-9]*`),
 `server/tarefa-avulsa.test.ts`, `server/horizonte.test.ts`,
 `server/crm.test.ts` (inclui, desde 15/10/2026, os achados do Raio-X e o porte pelo CNPJ no lead, com `equipe` só
 quando o porte foi conferido, e o follow-up só para quem leu, no Site e no PRUMO, e o Revisar com o
@@ -317,6 +327,12 @@ no prompt e no aviso, e o atendimento inteiro com systemctl, docker, reconferên
 recusas, R$, gravação atômica, nunca levanta) e o primeiro script que a usa,
 `python3 deploy/dell/auto-entrada.test.py`, `python3 deploy/dell/site-pastas.test.py` e
 `python3 deploy/dell/site-demos-limpeza.test.py`
+
+Registro único das ofertas próprias (28/10/2026, rodam no PC e no Dell):
+`python3 deploy/dell/claude-ops/ofertas.test.py` (o registro lê o `prumo-ofertas.json` ao lado,
+falta do JSON é erro, e as listas que ficam escritas fora de `claude-ops` batem com ele) e
+`python3 deploy/dell/claude-ops/nova-oferta.test.py` (o esqueleto e o `--conferir` numa cópia
+temporária; o JSON real não muda).
 (aviso aceito pelo dell-status, a fila ausente sem derrubar a rodada; desde 19/10/2026 sem o
 "jeito antigo": sem a lib o aviso não é gravado e vai ao stderr; na limpeza também o texto do aviso do
 acervo inteiro dentro de 4000 caracteres e o estado "avisado" só quando o aviso ficou na fila; o

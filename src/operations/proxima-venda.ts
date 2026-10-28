@@ -48,6 +48,8 @@ import { pedeMaterial, textoParaATela } from './marcadores-da-conversa'
 import { podeMandarPrimeiroContato } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import type { CrmGrupoHoje, CrmGrupoHojeId, CrmItemHoje, CrmLead, CrmProduto, CrmVisao } from './types'
+import { ehOfertaPropria, porOferta } from '../../server/ofertas.ts'
+import { SIGLA_DO_PRODUTO } from './crm-formato'
 
 export type TipoDeVenda = 'responder' | 'mandar-proposta' | 'combinado' | 'depois-do-link' | 'proposta' | 'followup' | 'desfecho' | 'primeiro'
 
@@ -192,8 +194,8 @@ export const JANELA_DO_DEPOIS_DO_LINK = { deMs: 20 * 3600_000, ateMs: 72 * 3600_
 const PERGUNTA_DEPOIS_DO_LINK: Record<CrmProduto, (empresa: string) => string> = {
   site: (e) => `Oi! Aqui é o Rômulo, do PRUMO. Sobre o site da ${e}: faz sentido colocar no ar agora ou prefere deixar para outro momento?`,
   prumo: (e) => `Oi! Aqui é o Rômulo, do PRUMO. Sobre o Raio-X da ${e}: faz sentido conversarmos por 20 minutos para escolher um ponto que vocês queiram resolver?`,
-  iris: () => 'Oi! Conseguiu dar uma olhada no que te mandei? O que achou?',
-  estampa: () => 'Oi! Conseguiu dar uma olhada no que te mandei? O que achou?',
+  // Ofertas próprias: sem 2ª mensagem aprovada, a pergunta é a mesma para todas.
+  ...porOferta(() => () => 'Oi! Conseguiu dar uma olhada no que te mandei? O que achou?'),
   plus: () => 'Meu Ir.\'., conseguiu dar uma olhada no que te mandei? O que achou?',
 }
 
@@ -369,7 +371,8 @@ export function chaveDoNicho(nicho: string): string {
   return nicho.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim() || 'sem nicho'
 }
 
-const ROTULO_CURTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' }
+// O rótulo curto é a sigla única (AC-19); era uma terceira cópia dela.
+const ROTULO_CURTO: Record<CrmProduto, string> = SIGLA_DO_PRODUTO
 
 /** O texto de um link wa.me (`?text=`); null quando o link não leva texto (o do n8n, a conversa). */
 export function textoDoLink(url: string): string | null {
@@ -472,7 +475,7 @@ function tatica(tipo: TipoDeVenda, lead: CrmLead): string {
 
 /** O "disse sim" diz o que mandar: "mande o próximo passo" sozinho não dizia o quê (AC-12). */
 function oQueMandarNoSim(lead: Pick<CrmLead, 'produto' | 'links' | 'demoApagadoEm'>): string {
-  if (lead.produto === 'iris' || lead.produto === 'estampa') return 'combine a demonstração'
+  if (ehOfertaPropria(lead.produto)) return 'combine a demonstração'
   if (lead.produto === 'prumo') return 'mande o Raio-X'
   if (lead.demoApagadoEm) return 'republique o demo e mande o link'
   if (lead.links.segunda) return 'mande o link'

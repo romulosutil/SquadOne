@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { calcularIndicadoresOperacionais } from './operations/modelo-operacional/indicadores.ts'
 import { textoEventoCiclo, validarTransicaoCiclo, type EventoCiclo } from './operations/ciclo-comercial.ts'
 import type { CrmLead, CrmVisao } from './operations/types.ts'
+import { PRODUTOS_DE_PROSPECCAO } from '../server/ofertas.ts'
 import { VERSAO_CLASSIFICACAO_RESPOSTA } from './operations/classificacao-resposta.ts'
 const AGORA = Date.parse('2026-10-25T15:00:00Z')
 function lead(id: string, extra: Partial<CrmLead> = {}): CrmLead {
@@ -10,7 +11,7 @@ function lead(id: string, extra: Partial<CrmLead> = {}): CrmLead {
 }
 function visao(leads: CrmLead[] = []): CrmVisao {
   return { estado: 'ok', geradoEm: new Date(AGORA-60_000).toISOString(), minutosAteVelho: 15,
-    fontes: ['site','prumo','iris','estampa','registros'].map(id=>({ id, nome:id, linhas:0 })), colunasAusentes: [], leads } as CrmVisao
+    fontes: ['site',...PRODUTOS_DE_PROSPECCAO,'registros'].map(id=>({ id, nome:id, linhas:0 })), colunasAusentes: [], leads } as CrmVisao
 }
 const valores = (v: CrmVisao | null) => Object.fromEntries(calcularIndicadoresOperacionais(v, AGORA).map(x=>[x.id,x.valor]))
 function anexar(l: CrmLead, e: EventoCiclo) {

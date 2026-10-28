@@ -20,6 +20,7 @@
  *    venda-do-dia: dois pedidos juntos não passam os dois.
  */
 import type { CrmLead } from './types'
+import { ehProdutoDeProspeccao } from '../../server/ofertas.ts'
 import { noExpedienteDeVenda } from './trava-de-horario'
 import { instantesDePrimeiroContato, ritmoDoEnvio, REGRAS_DO_RITMO, somarPrimeiros, type MotivoDoRitmo, type RegrasDoRitmo } from './trava-de-ritmo'
 
@@ -76,7 +77,7 @@ type LeadDoTime = Pick<CrmLead, 'produto' | 'etapa' | 'sinal' | 'links' | 'marco
 export function mensagemDoPrimeiroContato(lead: LeadDoTime | undefined): string | null {
   if (!lead) return null
   if (lead.produto === 'site' || lead.produto === 'plus') return lead.mensagemPronta?.trim() || null
-  if (!['prumo', 'iris', 'estampa'].includes(lead.produto) || !lead.links.convite) return null
+  if (!ehProdutoDeProspeccao(lead.produto) || !lead.links.convite) return null
   try {
     const u = new URL(lead.links.convite)
     return u.protocol === 'https:' && u.hostname === 'wa.me' ? u.searchParams.get('text')?.trim() || null : null
@@ -100,7 +101,7 @@ function destinoValido(lead: LeadDoTime): boolean {
 export function elegivelParaOTime(lead: LeadDoTime | undefined): boolean {
   if (!lead || lead.produto === 'plus' || lead.etapa !== 'novo' || !destinoValido(lead) || !mensagemDoPrimeiroContato(lead)) return false
   if (lead.produto === 'site' && lead.sinal !== 'pronto') return false
-  if (['prumo', 'iris', 'estampa'].includes(lead.produto)) {
+  if (ehProdutoDeProspeccao(lead.produto)) {
     const origem = lead.triagem?.origemWhatsapp?.trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     if (lead.sinal !== 'revisar' || !origem || /^(nao confirm|a confirmar|desconhecid)/.test(origem)) return false
   }

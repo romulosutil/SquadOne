@@ -1,4 +1,5 @@
 import type { CrmLead } from '../operations/types'
+import { OFERTA, ehOfertaPropria } from '../../server/ofertas.ts'
 import type { TrabalhoDoTime } from '../operations/proximo-passo-do-time'
 import { itemDaFilaComercial } from '../operations/fila-comercial'
 import { motivoDaMinhaVez } from './minha-vez'
@@ -73,7 +74,7 @@ export function passagensConfirmadas(antes: readonly CrmLead[] | null, depois: r
     const antigo = fasesDoCliente(anterior, agora).find(f => f.id === para)?.em
     if (!marco || marco === antigo || !Number.isFinite(Date.parse(marco)) || Date.parse(marco) > agora) return []
     const motivos = ['', '', 'Primeiro contato confirmado', 'Resposta humana recebida', 'Envio de material registrado', 'Proposta registrada', 'Desfecho registrado']
-    const producao = lead.produto === 'site' ? 'prumo--site-antes-da-venda' : lead.produto === 'prumo' ? 'prumo--organizar' : `prumo--${lead.produto === 'estampa' ? 'estamparias' : lead.produto}`
+    const producao = lead.produto === 'site' ? 'prumo--site-antes-da-venda' : lead.produto === 'prumo' ? 'prumo--organizar' : ehOfertaPropria(lead.produto) ? OFERTA[lead.produto].sala : `prumo--${lead.produto}`
     return [{ id: `${lead.id}:${para}:${marco}`, leadId: lead.id, empresa: lead.empresa, de, para, em: marco, motivo: motivos[para], salaPortadora: para === 2 ? 'prumo--prospeccao' : para === 4 ? producao : 'prumo--geral' }]
   }).sort((a, b) => Date.parse(b.em) - Date.parse(a.em))
 }

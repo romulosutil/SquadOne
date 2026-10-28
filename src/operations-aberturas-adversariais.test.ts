@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { mensagemDoConvite } from '../server/convite-mensagem.ts'
+import { PRODUTOS_DE_PROSPECCAO } from '../server/ofertas.ts'
 import { primeiraComEventoCritico } from '../server/site-mensagem.ts'
 import { primeiraDoPlus } from '../server/plus-mensagem.ts'
 import { classificarResposta, respostaParaAcompanhamento, type ClasseDaResposta } from './operations/classificacao-resposta.ts'
@@ -10,7 +11,7 @@ import type { CrmResposta } from './operations/types.ts'
 const ENVIO = '2026-10-27T11:00:00Z', ENTRADA = '2026-10-27T11:02:00Z'
 const aberturas = [
   ['site', primeiraComEventoCritico('Empresa Teste', { raio_x_url: 'https://example.com/analise', raio_x_achados: [{ id: 'site-fora-do-ar', dominio: 'example.com' }] }, true)],
-  ...['prumo', 'iris', 'estampa'].map(p => [p, mensagemDoConvite(p, 'Empresa Teste', '', new Date(ENVIO))]),
+  ...PRODUTOS_DE_PROSPECCAO.map(p => [p, mensagemDoConvite(p, 'Empresa Teste', '', new Date(ENVIO))]),
   ...(['site', 'prumo', 'iris', 'estampa'] as const).map(oferta => [`plus-${oferta}`, primeiraDoPlus({ empresa: 'Empresa Teste', oferta, whatsapp: '5527999990001' }).texto]),
 ]
 const casos: Array<[string, string, ClasseDaResposta]> = [

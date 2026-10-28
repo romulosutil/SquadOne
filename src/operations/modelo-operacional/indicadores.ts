@@ -1,5 +1,6 @@
 /** Leitura operacional pura. Não altera CRM, não envia e não declara primeira venda. */
 import type { CrmLead, CrmVisao } from '../types.ts'
+import { PRODUTOS_DE_PROSPECCAO } from '../../../server/ofertas.ts'
 import { planoComercialDoLead } from '../prioridade-comercial.ts'
 import { cicloDoLead } from '../ciclo-comercial.ts'
 import { temQualificacaoComercial } from '../qualificacao-comercial.ts'
@@ -29,7 +30,7 @@ function problemaDaFonte(visao: CrmVisao | null, agora: number): string | null {
   const limite = visao.minutosAteVelho * 60_000
   if (!Number.isFinite(agora) || !Number.isFinite(gerado) || !Number.isFinite(limite) || limite <= 0 || gerado > agora || agora - gerado > limite) return 'Fonte comercial antiga ou sem data verificável.'
   const fontes = Array.isArray(visao.fontes) ? visao.fontes : []
-  if (!['site', 'prumo', 'iris', 'estampa', 'registros'].every(id => fontes.some(f => f.id === id)) || fontes.some(f => !!f.erro) || !Array.isArray(visao.colunasAusentes) || visao.colunasAusentes.length || visao.ultimaFalha) return 'Fonte comercial incompleta ou com publicação pendente de conferência.'
+  if (!['site', ...PRODUTOS_DE_PROSPECCAO, 'registros'].every(id => fontes.some(f => f.id === id)) || fontes.some(f => !!f.erro) || !Array.isArray(visao.colunasAusentes) || visao.colunasAusentes.length || visao.ultimaFalha) return 'Fonte comercial incompleta ou com publicação pendente de conferência.'
   return null
 }
 

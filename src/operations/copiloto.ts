@@ -22,6 +22,7 @@ import {
   type Funil, type IdDaOferta, type IdDoPasso, type LeadDaJornada, type ProximoDaJornada,
 } from './jornada'
 import type { AchadoDoRaioX, CrmLead, CrmTipoDeResposta } from './types'
+import { ehOfertaPropria } from '../../server/ofertas.ts'
 import { textoParaOModelo, type PapelDaMensagem } from './marcadores-da-conversa'
 import { DIAS_DO_BLOG_PARADO, type SinaisDoSite } from '../../server/sinais-do-site.ts'
 import { lerSpiced, lacunasDoSpiced, qualificadoParaProposta, type Spiced } from './spiced'
@@ -286,7 +287,7 @@ export function montarDossie(lead: LeadDoCopiloto, extra: { textoDoRaioX?: strin
     .map((e) => ({ em: e.em, oQue: e.rotulo, ...(e.texto ? { texto: corta(textoParaOModelo(e.texto, mascarar), MAX_TEXTO_DE_EVENTO) } : {}) }))
   const textoRaioX = extra.textoDoRaioX?.trim()
   const urlRaioX = lead.links.raioX?.trim()
-  const proprias = funil === 'iris' || funil === 'estampa'
+  const proprias = ehOfertaPropria(funil)
   const sinaisDoSite = sinaisParaODossie(lead.sinais)
   const textoSpiced = (texto: string) => textoParaOModelo(texto, mascarar)
   const s = comercial.autoridade === 'qualificacao-nova' ? undefined : lerSpiced(lead.spiced) ?? undefined

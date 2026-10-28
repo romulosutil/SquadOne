@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import { LEAD_DE_EXEMPLO } from '../blueprint/exemplo.ts'
 import type { EventoCiclo as EventoFinanceiro } from '../operations/ciclo-comercial.ts'
 import type { TrabalhoRegistrado } from './trabalho-registrado'
+import { OFERTAS_PROPRIAS } from '../../server/ofertas.ts'
 type EventoCiclo = EventoFinanceiro | TrabalhoRegistrado
 const textoEventoCiclo = (evento: EventoCiclo, _agora?: number) => '[ciclo-comercial-v1] ' + JSON.stringify(evento)
 import { faseDoEscritorio, fasesDoCliente, movimentosDoEscritorio, pendenciasDaJornada } from './jornada-do-escritorio.ts'
@@ -49,7 +50,7 @@ describe('jornada e timeline do escritório', () => {
     assert.equal(pendenciasDaJornada([l], [], agora).length, 0, 'retirar tarefa do time não cria uma decisão humana por falta de contexto')
   })
   it('Iris e Estamparia não recebem etapa de material obrigatório inexistente', () => {
-    for (const produto of ['iris', 'estampa'] as const) { const l = lead(); l.produto = produto; assert.equal(fasesDoCliente(l, agora).some(f => f.id === 4), false) }
+    for (const produto of OFERTAS_PROPRIAS) { const l = lead(); l.produto = produto; assert.equal(fasesDoCliente(l, agora).some(f => f.id === 4), false) }
   })
   it('um ganho sem data não herda a data de uma recusa anterior', () => {
     const l = lead(); l.etapa = 'ganho'; l.eventos = [{tipo:'recusou',rotulo:'Recusa anterior',origem:'automático',fonte:'CRM',em:'2026-10-25T12:00:00Z'}]

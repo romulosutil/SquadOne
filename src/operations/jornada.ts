@@ -16,6 +16,7 @@ import { REGRAS_DO_RITMO } from './trava-de-ritmo'
 import { caminhoDaAba } from './vendas-abas'
 import { CARDAPIO, objecoesNoTexto, type IdDoServico, type ServicoDoCardapio } from './colinha'
 import type { AchadoDoRaioX, CrmLead, CrmProduto, IdDoAchado } from './types'
+import { ehOfertaPropria, type OfertaPropria as OfertaDoJson } from '../../server/ofertas.ts'
 
 // ------------------------------------------------------------------ etapas
 
@@ -233,6 +234,15 @@ export const OFERTAS_PROPRIAS: OfertaPropria[] = [
   },
 ]
 
+/**
+ * O que a jornada oferece a cada oferta própria do JSON (28/10/2026): o item do catálogo acima e o porquê. É
+ * conteúdo de cada oferta, por isso fica aqui; o Record faz o vue-tsc cobrar a oferta nova.
+ */
+const OFERTA_PROPRIA_NA_JORNADA: Record<OfertaDoJson, { id: IdDaOfertaPropria; porque: string }> = {
+  iris: { id: 'iris', porque: 'Clínica de terapia: o Iris, com o teste de 7 dias.' },
+  estampa: { id: 'crm-estamparia', porque: 'Estamparia: CRM de estamparia pronto; confirmar a necessidade e as condições próprias antes da proposta.' },
+}
+
 export type IdDaOferta = IdDoServico | IdDaOfertaPropria
 
 export function nomeDaOferta(id: IdDaOferta): string {
@@ -263,7 +273,7 @@ export function caminhoDoLead(lead: LeadDaJornada): IdDoPasso[] {
   const funil = funilDoLead(lead)
   const tronco: IdDoPasso[] = ['achado', 'raio-x', 'primeiro-contato', 'resposta', 'segunda']
   // Iris e estamparias: convite → conversa → proposta. Sem Raio-X aprovado nem Mapa.
-  if (funil === 'iris' || funil === 'estampa') return ['achado', 'primeiro-contato', 'resposta', 'conversa', 'proposta', 'ganho']
+  if (ehOfertaPropria(funil)) return ['achado', 'primeiro-contato', 'resposta', 'conversa', 'proposta', 'ganho']
   return [...tronco, 'conversa', ...(trilhoDeDentro(lead) ? ['mapa-convite', 'mapa', 'devolutiva'] as IdDoPasso[] : []), 'proposta', 'ganho']
 }
 
@@ -292,7 +302,7 @@ export function passoAtual(lead: LeadDaJornada): IdDoPasso {
       if (gente || lead.sinal === 'respondeu' || lead.sinal === 'respondeu-prumo' || lead.sinal === 'em-conversa') {
         // Iris e estamparias não têm 2ª mensagem: quem respondeu já está em conversa.
         const funil = funilDoLead(lead)
-        return funil === 'iris' || funil === 'estampa' ? 'conversa' : 'resposta'
+        return ehOfertaPropria(funil) ? 'conversa' : 'resposta'
       }
       return 'primeiro-contato'
   }
@@ -371,7 +381,7 @@ export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
   const dentro = trilhoDeDentro(lead)
   switch (passoAtual(lead)) {
     case 'achado':
-      return funil === 'prumo' || funil === 'iris' || funil === 'estampa'
+      return funil === 'prumo' || ehOfertaPropria(funil)
         ? { acao: 'Revisar o lead na Triagem e mandar o convite', quem: 'você' }
         : { acao: 'Esperar o Raio-X, que sai às 11:15 e às 17:15', quem: 'robô' }
     case 'raio-x':
@@ -520,9 +530,9 @@ export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
     r.naoAgora.push({ id: 'raio-x', porque: 'Lead encerrado: nada a oferecer, a não ser que ele volte a escrever.' })
     return r
   }
-  if (funil === 'iris' || funil === 'estampa') {
-    const id: IdDaOfertaPropria = funil === 'iris' ? 'iris' : 'crm-estamparia'
-    r.agora.push({ id, porque: funil === 'iris' ? 'Clínica de terapia: o Iris, com o teste de 7 dias.' : 'Estamparia: CRM de estamparia pronto; confirmar a necessidade e as condições próprias antes da proposta.' })
+  if (ehOfertaPropria(funil)) {
+    const { id, porque } = OFERTA_PROPRIA_NA_JORNADA[funil]
+    r.agora.push({ id, porque })
     r.naoAgora.push({ id: 'raio-x', porque: 'Iris e estamparias não passam pelo Raio-X nem pelo Mapa.' })
     return r
   }

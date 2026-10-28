@@ -8,6 +8,7 @@ import { resumoDoDell } from "../src/operations/alertas.ts";
 import { pareceFinancas } from "./financas/parece-financas.ts";
 import { FUSO } from "./alocador.ts";
 import type { CrmLead, CrmVisao, DellStatus } from "../src/operations/types.ts";
+import { PRODUTOS } from "./ofertas.ts";
 import type { StatusDoDell } from "./dell-status.ts";
 import type { AgendaSummary } from "./operations.ts";
 import type { ConsultaAoHermes } from "./hermes-consulta.ts";
@@ -32,7 +33,7 @@ export const LEITURAS = [
 export type NomeDaLeitura = (typeof LEITURAS)[number];
 export const CONSULTAR_HERMES = "consultar_hermes";
 
-const PRODUTO = { type: Type.STRING, enum: ["site", "prumo", "iris", "estampa", "plus"], description: "O produto do lead, como buscar_lead devolve." };
+const PRODUTO = { type: Type.STRING, enum: [...PRODUTOS], description: "O produto do lead, como buscar_lead devolve." };
 const ID = { type: Type.STRING, description: "O id do lead, como buscar_lead devolve. Nunca invente." };
 
 const DECLARACOES_DE_LEITURA: FunctionDeclaration[] = [

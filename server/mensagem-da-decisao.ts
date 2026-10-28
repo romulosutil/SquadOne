@@ -1,5 +1,6 @@
 import type { Router } from 'express'
 import type { CrmVisao } from '../src/operations/types.ts'
+import { ehProduto } from './ofertas.ts'
 import { procedimentoDaDecisao } from '../src/office/procedimento-da-decisao.ts'
 import { acaoDoLead } from '../src/operations/proxima-venda.ts'
 import { hashDoContexto, impedimentoDaMensagem, linkDoRaioXParaMensagem } from '../src/operations/revisao-resposta.ts'
@@ -11,7 +12,7 @@ export function montarMensagemDaDecisao(router: Router, op: { crm?: { visao(): P
   router.post('/crm/decisao/mensagem', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store')
     const { produto, id, contextoHash } = req.body ?? {}
-    if (!['site', 'prumo', 'iris', 'plus', 'estampa'].includes(produto) || typeof id !== 'string' || !id || id.length > 300 || typeof contextoHash !== 'string' || !/^[a-f0-9]{64}$/.test(contextoHash)) return void res.status(400).json({ error: 'Confira o cliente e atualize a leitura.' })
+    if (!ehProduto(produto) || typeof id !== 'string' || !id || id.length > 300 || typeof contextoHash !== 'string' || !/^[a-f0-9]{64}$/.test(contextoHash)) return void res.status(400).json({ error: 'Confira o cliente e atualize a leitura.' })
     if (!op.crm) return void res.status(503).json({ error: 'Vendas está indisponível.' })
     try {
       const visao = await op.crm.visao()

@@ -15,6 +15,7 @@ import { mascararParaJev } from '../../server/openrouter-decisoes.ts'
 import { omitirValores, pareceFinancas } from '../../server/financas/parece-financas.ts'
 import type { CartaoDoAssistente, FonteDaResposta, MensagemDoAssistente } from './assistente-contrato'
 import type { CrmLead, CrmProduto } from './types'
+import { ehProduto } from '../../server/ofertas.ts'
 
 // ------------------------------------------------------------------ o que nem vai ao modelo
 
@@ -256,7 +257,6 @@ export const NOMES_DAS_PROPOSTAS = ['propor_pedido_ao_time', 'propor_anotacao_no
 export type NomeDaProposta = (typeof NOMES_DAS_PROPOSTAS)[number]
 export const MAX_TEXTO_DO_CARTAO = 1000
 
-const PRODUTOS: readonly CrmProduto[] = ['site', 'prumo', 'iris', 'estampa', 'plus']
 /** O id do lead no formato do CRM (o mesmo de `leadDoPedido` em server/operations.ts). */
 export const ID_DE_LEAD = /^[A-Za-z0-9_:.-]{1,200}$/
 
@@ -314,7 +314,7 @@ export function lerCartaoProposto(
 
   const produto = typeof a.produto === 'string' ? a.produto.trim() : ''
   const leadId = typeof a.id === 'string' ? a.id.trim() : ''
-  if (!PRODUTOS.includes(produto as CrmProduto) || !ID_DE_LEAD.test(leadId)) return recusa('lead com produto ou id fora do formato')
+  if (!ehProduto(produto) || !ID_DE_LEAD.test(leadId)) return recusa('lead com produto ou id fora do formato')
   if (!visao) return recusa('Vendas não foi lido: sem como conferir o lead')
   const lead = acharLead(visao.leads, produto, leadId)
   if (!lead) return recusa('lead fora de Vendas')

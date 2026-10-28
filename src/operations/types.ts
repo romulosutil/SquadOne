@@ -2,6 +2,7 @@ import type { ResumoSinaisComerciais } from './sinais-comerciais.ts'
 import type { SinaisDoSite } from '../../server/sinais-do-site.ts'
 import type { QualificacaoComercial } from './qualificacao-comercial'
 import type { Spiced } from './spiced'
+import type { CrmProduto, LinkDaOfertaPropria } from '../../server/ofertas.ts'
 
 export type OperationalState = 'healthy' | 'syncing' | 'unavailable' | 'unknown'
 // Espelha server/operations.ts. 'syncthing' é opcional (aposentado em
@@ -66,7 +67,8 @@ export interface OperationsOverview {
 
 // CRM do PRUMO (Site antes da venda, serviços PRUMO, Iris, CRM de estamparia). Espelha server/crm.ts; a Central só lê.
 export type CrmEtapa = 'novo' | 'contato' | 'proposta' | 'ganho' | 'perdido'
-export type CrmProduto = 'site' | 'prumo' | 'iris' | 'estampa' | 'plus'
+// As ofertas próprias vêm de deploy/dell/claude-ops/prumo-ofertas.json (server/ofertas.gerado.ts, 28/10/2026).
+export type { CrmProduto }
 export type CrmSinal =
   | 'na-fila' | 'publicado' | 'pronto' | 'enviado' | 'viu' | 'respondeu' | 'em-conversa'
   | 'revisar' | 'sem-etapa' | 'convite' | 'convite-visto' | 'respondeu-prumo' | 'diagnostico'
@@ -297,7 +299,7 @@ export interface CrmVisao {
   pastasLidas: boolean
   gerador?: { estado: 'processando' | 'ocioso' | 'atencao' | 'desconhecido'; detalhe: string; atualizadoEm?: string; pendentes?: number }
   registro: { disponivel: boolean; motivo?: string }
-  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaIris?: string; planilhaEstampa?: string; planilhaCrm?: string }
+  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaCrm?: string } & Partial<Record<LinkDaOfertaPropria, string>>
   publicacao?: CrmPublicacao
   ultimaFalha?: CrmUltimaFalha
 }

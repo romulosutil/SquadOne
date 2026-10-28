@@ -18,6 +18,10 @@ import { contatoPausado } from '../src/operations/aprendizado-comercial.ts';
 import { protecaoDaDemo, revisaoComercialDoLead } from "./protecao-comercial.ts";
 import { revisaoDaClassificacao, ultimoConviteConfirmado, PREFIXO_CONVITE_TIME } from '../src/operations/decisoes-comerciais.ts';
 import { mensagemDoConvite } from './convite-mensagem.ts';
+import {
+  OFERTA, OFERTAS_PROPRIAS, PRODUTOS, PRODUTOS_DE_PROSPECCAO, ehOfertaPropria, ehProduto, ehProdutoDeProspeccao, porOferta,
+  type CrmProduto, type CrmProdutoDeProspeccao, type LinkDaOfertaPropria,
+} from './ofertas.ts';
 import os from "node:os";
 import path from "node:path";
 import { chaveDoNumero, enviosComAConversa, lerConversas, pastaDasConversas, resumirConversa, saidasDaConversa, type MensagemDaConversa, type ResumoDaConversa } from "./conversa-do-lead.ts";
@@ -26,7 +30,7 @@ import { quemRespondeu } from '../src/operations/resultados.ts';
 import { classificarResposta, respostaParaAcompanhamento, ROTULOS_DA_CLASSIFICACAO, type ClassificacaoDaResposta } from '../src/operations/classificacao-resposta.ts';
 import { achadosDoRecibo, lerPastasDosLeads, type AchadoDoRaioX, type GeradorDeSites, type LugarDaPasta, type PastaDoLead } from "./auto-production.ts";
 import { followupDoPlus, primeiraDoPlus } from "./plus-mensagem.ts";
-import type { LeadPlus, OfertaDoPlus } from "./plus-catalogo.ts";
+import { OFERTAS_DO_PLUS, type LeadPlus, type OfertaDoPlus } from "./plus-catalogo.ts";
 import { reenvioDoPrumo, segundaDoPrumo } from "./prumo-mensagem.ts";
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, followupDe, raioXAvulso, reenvioDoRoboDe, segundaDe } from "./site-mensagem.ts";
 import { bracoDoRecibo, entraNoTesteDoRecibo, type BracoDoRecibo } from "../src/operations/ab-recibo.ts";
@@ -58,15 +62,9 @@ import { ajusteDaPrioridade, ehSiteProprio, extrairSinais, type SinaisDoSite } f
 // havia uma semana. Uma coluna, um critério: DIAS_SEM_RESPOSTA.
 export const ETAPAS = ["novo", "contato", "proposta", "ganho", "perdido"] as const;
 export type CrmEtapa = (typeof ETAPAS)[number];
-// "plus" (15/10/2026): os leads do Catálogo de Negócios Maçônicos, abordados com a saudação da Ordem. Não é
-// uma quinta oferta: cada um carrega a oferta que recebe (site, prumo, iris, estampa) em `plus.oferta`. Vem de
-// um arquivo (plus/leads.json), não de planilha; o estado dele sai só dos registros da aba CRM.
-export const PRODUTOS = ["site", "prumo", "iris", "estampa", "plus"] as const;
-export type CrmProduto = (typeof PRODUTOS)[number];
-/** As ofertas que saem de uma aba no formato do Prospects (Etapa, convite, WhatsApp publicado no site). */
-export const PRODUTOS_DE_PROSPECCAO = ["prumo", "iris", "estampa"] as const;
-export type CrmProdutoDeProspeccao = (typeof PRODUTOS_DE_PROSPECCAO)[number];
-export const ehProduto = (valor: unknown): valor is CrmProduto => (PRODUTOS as readonly unknown[]).includes(valor);
+// PRODUTOS, PRODUTOS_DE_PROSPECCAO e ehProduto moram em server/ofertas.ts (28/10/2026), puros, para a SPA
+// validar com a mesma lista; as ofertas próprias vêm de deploy/dell/claude-ops/prumo-ofertas.json.
+export { PRODUTOS, PRODUTOS_DE_PROSPECCAO, ehProduto, ehProdutoDeProspeccao, type CrmProduto, type CrmProdutoDeProspeccao };
 
 export const ROTULO_DA_ETAPA: Record<CrmEtapa, string> = {
   novo: "Novo",
@@ -79,18 +77,16 @@ export const ROTULO_DA_ETAPA: Record<CrmEtapa, string> = {
 export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
   site: "Site antes da venda",
   prumo: "Serviços PRUMO",
-  iris: "Iris · Clínicas",
-  estampa: "CRM de estamparia",
+  ...porOferta((_, o) => o.rotulo),
   plus: "Plus",
 };
 
 /** De onde vem cada oferta de prospecção: aba, quem encontrou e qual link da planilha ela usa. */
 export const OFERTA_DE_PROSPECCAO: Record<CrmProdutoDeProspeccao, {
-  aba: string; cacador: string; link: "planilhaPrumo" | "planilhaIris" | "planilhaEstampa";
+  aba: string; cacador: string; link: "planilhaPrumo" | LinkDaOfertaPropria;
 }> = {
   prumo: { aba: "Prospects", cacador: "Encontrado pelo Lead Scout", link: "planilhaPrumo" },
-  iris: { aba: "Clínicas", cacador: "Encontrado pelo Caçador do Iris", link: "planilhaIris" },
-  estampa: { aba: "Estamparias", cacador: "Encontrado pelo Caçador de estamparias", link: "planilhaEstampa" },
+  ...porOferta((_, o) => ({ aba: o.aba, cacador: o.cacadorRotulo, link: o.linkRetrato })),
 };
 
 /** Follow-up, expiração e mudança automática de pasta só valem para envio a partir daqui (site-antes-da-venda.py). */
@@ -375,12 +371,13 @@ export interface CrmRetrato {
   versao: 1;
   geradoEm: string;
   publicacao?: CrmPublicacao;
-  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaIris?: string; planilhaEstampa?: string; planilhaCrm?: string };
-  /** `iris` e `estampa` (14/10/2026): ausentes num retrato antigo, viram fonte vazia com o aviso. */
-  fontes: { site: CrmFonte; prumo: CrmFonte; iris: CrmFonte; estampa: CrmFonte; registros: CrmFonte };
+  /** Um link por aba; o de cada oferta própria tem a chave `link_retrato` do JSON (planilhaIris, planilhaEstampa, …). */
+  links: { webhook?: string; planilhaSite?: string; planilhaPrumo?: string; planilhaCrm?: string } & Partial<Record<LinkDaOfertaPropria, string>>;
+  /** As ofertas próprias (14/10/2026): ausentes num retrato antigo, viram fonte vazia com o aviso. */
+  fontes: { site: CrmFonte; registros: CrmFonte } & Record<CrmProdutoDeProspeccao, CrmFonte>;
 }
 
-const LINKS_DO_RETRATO = ["webhook", "planilhaSite", "planilhaPrumo", "planilhaIris", "planilhaEstampa", "planilhaCrm"] as const;
+const LINKS_DO_RETRATO = ["webhook", "planilhaSite", "planilhaPrumo", ...OFERTAS_PROPRIAS.map((id) => OFERTA[id].linkRetrato), "planilhaCrm"] as const;
 
 export class RetratoInvalido extends Error {
   constructor(message: string) {
@@ -453,8 +450,7 @@ export function validarRetrato(valor: unknown): CrmRetrato {
     fontes: {
       site: lerFonte(fontes.site, "site"),
       prumo: lerFonte(fontes.prumo, "prumo"),
-      iris: lerFonte(fontes.iris, "iris"),
-      estampa: lerFonte(fontes.estampa, "estampa"),
+      ...porOferta((id) => lerFonte(fontes[id], id)),
       registros: lerFonte(fontes.registros, "registros"),
     },
   };
@@ -1890,7 +1886,7 @@ export function acaoDoInteresseParado(lead: Pick<CrmLead, "produto" | "links" | 
   const ha = `há ${tempoEsperando(esperandoMs)}`;
   // A licença não é "quer ver": ele deixou mandar o que foi oferecido, e é só isso que falta.
   if (lead.resposta?.tipo === "licenca") return `Deixou mandar ${ha} — o que ele autorizou ainda não foi mandado`;
-  if (lead.produto === "iris" || lead.produto === "estampa") return `Quer saber mais ${ha} — combinar a demonstração`;
+  if (ehOfertaPropria(lead.produto)) return `Quer saber mais ${ha} — combinar a demonstração`;
   if (lead.produto === "prumo") {
     return lead.links.segunda ? `Quer saber mais ${ha} — o Raio-X ainda não foi mandado`
       : `Quer saber mais ${ha} — o Raio-X ainda não foi feito nem mandado`;
@@ -1969,7 +1965,7 @@ function montarHoje(leads: CrmLead[], agora: number): CrmGrupoHoje[] {
       const urgente = parado !== undefined && Number.isFinite(desde) && agora - desde >= HORAS_ATE_URGENTE * 60 * 60 * 1000;
       const base = urgente ? acaoDoInteresseParado(lead, agora - desde)
         : r?.tipo === "licenca" ? "Deixou mandar: mandar o que ele autorizou"
-        : r?.tipo === "interesse" ? (lead.produto === "iris" || lead.produto === "estampa" ? "Quer saber mais: combinar a demonstração"
+        : r?.tipo === "interesse" ? (ehOfertaPropria(lead.produto) ? "Quer saber mais: combinar a demonstração"
           : lead.produto === "prumo"
           ? (lead.links.segunda ? "Quer saber mais: mandar o Raio-X" : "Quer saber mais: fazer o Raio-X e mandar")
           : lead.demoApagadoEm ? "Quer ver, mas o demo foi apagado: republicar antes de mandar o link"
@@ -2064,11 +2060,10 @@ function contagemVazia(): Record<CrmEtapa, CrmContagem> {
   return Object.fromEntries(ETAPAS.map((etapa) => [etapa, { total: 0, ...Object.fromEntries(PRODUTOS.map((p) => [p, 0])) }])) as Record<CrmEtapa, CrmContagem>;
 }
 
-const NOME_DA_FONTE: Record<CrmFonteId, string> = {
+export const NOME_DA_FONTE: Record<CrmFonteId, string> = {
   site: "Leads — Site antes da venda",
   prumo: "PRUMO — Prospects",
-  iris: "PRUMO — Clínicas (Iris)",
-  estampa: "PRUMO — Estamparias (CRM de estamparia)",
+  ...porOferta((_, o) => o.fonte),
   plus: "Plus — Catálogo de Negócios Maçônicos",
   registros: "Aba CRM (notas e próximos passos)",
 };
@@ -2452,7 +2447,7 @@ export async function lerPlus(diretorio: string | undefined): Promise<PlusLido> 
   const bruto = (dados && typeof dados === "object" ? dados : {}) as Record<string, unknown>;
   const importado = texto(bruto.geradoEm, 64);
   const lista = Array.isArray(bruto.leads) ? bruto.leads : [];
-  const ofertas: readonly string[] = ["site", "prumo", "iris", "estampa"];
+  const ofertas: readonly string[] = OFERTAS_DO_PLUS;
   const leads: LeadPlus[] = [];
   for (const item of lista.slice(0, 2000)) {
     const v = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;

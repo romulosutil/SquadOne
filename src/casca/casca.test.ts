@@ -26,7 +26,8 @@ import {
   type TimeLido,
 } from './hoje.ts'
 import type { Semaforo } from '../office/salaFinancas.ts'
-import type { CrmLead, CrmVisao, DellCheck } from '../operations/types.ts'
+import type { CrmContagem, CrmLead, CrmVisao, DellCheck } from '../operations/types.ts'
+import { OFERTAS_PROPRIAS } from '../../server/ofertas.ts'
 import type { QuestCalendario } from '../types.ts'
 
 const DELL: Capacidades = { perfil: 'operations', agentes: true }
@@ -339,7 +340,7 @@ describe('estado do time, só com fonte', () => {
 })
 
 describe('resumoDoFunil', () => {
-  const n = (total: number) => ({ total, site: total, prumo: 0, iris: 0, estampa: 0, plus: 0 })
+  const n = (total: number): CrmContagem => ({ total, site: total, prumo: 0, plus: 0, ...Object.fromEntries(OFERTAS_PROPRIAS.map((o) => [o, 0])) } as CrmContagem)
   it('só as etapas abertas, no singular e no plural', () => {
     assert.equal(
       resumoDoFunil({ novo: n(3), contato: n(1), proposta: n(1), ganho: n(9), perdido: n(40) }),

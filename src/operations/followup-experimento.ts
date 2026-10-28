@@ -10,10 +10,12 @@ export const MINIMO_POR_BRACO_DO_FOLLOWUP = 30
 export interface MetadataDoFollowup { braco: 'A' | 'B'; versao: typeof VERSAO_DO_FOLLOWUP }
 export function metadataDoFollowup(produto: string, id: string, ofertaPlus?: string, aprovado = FOLLOWUP_NOVO_APROVADO): MetadataDoFollowup {
   const oferta = produto === 'plus' ? ofertaPlus : produto
-  const valido = ['site', 'prumo', 'iris', 'estampa'].includes(oferta ?? '') && Boolean(id.trim())
+  // Só quem tem texto aprovado entra no sorteio (era a mesma lista à mão; o Plus vale pela oferta dele).
+  const valido = Object.hasOwn(FOLLOWUP_NOVO, oferta ?? '') && Boolean(id.trim())
   return { braco: valido && aprovado && hashDoLead(`${produto}:${id}:${ofertaPlus ?? ''}`, VERSAO_DO_FOLLOWUP) % 2 ? 'B' : 'A', versao: VERSAO_DO_FOLLOWUP }
 }
-export const FOLLOWUP_NOVO: Record<'site' | 'prumo' | 'iris' | 'estampa', string> = {
+/** Um texto aprovado por oferta: oferta nova no JSON faz o vue-tsc cobrar o dela aqui. */
+export const FOLLOWUP_NOVO: Record<Exclude<CrmProduto, 'plus'>, string> = {
   site: 'Oi, é o Rômulo de novo. Hoje, quem procura {EMPRESA} no Google consegue chegar até vocês pelo site? Se esse assunto não for prioridade, é só dizer.',
   prumo: 'Oi, é o Rômulo de novo, do PRUMO. Hoje vocês conseguem acompanhar os contatos até virarem cliente? Se não for prioridade, é só dizer.',
   iris: 'Oi, é o Rômulo de novo, do PRUMO. Hoje, juntar as anotações para a reavaliação toma tempo de quem coordena a clínica? Se não for prioridade, é só dizer.',

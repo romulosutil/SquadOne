@@ -38,6 +38,7 @@ import type {
 } from "../src/operations/assistente-contrato.ts";
 import { passoAtual, passoDaJornada } from "../src/operations/jornada.ts";
 import type { CrmProduto } from "../src/operations/types.ts";
+import { ehProduto } from "./ofertas.ts";
 import {
   CONSULTAR_HERMES, consultarOHermes, declaracoesDoAssistente, LEITURAS, LeiturasDaMensagem, type FontesDoAssistente, type ResultadoDoHermes,
 } from "./assistente-ferramentas.ts";
@@ -141,7 +142,6 @@ export class TetoDoAssistente extends Error {
 
 // --- O corpo do pedido -----------------------------------------------------------
 
-const PRODUTOS: readonly CrmProduto[] = ["site", "prumo", "iris", "estampa", "plus"];
 const ID_DA_CONVERSA = /^[A-Za-z0-9-]{8,64}$/;
 const CONTROLE = /[\u0000-\u0008\u000b-\u001f\u007f]/;
 
@@ -170,7 +170,7 @@ export function lerPedidoDeMensagem(corpo: unknown): PedidoDeMensagem {
     const l = (typeof ctx.lead === "object" ? ctx.lead : {}) as Record<string, unknown>;
     const produto = typeof l.produto === "string" ? l.produto : "";
     const id = typeof l.id === "string" ? l.id.trim() : "";
-    if (!PRODUTOS.includes(produto as CrmProduto) || !ID_DE_LEAD.test(id)) throw new PedidoDoAssistenteInvalido("Lead inválido.");
+    if (!ehProduto(produto) || !ID_DE_LEAD.test(id)) throw new PedidoDoAssistenteInvalido("Lead inválido.");
     contexto.lead = { produto, id };
   }
   if (ctx.preparoAmanhaContextoHash !== undefined) {

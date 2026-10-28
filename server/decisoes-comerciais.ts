@@ -1,5 +1,6 @@
 import type { Router } from 'express'
 import type { CrmVisao } from '../src/operations/types.ts'
+import { ehProdutoDeProspeccao } from './ofertas.ts'
 import { hashDoContexto } from '../src/operations/revisao-resposta.ts'
 import { aberturaConfirmadaDoLead, baseDaClassificacao, PREFIXO_CLASSIFICACAO, PREFIXO_CONVITE, ultimoConviteConfirmado } from '../src/operations/decisoes-comerciais.ts'
 
@@ -32,7 +33,7 @@ export function montarDecisoesComerciais(router: Router, crm?: { visao(): Promis
         texto = PREFIXO_CLASSIFICACAO + JSON.stringify({ base: baseDaClassificacao(lead), decisao, motivo: motivo.trim() })
       } else {
         const em = typeof enviadoEm === 'string' ? Date.parse(enviadoEm) : NaN
-        if (!['prumo', 'iris', 'estampa'].includes(lead.produto) || lead.etapa !== 'novo' || lead.sinal !== 'revisar' || ultimoConviteConfirmado(lead.eventos) || typeof mensagem !== 'string' || !mensagem.trim() || mensagem.length > 600 || !Number.isFinite(em) || em > Date.now() + 60_000 || (lead.desde && em < Date.parse(lead.desde))) {
+        if (!ehProdutoDeProspeccao(lead.produto) || lead.etapa !== 'novo' || lead.sinal !== 'revisar' || ultimoConviteConfirmado(lead.eventos) || typeof mensagem !== 'string' || !mensagem.trim() || mensagem.length > 600 || !Number.isFinite(em) || em > Date.now() + 60_000 || (lead.desde && em < Date.parse(lead.desde))) {
           consumidos.delete(chave); res.status(400).json({ error: 'Confirme o conteúdo e o horário real do convite enviado. O contato precisa estar na triagem.' }); return
         }
         const abertura = aberturaConfirmadaDoLead(lead, mensagem)

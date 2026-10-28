@@ -8,6 +8,7 @@ import {
   type IdDaOferta, type IdDoPasso, type LeadDaJornada,
 } from './operations/jornada.ts'
 import type { AchadoDoRaioX } from './operations/types.ts'
+import { OFERTAS_PROPRIAS as OFERTAS_DO_JSON } from '../server/ofertas.ts'
 
 const lead = (extra: Partial<LeadDaJornada> = {}): LeadDaJornada => ({
   produto: 'site', etapa: 'novo', sinal: 'na-fila', marcos: {}, links: {}, followupHoje: false, ...extra,
@@ -42,7 +43,7 @@ describe('jornada: o caminho de cada funil', () => {
     for (const l of [lead({ produto: 'prumo', equipe: false }), lead()]) assert.ok(!caminhoDoLead(l).includes('mapa'))
   })
   it('Iris e estamparias: o caminho curto, sem Raio-X nem Mapa', () => {
-    for (const produto of ['iris', 'estampa'] as const) {
+    for (const produto of OFERTAS_DO_JSON) {
       const c = caminhoDoLead(lead({ produto }))
       assert.ok(!c.includes('raio-x') && !c.includes('mapa'))
     }

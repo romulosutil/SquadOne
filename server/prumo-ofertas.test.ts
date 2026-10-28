@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { describe, it } from "node:test";
 import { COLUNAS_DO_PRUMO, OFERTA_DE_PROSPECCAO, etapaDoPrumo, normalizarCabecalho } from "./crm.ts";
+import { OFERTAS_PROPRIAS, ehOfertaPropria } from "./ofertas.ts";
 
 // Contrato entre deploy/dell/claude-ops/prumo-ofertas.json (o que o n8n grava nas abas Clínicas e
 // Estamparias) e server/crm.ts (o que o CRM lê delas). Quebrar um lado sem o outro deixaria a oferta
@@ -20,9 +21,11 @@ const CONFIG = JSON.parse(fs.readFileSync(new URL("../deploy/dell/claude-ops/pru
 
 describe("prumo-ofertas.json × CRM", () => {
   it("as ofertas usam a aba do CRM e o caminho específico do convite no workflow", () => {
-    assert.deepEqual(Object.keys(CONFIG.ofertas).sort(), ["estampa", "iris"]);
+    // A lista sai do JSON (server/ofertas.gerado.ts): oferta nova entra sem mexer aqui.
+    assert.deepEqual(Object.keys(CONFIG.ofertas), [...OFERTAS_PROPRIAS]);
     for (const [id, o] of Object.entries(CONFIG.ofertas)) {
-      const doCrm = OFERTA_DE_PROSPECCAO[id as "iris" | "estampa"];
+      assert.ok(ehOfertaPropria(id), id);
+      const doCrm = OFERTA_DE_PROSPECCAO[id];
       assert.equal(o.aba, doCrm.aba, id);
       // O CRM operacional usa wa.me direto e não expõe mais o campo convite.
       // O webhook continua sendo contrato da geração dos workflows de cada oferta.

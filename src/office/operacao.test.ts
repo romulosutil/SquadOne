@@ -9,6 +9,7 @@ import {
   JORNADA_DAS_SALAS, estadoDoRobo, fonteDoCrm, hrefDaJornada, lerRecorte, operacaoDaSala, temOperacao,
 } from "./operacao.ts";
 import { lerFiltroDePasso } from "../operations/funil-lista.ts";
+import { OFERTA, OFERTAS_PROPRIAS } from "../../server/ofertas.ts";
 
 const AGORA = Date.parse("2026-10-15T15:00:00Z");
 let seq = 0;
@@ -29,12 +30,12 @@ describe("operação das salas: que pedaço da jornada cada sala mostra", () => 
     assert.deepEqual(
       Object.fromEntries(Object.entries(JORNADA_DAS_SALAS).map(([id, j]) => [id, j.recortes.map((r) => r.produto)])),
       {
-        "prumo--prospeccao": ["site", "prumo", "iris", "estampa", "plus"],
+        "prumo--prospeccao": ["site", "prumo", ...OFERTAS_PROPRIAS, "plus"],
         "prumo--geral": [null],
         "prumo--site-antes-da-venda": ["site"],
         "prumo--organizar": ["prumo"],
-        "prumo--iris": ["iris"],
-        "prumo--estamparias": ["estampa"],
+        // Uma sala por oferta própria, a do JSON (prumo--iris, prumo--estamparias; server/ofertas.test.ts fixa os nomes).
+        ...Object.fromEntries(OFERTAS_PROPRIAS.map((id) => [OFERTA[id].sala, [id]])),
       }
     );
   });
@@ -114,7 +115,9 @@ describe("operação das salas: o recorte lido", () => {
   });
 
   it("o estoque da Prospecção por oferta", () => {
-    const [site, , iris, , plus] = JORNADA_DAS_SALAS["prumo--prospeccao"].recortes.map((r) => lerRecorte(r, leads));
+    // Pelo produto, não pela posição: uma oferta nova muda a posição do Plus.
+    const lidos = new Map(JORNADA_DAS_SALAS["prumo--prospeccao"].recortes.map((r) => [r.produto, lerRecorte(r, leads)]));
+    const [site, iris, plus] = (["site", "iris", "plus"] as const).map((p) => lidos.get(p)!);
     assert.deepEqual([site.total, iris.total, plus.total], [3, 0, 1]);
     assert.equal(site.comVoce, 0);
     assert.equal(iris.passos.length, 0);

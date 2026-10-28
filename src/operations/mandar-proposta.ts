@@ -23,6 +23,7 @@ import type { SugestaoDoCopiloto } from './copiloto'
 import { funilDoLead, passoAtual, type LeadDaJornada } from './jornada'
 import { pedeMaterial } from './marcadores-da-conversa'
 import type { CrmLead } from './types'
+import { OFERTA, ehOfertaPropria } from '../../server/ofertas.ts'
 import { temQualificacaoComercial } from './qualificacao-comercial'
 import { qualificadoParaProposta } from './spiced'
 import { textoDasFaixasIris, PRECOS_CANONICOS_IRIS } from './precos-iris'
@@ -50,8 +51,7 @@ export function instanteDoMaterial(lead: LeadDaJornada): number {
 
 /** As linhas sem 2ª mensagem: o convite abre a conversa e o material (vídeo, documento) vai à mão. */
 const sem2aMensagem = (lead: LeadDaJornada): boolean => {
-  const funil = funilDoLead(lead)
-  return funil === 'iris' || funil === 'estampa'
+  return ehOfertaPropria(funilDoLead(lead))
 }
 
 /**
@@ -148,8 +148,10 @@ export function rascunhoDaProposta(empresa: string, sugestao: Pick<SugestaoDoCop
 export function textoBaseDaProposta(lead: LeadDaProposta): string {
   const funil = funilDoLead(lead)
   if (funil === 'iris') return `Como combinamos, segue o rascunho da Iris para ${lead.empresa.trim()}:\n\n${textoDasFaixasIris()}\n\nEscopo e início: [confirmar com a clínica antes de fechar por escrito].`
-  if (funil === 'estampa') {
-    const produto = 'CRM de estamparia'
+  // Oferta própria sem preço aprovado (o CRM de estamparia, e a nova até ganhar o dela): rascunho com colchetes,
+  // nunca o "Respondido" do PRUMO com preço do cardápio, que era o que uma oferta nova recebia calada.
+  if (ehOfertaPropria(funil)) {
+    const produto = OFERTA[funil].rotulo
     return `Como combinamos, segue o rascunho para ${lead.empresa.trim()}:\n\n${produto}\nEscopo: [confirmar a entrega combinada].\nInvestimento: [preencher com as condições aprovadas do catálogo desta oferta].\nInício: [confirmar dia].\n\nVamos conferir esses pontos antes de fechar por escrito?`
   }
   const id = funil === 'site' ? 'proposta-encontrado' : lead.sinal === 'diagnostico' ? 'proposta-fonte' : 'proposta-respondido'

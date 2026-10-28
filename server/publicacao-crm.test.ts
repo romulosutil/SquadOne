@@ -5,13 +5,14 @@ import path from 'node:path';
 import { afterEach, describe, it } from 'node:test';
 import { validarPublicacaoCrm, falhaMaisRecenteQueRetrato, type CrmPublicacao } from './publicacao-crm.ts';
 import { CrmStore, configDoCrm, validarRetrato, montarCrm } from './crm.ts';
+import { PRODUTOS_DE_PROSPECCAO } from './ofertas.ts';
 
 // Só fixtures de schema/ordem e diretórios temporários; nenhum append, modelo ou envio.
 const EM = '2026-10-24T15:00:00.000Z';
 const AGORA = new Date('2026-10-24T15:01:00.000Z');
 const pub = (id: string, hash = 'a'.repeat(64)): CrmPublicacao => ({ v: 1, execucaoId: id, conteudoHash: hash, publicadoEm: EM });
 function retrato(publicacao?: CrmPublicacao) {
-  return { versao: 1, geradoEm: EM, links: {}, fontes: Object.fromEntries(['site','prumo','iris','estampa','registros'].map(k => [k,{colunas:[],linhas:[]}])), ...(publicacao ? {publicacao} : {}) };
+  return { versao: 1, geradoEm: EM, links: {}, fontes: Object.fromEntries(['site',...PRODUTOS_DE_PROSPECCAO,'registros'].map(k => [k,{colunas:[],linhas:[]}])), ...(publicacao ? {publicacao} : {}) };
 }
 
 describe('Publicação CRM: metadado e ordem local', () => {

@@ -22,6 +22,7 @@ import { SIGLA_DO_PRODUTO } from './crm-formato'
 import type { Guardador } from './guardador'
 import { PASSOS, passoAtual, type IdDoPasso, type LeadDaJornada } from './jornada'
 import type { CrmLead, CrmProduto } from './types'
+import { ehProduto } from '../../server/ofertas.ts'
 
 // ------------------------------------------------------------------ o contrato dos sinais
 
@@ -274,7 +275,6 @@ export const temCriterio = (cohort: Cohort, coluna: ColunaDoCohort, criterio: Cr
 // ------------------------------------------------------------------ guardar
 
 export const CHAVE_DO_COHORT = 'squadone:crm:triagem-cohort'
-const PRODUTOS: readonly CrmProduto[] = ['site', 'prumo', 'iris', 'estampa', 'plus']
 
 /** Um critério lido do disco: o que não bate com o formato é descartado, nunca adivinhado. */
 function criterioLido(bruto: unknown): Criterio | null {
@@ -282,7 +282,7 @@ function criterioLido(bruto: unknown): Criterio | null {
   const c = bruto as Record<string, unknown>
   const texto = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
   switch (c.tipo) {
-    case 'oferta': return PRODUTOS.includes(c.valor as CrmProduto) ? { tipo: 'oferta', valor: c.valor as CrmProduto } : null
+    case 'oferta': return ehProduto(c.valor) ? { tipo: 'oferta', valor: c.valor } : null
     case 'nicho': case 'cidade': { const v = texto(c.valor); return v ? { tipo: c.tipo, valor: v } : null }
     case 'passo': return PASSOS.some((p) => p.id === c.valor) ? { tipo: 'passo', valor: c.valor as IdDoPasso } : null
     case 'temSite': case 'whatsappPublicado': return { tipo: c.tipo }

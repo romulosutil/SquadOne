@@ -14,6 +14,7 @@ test('convite confirmado pela integração do time também muda a etapa', () => 
   { enviadoEm, mensagem: 'Convite enviado' })
 })
 import { mensagemDoConvite } from './convite-mensagem.ts'
+import { OFERTAS_PROPRIAS } from './ofertas.ts'
 import { readFileSync } from 'node:fs'
 
 const agora = new Date()
@@ -62,7 +63,7 @@ test('convite usa destino direto, permanece na triagem até confirmação e usa 
 })
 test('textos das ofertas preservam os modelos aprovados', () => {
   const cfg = JSON.parse(readFileSync(new URL('../deploy/dell/claude-ops/prumo-ofertas.json', import.meta.url), 'utf8'))
-  for (const produto of ['iris', 'estampa']) assert.equal(mensagemDoConvite(produto, 'Empresa', '', new Date('2026-10-18T15:00:00Z')), cfg.ofertas[produto].mensagem.replace('{OLA}', 'Boa tarde').replace('{NOME}', 'Empresa'))
+  for (const produto of OFERTAS_PROPRIAS) assert.equal(mensagemDoConvite(produto, 'Empresa', '', new Date('2026-10-18T15:00:00Z')), cfg.ofertas[produto].mensagem.replace('{OLA}', 'Boa tarde').replace('{NOME}', 'Empresa'))
 })
 test('confirmações validam contexto, impedem duplicidade e não repetem resultado ambíguo', async () => {
   const r = retrato(); let chamadas = 0; let falha = false

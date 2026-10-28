@@ -18,6 +18,7 @@
 import { PASSOS, painelDaJornada, type IdDoPasso, type QuemFaz } from "../operations/jornada";
 import { ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO } from "../operations/crm-formato";
 import type { CrmEtapa, CrmLead, CrmProduto, CrmVisao, DellCheck, DellStatus } from "../operations/types";
+import { OFERTA, OFERTAS_PROPRIAS } from "../../server/ofertas.ts";
 import { linkDoComoFunciona, trabalhadoresDaSala, type TrabalhadorAutomatico } from "./trabalhadores";
 
 // ------------------------------------------------------------------ que pedaço da jornada cada sala mostra
@@ -52,8 +53,8 @@ export const JORNADA_DAS_SALAS: Readonly<Record<string, JornadaDaSala>> = {
   "prumo--geral": { titulo: "Conversas em andamento, todas as ofertas", recortes: [{ produto: null, passos: EM_ANDAMENTO }] },
   "prumo--site-antes-da-venda": { titulo: "Leads desta oferta", recortes: [{ produto: "site" }] },
   "prumo--organizar": { titulo: "Leads desta oferta", recortes: [{ produto: "prumo" }] },
-  "prumo--iris": { titulo: "Leads desta oferta", recortes: [{ produto: "iris" }] },
-  "prumo--estamparias": { titulo: "Leads desta oferta", recortes: [{ produto: "estampa" }] },
+  // A sala de cada oferta própria vem de prumo-ofertas.json (`sala`).
+  ...Object.fromEntries(OFERTAS_PROPRIAS.map((produto): [string, JornadaDaSala] => [OFERTA[produto].sala, { titulo: "Leads desta oferta", recortes: [{ produto }] }])),
 };
 
 // ------------------------------------------------------------------ as fontes

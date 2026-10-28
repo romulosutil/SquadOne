@@ -1,5 +1,6 @@
 import { compararPlanosComerciais, planoPedeConferenciaInterna, planoComercialDoLead, temContextoPrioridadeComercial } from '../operations/prioridade-comercial'
-import type { CrmLead } from '../operations/types'
+import type { CrmLead, CrmProduto } from '../operations/types'
+import { PRODUTOS, SIGLA_DO_PRODUTO } from '../operations/crm-formato'
 import { prioridadeDaAcao, PRIORIDADE_DA_FILA, type AcaoDeVenda } from '../operations/proxima-venda'
 import { conversasParaConduzir, type ConversaParaVoce } from '../operations/conversas-para-conduzir'
 import { contatoPausado } from '../operations/aprendizado-comercial'
@@ -14,7 +15,8 @@ export interface Decisao {
   motivo: string
   acao: AcaoDeVenda | null
 }
-export const nomesDasOfertas = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', plus: 'Plus', estampa: 'Estamparia' } as const
+// A sigla única (AC-19), na ordem dos filtros de Vendas; era uma cópia à mão.
+export const nomesDasOfertas: Readonly<Record<CrmProduto, string>> = Object.fromEntries(PRODUTOS.map((p) => [p, SIGLA_DO_PRODUTO[p]])) as Record<CrmProduto, string>
 
 const instante = (em?: string) => Date.parse(em ?? '') || 0
 

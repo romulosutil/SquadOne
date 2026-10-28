@@ -1,6 +1,7 @@
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO } from '../../server/site-mensagem.ts'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmRegimeDaMensagem, CrmTipoDeResposta } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
+import { OFERTA, OFERTAS_PROPRIAS, PRODUTOS as PRODUTOS_DO_CRM, ehOfertaPropria, porOferta, type LinkDaOfertaPropria } from '../../server/ofertas.ts'
 import { textoParaATela } from './marcadores-da-conversa'
 import { lerDecisao, PREFIXO_CLASSIFICACAO, PREFIXO_CONVITE, type RevisaoClassificacao, type ConviteConfirmado } from './decisoes-comerciais'
 
@@ -83,9 +84,11 @@ export const ROTULO_DA_RESPOSTA: Record<CrmTipoDeResposta, string> = {
 }
 
 // PRUMO como holding (14/10/2026): as quatro ofertas são do PRUMO e dividem o mesmo funil.
-export const PRODUTOS: readonly CrmProduto[] = ['site', 'prumo', 'iris', 'estampa', 'plus']
+// As ofertas próprias (Iris, estamparia, as próximas) vêm de deploy/dell/claude-ops/prumo-ofertas.json (28/10/2026).
+export const PRODUTOS: readonly CrmProduto[] = PRODUTOS_DO_CRM
+export { ehOfertaPropria }
 export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
-  site: 'Site antes da venda', prumo: 'Serviços PRUMO', iris: 'Iris · Clínicas', estampa: 'CRM de estamparia', plus: 'Plus',
+  site: 'Site antes da venda', prumo: 'Serviços PRUMO', ...porOferta((_, o) => o.rotulo), plus: 'Plus',
 }
 /**
  * O rótulo curto de cada oferta, o MESMO no celular e no desktop (AC-19, 17/10/2026): nos chips do
@@ -93,12 +96,22 @@ export const ROTULO_DO_PRODUTO: Record<CrmProduto, string> = {
  * PRUMO" e "CRM de estamparia": pareciam ofertas diferentes. É o rótulo da linha de contexto da
  * Próxima venda (ROTULO_CURTO de proxima-venda.ts); o longo fica para a Ficha.
  */
-export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO', iris: 'Iris', estampa: 'Estamparia', plus: 'Plus' }
+export const SIGLA_DO_PRODUTO: Record<CrmProduto, string> = { site: 'Site', prumo: 'PRUMO', ...porOferta((_, o) => o.sigla), plus: 'Plus' }
 /** Plus (15/10/2026): a oferta que o lead recebe, na ordem em que o filtro a mostra. */
 // É o rótulo curto (AC-13): era um terceiro jogo de nomes, com "Serviços PRUMO" entre siglas.
+// As chaves são as ofertas que o Plus recebe (OFERTAS_DO_PLUS em server/plus-catalogo.ts, que a SPA não importa:
+// usa node:crypto), não todas as ofertas; Plus para uma oferta nova é decisão à parte (textos maçônicos próprios).
 export const ROTULO_DA_OFERTA_DO_PLUS = {
   site: SIGLA_DO_PRODUTO.site, prumo: SIGLA_DO_PRODUTO.prumo, iris: SIGLA_DO_PRODUTO.iris, estampa: SIGLA_DO_PRODUTO.estampa,
-} as const
+} as const satisfies Record<NonNullable<CrmLead['plus']>['oferta'], string>
+/**
+ * O link da aba de cada oferta própria no rodapé de Vendas ("Aba Clínicas (Iris)", "Aba Estamparias"): a sigla
+ * entra entre parênteses só quando a aba não a diz.
+ */
+export const ABAS_DAS_OFERTAS_PROPRIAS: ReadonlyArray<{ chave: LinkDaOfertaPropria; rotulo: string }> = OFERTAS_PROPRIAS.map((id) => {
+  const { aba, sigla, linkRetrato } = OFERTA[id]
+  return { chave: linkRetrato, rotulo: `Aba ${aba}${aba.toLowerCase().includes(sigla.toLowerCase()) ? '' : ` (${sigla})`}` }
+})
 /** O primeiro contato: o Site manda o site pronto, as outras ofertas um convite para conversar. */
 export const ehConvite = (produto: CrmProduto) => produto !== 'site' && produto !== 'plus'
 

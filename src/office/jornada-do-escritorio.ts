@@ -1,4 +1,5 @@
 import type { CrmLead } from '../operations/types'
+import { ehOfertaPropria } from '../../server/ofertas.ts'
 import { trabalhosRegistrados } from './trabalho-registrado'
 import type { AcaoDeVenda } from '../operations/proxima-venda'
 import { decisoesHumanasDoEscritorio } from './minha-vez'
@@ -38,7 +39,7 @@ export function faseDoEscritorio(lead: CrmLead, agora = Date.now()): FaseDoEscri
 }
 export function fasesDoCliente(lead: CrmLead, agora = Date.now()) {
   const atual = faseDoEscritorio(lead, agora), em = datas(lead, agora)
-  const semMaterial = (lead.produto === 'iris' || lead.produto === 'estampa') && !em[3]
+  const semMaterial = ehOfertaPropria(lead.produto) && !em[3]
   return FASES_DO_ESCRITORIO.filter(f => !semMaterial || f.id !== 4).map(f => ({
     ...f, em: em[f.id - 1], estado: f.id === atual ? 'atual' as const : em[f.id - 1] ? 'confirmado' as const : f.id > atual ? 'depois' as const : 'sem-registro' as const,
   }))
