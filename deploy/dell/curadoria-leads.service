@@ -1,11 +1,16 @@
 [Unit]
 Description=Marina: revisar qualidade dos leads e aprender com resultados comerciais
 After=network-online.target squadone-operations.service
+Wants=squadone-operations.service
+StartLimitIntervalSec=30min
+StartLimitBurst=10
 
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 %h/.local/bin/curadoria-leads
 TimeoutStartSec=3min
+Restart=on-failure
+RestartSec=2min
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true
