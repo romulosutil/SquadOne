@@ -1,0 +1,11 @@
+[Unit]
+Description=Confere pedidos de material do Encontrado sem acionar o operador
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=2min
+AccuracySec=15s
+Unit=encontrado-materiais.service
+
+[Install]
+WantedBy=timers.target
