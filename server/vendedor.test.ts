@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ESPERA_DO_AVISO_MS, MAX_AVISOS_POR_DIA, decidir, estadoNovo, botoesDoAviso, criarVendedor, conferirDoAviso, limparAbertos, rodapeDeFora, textoDoAviso, toqueNoAviso, type AvisoAberto, type DoDia } from "./vendedor.ts";
+import { ESPERA_DO_AVISO_MS, MAX_AVISOS_POR_DIA, decidir, estadoDoDia, estadoNovo, vaiAoTelegram, botoesDoAviso, criarVendedor, conferirDoAviso, limparAbertos, rodapeDeFora, textoDoAviso, toqueNoAviso, type AvisoAberto, type DoDia } from "./vendedor.ts";
 import type { Resolvida } from "./venda-do-dia.ts";
 import { filaDeVenda, type AcaoDeVenda } from "../src/operations/proxima-venda.ts";
 import type { CrmLead, CrmVisao } from "../src/operations/types.ts";
@@ -256,3 +256,128 @@ describe("vendedor: passagem comercial interna sem confirmação de envio", () =
     } finally { vendedor.parar(); reiniciado?.parar(); await rm(dir, { recursive: true, force: true }) }
   })
 })
+
+// 28/10/2026 (decisão do PM, autoridade do Rômulo): 276 avisos, 20 "Enviei" e 239 expirados em 7 dias.
+// Teto de 8, lista branca por tipo e 1 aviso por lead por dia; o urgente passa dos dois limites.
+describe("vendedor: só o que vale o toque vai ao Telegram", () => {
+  const acao = (chave: string, tipo: AcaoDeVenda["tipo"], extra: Partial<AcaoDeVenda> = {}): AcaoDeVenda => ({
+    chave: `site:L|${chave}`, leadId: "site:L", empresa: "Studio L", produto: "site", tipo, titulo: "t", contexto: "c", porque: "p", tatica: "x",
+    primeiroContato: false, quente: false, ...extra,
+  });
+  const lead = (extra: Partial<CrmLead> = {}): CrmLead => ({
+    id: "site:L", chave: "L", produto: "site", empresa: "Studio L", etapa: "contato", sinal: "em-conversa", subEtapa: "Respondeu",
+    marcos: {}, eventos: [], links: {}, ...extra,
+  } as CrmLead);
+  const conferido = { tipo: "nota", rotulo: "Nota", texto: "[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.", em: new Date(T).toISOString(), origem: "manual", fonte: "CRM" } as CrmLead["eventos"][number];
+  // Uma resposta de gente, comum (não quente), por lead: o caso de rotina que o teto e o 1 por lead seguram.
+  const respondeu = (id: string, trecho = "Me explica melhor?"): CrmLead => lead({
+    id: `site:${id}`, chave: id, empresa: id, marcos: { enviado: new Date(T - 86_400_000).toISOString(), respondeu: new Date(T - 3_600_000).toISOString() },
+    links: { whatsapp: "https://wa.me/5511999990000" }, eventos: [conferido],
+    resposta: { tipo: "neutra", trecho, em: new Date(T - 3_600_000).toISOString() },
+  });
+  const visao = (grupos: Partial<Record<"resposta" | "followup" | "enviar", CrmLead[]>>): CrmVisao => ({
+    estado: "ok", leads: Object.values(grupos).flat(),
+    hoje: Object.entries(grupos).map(([id, ls]) => ({ id, titulo: id, explicacao: "", itens: ls!.map((l) => ({ leadId: l.id, acao: "Agir", detalhe: "", ordem: 1, links: [] })) })),
+  } as unknown as CrmVisao);
+
+  it("o teto do dia é 8", () => assert.equal(MAX_AVISOS_POR_DIA, 8));
+
+  it("lista branca: responder, mandar a proposta, o 'o que achou?' e o pedido de preço vão; a rotina fica na Central", () => {
+    const vao: AcaoDeVenda[] = [
+      acao("responder", "responder"),
+      acao("mandar-proposta", "mandar-proposta", { quente: true }),
+      acao("depois-do-link", "depois-do-link", { quente: true }),
+      acao("negociacao-humana", "combinado"),
+      acao("ciclo-comercial", "combinado", { quente: true }),
+      acao("preparo-x|atendimento-comercial", "combinado", { interna: true, quente: true }),
+    ];
+    const ficam: AcaoDeVenda[] = [
+      acao("primeiro", "primeiro", { primeiroContato: true }),
+      acao("followup", "followup"),
+      acao("followup", "followup", { primeiroContato: true }),
+      acao("cadencia|proposta|x|dia-3", "proposta"),
+      acao("cadencia|conversa|x|dia-2", "depois-do-link"),
+      acao("desfecho", "desfecho"),
+      acao("revisao", "combinado", { revisao: true, conferirHistorico: true }),
+      acao("revisao-conversa|x", "combinado", { revisao: true, conferirHistorico: true }),
+      acao("qualificar", "combinado", { quente: true }),
+      acao("ciclo-comercial", "combinado"),
+      acao("preparo-x|atendimento-comercial", "combinado", { interna: true }),
+      acao("qualificacao-comercial", "combinado"),
+      acao("indicacao|x", "combinado"),
+      acao("combinado", "combinado", { quente: true }),
+    ];
+    for (const a of vao) assert.equal(vaiAoTelegram(a), true, a.chave);
+    for (const a of ficam) assert.equal(vaiAoTelegram(a), false, `${a.chave} (${a.tipo})`);
+  });
+
+  it("resposta de robô ou de recepção não vai, nem quente", () => {
+    const r = acao("responder", "responder", { quente: true });
+    assert.equal(vaiAoTelegram(r, lead({ resposta: { tipo: "bot", trecho: "Olá! Recebemos sua mensagem", em: "" } })), false);
+    assert.equal(vaiAoTelegram(r, lead({ conversa: { desde: "", mensagens: 1, ultima: { em: "", direcao: "entrada", trecho: "oi", papel: "recepcao" } } } as Partial<CrmLead>)), false);
+    assert.equal(vaiAoTelegram({ ...r, copiloto: { porque: "", quando: "", momento: { quem: "robo", leitura: "", passo: "" } } }, lead()), false);
+    assert.equal(vaiAoTelegram(r, lead({ resposta: { tipo: "interesse", trecho: "pode mandar", em: "" } })), true);
+  });
+
+  it("follow-up e primeiro contato na fila não viram aviso; a resposta de gente vira", () => {
+    const v = visao({ followup: [respondeu("seguir")], enviar: [lead({ id: "site:novo", chave: "novo", etapa: "novo", links: { whatsapp: "https://wa.me/5511988880000" } })] });
+    assert.ok(filaDeVenda(v, { primeiroLiberado: true, agora: T }).some((a) => a.tipo === "followup"), "o fixture precisa de um follow-up na fila");
+    assert.deepEqual(decidir(v, estadoNovo(T), T, undefined, dia()).decisao, { tipo: "nada", motivo: "fila-vazia" });
+    const comResposta = visao({ resposta: [respondeu("gente")] });
+    assert.equal(decidir(comResposta, estadoNovo(T), T, undefined, dia()).decisao.tipo, "avisar");
+  });
+
+  it("teto de 8: o 8º sai, o 9º espera o dia seguinte", () => {
+    const v = visao({ resposta: [respondeu("gente")] });
+    const [a] = filaDeVenda(v, { primeiroLiberado: false, agora: T });
+    assert.equal(a.tipo, "responder");
+    assert.equal(a.quente, false, "o caso de rotina não pode ser urgente");
+    assert.equal(decidir(v, { ...estadoNovo(T), avisosHoje: MAX_AVISOS_POR_DIA - 1 }, T, undefined, dia()).decisao.tipo, "avisar");
+    assert.deepEqual(decidir(v, { ...estadoNovo(T), avisosHoje: MAX_AVISOS_POR_DIA }, T, undefined, dia()).decisao, { tipo: "nada", motivo: "teto-do-dia" });
+  });
+
+  it("um aviso por lead por dia, mesmo com outra chave; outro lead segue avisando", () => {
+    const v = visao({ resposta: [respondeu("A"), respondeu("B")] });
+    const r = decidir(v, { ...estadoNovo(T), leadsAvisados: ["site:A"] }, T, undefined, dia());
+    assert.equal(r.decisao.tipo === "avisar" && r.decisao.acao.leadId, "site:B");
+    assert.deepEqual(decidir(v, { ...estadoNovo(T), leadsAvisados: ["site:A", "site:B"] }, T, undefined, dia()).decisao, { tipo: "nada", motivo: "fila-vazia" });
+    // A Central ter resolvido algo do lead hoje não conta como aviso no Telegram.
+    const doDia = dia({ "site:A|followup": resolvida(T - min, "enviada", "central") });
+    const pelaCentral = decidir(visao({ resposta: [respondeu("A")] }), estadoNovo(T), T, undefined, doDia);
+    assert.equal(pelaCentral.decisao.tipo === "avisar" && pelaCentral.decisao.acao.leadId, "site:A");
+  });
+
+  it("estado de antes do campo: os leads de `avisados` contam como avisados até o dia virar", () => {
+    const lido = { dia: estadoNovo(T).dia, avisados: ["site:A|followup", "site:B|responder|2026-10-14T12:00:00Z"], pulados: [], abertos: [], enviadosHoje: 0, avisosHoje: 2 };
+    assert.deepEqual(estadoDoDia(lido, T).leadsAvisados, ["site:A", "site:B"]);
+    assert.deepEqual(estadoDoDia({ ...lido, leadsAvisados: ["site:C"] }, T).leadsAvisados, ["site:C"]);
+  });
+
+  it("o urgente passa do teto e do 1 por lead", () => {
+    const quente = respondeu("Q", "pode mandar");
+    quente.resposta = { ...quente.resposta!, tipo: "interesse" };
+    const v = visao({ resposta: [quente] });
+    const [a] = filaDeVenda(v, { primeiroLiberado: false, agora: T });
+    assert.equal(a.quente, true, "o fixture precisa de um 'quero ver' quente");
+    const r = decidir(v, { ...estadoNovo(T), avisosHoje: MAX_AVISOS_POR_DIA, leadsAvisados: ["site:Q"] }, T, undefined, dia());
+    assert.equal(r.decisao.tipo === "avisar" && r.decisao.acao.leadId, "site:Q");
+  });
+
+  it("a volta grava o lead avisado, e a seguinte não avisa o mesmo lead de novo", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "vendedor-por-lead-")), arquivo = join(dir, "vendedor.json");
+    let agora = T, avisos = 0;
+    const v = visao({ resposta: [respondeu("A")] });
+    const vendedor = criarVendedor({ arquivoDeEstado: arquivo, agora: () => agora, vendaDoDia: criarMemoriaDaVenda(join(dir, "dia.json"), () => agora),
+      lerVisao: async () => v, enviar: async () => { avisos++; }, registrar: async () => {} });
+    try {
+      assert.equal((await vendedor.volta()).tipo, "avisar");
+      assert.deepEqual(JSON.parse(await readFile(arquivo, "utf8")).leadsAvisados, ["site:A"]);
+      // Uma mensagem nova dele é outra chave de responder: no mesmo dia, sem ser urgente, não avisa de novo.
+      const em = new Date(T + min).toISOString();
+      v.leads[0].conversa = { desde: em, mensagens: 1, ultimaEntrada: em, ultima: { em, direcao: "entrada", trecho: "e o prazo?" } } as CrmLead["conversa"];
+      agora = T + ESPERA_DO_AVISO_MS + min;
+      await vendedor.volta();
+      assert.equal(avisos, 1);
+    } finally { vendedor.parar(); await rm(dir, { recursive: true, force: true }); }
+  });
+});

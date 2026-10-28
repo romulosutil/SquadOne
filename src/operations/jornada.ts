@@ -94,7 +94,7 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Primeira mensagem',
     trilho: 'tronco',
     quem: 'você',
-    como: `O time comercial (só o Site em pronto), a Ficha do lead ou o "Envie para X" do Telegram, pelo WhatsApp, no expediente e na trava de ritmo (intervalo mínimo de ${Math.round(REGRAS_DO_RITMO.intervaloMs / 60_000)} min, ${REGRAS_DO_RITMO.porHora} por hora móvel; teto diário vigente mostrado na Central); o observador marca envio e leitura sozinho`,
+    como: `O time comercial (só o Site em pronto) ou a Ficha do lead, pelo WhatsApp, no expediente e na trava de ritmo (intervalo mínimo de ${Math.round(REGRAS_DO_RITMO.intervaloMs / 60_000)} min, ${REGRAS_DO_RITMO.porHora} por hora móvel; teto diário vigente mostrado na Central); o observador marca envio e leitura sozinho`,
     entra: 'Enviada (ou convite enviado), sem resposta de gente.',
     sai: 'Resposta de gente leva para "Respondeu". Sem resposta: follow-up no 3º dia (só para quem leu, no mesmo dia). Vendas mostra a saída por prazo no 7º dia; a planilha marca expirado no 7º, junto.',
     prazo: 'follow-up no 3º dia; saída por prazo em Vendas em 7 dias; expiração da planilha também em 7 dias',

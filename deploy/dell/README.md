@@ -1225,7 +1225,7 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   enviado antes é acervo: saiu um resumo único (`--resumo-backlog`) e nada é automático. **O follow-up do 3º dia não é mais daqui**
   (19/10/2026): o 05 não grava mais `followup_em` (a coluna segue na planilha, ninguém a escreve) e, desde 17/10 (OT-01), também não avisa.
   A Central é a dona do follow-up e do Perdido (`server/crm.ts`): calcula o dia sozinha a partir do envio, vale do 3º ao 6º dia, só para
-  quem leu, e aparece em Vendas › Conversas para você e no "Envie para X" do Telegram.
+  quem leu, e aparece em Vendas › Conversas para você (desde 28/10/2026 o follow-up não vai mais ao "Envie para X" do Telegram).
 - **06 · Funil semanal** (segunda, 08:00): por nicho (vertical + cidade)
   leads, sites, enviados, responderam, em conversa, recusados e concluídos.
   Aviso pelo Hermes e `n8n-estado/site-funil.json`, sem `itens` (não vira

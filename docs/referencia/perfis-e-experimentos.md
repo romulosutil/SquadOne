@@ -204,7 +204,8 @@ Funil real em 15/10/2026: 221 envios, 5 interesses, 0 propostas. O gargalo é do
 > - **A Ficha de um lead Novo** mostra o botão de primeiro contato com as travas de horário e ritmo (`primeiro-da-ficha.ts`); o
 >   convite aberto e não confirmado pelo servidor vale no ritmo só naquele aparelho, e a tela diz isso.
 > - **O vendedor do Telegram** (`server/vendedor.ts`) usa a regra da Central de quem faz o primeiro contato (`primeirosDoTime`): com o
->   time pausado ou sem fila, o lead novo volta a ser avisado ao Rômulo. O teto de 40 conta só os avisos que de fato saíram
+>   time pausado ou sem fila, o lead novo volta a ser avisado ao Rômulo (até 28/10/2026: desde então o primeiro contato fica só
+>   na Central e o teto é 8, ver "No Telegram" abaixo). O teto de 40 conta só os avisos que de fato saíram
 >   (`avisosHoje`; o que a Central resolveu e o barrado pelo gate não contam) e o "quero ver" quente passa por cima dele. Só espera o
 >   copiloto por 4 min quando a última mensagem da conversa é do lead (`COM_COPILOTO` é só `responder`); nos outros passos o copiloto
 >   nunca responde, e esperar era à toa. O `vendedor.json` não guarda mais os primeiros contatos (a fonte é o `venda-do-dia.json`);
@@ -275,12 +276,21 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
 - **Na tela (histórico: `ProximaVenda.vue` saiu em 19/10/2026, ver o bloco acima):** `ProximaVenda.vue` era a aba "A fazer" de Vendas (até 17/10/2026 era também o primeiro cartão da Hoje do Dell; a Central de comando mostra só uma faixa com o passo da vez). O toque no link anota
   como no CRM (2ª mensagem, follow-up, Plus) e conta o primeiro contato na trava; "Enviei, próxima" e "Pular" vão ao
   servidor (desde OT-01; o localStorage do dia é a reserva). Desde 17/10/2026 o "Enviei, próxima" vira o primário depois do toque.
-- **No Telegram** (`server/vendedor.ts`): `SQUADONE_VENDEDOR=true` no `operations` com o bot ligado. A cada minuto, de seg
-  a sex das 08:00 às 17:30 (`EXPEDIENTE_DE_VENDA`), manda a próxima ação com "Abrir no WhatsApp com a mensagem" (botão de
+- **No Telegram** (`server/vendedor.ts`): `SQUADONE_VENDEDOR=true` no `operations` com o bot ligado. A cada minuto, das 7h
+  às 22h de São Paulo (`silencioDoVendedor` cala das 22h às 7h), manda a próxima ação com "Abrir no WhatsApp com a mensagem" (botão de
   URL), "✓ Enviei" e "Pular" (callback `v:<token>:e|p`) e, com `SQUADONE_ORIGEM_CENTRAL`
   (`https://<máquina>.ts.net:8443`), "Ver a ficha". Um aviso aberto por vez; 30 min sem toque vira pulado; um "quero
-  ver" novo fura a espera; teto de 40 avisos/dia (os que saíram; o "quero ver" quente passa por cima). "Enviei" anota no CRM o que o link não marca sozinho e conta o
-  primeiro contato na trava pelo `venda-do-dia.json`. Estado em `<SQUADONE_OPERATIONS_DATA_DIR>/vendedor.json` (600).
+  ver" novo fura a espera. "Enviei" anota no CRM o que o link não marca sozinho. Estado em
+  `<SQUADONE_OPERATIONS_DATA_DIR>/vendedor.json` (600).
+  **Só o que vale o toque (28/10/2026, decisão do PM com autoridade delegada pelo Rômulo, `docs/PRUMO-DECISOES-PM-2026-10-28.md`):**
+  em 7 dias foram 276 avisos, 20 "Enviei" e 239 expirados. Ao Telegram vai só a lista branca `vaiAoTelegram`: `responder` de gente
+  (robô e recepção não), `mandar-proposta`, o "o que achou?" de 20–72 h (`depois-do-link` com a chave `|depois-do-link`), o "quanto
+  custa" (`combinado` com `|negociacao-humana`) e o urgente. Ficam só na Central: primeiro contato, follow-up, os degraus da cadência
+  (`proposta`, `depois-do-link` com `|cadencia|`), `desfecho`, revisões, `qualificar`, o `ciclo-comercial` sem saldo, a indicação e o
+  atendimento/qualificação comercial sem urgência. Teto de 8 avisos que saíram por dia (`MAX_AVISOS_POR_DIA`, era 40) e 1 por lead por
+  dia (`leadsAvisados`, à parte de `avisados`). O urgente (`avisoUrgente`: o "quero ver" quente e o pedido comercial interno quente,
+  pagamento, aceite, Pix, contrato) passa por cima dos dois. Os atendimentos do Encontrado e da Estamparia conduzidos pelo time
+  (`atendimentoComercial.alvo === "time"`) nem entram na fila; os que voltam ao operador seguem a regra do atendimento comercial.
   Pelo Telegram e não pela fila do Hermes (exceção de 16/10/2026 à RULES 20): precisa de botões e sairia pelo mesmo
   número que fala com os leads.
 - **"Mandar a proposta" em um toque** (`src/operations/mandar-proposta.ts`, PURO; 16/10/2026): o diagnóstico mostrou 0

@@ -150,8 +150,17 @@ describe("jornada do Site: do pronto ao 'quero ver'", () => {
   });
 });
 
+// Com o histórico conferido: o passo oferece texto e "Enviei" (sem a nota, vira "conferir a conversa").
+function conferida(v: CrmVisao): CrmVisao {
+  v.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
+  return v;
+}
+
 describe("vendedor: um aviso por vez, só no expediente", () => {
   const vPronto = visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` });
+  // Desde 28/10/2026 o primeiro contato fica só na Central (lista branca do vendedor): o caso de rotina
+  // que chega ao Telegram é a resposta de gente, sem ser o "quero ver" quente.
+  const vResposta = conferida(visaoCom({ status: "enviado", enviado_em: dias(1), respondeu_em: horas(1), resposta_tipo: "neutra", resposta_trecho: "me explica melhor?", resposta_em: horas(1) }));
   const t = AGORA.getTime();
 
   it("expediente: seg a sex, 08:00 a 17:30 de São Paulo", () => {
@@ -162,11 +171,14 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
     assert.equal(noExpedienteDeVenda(Date.parse("2026-10-17T13:00:00Z")), false); // sábado
   });
 
-  it("avisa a primeira da fila e depois espera o toque", () => {
-    const um = decidir(vPronto, estadoNovo(t), t);
-    assert.equal(um.decisao.tipo, "avisar");
-    const estado = { ...um.estado, avisados: ["site:L|primeiro"], abertos: [{ chave: "site:L|primeiro", token: "abc", em: t, leadId: "site:L", primeiroContato: true, produto: "site" as const, texto: "x" }] };
-    assert.deepEqual(decidir(vPronto, estado, t + 60_000).decisao, { tipo: "nada", motivo: "fila-vazia" });
+  it("o primeiro contato não vai ao Telegram; a resposta vai, e depois espera o toque", () => {
+    assert.equal(filaDeVenda(vPronto, LIVRE)[0]?.tipo, "primeiro", "o primeiro contato segue na fila da Central");
+    assert.deepEqual(decidir(vPronto, estadoNovo(t), t).decisao, { tipo: "nada", motivo: "fila-vazia" });
+    const um = decidir(vResposta, estadoNovo(t), t);
+    assert.equal(um.decisao.tipo === "avisar" && um.decisao.acao.tipo, "responder");
+    const chave = um.decisao.tipo === "avisar" ? um.decisao.acao.chave : "";
+    const estado = { ...um.estado, avisados: [chave], abertos: [{ chave, token: "abc", em: t, leadId: "site:L", primeiroContato: false, produto: "site" as const, texto: "x" }] };
+    assert.deepEqual(decidir(vResposta, estado, t + 60_000).decisao, { tipo: "nada", motivo: "fila-vazia" });
   });
 
   it("aviso sem toque por 30 min vira pulado e libera o próximo", () => {
@@ -211,9 +223,9 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
   // MSG-8 / VEN-18 (19/10/2026): o teto conta o que saiu no Telegram, não o que a Central resolveu, e o quente passa.
   it("o teto de avisos: as resolvidas na Central não contam, e o 'quero ver' quente passa por cima", () => {
     const resolvidas = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`x${i}|followup`, { em: t - 60_000, pulou: false, como: "enviada" as const, por: "central" as const }]));
-    assert.equal(decidir(vPronto, estadoNovo(t), t, undefined, { resolvidas, primeiros: {} }).decisao.tipo, "avisar", "60 resolvidas na Central não calam o vendedor");
+    assert.equal(decidir(vResposta, estadoNovo(t), t, undefined, { resolvidas, primeiros: {} }).decisao.tipo, "avisar", "60 resolvidas na Central não calam o vendedor");
     const noTeto = { ...estadoNovo(t), avisosHoje: MAX_AVISOS_POR_DIA };
-    assert.deepEqual(decidir(vPronto, noTeto, t).decisao, { tipo: "nada", motivo: "teto-do-dia" });
+    assert.deepEqual(decidir(vResposta, noTeto, t).decisao, { tipo: "nada", motivo: "teto-do-dia" });
     const quente = visaoCom({ status: "enviado", enviado_em: dias(1), respondeu_em: horas(1), resposta_tipo: "licenca", resposta_trecho: "pode mandar", resposta_em: horas(1) });
     quente.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
     const r = decidir(quente, noTeto, t);
@@ -247,12 +259,12 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
 // AC-06 (17/10/2026): a Central e o Telegram numa fila só, pelo venda-do-dia.json. Fixture e
 // diretório temporário: nenhum Telegram, n8n ou arquivo de dados real é tocado.
 describe("vendedor e Central: o servidor é a fonte do dia", () => {
-  const vFollowup = visaoCom({ status: "enviado", enviado_em: dias(3), visto_em: dias(2.8) });
-  // Estes cenários exercitam confirmação de envios, depois da conferência do contexto.
-  vFollowup.leads[0].eventos.push({ tipo: 'nota', rotulo: 'Nota', texto: '[historico-conferido-v1] Conferi a conversa deste lead no WhatsApp.', em: AGORA.toISOString(), origem: 'manual', fonte: 'CRM' });
-  const CHAVE = "site:L|followup";
+  // Desde 28/10/2026 só a lista branca vai ao Telegram: estes cenários usam o "quero ver" (a 2ª mensagem
+  // anotada no "Enviei"), depois da conferência do contexto. Antes era o follow-up, que ficou só na Central.
+  const vQuerVer = conferida(visaoCom({ status: "enviado", enviado_em: dias(1), respondeu_em: horas(1), resposta_tipo: "interesse", resposta_trecho: "pode mandar", resposta_em: horas(1) }));
+  const CHAVE = "site:L|responder";
 
-  async function montar(visao: CrmVisao = vFollowup, extras: Partial<Parameters<typeof criarVendedor>[0]> = {}) {
+  async function montar(visao: CrmVisao = vQuerVer, extras: Partial<Parameters<typeof criarVendedor>[0]> = {}) {
     const dir = await mkdtemp(join(tmpdir(), "squadone-vendedor-"));
     const relogio = { agora: AGORA.getTime() };
     const memoria = criarMemoriaDaVenda(join(dir, "venda-do-dia.json"), () => relogio.agora);
@@ -279,7 +291,7 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
 
   // O gate de envio (17/10/2026): o link do aviso é de outro número que o do registro do lead.
   it("link para outro número que o do registro: o aviso não sai com botão, o motivo vai ao Telegram e não repete", async () => {
-    const visao = structuredClone(vFollowup);
+    const visao = structuredClone(vQuerVer);
     assert.match(visao.leads[0].links.whatsapp ?? "", /wa\.me\/\d+/, "o fixture precisa de um wa.me para o teste valer");
     visao.leads[0].links.whatsapp = "https://wa.me/5511900000999";
     const m = await montar(visao);
@@ -298,24 +310,22 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
     }
   });
 
-  // MSG-1 / VEN-6 (19/10/2026): quem faz o primeiro contato é só o primeirosDoTime, como na Central. Antes, o
-  // arquivo de config do time existir (mesmo com ativo:false) tirava todo lead novo do aviso.
-  it("peloTime: o arquivo de config do time não tira o lead novo; só o primeirosDoTime tira", async () => {
+  // MSG-1 / VEN-6 (19/10/2026): quem faz o primeiro contato é só o primeirosDoTime, como na Central. Desde
+  // 28/10/2026 o primeiro contato do operador também fica só na Central (lista branca do vendedor): com ou
+  // sem o time, nenhum aviso de primeiro contato sai no Telegram.
+  it("primeiro contato não vai ao Telegram, seja do time ou do operador", async () => {
     const vPronto = visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` });
     const ID = vPronto.leads[0].id;
     let doTime = new Set<string>();
     const m = await montar(vPronto, { primeirosDoTime: async () => doTime });
     try {
       await writeFile(join(m.dir, "frente-comercial-config.json"), JSON.stringify({ ativo: false }));
-      // Do time: sem primeiro contato no aviso.
       doTime = new Set([ID]);
       assert.deepEqual(await m.vendedor.volta(), { tipo: "nada", motivo: "fila-vazia" });
-      assert.equal(m.enviados.length, 0);
-      // O time deixou o lead (não é mais dele): o operador recebe, com o arquivo de config lá.
       doTime = new Set();
       m.relogio.agora += 60_000;
-      assert.equal((await m.vendedor.volta()).tipo, "avisar");
-      assert.equal(m.enviados.length, 1);
+      assert.deepEqual(await m.vendedor.volta(), { tipo: "nada", motivo: "fila-vazia" });
+      assert.equal(m.enviados.length, 0);
     } finally {
       await m.fim();
     }
@@ -392,7 +402,7 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
       await m.vendedor.volta();
       m.relogio.agora += 60_000;
       // A Central anotou no toque do link e depois deu "Enviei, próxima".
-      await m.memoria.anotarUmaVez(CHAVE, "followup_enviado", "central", async () => { m.registros.push("central"); });
+      await m.memoria.anotarUmaVez(CHAVE, "segunda_enviada", "central", async () => { m.registros.push("central"); });
       await m.memoria.resolver(CHAVE, "enviada", "central");
       const r = await m.vendedor.tocar(m.token(), "enviei");
       assert.equal(r.curto, "Já estava feito.");
@@ -407,7 +417,7 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
     const m = await montar();
     try {
       await m.vendedor.volta();
-      await m.memoria.anotarUmaVez(CHAVE, "followup_enviado", "central", async () => { m.registros.push("central"); });
+      await m.memoria.anotarUmaVez(CHAVE, "segunda_enviada", "central", async () => { m.registros.push("central"); });
       const r = await m.vendedor.tocar(m.token(), "enviei");
       assert.match(r.texto ?? "", /já estava anotado no CRM/);
       assert.deepEqual(m.registros, ["central"]);
@@ -424,9 +434,9 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
       await m.vendedor.volta();
       const r = await m.vendedor.tocar(m.token(), "enviei");
       assert.match(r.texto ?? "", /anotado no CRM\.$/);
-      assert.deepEqual(m.registros, ["L:followup_enviado"]);
+      assert.deepEqual(m.registros, ["L:segunda_enviada"]);
       // A Central tentando anotar a mesma ação depois: já estava.
-      const deNovo = await m.memoria.anotarUmaVez(CHAVE, "followup_enviado", "central", async () => { m.registros.push("central"); });
+      const deNovo = await m.memoria.anotarUmaVez(CHAVE, "segunda_enviada", "central", async () => { m.registros.push("central"); });
       assert.equal(deNovo.anotou, false);
       assert.equal(m.registros.length, 1);
     } finally {
@@ -452,28 +462,24 @@ describe("vendedor e Central: o servidor é a fonte do dia", () => {
     }
   });
 
-  it("o primeiro contato do 'Enviei' vai ao servidor, e a Central conta na trava", async () => {
+  it("o primeiro contato fica na Central: o Telegram não avisa nem marca nada na trava", async () => {
     const m = await montar(visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` }));
     try {
-      await m.vendedor.volta();
-      await m.vendedor.tocar(m.token(), "enviei");
-      assert.deepEqual((await m.memoria.ler()).primeiros["site:L"], { em: AGORA.getTime(), por: "telegram" });
+      assert.deepEqual(await m.vendedor.volta(), { tipo: "nada", motivo: "fila-vazia" });
+      assert.equal(m.enviados.length, 0);
+      assert.deepEqual((await m.memoria.ler()).primeiros, {});
     } finally {
       await m.fim();
     }
   });
 
   it("decidir: aviso de outra ação resolvido na Central fecha e a próxima sai na mesma volta", () => {
-    const vPronto = visaoCom({ status: "pronto", wa_link: `${WEBHOOK}/enviar?place_id=L` });
     const t = AGORA.getTime();
     const estado = { ...estadoNovo(t), avisados: ["outro|followup"], abertos: [{ chave: "outro|followup", token: "abc", em: t - 60_000, leadId: "outro", primeiroContato: false, produto: "site" as const, texto: "x" }] };
     const doDia = { resolvidas: { "outro|followup": { em: t - 30_000, pulou: false, como: "enviada" as const, por: "central" as const } }, primeiros: {} };
-    const r = decidir(vPronto, estado, t, undefined, doDia);
+    const r = decidir(vQuerVer, estado, t, undefined, doDia);
     assert.equal(r.fechados.fora.length, 1);
     assert.equal(r.decisao.tipo, "avisar");
-    // E a trava conta o primeiro contato que a Central fez há 1 min: o próximo espera.
-    const comPrimeiro = decidir(vPronto, estadoNovo(t), t, undefined, { resolvidas: {}, primeiros: { "site:outro": { em: t - 60_000, por: "central" as const } } });
-    assert.deepEqual(comPrimeiro.decisao, { tipo: "nada", motivo: "fila-vazia" });
   });
 });
 

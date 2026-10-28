@@ -1,5 +1,17 @@
 # Arquitetura
 
+## Vendedor do Telegram: só o que vale o toque (28/10/2026)
+
+Decisão do PM com autoridade delegada pelo Rômulo (`docs/PRUMO-DECISOES-PM-2026-10-28.md`):
+em 7 dias foram 276 avisos, 20 "Enviei" e 239 expirados. O `server/vendedor.ts` continua lendo
+a mesma fila de venda da Central, mas `vaiAoTelegram` (PURO) só deixa sair o que pede um envio
+do Rômulo a quem escreveu ou está fechando: `responder` de gente (sem robô nem recepção),
+`mandar-proposta`, o "o que achou?" (`|depois-do-link`), o "quanto custa"
+(`|negociacao-humana`) e o urgente (`avisoUrgente`). Teto de 8 avisos que saíram por dia
+(`MAX_AVISOS_POR_DIA`) e 1 por lead por dia (`leadsAvisados`); o urgente passa pelos dois.
+Primeiro contato, follow-up, cadência, desfecho, revisões e internos ficam só na Central. Os
+atendimentos do Encontrado e da Estamparia conduzidos pelo time não entram na fila.
+
 ## Camadas do escritório e laboratório PixiJS (26/10/2026)
 
 O escritório mantém o renderizador DOM/CSS como padrão. O build principal valida

@@ -95,10 +95,13 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           automático (16/10/2026): quando a vez é do Rômulo, sugere sozinho, uma geração por vez (SQUADONE_COPILOTO_AUTOMATICO=false desliga);
                           sinais do site (17/10/2026): o dossiê leva sinaisDoSite (sinaisParaODossie, PURO) só com sinais COM fonte, em observação cautelosa (tag/pixel instalado nunca vira gasto; agência só
                           contexto, sem abrir), e o prompt ganha a regra de UMA observação na 1ª linha só quando há sinais; sem sinais o hash do dossiê não muda; nenhum template do funil muda (experimento A/B/C)
-  server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, seg–sex 08:00–17:30
-                          (os avisos que não são de primeiro contato saem das 7h às 22h, inclusive fora do expediente; o primeiro contato conserva horário e ritmo; das 22h às 7h `silencioDoVendedor` não sai nada):
+  server/vendedor.ts      (16/10/2026, SQUADONE_VENDEDOR=true, só operations com o bot) "Envie para X" no Telegram, das 7h às 22h
+                          (das 22h às 7h `silencioDoVendedor` não sai nada):
                           um aviso por vez com a mensagem pronta (a do copiloto quando há, esperando até 4 min só se a última mensagem é do lead) e "Abrir no WhatsApp", "Enviei", "Pular"; `decidir` PURO; nunca envia ao lead;
-                          teto de 40 avisos que SAÍRAM por dia (o "quero ver" quente passa por cima); quem faz o 1º contato é a regra da Central (primeirosDoTime); o dia do servidor (venda-do-dia) é obrigatório
+                          desde 28/10/2026 só a lista branca `vaiAoTelegram` (responder de gente, sem robô/recepção; mandar-proposta; o "o que achou?"
+                          `|depois-do-link`; o "quanto custa" `|negociacao-humana`; e o urgente), teto de 8 avisos que SAÍRAM por dia (`MAX_AVISOS_POR_DIA`)
+                          e 1 por lead por dia (`leadsAvisados`); o urgente (`avisoUrgente`: "quero ver" quente, pagamento, aceite, Pix, contrato) passa por cima
+                          dos dois; primeiro contato, follow-up, cadência, revisões e internos ficam só na Central; o dia do servidor (venda-do-dia) é obrigatório
   server/frente-comercial.ts  (19/10/2026) a Central do time comercial: GET /crm/frente (estado, sem número), POST /crm/frente/config ({ ativo }),
                           POST /crm/frente/reservar (o time pede UM primeiro contato: mesma janela e ritmo da Central, gate em "bloquear", grava o
                           primeiro do dia `por: "time"` na fila do venda-do-dia); `doTime` em GET /crm/venda. O time em si é deploy/dell/frente-comercial.py:

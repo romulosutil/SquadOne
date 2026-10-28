@@ -30,15 +30,15 @@ const rotulo = computed(() => erro.value ? 'Sem leitura recente' : frente.value?
 const desdeQuando = computed(() => frente.value?.ultimaRodadaEm ? `desde ${hora(frente.value.ultimaRodadaEm)}` : 'sem nenhuma rodada gravada')
 /**
  * Quem envia o primeiro contato hoje, com o que a Central sabe. O time tem dois interruptores (`ativo` e o
- * timer do systemd): "ativo" sem o ciclo andando é o pior caso, porque os leads da fila dele saem do
- * "Envie para X" do Telegram e ninguém os envia.
+ * timer do systemd): "ativo" sem o ciclo andando é o pior caso, porque os leads da fila dele saem da
+ * Ficha e ninguém os envia. O Telegram não oferece primeiro contato desde 28/10/2026.
  */
 const quemEnvia = computed(() => {
   const f = frente.value
   const time = !f ? 'Lendo o time…'
     : f.pausaAutomatica ? 'Pausa automática em todos os primeiros contatos, inclusive os seus. Respostas às conversas existentes continuam disponíveis.'
-    : !f.ativo ? 'Pausado: os primeiros contatos são seus, pela Ficha e pelo "Envie para X" do Telegram.'
-    : f.cicloParado ? `Ativo, mas o ciclo está parado ${desdeQuando.value}. Os leads da fila dele saem do Telegram e ninguém os envia até o ciclo voltar; pause o time para eles voltarem para você.`
+    : !f.ativo ? 'Pausado: os primeiros contatos são seus, pela Ficha do lead.'
+    : f.cicloParado ? `Ativo, mas o ciclo está parado ${desdeQuando.value}. Os leads da fila dele saem da Ficha e ninguém os envia até o ciclo voltar; pause o time para eles voltarem para você.`
     : 'Ativo e rodando: os primeiros contatos das cinco ofertas que o time cobre (Site, Plus, PRUMO, Iris e Estamparia), dentro do expediente e do teto do dia, são do time.'
   const v = vendedor.value
   const telegram = !v ? 'Sem leitura do vendedor agora.'

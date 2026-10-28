@@ -1,9 +1,15 @@
 /**
  * O vendedor (16/10/2026, pedido do Rômulo: "podia ser mais proativo, um aviso 'Envie mensagem para
- * xpto' com tudo já organizado, só pra eu revisar"). De segunda a sexta, das 08:00 às 17:30, ele
- * olha a fila de venda (src/operations/proxima-venda.ts) a cada minuto e manda no Telegram UMA
- * próxima ação por vez: quem é, por quê, como vender nesse momento e a mensagem pronta, com
- * "Abrir no WhatsApp" (o texto já preenchido), "Enviei" e "Pular".
+ * xpto' com tudo já organizado, só pra eu revisar"). Todo dia, fora do silêncio das 22h às 7h de
+ * São Paulo (silencioDoVendedor), ele olha a fila de venda (src/operations/proxima-venda.ts) a cada
+ * minuto e manda no Telegram UMA próxima ação por vez: quem é, por quê, como vender nesse momento e
+ * a mensagem pronta, com "Abrir no WhatsApp" (o texto já preenchido), "Enviei" e "Pular".
+ *
+ * Só o que vale o toque (28/10/2026, decisão do PM com autoridade do Rômulo): em 7 dias foram 276
+ * avisos, 20 "Enviei" e 239 expirados. Ao Telegram vão só as ações da lista branca (vaiAoTelegram:
+ * responder a quem escreveu, mandar a proposta, o "o que achou?" depois do link), no máximo 8 por dia
+ * (MAX_AVISOS_POR_DIA) e 1 por lead por dia. Primeiro contato, follow-up, toques da cadência,
+ * revisões e encaminhamentos internos ficam só na Central, que segue com a fila inteira.
  *
  * Semi-automático por decisão de 16/10/2026: nada sai para o lead sem o toque dele no WhatsApp. A
  * API não oficial (Evolution) ficou de fora porque o número é o mesmo do Hermes e acabou de levar
@@ -15,8 +21,8 @@
  *
  * Ritmo: um aviso aberto por vez. O próximo só sai depois de "Enviei"/"Pular", de a ação sumir da
  * fila (o retrato confirmou) ou de 30 min sem toque (vale como pular). Exceção: alguém que acabou
- * de dizer "quero ver" fura a espera. Primeiro contato passa pela trava de ritmo
- * (trava-de-ritmo.ts), contando também os "Enviei" que o retrato ainda não viu.
+ * de dizer "quero ver" fura a espera. O primeiro contato não vem mais por aqui (lista branca); a
+ * trava de ritmo (trava-de-ritmo.ts) segue calculada porque a fila é a mesma da Central.
  *
  * O servidor é a fonte única do dia (17/10/2026, AC-06, server/venda-do-dia.ts): o que a Central
  * resolve fecha o aviso aberto aqui na volta seguinte (a mensagem perde os botões e diz "Feito na
@@ -33,7 +39,8 @@ import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { esperaOCopiloto, filaDeVenda, noExpedienteDeVenda, resumoDaFila, type AcaoDeVenda, type SugestaoDeVenda } from "../src/operations/proxima-venda.ts";
 import { instantesDePrimeiroContato, ritmoDoEnvio, somarPrimeiros } from "../src/operations/trava-de-ritmo.ts";
-import type { CrmVisao } from "../src/operations/types.ts";
+import type { CrmLead, CrmVisao } from "../src/operations/types.ts";
+import { papelDaMensagem } from "../src/operations/marcadores-da-conversa.ts";
 import { comHistoricoConferido } from "../src/operations/historico-comercial.ts";
 import type { Botao } from "./telegram.ts";
 import { dadosDaVenda } from "./telegram-entrada.ts";
@@ -45,10 +52,12 @@ import { acaoInternaComercial } from "../src/operations/acao-interna-comercial.t
 export const ESPERA_DO_AVISO_MS = 30 * 60_000;
 /**
  * Teto de avisos que de fato saíram no Telegram no dia (`avisosHoje`). Não conta o que a Central resolveu
- * nem o aviso barrado pelo gate, e o "quero ver" quente passa por cima dele: o teto existe para o volume
- * de rotina não afogar o Rômulo, não para calar quem acabou de pedir o material.
+ * nem o aviso barrado pelo gate, e o urgente (o "quero ver" quente e o pedido comercial interno quente:
+ * pagamento, aceite, Pix, contrato) passa por cima dele: o teto existe para o volume de rotina não afogar
+ * o Rômulo, não para calar quem acabou de pedir. Era 40 até 28/10/2026, quando a semana teve 20 "Enviei"
+ * em 276 avisos: o resto vira ruído que esconde o aviso que importa.
  */
-export const MAX_AVISOS_POR_DIA = 40;
+export const MAX_AVISOS_POR_DIA = 8;
 /** Quantas gravações seguidas do estado podem falhar antes de o laço parar (avisar sem gravar reenvia a cada minuto). */
 export const MAX_FALHAS_DE_GRAVACAO = 3;
 export const INTERVALO_DO_VENDEDOR_MS = 60_000;
@@ -97,6 +106,11 @@ export interface EstadoDoVendedor {
   enviadosHoje: number;
   /** Avisos que de fato saíram no Telegram hoje: o teto (MAX_AVISOS_POR_DIA) conta este, não `avisados`. */
   avisosHoje: number;
+  /**
+   * Leads que já receberam aviso no Telegram hoje (1 por lead por dia, 28/10/2026). À parte de `avisados`,
+   * que também guarda o que a Central resolveu: o lead que a Central tocou de manhã e escreve à tarde avisa.
+   */
+  leadsAvisados: string[];
 }
 
 export const silencioDoVendedor = (ms: number) => { const h = new Date(ms - 3 * 3600_000).getUTCHours(); return h >= 22 || h < 7; };
@@ -104,8 +118,11 @@ export const silencioDoVendedor = (ms: number) => { const h = new Date(ms - 3 * 
 export const diaDeSP = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().slice(0, 10);
 
 export function estadoNovo(agora: number): EstadoDoVendedor {
-  return { dia: diaDeSP(agora), avisados: [], pulados: [], abertos: [], enviadosHoje: 0, avisosHoje: 0 };
+  return { dia: diaDeSP(agora), avisados: [], pulados: [], abertos: [], enviadosHoje: 0, avisosHoje: 0, leadsAvisados: [] };
 }
+
+/** O lead de uma chave de ação (`leadId|tipo...`). */
+const leadDaChave = (chave: string) => chave.split("|")[0];
 
 /** O estado lido, ou um novo se é de outro dia ou ilegível. */
 export function estadoDoDia(lido: unknown, agora: number): EstadoDoVendedor {
@@ -120,7 +137,50 @@ export function estadoDoDia(lido: unknown, agora: number): EstadoDoVendedor {
     enviadosHoje: Number.isFinite(e.enviadosHoje) ? Number(e.enviadosHoje) : 0,
     // Estado de antes do campo: `avisados` é o teto mais conservador (soma o que a Central resolveu) até o dia virar.
     avisosHoje: Number.isFinite(e.avisosHoje) ? Number(e.avisosHoje) : avisados.length,
+    // Idem para os leads: no dia da troca, quem já estava em `avisados` conta como avisado.
+    leadsAvisados: Array.isArray(e.leadsAvisados) ? e.leadsAvisados.filter((c) => typeof c === "string") : [...new Set(avisados.map(leadDaChave))],
   };
+}
+
+/**
+ * Passa do teto e do 1 por lead: o "quero ver" quente e o pedido comercial interno quente (pagamento,
+ * aceite, Pix, contrato: plano urgente ou cobrança com saldo, proxima-venda.ts). Cada um é limitado pela
+ * própria chave (uma por mensagem nova ou por evidência), e calar quem acabou de pedir é o que o vendedor
+ * existe para evitar.
+ */
+export const avisoUrgente = (a: AcaoDeVenda) => a.quente && (a.tipo === "responder" || acaoInternaComercial(a));
+
+/** Quem escreveu foi o robô ou a recepção: não é a vez do Rômulo vender, é a Central conferir quem decide. */
+function respostaDeRoboOuRecepcao(a: AcaoDeVenda, lead: CrmLead | undefined): boolean {
+  const quem = a.copiloto?.momento?.quem;
+  if (quem === "robo" || quem === "recepcao") return true;
+  if (!lead) return false;
+  if (lead.resposta?.tipo === "bot" || lead.classificacaoResposta?.classe === "robo") return true;
+  const u = lead.conversa?.ultima;
+  return u?.direcao === "entrada" && papelDaMensagem(u.trecho, u.papel) !== undefined;
+}
+
+/**
+ * PURO (28/10/2026): a lista branca do Telegram, por tipo da fila (proxima-venda.ts). Só vai o que pede
+ * um envio do Rômulo a um lead que escreveu ou que está num passo de fechamento:
+ * - `responder`: gente respondeu ("quero ver", "pode mandar", "quanto custa", pedido de conversa);
+ *   menos o robô e a recepção.
+ * - `combinado` com a chave `|negociacao-humana`: o "quanto custa". A fila o tira do `responder` desse
+ *   lead (vira condução humana), então sem esta linha o pedido de preço sumiria do Telegram.
+ * - `mandar-proposta`: gostou depois do link, a proposta está pronta.
+ * - `depois-do-link` com a chave `|depois-do-link`: o "o que achou?" de 20 a 72 h. A cadência da conversa
+ *   usa o mesmo tipo com a chave `|cadencia|...` e é toque de rotina.
+ * Fica só na Central: `primeiro`, `followup`, `proposta` (degraus da cadência), `desfecho`, e o resto do
+ * `combinado` (revisões de 7 dias, `qualificar`, `ciclo-comercial` sem pendência, indicação, combinado
+ * salvo e os internos), que aqui expiravam sem toque. O urgente (avisoUrgente) passa mesmo fora da
+ * lista: é o pedido de pagamento, aceite, Pix ou contrato, que não pode esperar alguém abrir a Central.
+ */
+export function vaiAoTelegram(a: AcaoDeVenda, lead?: CrmLead): boolean {
+  if (a.tipo === "responder") return !respostaDeRoboOuRecepcao(a, lead);
+  if (avisoUrgente(a)) return true;
+  if (a.tipo === "mandar-proposta") return true;
+  if (a.tipo === "combinado") return a.chave.endsWith("|negociacao-humana");
+  return a.tipo === "depois-do-link" && a.chave.endsWith("|depois-do-link");
 }
 
 export type Decisao =
@@ -189,6 +249,7 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   const estado: EstadoDoVendedor = {
     ...estadoLido,
     abertos: [...estadoLido.abertos],
+    leadsAvisados: [...(estadoLido.leadsAvisados ?? [])],
     avisados: [...new Set([...estadoLido.avisados, ...entradas.filter(([, r]) => r.como !== "pulada").map(([c]) => c)])],
     pulados: [...new Set([...estadoLido.pulados, ...entradas.filter(([, r]) => r.como === "pulada").map(([c]) => c)])],
   };
@@ -206,10 +267,12 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   estado.abertos = ficam;
   for (const a of fechados.expirados) if (!estado.pulados.includes(a.chave)) estado.pulados.push(a.chave);
   const avisados = new Set(estado.avisados);
-  // Passado o teto só o "quero ver" quente ainda avisa (ver MAX_AVISOS_POR_DIA).
+  const leadsAvisados = new Set(estado.leadsAvisados);
+  // Passado o teto, ou com o lead já avisado hoje, só o urgente ainda avisa (ver MAX_AVISOS_POR_DIA e avisoUrgente).
   const noTeto = estado.avisosHoje >= MAX_AVISOS_POR_DIA;
-  const urgente = (a: AcaoDeVenda) => a.quente && (a.tipo === "responder" || acaoInternaComercial(a));
-  const novas = fila.filter((a) => !avisados.has(a.chave) && (!noTeto || urgente(a)));
+  const urgente = avisoUrgente;
+  const novas = fila.filter((a) => !avisados.has(a.chave) && vaiAoTelegram(a, porId.get(a.leadId))
+    && (urgente(a) || (!noTeto && !leadsAvisados.has(a.leadId))));
   if (!novas.length) return { decisao: { tipo: "nada", motivo: noTeto ? "teto-do-dia" : "fila-vazia" }, estado, fechados };
   // Um aviso aberto por vez, menos o "quero ver" que acabou de chegar: `quente` vem da fila (proxima-venda.ts)
   // e vale para o interesse E para a licença (pedeMaterial), que até 17/10 era gravada como interesse.
@@ -499,7 +562,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
   // O que já foi ao Telegram mas ainda não está no arquivo. Se a gravação falha depois do envio, a volta
   // seguinte reenviaria o mesmo aviso a cada minuto (o teto não segura: ele também mora no arquivo) e o
   // toque nele não acharia o token. Só em memória; sai quando uma gravação passa.
-  const pendentes: { dia: string; avisados: Set<string>; abertos: AvisoAberto[]; avisos: number } = { dia: "", avisados: new Set(), abertos: [], avisos: 0 };
+  const pendentes: { dia: string; avisados: Set<string>; abertos: AvisoAberto[]; avisos: number; leads: Set<string> } = { dia: "", avisados: new Set(), abertos: [], avisos: 0, leads: new Set() };
   let falhasDeGravacao = 0;
 
   /** O estado do arquivo; só o arquivo que ainda não existe é "dia novo". Outro erro sobe: a volta é pulada com log. */
@@ -516,6 +579,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     if (pendentes.dia === e.dia) {
       for (const a of pendentes.abertos) if (!e.abertos.some((x) => x.chave === a.chave)) e.abertos.push(a);
       for (const c of pendentes.avisados) if (!e.avisados.includes(c)) e.avisados.push(c);
+      for (const l of pendentes.leads) if (!e.leadsAvisados.includes(l)) e.leadsAvisados.push(l);
       e.avisosHoje += pendentes.avisos;
     }
     return e;
@@ -538,6 +602,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     pendentes.avisados.clear();
     pendentes.abertos.length = 0;
     pendentes.avisos = 0;
+    pendentes.leads.clear();
   }
   function pararLaco() {
     if (relogio) clearInterval(relogio);
@@ -659,9 +724,11 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       pendentes.avisados.add(decisao.acao.chave);
       pendentes.abertos.push(novoAberto);
       pendentes.avisos++;
+      pendentes.leads.add(decisao.acao.leadId);
       estado.avisados.push(decisao.acao.chave);
       estado.abertos.push(novoAberto);
       estado.avisosHoje++;
+      if (!estado.leadsAvisados.includes(decisao.acao.leadId)) estado.leadsAvisados.push(decisao.acao.leadId);
       historico.push({ em: agora, evento: "avisado", chave: decisao.acao.chave, tipo: decisao.acao.tipo, ...(decisao.acao.quente ? { quente: true } : {}) });
     }
     await gravarEstado(estado);

@@ -150,20 +150,25 @@ describe('a tela e o Telegram não oferecem o primeiro contato dos leads do time
     assert.deepEqual(filaDeVenda(v, { ...tela, primeirosDoTime: new Set(['p0', 'p1', 'p2']) }), [])
   })
 
-  it('vendedor do Telegram: o mesmo predicado, no mesmo lugar da fila', () => {
-    const estado = estadoDoDia(null, AGORA)
-    const semTime = decidir(v, estado, AGORA)
-    assert.equal(semTime.decisao.tipo === 'avisar' && semTime.decisao.acao.leadId, 'p0')
-    const comTime = decidir(v, estadoDoDia(null, AGORA), AGORA, undefined, null, new Set(['p0']))
-    assert.equal(comTime.decisao.tipo === 'avisar' && comTime.decisao.acao.leadId, 'p1')
-    const todos = decidir(v, estadoDoDia(null, AGORA), AGORA, undefined, null, new Set(['p0', 'p1', 'p2']))
-    assert.deepEqual(todos.decisao, { tipo: 'nada', motivo: 'fila-vazia' })
+  // Desde 28/10/2026 o primeiro contato fica só na Central (vaiAoTelegram, server/vendedor.ts): o vendedor
+  // lê a mesma fila, com ou sem os do time, e não avisa nenhum. O predicado do time segue no teste acima.
+  it('vendedor do Telegram: a mesma fila, e o primeiro contato não vai ao Telegram', () => {
+    for (const doTime of [undefined, new Set(['p0']), new Set(['p0', 'p1', 'p2'])]) {
+      const r = decidir(v, estadoDoDia(null, AGORA), AGORA, undefined, null, doTime)
+      assert.deepEqual(r.decisao, { tipo: 'nada', motivo: 'fila-vazia' })
+    }
   })
   it('a pausa automática retira primeiros contatos e fecha avisos antigos do Telegram', () => {
+    // Um aviso de primeiro contato aberto antes da lista branca: sem pausa ele fica; com a pausa sai da fila e fecha.
+    const [p0] = filaDeVenda(v, tela)
     const estado = estadoDoDia(null, AGORA)
+    estado.abertos.push({ chave: p0.chave, token: 't', em: AGORA - 5 * MIN, leadId: 'p0', primeiroContato: true, produto: 'site', texto: '' })
     const aberto = decidir(v, estado, AGORA)
-    assert.equal(aberto.decisao.tipo, 'avisar')
+    assert.deepEqual(aberto.decisao, { tipo: 'nada', motivo: 'fila-vazia' })
+    assert.deepEqual(aberto.estado.abertos.map((a) => a.chave), [p0.chave])
     const pausado = decidir(v, estado, AGORA, undefined, null, undefined, true)
     assert.deepEqual(pausado.decisao, { tipo: 'nada', motivo: 'fila-vazia' })
+    assert.deepEqual(pausado.fechados.sairam.map((a) => a.chave), [p0.chave])
+    assert.deepEqual(pausado.estado.abertos, [])
   })
 })
