@@ -1,0 +1,56 @@
+{
+  "id": "telegram",
+  "nome": "Telegram",
+  "objetivo": "Receber pedidos do operador e entregar resultados e avisos internos com encaminhamento, mantendo a Central como fonte do trabalho.",
+  "responsavel": "Central recebe e organiza; monitor publica P0/falhas; Rômulo confere a ficha, assume decisões e confirma os fatos humanos.",
+  "executa": [
+    "Recebe pedidos em chat privado autorizado por polling e preserva a identidade antes de confirmar o offset.",
+    "Entrega resultado do turno e avisos internos vinculados à oportunidade ou obrigação correspondente.",
+    "Preserva fila serial, deduplicação e estado ambíguo no reinício; pedido antigo não cria compromisso atrasado.",
+    "Encaminha P0/falhas exclusivamente pelo Telegram e aplica as regras de silêncio da classe.",
+    "Correção local reserva aviso pessoal antes do transporte e conserva resultado por destino em journal privado; depende de instalação controlada no Dell."
+  ],
+  "naoExecuta": [
+    "Não envia a clientes, negocia, aceita contrato ou confirma pagamento por receber aviso.",
+    "Não transforma clique, avisoTentado, mensagem recebida ou timer ativo em trabalho concluído.",
+    "Não mistura agenda/finanças pessoais com a operação de leads nem cria base comercial paralela.",
+    "Não reativa a prospecção ou repete uma execução ambígua para preencher uma lacuna."
+  ],
+  "entradas": [
+    "Pedidos reais do operador e callbacks autorizados, com IDs originais e revalidação de idade.",
+    "Pendências atuais da Central, resultados de turno e outboxes de avisos existentes.",
+    "Estado de agenda/infraestrutura e lembretes pessoais sob contratos separados."
+  ],
+  "saidas": [
+    "Resultado para a mesma conversa autorizada ou aviso com encaminhamento verificável.",
+    "Estado operacional persistido: pendente, processando, concluído ou ambíguo; a fila não declara aceite de cliente.",
+    "Responsável e próxima ação são conferidos na Central depois do aviso."
+  ],
+  "fontes": [
+    "RULES.md: papéis/canais, cadência e privacidade.",
+    "telegram-entrada, telegram-bot, telegram-polling e fila-telegram-duravel.",
+    "vendedor, avisos, garantias-agenda, dell-status e lib/aviso.",
+    "docs/revops/telegram.md: rotina, estados pessoais, migração compatível e retorno seguro com sidecar privado."
+  ],
+  "falhas": [
+    "Falha de persistência: não confirmar recebimento, conservar identidade e investigar internamente.",
+    "Conflito de polling: conferir webhook ou consumidor concorrente; não apagar updates ou mudar transporte automaticamente.",
+    "Execução interrompida: preservar ambiguidade e conferir fonte; não repetir modelo/agenda por timeout.",
+    "Falha de P0/Dell: manter na outbox e aguardar tentativa posterior, sem fallback WhatsApp.",
+    "Aviso pessoal incerto/parcial: manter reserva revisável sem fallback ou repetição, inclusive após reinício; somente ausência de tentativa ou recusa explícita de todos os destinos permite a fila pessoal. P0/comercial nunca usam fallback."
+  ],
+  "verificacao": [
+    "Consultar monitor recente, estado da fila e encaminhamento sem imprimir token, chat ou conteúdo.",
+    "Conferir a fonte e o evento/pedido original antes de resolver ambiguidade.",
+    "Leitura de 25/10 confirmou Central ativa, polling e configuração presente; monitor Telegram ok com retrato recente. Isso não comprova entrega comercial.",
+    "325 testes isolados em 41 suítes aprovados; o lote integrado passou 4.129 testes Linux, tipagem e build. Bundle corrigido instalado em 25/10 com backup e reinício ocioso; runtime e garantias responderam por GET, sem transporte de teste."
+  ],
+  "limites": [
+    "Prospecção continua pausada e esta consulta não envia mensagens. Atendimento manual de Rômulo permanece decisão própria.",
+    "Silêncio de São Paulo: vendedor comercial espera das 22h às 7h; aviso pessoal comum chega sem som; P0 pode alertar.",
+    "Teto de avisos internos não é capacidade de vendas ou limite de WhatsApp.",
+    "Finanças pessoais levam apenas semáforo/percentual e categoria permitida, nunca valores ou estabelecimento.",
+    "Configuração presente e monitor ok não confirmam recebimento, leitura, resolução, proposta enviada, aceite ou pagamento.",
+    "Journal privado conserva reservas/incertezas sem TTL; corrupção ou limite de 16 MiB bloqueiam em vez de limpar histórico. O mapa numérico legado continua respeitado e preservado."
+  ]
+}
