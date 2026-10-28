@@ -25,8 +25,16 @@ OBSERVADOR_REAL=f.observador_ativo
 MSG='Olá! Vi que a Empresa de teste ainda não tem site. Fiz uma prévia, posso mandar?'
 
 def lead(id_='site:teste',n='5511998887766'):
+    # Desde a curadoria da Marina (26/10/2026) o Site só é elegível com achado verificável do Raio-X.
     return {'id':id_,'produto':'site','empresa':'Empresa de teste','etapa':'novo','sinal':'pronto','marcos':{},'mensagemPronta':MSG,
+            'achados':[{'id':'sem-site'}],
             'links':{'whatsapp':'https://wa.me/'+n,'enviar':'https://dell.test/webhook/enviar?place_id='+id_.partition(':')[2]}}
+
+MODELO_NEUTRO={'hash':'modelo-neutro-teste','padroes':[],'semWhatsapp':[]}
+
+# Estamparia só entra com necessidade, impacto e decisor confirmados no CRM (curadoria de 26/10/2026).
+SPICED_CONFIRMADO={'dor':'pedidos espalhados no WhatsApp','impacto':'atraso na produção',
+                   'decisao':{'decisor_confirmado':'sim','quem':'dono da estamparia'}}
 
 def outro_produto(produto,n='5511998887766'):
     l=lead(f'{produto}:teste',n)|{'produto':produto}
@@ -35,6 +43,7 @@ def outro_produto(produto,n='5511998887766'):
     else:
         l['sinal']='revisar';l['triagem']={'origemWhatsapp':'cadastro confirmado','sinais':'ABA · TEA' if produto=='iris' else 'camisetas · silk'}
         l['links']['convite']='https://wa.me/'+n+'?text='+urllib.parse.quote(MSG)
+        if produto=='estampa':l['spiced']=json.loads(json.dumps(SPICED_CONFIRMADO))
     return l
 
 def avaliar(_a,_e,lote,_ant,_funil=None,_taxas=None):
@@ -59,6 +68,12 @@ class Frente(unittest.TestCase):
         for duble in (patch.object(f,'avisar_time',side_effect=aviso),patch.object(f,'observador_ativo',return_value=True),patch.object(f,'protecao_permite_envio',return_value=True)):
             duble.start();self.addCleanup(duble.stop)
         self.observador=f.observador_ativo  # o dublê: .return_value=False tira o observador do ar
+        # Sem a régua recente da Marina a rodada para antes da inferência (falha fechada, 26/10/2026; coberto em
+        # frente-comercial-curadoria.test.py). Aqui a régua é neutra: sem padrões nem destinos mortos. O hash dela
+        # entra no fingerprint, então o teste já começa com a mesma régua que a rodada vai carregar.
+        regua=patch.object(f.lib_curadoria(),'carregar_modelo',return_value=MODELO_NEUTRO)
+        regua.start();self.addCleanup(regua.stop)
+        f._MODELO_CURADORIA=MODELO_NEUTRO;self.addCleanup(setattr,f,'_MODELO_CURADORIA',None)
 
     def test_pausa_entre_reserva_e_envio_nao_envia(self):
         f.protecao_permite_envio.return_value=False
@@ -113,7 +128,8 @@ class Frente(unittest.TestCase):
         taxas=f.taxas_por_setor({'leads':ls})
         novo=outro_produto('iris')|{'nicho':'terapia','triagem':{'prioridade':70,'origemWhatsapp':'confirmado','sinais':'ABA · TEA'}}
         self.assertEqual(taxas[('iris','terapia')],0.3)
-        self.assertEqual(f.prioridade_do_candidato(novo,taxas),76)
+        # Desde 26/10/2026 a taxa do setor é só descritiva: não dá bônus de seleção (o ajuste é o da régua da Marina).
+        self.assertEqual(f.prioridade_do_candidato(novo,taxas),70)
         self.assertEqual(f.taxas_por_setor({'leads':ls[:9]}),{})
 
     def test_plus_avalia_descricao_e_oferta_e_invalida_cache_antigo(self):
@@ -136,7 +152,7 @@ class Frente(unittest.TestCase):
     def test_plano_fixa_ids_mas_avalia_ficha_atual_do_crm(self):
         antigo=lead()|{'triagem':{'prioridade':70}}
         registro=f.Registro(Path(self.tmp.name)/'base'/'registro.sqlite');registro.plano('2026-10-19',[antigo]);registro.db.close()
-        atual=lead()|{'triagem':{'prioridade':85},'achados':[{'titulo':'Site indisponível'}]}
+        atual=lead()|{'triagem':{'prioridade':85},'achados':[{'id':'site-fora-do-ar','titulo':'Site indisponível'}]}
         x=self.rodar({'estado':'ok','leads':[atual]},lambda l:{'reservado':True,'texto':MSG})
         self.assertEqual(x.envio.call_count,1)
         self.assertEqual(x.estados[-1]['fila'][0]['hash'],f.fingerprint(atual))
@@ -446,7 +462,10 @@ class Frente(unittest.TestCase):
         self.r.plano('2026-10-19',antigos)
         novos=[outro_produto(p,f'55119988878{i:02}') for i,p in enumerate(('prumo','iris','estampa','plus'))]
         plano=self.r.plano('2026-10-19',antigos+novos)
-        self.assertEqual(set(l['produto'] for l in plano[:5]),{'site','prumo','iris','estampa','plus'})
+        # Desde 26/10/2026 o Site é a oferta principal e vem primeiro; as demais entram no plano e se alternam entre si.
+        self.assertEqual(len(plano),44)
+        self.assertEqual({l['produto'] for l in plano[:40]},{'site'})
+        self.assertEqual({l['produto'] for l in plano[40:]},{'prumo','iris','estampa','plus'})
 
     # O que já valia antes de 19/10.
     def test_bloqueia_duplicidade_e_resultado_incerto_apos_reinicio(self):

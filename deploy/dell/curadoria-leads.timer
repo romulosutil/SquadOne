@@ -1,0 +1,11 @@
+[Unit]
+Description=Curadoria diária antes dos contatos e revisão dos resultados ao fim do dia
+
+[Timer]
+OnCalendar=*-*-* 07:20:00 America/Sao_Paulo
+OnCalendar=*-*-* 18:40:00 America/Sao_Paulo
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
