@@ -94,7 +94,7 @@ LEADS_GID = "396728619"
 BUSCAS_GID = "52197070"
 # O "01 · Caçador" no n8n do Dell: os scripts que o editam (site-nichos, site-cacador-*) importam daqui.
 CACADOR = "oow8TkxrAf4fVvTj"
-# As colunas da aba Buscas, na ordem da planilha (site-nichos.py e site-buscas-ampliar.py escrevem por ela).
+# As colunas da aba Buscas, na ordem da planilha (o site-acompanhamento.py usa as de pausa).
 COLUNAS_DE_BUSCAS = ["query", "lat", "lng", "raio_m", "vertical", "ativa", "ultima_rodada", "pausada_em", "pausa_motivo"]
 # Dias sem resposta até o lead "enviado" virar "expirado" (05 · Acompanhamento) e a pasta ir para _concluidos/
 # (Pastas a mover, aqui). É o DIAS_SEM_RESPOSTA da Central (server/crm.ts) e o que os textos dizem: se mudar

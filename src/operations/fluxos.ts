@@ -148,7 +148,7 @@ export const FLUXOS: FluxoDaOperacao[] = [
     nome: 'PRUMO · Serviços PRUMO',
     frase: 'Do prospect ao Mapa. O prospect chega pela CDL; o Dell pontua e monta o rascunho; você revisa, convida e conduz.',
     passos: [
-      { titulo: 'O prospect chega pela CDL ou pelo Raio-X', texto: 'A empresa com equipe chega pela CDL ou pede o Mapa depois do Raio-X. O caminho é Raio-X, depois o Mapa (grátis) e, só depois dele, a Fonte (09/10). O Lead Scout (convite frio a distribuidoras achadas no Places) está desligado no n8n: 57 convites, 21 respostas de robô e nenhum dono interessado. O fluxo continua lá, inativo.', onde: 'externo', quando: 'quando chegar' },
+      { titulo: 'O prospect chega pela CDL ou pelo Raio-X', texto: 'A empresa com equipe chega pela CDL ou pede o Mapa depois do Raio-X. O caminho é Raio-X, depois o Mapa (grátis) e, só depois dele, a Fonte (09/10). O Lead Scout (convite frio a distribuidoras achadas no Places) foi desligado em 08/10 (57 convites, 21 respostas de robô e nenhum dono interessado) e não existe mais no n8n.', onde: 'externo', quando: 'quando chegar' },
       { titulo: 'Revisa o prospect', texto: `Em ${PRIMEIROS} (Triagem), fora das ${caminhoDaAba('afazer')}: veja o site e o briefing do CNPJ.`, onde: 'voce', quando: 'você decide', comVoce: true, fila: 'pend:prumo-revisar', link: triagem('prumo') },
       { titulo: 'Enviar convite', texto: 'Pela Triagem ou pela Ficha, com as mesmas travas de horário e de ritmo do Site: "Abrir convite no WhatsApp" só abre a conversa com a mensagem. O "Convite enviado" é marcado pelo observador, ou pelo "Enviei" que você toca depois de enviar. Escrever direto ao dono também conta.', onde: 'voce', quando: 'um clique', comVoce: true, verificacao: 'fluxo:GkgYmWZJ65a2e9XF', blueprint: 'PRUMO-1-P1' },
       { titulo: 'Leitura e resposta se marcam', texto: 'O observador anota "Leu o convite em…" e "Respondeu no WhatsApp em…" na planilha.', onde: 'dell', quando: 'na hora' },
@@ -224,20 +224,9 @@ export const FLUXOS: FluxoDaOperacao[] = [
       { titulo: 'Divergência vira nota', texto: 'Se a planilha e a pasta discordam por mais de 2 h, a ficha mostra. Nada é corrigido sozinho.', onde: 'dell', quando: 'a cada leitura' },
     ],
   },
-  {
-    id: 'pncp',
-    grupo: 'Licitações',
-    nome: 'Radar PNCP',
-    frase: 'Toda manhã o Dell procura licitações de design e te manda só o que ainda dá tempo de disputar.',
-    passos: [
-      { titulo: 'n8n dispara a coleta', texto: 'O collector responde na hora e busca em segundo plano.', onde: 'dell', quando: '07:30', verificacao: 'fluxo:c8d62107-67db-4a1e-b6a9-211f9d9ef0df' },
-      { titulo: 'Busca no PNCP', texto: 'Filtra, pontua e guarda o relatório.', onde: 'externo', quando: 'em segundo plano', verificacao: 'pncp' },
-      { titulo: 'Tira o que vence em menos de 3 h', texto: 'Não chega no resumo; fica só a contagem.', onde: 'dell', quando: 'na coleta' },
-      { ramo: 'se a coleta não veio', titulo: 'Repescagem', texto: 'pncp-catchup refaz a coleta, também quando o Dell estava desligado às 07:30.', onde: 'dell', quando: '08:00 ou ao ligar' },
-      { titulo: 'Resumo no WhatsApp', texto: 'O Hermes lê o relatório e manda as oportunidades.', onde: 'dell', quando: '08:00' },
-      { titulo: 'Monta o dossiê do edital', texto: 'Matriz do edital e proposta em ~/Licitacoes.', onde: 'voce', quando: 'você decide', comVoce: true },
-    ],
-  },
+  // O Radar PNCP (grupo "Licitações") saiu daqui em 28/10/2026: a frente está pausada desde 11/10 e o fluxo
+  // c8d62107-… foi arquivado no n8n. Para religar, o export está em
+  // deploy/dell/licitacoes-automation/workflows/radar-pncp.json e os passos reversos em deploy/dell/README.md ("Radar PNCP").
   {
     id: 'alertas',
     grupo: 'Operação do Dell',
@@ -275,7 +264,6 @@ export const FLUXOS: FluxoDaOperacao[] = [
     nome: 'O que chega no WhatsApp e no Telegram',
     frase: 'O Hermes é o secretário: informa e não manda nada a lead. O WhatsApp dele é o mesmo número que fala com os leads; desde 16/10/2026 o que é pessoal (lembretes, finanças, falhas do Dell) e o vendedor vão pelo bot do Telegram.',
     passos: [
-      { titulo: 'Radar de licitações', texto: 'Resumo do PNCP.', onde: 'dell', quando: '08:00' },
       { titulo: 'Funil por nicho', texto: 'Só às segundas.', onde: 'dell', quando: 'segunda 08:00' },
       { titulo: 'Visão semanal de receita', texto: 'Lê ~/renda-2026 e o PRUMO.', onde: 'dell', quando: 'segunda 08:30' },
       { titulo: 'ASMR: conceito do dia', texto: 'Briefing de prompt tátil.', onde: 'dell', quando: '09:00' },
@@ -354,13 +342,10 @@ export const UM_DIA: HoraDoDia[] = [
   { hora: '03:00', itens: [{ onde: 'dell', titulo: 'Grafo dos projetos', nota: 'timer · graphify' }] },
   { hora: '03:30', itens: [{ onde: 'dell', titulo: 'Cofre cifrado do backup', nota: 'restic → Drive; desligado, roda ao ligar' }] },
   { hora: '06:00', itens: [{ onde: 'dell', titulo: 'Caçador', nota: 'Site antes da venda; perdido se o Dell estiver desligado' }] },
-  { hora: '07:30', itens: [{ onde: 'dell', titulo: 'Coleta do radar PNCP', nota: 'n8n → collector' }] },
   {
     hora: '08:00',
     itens: [
       { onde: 'dell', titulo: 'Gerador de sites', nota: 'só lead de fora do Brasil, até 4; o "Gerar demo" roda na hora; desligado, roda ao ligar' },
-      { onde: 'dell', titulo: 'Repescagem do PNCP', nota: 'só se a das 07:30 não veio' },
-      { onde: 'dell', titulo: 'Radar de licitações no WhatsApp', nota: 'Hermes' },
       { onde: 'dell', titulo: 'Funil por nicho', nota: 'só segunda' },
     ],
   },
@@ -388,4 +373,4 @@ export const O_TEMPO_TODO: Array<{ quando: string; texto: string }> = [
   { quando: 'na hora', texto: 'Pasta do lead, site publicado, observador do WhatsApp, pastas movidas, rascunho do Mapa, falhas do n8n' },
 ]
 
-export const DELL_LIGADO = 'O Dell precisa estar ligado. Desligado, o Caçador (06:00), a coleta do PNCP (07:30) e os fluxos de hora em hora não rodam e não se repetem; o gerador, o cofre e a repescagem do PNCP rodam quando ele liga.'
+export const DELL_LIGADO = 'O Dell precisa estar ligado. Desligado, o Caçador (06:00) e os fluxos de hora em hora não rodam e não se repetem; o gerador e o cofre rodam quando ele liga.'

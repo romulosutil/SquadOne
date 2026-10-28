@@ -424,7 +424,6 @@ DICAS_DO_FLUXO = {
     "08 · CRM": "O CRM mostra o último retrato bom e diz que está velho.",
     "PRUMO — Clique em Enviar convite": "O clique que falhou não marcou o convite: confira no CRM (PRUMO).",
     "PRUMO — Diagnóstico": "Formulário respondido fica sem Índice e sem rascunho do Mapa até rodar.",
-    "PRUMO — Lead Scout": "Sem ele não entram prospects novos no dia.",
     "Radar PNCP": "A repescagem das 08:00 (pncp-catchup) refaz a coleta perdida: veja \"Radar PNCP\" em Dados.",
     "WhatsApp —": "O observador repete sozinho (1, 4 e 16 min, depois de hora em hora): corrigida a causa, nada se perde.",
 }

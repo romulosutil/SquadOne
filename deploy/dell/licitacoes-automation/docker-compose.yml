@@ -102,13 +102,14 @@ services:
       # Pendências para a Central (lidas pelo dell-status).
       - ${HOME}/.local/share/n8n-estado:/home/node/.n8n-files/estado
     entrypoint: ["/bin/sh", "-ec"]
+    # 28/10/2026: o bootstrap não importa mais o prumo-lead-scout-v1 nem o prumo-diagnostic-score-v1
+    # (de ~/prumo-automation). O Lead Scout saiu do n8n e o Diagnóstico vivo é outro fluxo; num volume
+    # novo, os dois voltariam como fluxos fantasmas.
     command:
       - |
         marker=/home/node/.n8n/bootstrap-v1
         if [ ! -f "$$marker" ]; then
           n8n import:workflow --input=/opt/licitacoes/workflows/radar-pncp.json
-          n8n import:workflow --input=/opt/prumo/prumo-lead-scout-v1.n8n.json
-          n8n import:workflow --input=/opt/prumo/prumo-diagnostic-score-v1.n8n.json
           touch "$$marker"
         fi
         exec n8n start

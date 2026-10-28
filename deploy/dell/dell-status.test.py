@@ -1029,7 +1029,7 @@ class Instalados(unittest.TestCase):
         self.assertIn("Cuidado: site-pastas foi gravado no Dell depois", ds.avaliar_instalados(itens)["o_que_fazer"])
 
     def test_curinga_so_cobre_o_que_esta_instalado(self):
-        for nome in ("crm.py", "aviso-origem.py", "n8n.test.py"):
+        for nome in ("crm.py", "fecha-ciclos.py", "n8n.test.py"):
             self.escrever(self.repo, f"deploy/dell/claude-ops/{nome}", "x")
         self.escrever(self.home, ".local/share/claude-ops/crm.py", "x")
         self.escrever(self.repo, "deploy/dell/backup/backup-dell-cofre.timer", "t")

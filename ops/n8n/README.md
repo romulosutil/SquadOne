@@ -1,10 +1,17 @@
-# PRUMO no n8n
+# n8n da Mel
 
-Esta pasta **não é a fonte** dos fluxos do PRUMO. Os JSONs de exportação que
-moravam aqui (Lead Scout, Preparar planilha, Diagnóstico) descreviam o desenho
-anterior a 23/09/2026 (aba `Leads`, etapa `Contato aceito`, `Convite pronto`) e
-foram apagados, junto com o script que os regenerava: importá-los de volta
-desfaria o fluxo vivo.
+Esta pasta **não é a fonte** dos fluxos. Cada fluxo é montado e publicado por um gerador em
+`deploy/dell/claude-ops/`, pela API local do n8n da Mel; editar no editor do n8n sem mudar o gerador
+se perde na próxima regeneração.
+
+## O que há aqui
+
+| Arquivo | Para quê |
+|---|---|
+| [`CATALOGO.md`](CATALOGO.md) | Fonte de verdade sobre o n8n: como se publica, a cadeia de ganchos do `n8n.py`, os 21 fluxos (id, gatilho, gerador, o que lê e grava, decisões), por que alguns não foram juntados, pendências e o mapa de scripts. Leia antes de mexer em qualquer fluxo. |
+| [`NOVA-OFERTA.md`](NOVA-OFERTA.md) | Como criar uma oferta nova do PRUMO: regras da Prumo, decisões que o molde preserva, o passo a passo com arquivo:linha, o modelo do bloco em `prumo-ofertas.json` e a proposta para deixar barato. |
+| [`workflows/01-Cacador.sanitizado.json`](workflows/01-Cacador.sanitizado.json) | Captura de auditoria do 01 · Caçador (ver abaixo). |
+| [`workflows/01-Cacador.schema.json`](workflows/01-Cacador.schema.json) | Esquema dessa captura. |
 
 ## Arquivo do 01 · Caçador da Mel — somente auditoria
 
@@ -16,43 +23,22 @@ SHA-256 do JSON sanitizado: `a3a5582574e551317195411ed07e54749e4dff09767a32e56a8
 
 **Não publicar automaticamente este arquivo.** Ele não integra instalados.json e não deve ser enviado a um importador/deployer automático. Para uma restauração humana autorizada, conferir os dois grafos, restabelecer manualmente as referências de credencial/planilha no destino, revisar parâmetros e manter o fluxo inativo até aprovação específica. Esta captura não republicou nem ativou qualquer Caçador.
 
-## De onde vêm os fluxos hoje
+## Histórico
 
-Cada fluxo é montado e publicado por um construtor em
-`deploy/dell/claude-ops/`, idempotente, pela API do n8n:
-
-| Fluxo | Construtor |
-|---|---|
-| Diagnóstico do dono (pontuação, avisos, ramo do Mapa) e "Clique em Enviar convite" do PRUMO | `prumo-simples.py` (o ramo do Mapa vem de `prumo-mapa-n8n.py`) |
-| Caçadores e cliques de convite do Iris e do CRM de estamparia | `prumo-ofertas.py` (+ `prumo-ofertas.json`) |
-| 08 · CRM (retrato das planilhas para a Central) | `crm.py` |
-| Fonte com IA e Medição de eventos (site público) | `prumo-publico.py` |
-
-O Lead Scout (convite frio a distribuidoras) está **desligado desde
-08/10/2026** (`DESLIGADOS` em `claude-ops/n8n.py`); o fluxo inativo continua no
-n8n, mas nenhum construtor o recria.
-
-## O fluxo real da fila
-
-A planilha do PRUMO tem a aba `Prospects` (a única do dia a dia) e a oculta
-`Descartados`. A coluna `Etapa` anda assim:
-
-```text
-Revisar -> Convite enviado -> Diagnóstico pronto -> Concluído | Sem interesse
-```
-
-- **Revisar**: o caçador grava o prospect com o botão "Enviar convite" (link
-  rastreado do n8n).
-- **Convite enviado**: quem muda a Etapa é o **observador do WhatsApp**
-  (`whatsapp-conversa.py`), quando a mensagem sai de verdade. O clique em
-  "Enviar convite" só abre o WhatsApp com o texto pronto; não marca nada.
-- **Diagnóstico pronto**: a pontuação (de hora em hora) lê o formulário, grava
-  Índice (média) e Briefing na linha. O aviso para o Rômulo é o do Mapa
-  (`prumo_mapa.py`), que tem o índice de 18 itens.
-
-## Arquivo de auditoria e fixture antiga
-
-Os exports antigos foram removidos. O único arquivo de fluxo nesta pasta agora é a captura sanitizada e inativa do Caçador descrita acima. O export do Diagnóstico mudou para
-`deploy/dell/claude-ops/testes/prumo-diagnostico.fixture.json`: é só fixture de teste,
-de onde `claude-ops/workflow_confiabilidade.test.py` lê o questionário de 16 perguntas.
-Não é importável nem representa o fluxo vivo.
+- **Exports antigos do PRUMO.** `workflows/prumo-lead-scout.json`, `prumo-preparar-planilha.json` e
+  `prumo-diagnostico.json` descreviam o desenho anterior a 23/09/2026 (aba `Leads`, etapa `Contato
+  aceito`, `Convite pronto`). Foram apagados em 19/10/2026 (commit `4d85412`, auditoria de fluxos),
+  junto com o script que os regenerava; importá-los desfaria o fluxo vivo. Para consultar, use o Git.
+  O questionário de 16 perguntas do Diagnóstico ficou só como fixture de teste, em
+  `deploy/dell/claude-ops/testes/prumo-diagnostico.fixture.json` (lida por
+  `workflow_confiabilidade.test.py`); não é importável nem representa o fluxo vivo.
+- **Lead Scout** (convite frio a distribuidoras). Desligado em 08/10/2026 e **removido do n8n**: não
+  está entre os 21 fluxos de 28/10/2026. Em 28/10/2026 saíram o import dele no bootstrap do compose de
+  `licitacoes-automation` e a dica no `dell-status`. Sobram a entrada em `DESLIGADOS` (`n8n.py`), que
+  não faz nada, e os remendos `prumo-porte-cnpj.*`, sem alvo, que ficam só porque o cartão `PRUMO-1-B1`
+  de `docs/blueprint/servico.json` os cita (o teste do blueprint exige que o arquivo exista).
+- **Diagnóstico por formulário.** Até 08/10/2026 o "sim" ao convite do PRUMO recebia o formulário de
+  16 perguntas, e a pontuação de hora em hora gravava Índice e Briefing em Prospects (etapa
+  "Diagnóstico pronto"). Desde então o sim recebe o Raio-X. O fluxo "PRUMO — Diagnóstico do dono" ainda
+  lê o formulário, e o convite do PRUMO ainda tem o ramo `passo=diagnostico`; ambos estão nas pendências
+  do `CATALOGO.md`.

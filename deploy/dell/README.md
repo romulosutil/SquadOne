@@ -738,10 +738,10 @@ install -D -m 644 deploy/dell/lib/aviso.py ~/.local/lib/mel/aviso.py   # antes d
 ```
 
 Os fluxos do n8n montam o aviso em nós Code (`claude-ops/n8n.py`,
-`aviso_nodes`, com `origem: 'n8n:' + $workflow.name`). Fluxos publicados antes
-de 06/10/2026 não mandam `origem`: `claude-ops/aviso-origem.py --aplicar` os
-ajusta (sem `--aplicar` só lista). **Rode-o antes de instalar este
-`dell-status`**: o antigo ignora o campo a mais, o novo recusa aviso sem ele.
+`aviso_nodes`, com `origem: 'n8n:' + $workflow.name`). Os fluxos publicados antes
+de 06/10/2026, que não mandavam `origem`, foram ajustados pelo
+`claude-ops/aviso-origem.py` (one-shot aplicado em 06/10/2026 e removido do
+repositório em 28/10/2026).
 
 A pasta é `770` com o grupo do usuário `node` do container do n8n (gid 1000,
 o mesmo do Rômulo no Dell), e não mais `777`: qualquer processo do Dell podia
@@ -750,7 +750,6 @@ arquivos novos.
 
 ```bash
 python3 deploy/dell/dell-status.test.py   # cron, rotinas, gerador, fluxos, filas, fila de avisos, WhatsApp, backup, arquivos instalados, timers, healthwatch, rotinas caladas, pastas, prazos, central atualizada, telegram e "o que fazer"
-(cd deploy/dell/claude-ops && python3 aviso-origem.py --aplicar)   # antes do dell-status novo
 install -m 755 deploy/dell/dell-status.py ~/.local/bin/dell-status
 mkdir -p ~/.local/share/avisos/fila
 chgrp "$(docker exec licitacoes-automation-n8n-1 id -g)" ~/.local/share/avisos/fila && chmod 2770 ~/.local/share/avisos/fila
@@ -1319,7 +1318,7 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
   "Gerador de sites") e o script não reescreve mais a cópia. **O `site-nichos.py` de hoje só troca a
   lista `FEMININOS`** (o artigo da mensagem, "da Desentupidora X", "do Escritório Y") em todo nó Code do n8n que a copia, lida do
   `site-mensagem.js`; a pausa das buscas, a troca da regra 1 e do Pontuar e a escrita do `CLAUDE.md` foram apagadas dele em 19/10/2026
-  (rodar a pausa hoje desligaria as ~80 buscas que o `site-buscas-ampliar.py` acrescentou). Rodar de novo não muda nada; `--testar` não grava.
+  (rodar a pausa hoje desligaria as ~80 buscas que o `site-buscas-ampliar.py`, one-shot de 07/10/2026 removido em 28/10/2026, acrescentou). Rodar de novo não muda nada; `--testar` não grava.
 - `python3 site-acompanhamento.py --testar` roda cópias dos dois sem gravar;
   `--testar-regra`, `python3 site-cacador-escolha.py --testar` e
   `python3 site-cacador-site-no-ar.py --testar` (HTTP de mentira, mais o
@@ -1328,18 +1327,18 @@ Depois do envio (`claude-ops/site-acompanhamento.py`, 29/09/2026):
 
 **Lead Scout desligado** (08/10/2026): o convite frio a distribuidoras deu 57
 convites, 21 respostas de robô e nenhum dono interessado; a empresa com equipe
-chega pela CDL ao Mapa, grátis, e a Fonte só vem depois dele (09/10). O fluxo `e02c6f43-…` fica no n8n, inativo, e `n8n.DESLIGADOS`
-(`claude-ops/n8n.py`) faz o `POST /activate` dos `prumo-*.py` e do
-`fecha-ciclos.py` virar um aviso em vez de religá-lo. Religar: tirar o id de
-lá (PR), instalar e ativar no n8n.
+chega pela CDL ao Mapa, grátis, e a Fonte só vem depois dele (09/10). O fluxo `e02c6f43-…` já não existe no n8n
+(conferido em 28/10/2026); o id ainda está em `n8n.DESLIGADOS` (`claude-ops/n8n.py`), sem efeito. Desde 28/10/2026 o
+bootstrap do compose (`licitacoes-automation/docker-compose.yml`) também não o importa mais num volume novo.
 
-Balcão e Lead Scout gravam contagens em `~/.local/share/n8n-estado/*.json`,
+O Balcão e os fluxos do PRUMO gravam contagens em `~/.local/share/n8n-estado/*.json`,
 que o `dell-status` mostra em "Esperando você" na Central. "Enviados esperando
 resposta" conta só quem ainda está na raiz de `~/auto-site`. (O `prumo-rodizio.py`, que punha o Lead Scout em rodízio de buscas, foi apagado em
-19/10/2026 com o Lead Scout desligado.) `claude-ops/prumo-porte-cnpj.py` liga o filtro de porte (código do nó
+19/10/2026 com o Lead Scout desligado.) `claude-ops/prumo-porte-cnpj.py` ligava, no Lead Scout, o filtro de porte (código do nó
 em `prumo-porte-cnpj.js`): acha o CNPJ no site, consulta a Receita pela
 BrasilAPI e descarta MEI, microempresa, rede, CNPJ baixado e quem não é
-comércio. Quem passa leva o resumo do CNPJ na coluna Briefing.
+comércio. Quem passa leva o resumo do CNPJ na coluna Briefing. Sem o Lead Scout no n8n, o script não tem onde
+aplicar (28/10/2026); fica no repositório porque o cartão `PRUMO-1-B1` do blueprint o cita como referência do filtro.
 
 ## Página do lead e limpeza dos demos (`claude-ops/site-lead-acoes.py`, `site-demos-limpeza.*`)
 
@@ -2927,11 +2926,11 @@ venda, CRM): nunca pare nem reinicie por causa do radar.**
 |---|---|---|---|---|
 | 1 | Rotina do Hermes "Radar diário de licitações" (`f6e7da0f8558`) | `hermes cron pause f6e7da0f8558` | `hermes cron resume f6e7da0f8558` | feito em 11/10/2026 |
 | 2 | Timer da repescagem | `systemctl --user disable --now pncp-catchup.timer` | `systemctl --user enable --now pncp-catchup.timer` | feito em 11/10/2026 |
-| 3 | Fluxo `Radar PNCP — coleta diária` (`c8d62107-67db-4a1e-b6a9-211f9d9ef0df`) | `docker exec licitacoes-automation-n8n-1 n8n unpublish:workflow --id=c8d62107-67db-4a1e-b6a9-211f9d9ef0df` **e depois** `docker restart licitacoes-automation-n8n-1` | `docker exec licitacoes-automation-n8n-1 n8n publish:workflow --id=c8d62107-67db-4a1e-b6a9-211f9d9ef0df` e o mesmo restart (ou ligar pelo editor, por túnel) | **pendente**: a chave de API do monitor (`N8N_API_KEY`) é só de leitura (`/deactivate` dá 403) e a CLI só vale com o n8n reiniciado; o restart derruba por ~30 s os webhooks de PRUMO/CRM/WhatsApp, por isso espera um momento aprovado |
-| 4 | Container `licitacoes-automation-collector-1` (33 MB) | `docker stop licitacoes-automation-collector-1 && docker update --restart=no licitacoes-automation-collector-1` | `docker update --restart=unless-stopped licitacoes-automation-collector-1 && docker start licitacoes-automation-collector-1` | **pendente, só depois do 3**: com o fluxo ativo e o collector parado, às 07:30 o fluxo falha, o `00 · Avisar falha` manda WhatsApp e o `fluxo:c8d62107…` fica vermelho |
+| 3 | Fluxo `Radar PNCP — coleta diária` (`c8d62107-67db-4a1e-b6a9-211f9d9ef0df`) | arquivar no editor do n8n (por túnel) | desarquivar no editor e publicar (ou reimportar `workflows/radar-pncp.json` e publicar) | **feito**: inativo no n8n, sem mudança desde 23/09/2026, e arquivado em 28/10/2026 (não apagado). Saiu do "Como funciona" da Central (`src/operations/fluxos.ts`) no mesmo dia |
+| 4 | Container `licitacoes-automation-collector-1` (33 MB) | `docker stop licitacoes-automation-collector-1 && docker update --restart=no licitacoes-automation-collector-1` | `docker update --restart=unless-stopped licitacoes-automation-collector-1 && docker start licitacoes-automation-collector-1` | **pendente**: com o 3 feito, nada mais chama o collector às 07:30 |
 | 5 | Marca do monitor | `date +%d/%m/%Y > ~/.local/state/dell-status/pausa-pncp` | `find ~/.local/state/dell-status -name pausa-pncp -delete` | **pendente, junto do 4** (precisa do `dell-status` novo instalado: `dell-status --instalados`) |
 
-Ordem para concluir: 3 (com o restart), 4, 5. Reverter na ordem inversa. O container
+Ordem para concluir: 4, 5 (o 3 está feito). Reverter na ordem inversa. O container
 parado com `restart=no` não é problema para o `dell-status` (a verificação
 `containers` ignora `exited` com política `no`) nem para o `dell-validate` (agora diz
 "parado de propósito"). Sem a marca do passo 5 o `Radar PNCP` em "Dados" viraria
