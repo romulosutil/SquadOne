@@ -213,7 +213,9 @@ class Traducao(unittest.TestCase):
         self.assertEqual(t.linhas[0]["chatId"], f"{LEAD}@s.whatsapp.net")
         corpo = upsert("207678898962522", dominio="lid")
         corpo["data"]["senderPn"] = f"{LEAD2}@s.whatsapp.net"
-        self.assertEqual(self.tr(corpo).linhas[0]["chatId"], f"{LEAD2}@s.whatsapp.net")
+        # senderPn identifica o participante, não prova qual é o chat: sozinho não resolve um @lid.
+        t = self.tr(corpo)
+        self.assertEqual((t.linhas, t.respostas, t.ignorados), ([], [], {"lid_sem_telefone": 1}))
         t = self.tr(upsert("207678898962522", dominio="lid"))
         self.assertEqual((t.linhas, t.respostas, t.ignorados), ([], [], {"lid_sem_telefone": 1}))
         # um alternativo que também é @lid não é telefone
