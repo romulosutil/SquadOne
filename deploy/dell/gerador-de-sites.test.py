@@ -1676,15 +1676,18 @@ class SeoNoGerador(unittest.TestCase):
         self.original = self.m.subprocess.run
         self.addCleanup(setattr, self.m.subprocess, "run", self.original)
 
+        self.alias = "https://demo-linotec.vercel.app"
+
         class Saida:
-            stdout, stderr, returncode = "▲ Aliased         https://demo-linotec.vercel.app\n", "", 0
+            def __init__(self, alias):
+                self.stdout, self.stderr, self.returncode = f"▲ Aliased         {alias}\n", "", 0
 
         def run(cmd, cwd=None, **k):
             if cmd[0] == sys.executable:  # o seo-do-site de verdade, sem rede (sem chave nem cache: sem Places)
                 return self.original(cmd + ["--sem-rede"], cwd=cwd, **k)
             if "deploy" in cmd:
                 self.palcos.append({n: Path(cwd, n).read_bytes() for n in sorted(os.listdir(cwd))})
-            return Saida()
+            return Saida(self.alias)
         self.m.subprocess.run = run
 
     def instalar(self):
@@ -1714,6 +1717,43 @@ class SeoNoGerador(unittest.TestCase):
         self.assertEqual(len(self.palcos), 1)
         self.assertIn(b'id="dados-estruturados"', self.palcos[0]["index.html"])
         self.m.garantir_seo(self.pasta, self.log)  # já tem: nada de outro deploy
+        self.assertEqual(len(self.palcos), 1)
+
+    def test_vercel_corta_o_nome_canonical_e_og_image_seguem_o_endereco_real(self):
+        """Bruno Gouveia, 29/10/2026: o projeto demo-<slug longo> ganhou o endereço curto, mas o canonical e o
+        og:image escritos à mão ficaram no previsto (404) e o cartão do WhatsApp saiu sem imagem."""
+        previsto, real = "https://demo-linotec.vercel.app", "https://demo-linotec-desentupidora.vercel.app"
+        self.alias = real
+        cabeca = (f'<link rel="canonical" href="{previsto}/">'
+                  f'<meta property="og:url" content="{previsto}/">'
+                  f'<meta property="og:image" content="{previsto}/og.jpg">'
+                  f'<meta name="twitter:image" content="{previsto}/og.jpg">'
+                  '<meta property="og:site_name" content="Linotec">')
+        (self.pasta / "index.html").write_text(pagina_seo(cabeca=cabeca), encoding="utf-8")
+        self.instalar()
+        self.assertTrue(self.m.publicar_na_vercel(self.pasta, self.log))
+        self.assertGreaterEqual(len(self.palcos), 2)  # o primeiro deploy e o que corrige
+        html = self.palcos[-1]["index.html"].decode("utf-8")
+        self.assertNotIn(previsto, html)
+        for trecho in (f'<link rel="canonical" href="{real}/">', f'content="{real}/og.jpg"'):
+            self.assertIn(trecho, html)
+        self.assertEqual(html.count('<link rel="canonical"'), 1)
+        self.assertIn('property="og:site_name" content="Linotec"', html)  # o resto do <head> fica como estava
+        recibo = json.loads((self.pasta / "publicado.json").read_text(encoding="utf-8"))
+        self.assertEqual(recibo["site_url"], real)
+
+    def test_vercel_corta_o_nome_sem_seo_instalado_o_endereco_tambem_e_trocado(self):
+        previsto, real = "https://demo-linotec.vercel.app", "https://demo-linotec-desentupidora.vercel.app"
+        self.alias = real
+        (self.pasta / "index.html").write_text(
+            pagina_seo(cabeca=f'<meta property="og:image" content="{previsto}/og.jpg">'), encoding="utf-8")
+        self.assertTrue(self.m.publicar_na_vercel(self.pasta, self.log))
+        self.assertIn(f'content="{real}/og.jpg"'.encode(), self.palcos[-1]["index.html"])
+        self.assertNotIn(previsto.encode(), self.palcos[-1]["index.html"])
+
+    def test_endereco_previsto_mantido_nao_republica(self):
+        self.instalar()
+        self.assertTrue(self.m.publicar_na_vercel(self.pasta, self.log))
         self.assertEqual(len(self.palcos), 1)
 
     def test_sem_o_seo_instalado_nada_muda(self):

@@ -886,17 +886,36 @@ def garantir_seo(pasta: Path, log_lead: Path) -> None:
         log(f"SEO técnico não garantido: {type(e).__name__}: {e}", "ERRO", log_lead)
 
 
+def trocar_endereco_previsto(pasta: Path, previsto: str, real: str, log_lead: Path) -> bool:
+    """O Claude escreve o canonical, o og:image e o og:url à mão com o endereço previsto (demo-<slug>.vercel.app).
+    Quando a Vercel corta o nome do projeto, esse endereço dá 404 e o cartão do WhatsApp sai sem imagem; o
+    aplicar_seo só refaz o JSON-LD e o sitemap. Troca só o endereço previsto, byte a byte. True = trocou."""
+    indice = pasta / "index.html"
+    bruto = indice.read_bytes()
+    alvo = previsto.encode("utf-8")
+    if alvo not in bruto:
+        return False
+    indice.write_bytes(bruto.replace(alvo, real.encode("utf-8")))
+    log(f"A Vercel deu {real} em vez de {previsto}: canonical e og:image trocados no index.html.", arquivo=log_lead)
+    return True
+
+
 def publicar_na_vercel(pasta: Path, log_lead: Path) -> bool:
     slug = pasta.name
-    # A URL de sempre; se a Vercel der outra, o JSON-LD e o sitemap são refeitos com ela e sobem de novo.
+    # A URL de sempre; se a Vercel der outra, o canonical, o og:image, o JSON-LD e o sitemap são refeitos com ela
+    # e sobem de novo.
     previsto = f"https://demo-{slug}.vercel.app"
     aplicar_seo(pasta, previsto, log_lead)
     url = deploy_do_palco(pasta, log_lead)
     if not url:
         return False
-    if url.rstrip("/") != previsto and MARCA_DO_SEO in (pasta / "index.html").read_text(encoding="utf-8", errors="replace"):
-        aplicar_seo(pasta, url, log_lead)
-        url = deploy_do_palco(pasta, log_lead) or url
+    if url.rstrip("/") != previsto:
+        trocou = trocar_endereco_previsto(pasta, previsto, url.rstrip("/"), log_lead)
+        refazer_seo = MARCA_DO_SEO in (pasta / "index.html").read_text(encoding="utf-8", errors="replace")
+        if refazer_seo:
+            aplicar_seo(pasta, url, log_lead)
+        if trocou or refazer_seo:
+            url = deploy_do_palco(pasta, log_lead) or url
     conteudo = (pasta / "content.md").read_text(encoding="utf-8", errors="replace")
     pid = re.search(r"(?i)place_id[:* \t]+([a-zA-Z0-9_-]+)", conteudo)
     if not pid:
