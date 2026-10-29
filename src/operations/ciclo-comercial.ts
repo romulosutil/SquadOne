@@ -236,3 +236,14 @@ export function cicloDoLead(lead: LeadCiclo, agora = Date.now()) {
     envios: eventos.filter(e => e.tipo === 'proposta_enviada'), aceites: eventos.filter(e => e.tipo === 'aceite'), condicoes: eventos.filter(e => e.tipo === 'condicao_cobranca'), cobrancas, pagamentos,
     recebido: pagamentos.reduce((n, p) => n + p.valor, 0), primeiroRecebimento: pagamentos.map(e => e.data).sort()[0] }
 }
+/**
+ * A última versão enviada da proposta (`proposta_enviada` ativo), no formato de `CrmLead.proposta`: é
+ * ela que o CRM mostra em Proposta e de onde a cadência da proposta conta (28/10/2026). O instante é o
+ * do registro na aba CRM; sem ele, o meio-dia do dia informado.
+ */
+export function ultimoEnvioDaProposta(lead: LeadCiclo, agora = Date.now()): { em: string; data: string } | undefined {
+  const envio = cicloDoLead(lead, agora).envios.at(-1)
+  if (!envio) return undefined
+  const em = (lead.eventos ?? []).find(e => lerEventoCiclo(e.registroTexto ?? e.texto ?? '', agora)?.id === envio.id)?.em ?? `${envio.data}T12:00:00-03:00`
+  return { em, data: envio.data }
+}

@@ -57,16 +57,6 @@ export function textoDoEvento(texto: string): string {
   return textoParaATela(texto).replace(/^Fechou\b/, 'Ganhou').replace(/^Viu a mensagem\b/, 'Leu a mensagem')
 }
 
-export const ROTULO_DA_PERDA: Record<NonNullable<CrmLead['motivoPerda']>, string> = {
-  'proposta-sem-retorno': 'Proposta sem retorno',
-  recusou: 'Recusou',
-  expirou: 'Sem resposta',
-  esfriou: 'Parou de responder',
-  'sem-interesse': 'Sem interesse',
-  'sem-contato': 'Sem contato',
-  descartado: 'Descartado',
-}
-
 /** "Perdido em 3 dias" para quem está Em contato; vazio quando um próximo passo segura o lead. */
 export function textoDoPrazo(lead: CrmLead): string {
   if (lead.etapa !== 'contato' || lead.diasParaSair === undefined) return ''

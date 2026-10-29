@@ -581,17 +581,29 @@ Entregue e instalado na Mel em 19/10 (relato fase a fase em `docs/PRUMO-IMPLEMEN
   `qualificadoParaProposta` exige dor + impacto + decisor confirmado nas cinco linhas: sem isso a fila pede "dez minutos" e mostra
   as perguntas que faltam, o copiloto não prepara itens de proposta e o "Mandar a proposta" não aparece. Recepção ou robô pedem
   acesso ao responsável. Registrar uma proposta histórica real continua permitido. Impacto em R$ só com o valor literal do lead.
-- **Cadência da proposta e da conversa (Fase 3).** `src/operations/cadencia.ts`, dias úteis seg–sex (sem calendário de feriados).
-  Proposta: nenhum toque no dia 0, retornos no 1º e no 3º dia útil, perde no 10º dia corrido sem retorno (Perdido "Proposta sem
-  retorno"). Conversa: um toque no 2º dia útil depois da nossa última saída e revisão no 7º dia corrido. O toque é humano e só vira
+- **Cadência da proposta e da conversa (Fase 3; proposta refeita em 28/10/2026).** `src/operations/cadencia.ts`, dias úteis seg–sex
+  (sem calendário de feriados). Proposta (decisão de 28/10, `docs/PRUMO-DECISOES-PM-2026-10-28.md`): validade de 10 dias corridos
+  contando o envio (condição, não promoção); nenhum toque no dia 0; D+1 útil pergunta a dúvida e quem mais decide, D+4 úteis convida
+  para 10 minutos com quem decide junto, D+8 corridos diz a validade e oferece encerrar (`TOQUES_DA_PROPOSTA`, sem preço nem link);
+  no D+10 corrido sem resposta vai a Perdido ("Proposta sem retorno", motivo "sumiu"). Só o degrau do dia vale; o "dia-3" confirmado
+  da cadência antiga conta como o toque do D+4. A proposta do ciclo comercial entra igual: conta da última versão enviada enquanto não
+  há aceite, recebimento nem histórico incoerente, e no dia do toque ele substitui o cartão "Acompanhe a decisão". Conversa: um toque no 2º dia útil depois da nossa última saída e revisão no 7º dia corrido. O toque é humano e só vira
   fato com a confirmação `cadencia_enviada` (uma por proposta e degrau). Recusa, exclusão, perda manual, pausa, resposta humana e
   próximo passo futuro impedem a cobrança. Follow-up de contato frio: um só, entre os dias 3 e 6, com ou sem recibo, e perda fria no
   7º dia (o mesmo `DIAS_SEM_RESPOSTA` do CRM, da planilha e da limpeza do demo, que apaga 2 dias depois).
+- **Motivos de perda, lista fechada (28/10/2026).** `src/operations/motivos-de-perda.ts`: preco, timing, decisor, ja_tem, sem_dor,
+  sumiu, contato_errado, com o rótulo curto da tela. O "Perdeu" da Ficha pede um deles antes de gravar (sem motivo, nada grava) e
+  grava dois registros no formato de sempre: `motivo_perda` (o mesmo de Receita) e, se ele gravou, `recusou` (preco, timing,
+  decisor, ja_tem, sem_dor) ou `sem_contato` (sumiu, contato_errado). O servidor devolve `motivoDaPerda` em todo Perdido: o
+  registrado manda (até um desfazer de perda); sem ele, o `motivoPerda` automático traduzido: recusou e sem-interesse → sem_dor,
+  expirou, esfriou e proposta-sem-retorno → sumiu, sem-contato → contato_errado, descartado fica fora (não é venda perdida).
+  `motivoPerda` continua igual na API (o Dell e o Funil decidem por ele). Registros antigos "sem-dor" e "concorrente" são lidos
+  como sem_dor e ja_tem, nunca regravados. Resultados e a nota da coluna Perdido do Funil contam pela lista nova.
 - **Vendedor do Telegram em silêncio das 22h às 7h** (`silencioDoVendedor`): nada sai nessa janela. Fora dela os avisos que não
   são de primeiro contato (responder, proposta qualificada, combinado, depois do link) saem inclusive fora do expediente de venda e
   passam antes das revisões; o primeiro contato conserva horário, ritmo e o teto compartilhado de 15 por dia.
 - **AARRR e Estrela-guia (Fase 4).** `src/operations/aarr.ts` lê só fatos confirmados na aba CRM, desde 19/10 (`valor_proposta`,
-  `pagamento_confirmado`, `receita_desfeita`, `origem`, `motivo_perda`, `retencao_3m`, `indicacao_*`), gravados na Ficha por
+  `pagamento_confirmado`, `receita_desfeita`, `origem`, `motivo_perda` (a lista fechada de `motivos-de-perda.ts` desde 28/10), `retencao_3m`, `indicacao_*`), gravados na Ficha por
   `CrmReceita.vue`. Os centavos vêm do catálogo da oferta (Iris por ficha ativa em faixas marginais, `precos-iris.ts`; Estamparia
   sem preço, não se registra valor dela); nunca de um valor livre nem do modelo. **A Estrela-guia é o número de pagamentos
   confirmados na semana de São Paulo**, nas cinco linhas e fora do filtro; um recebimento é único por lead, referência e data (os
@@ -605,6 +617,18 @@ Entregue e instalado na Mel em 19/10 (relato fase a fase em `docs/PRUMO-IMPLEMEN
   confirmação humana grava braço e versão do texto realmente enviado. Nos dois, 30 observações por braço antes de qualquer taxa, o
   que já foi enviado nunca troca de letra, o histórico não recebe braço inventado, o envio segue humano, e a aprovação não religa
   caçadores nem muda o teto de prospecção. Texto exato em `docs/PRUMO-TEXTOS-VENDAS-2026-10-19.md`.
+- **Follow-up B, versão `followup-2026-10-29` (decisão do PM de 28/10, `docs/PRUMO-DECISOES-PM-2026-10-28.md`, "Follow-up").** O
+  braço A (o controle que o servidor monta em `followupDe`) não mudou; o B trocou de texto e de versão (`VERSAO_DO_FOLLOWUP`, que
+  também é o sal do sorteio). Por oferta (`site`, `prumo`, `iris`, `estampa`; o Plus usa o da oferta dele com "Meu Ir.'.," e
+  "T.F.A."), dois textos em `FOLLOWUP_NOVO`: `semFato`, uma pergunta sobre a operação, e `comFato`, que abre pelo fato verificável do
+  Raio-X (`fatoDoFollowup`: a mesma regra `eventoCriticoDe` da abertura D, sobre `links.raioX` e `achados`) e pergunta "Vocês já
+  sabiam disso?". O texto com fato só sai com fato; fato com "?", "{", "}" ou http/www cai no sem fato. Todos com uma pergunta só, sem
+  R$ e sem link (o domínio do próprio lead, quando é o fato, aparece como na abertura D). O registro novo pode levar `"fato": true|false`
+  no B, para separar as duas variantes depois das 30 por braço. A versão `followup-2026-10-19` continua lida
+  (`VERSOES_ANTERIORES_DO_FOLLOWUP`: a Ficha ainda a mostra como follow-up confirmado), mas `leituraDoFollowup(leads, versao)` mede uma
+  versão por vez: o lead entra pela primeira confirmação versionada dele, e só na versão dela. Números mostra a taxa da versão nova (30
+  por braço antes de qualquer taxa) e, à parte, a contagem da de 19/10. Só o B do CRM mudou: o n8n (05 · Acompanhamento) continua no
+  `FOLLOWUP` de controle, então `site-mensagem.js` não mudou e não há o que reinstalar no Dell.
 - **Teste do Plus de 20 (Fase 0, medido na Fase 3).** `plus-experimento.ts`: os 20 primeiros envios `plus_enviado` manuais a partir de
   19/10, contra o Site no mesmo período (respostas de gente, "quero ver", propostas), em Números. Reenvio não faz de lead antigo um novo.
 - **Entrada durável do WhatsApp (Fase 5).** `evolution-adaptador.py`: com a lista de leads velha, ou o LID sem telefone correlato, o

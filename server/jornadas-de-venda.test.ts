@@ -136,7 +136,7 @@ describe("jornada do Site: do pronto ao 'quero ver'", () => {
     );
     const tipos = filaDeVenda(v, LIVRE).map((a) => a.tipo);
     assert.ok(tipos.includes("proposta"), tipos.join(","));
-    assert.match(filaDeVenda(v, LIVRE).find((a) => a.tipo === "proposta")!.tatica, /sem reenviar preço|não reenvie o preço/);
+    assert.match(filaDeVenda(v, LIVRE).find((a) => a.tipo === "proposta")!.tatica, /[Ss]em (reenviar )?preço|não reenvie o preço/);
   });
 
   it("só o robô respondeu: no dia seguinte, o reenvio pedindo o responsável conta como primeiro contato", () => {

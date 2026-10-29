@@ -39,9 +39,10 @@ import { ultimaRespostaDeGente } from './resultados'
 import { proximoDaJornada } from './jornada'
 import { gostouDepoisDoLink, indicouInteresseDepoisDoLink, propostaDeUmToque } from './mandar-proposta'
 import { lacunasDoSpiced, qualificadoParaProposta } from './spiced'
-import { cadenciaDoLead, textoDoRegistroCadencia } from './cadencia'
+import { TOQUES_DA_PROPOSTA, cadenciaDoLead, textoDoRegistroCadencia, validadeDaProposta, type DegrauDaProposta } from './cadencia'
+import { ROTULO_DO_MOTIVO_DE_PERDA } from './motivos-de-perda'
 import { indicacaoPendente, textoDoRegistroAarr } from './aarr'
-import { metadataDoFollowup, textoDoFollowup, textoDoRegistroFollowup } from './followup-experimento'
+import { fatoDoFollowup, metadataDoFollowup, textoDoFollowup, textoDoRegistroFollowup } from './followup-experimento'
 import { contatoPausado } from './aprendizado-comercial'
 import { comHistoricoConferido } from './historico-comercial'
 import { pedeMaterial, textoParaATela } from './marcadores-da-conversa'
@@ -294,8 +295,14 @@ function acaoMandarProposta(lead: CrmLead, momento?: MomentoDaVenda): AcaoDeVend
   }
 }
 
+/**
+ * O toque da cadência (cadencia.ts). Na proposta, cada degrau tem o seu objetivo e o seu texto
+ * (TOQUES_DA_PROPOSTA, 28/10/2026): D+1 útil a dúvida e quem decide, D+4 úteis 10 minutos com quem
+ * decide, D+8 corridos a validade. Vale também para a proposta do ciclo comercial: cadenciaDoLead
+ * acompanha a última versão enviada enquanto espera a decisão.
+ */
 function acaoDaCadencia(lead: CrmLead, ctx: ContextoDaVenda): AcaoDeVenda | null {
-  if (temQualificacaoComercial(lead, ctx.agora) || cicloDoLead(lead, ctx.agora).historico.length) return null
+  if (temQualificacaoComercial(lead, ctx.agora)) return null
   if (ctx.agora === undefined) return null
   const c = cadenciaDoLead(lead, ctx.agora)
   if (!c || (c.estado !== 'tocar' && c.estado !== 'revisar')) return null
@@ -307,16 +314,18 @@ function acaoDaCadencia(lead: CrmLead, ctx: ContextoDaVenda): AcaoDeVenda | null
     primeiroContato: false, quente: false, conferirHistorico: true, revisao: true,
   }
   const sugestao = !proposta ? ctx.sugestoes?.get(lead.id) : undefined
-  const fallback = proposta
-    ? c.registro?.degrau === 'dia-3' ? 'Oi! Sobre a proposta, ficou alguma dúvida? Se não for a hora, me diga e combinamos quando voltar ao assunto.' : 'Oi! Conseguiu olhar a proposta? O que ainda falta esclarecer para decidir?'
+  // Na proposta o texto é o do degrau, sem copiloto: cada toque tem um objetivo, e nenhum leva preço nem link novo.
+  const toque = proposta ? TOQUES_DA_PROPOSTA[c.registro!.degrau as DegrauDaProposta] : undefined
+  const validade = validadeDaProposta(c.base)
+  const fallback = toque ? toque.mensagem(validade)
     : 'Oi! Ficou alguma dúvida do que conversamos? Podemos marcar 10 minutos para entender o próximo passo?'
   const texto = sugestao?.mensagem.trim() || fallback
   return {
     chave: c.chave!, leadId: lead.id, empresa: lead.empresa, produto: lead.produto, tipo: proposta ? 'proposta' : 'depois-do-link',
-    titulo: proposta ? `${c.registro?.degrau === 'dia-3' ? 'Último toque' : 'Peça retorno'} da proposta de ${lead.empresa}` : `Retome a conversa com ${lead.empresa}`,
-    contexto: proposta ? 'Cadência da proposta' : 'Conversa sem retorno: 2º dia útil',
-    porque: proposta ? 'Retorno no degrau previsto, sem repetir todos os dias.' : 'Você respondeu e a conversa ainda não voltou.',
-    tatica: proposta ? 'Pergunte o que falta para decidir, sem reenviar preço.' : 'Use a leitura atual do copiloto ou a pergunta curta de descoberta.',
+    titulo: toque ? toque.titulo(lead.empresa) : `Retome a conversa com ${lead.empresa}`,
+    contexto: toque ? toque.contexto(validade) : 'Conversa sem retorno: 2º dia útil',
+    porque: toque ? toque.porque : 'Você respondeu e a conversa ainda não voltou.',
+    tatica: toque ? toque.tatica : 'Use a leitura atual do copiloto ou a pergunta curta de descoberta.',
     rascunho: texto, ...(lead.links.whatsapp ? { link: { rotulo: 'Abrir no WhatsApp com a mensagem', url: `${lead.links.whatsapp}${lead.links.whatsapp.includes('?') ? '&' : '?'}text=${encodeURIComponent(texto)}` } } : {}),
     anota: 'cadencia_enviada', textoDoRegistro: textoDoRegistroCadencia(c.registro!), primeiroContato: false, quente: false,
   }
@@ -411,23 +420,29 @@ function linkDosEua(url: string): boolean {
 /**
  * PURO. O follow-up do 3º dia como a fila o mostra e abre (A/B do follow-up, 19/10/2026). O servidor
  * só monta o texto de controle (followupDe); aqui o braço sorteado por hash escolhe o que sai: A é o
- * controle intacto, B é FOLLOWUP_NOVO. O texto mostrado, o do wa.me e o braço gravado saem da mesma
- * decisão, para a leitura (leituraDoFollowup) nunca comparar o texto antigo com ele mesmo.
+ * controle intacto, B é FOLLOWUP_NOVO (com o fato do Raio-X quando há um verificável, 29/10/2026).
+ * O texto mostrado, o do wa.me e o braço gravado saem da mesma decisão, para a leitura
+ * (leituraDoFollowup) nunca comparar o texto antigo com ele mesmo.
  * Sem versão (`registro` ausente): link que não leva texto, número dos EUA (o novo não tem inglês)
  * ou oferta sem texto novo. Esses seguem com o controle e ficam fora do teste, em vez de entrarem
  * no braço A e sujarem a comparação.
  */
-export function followupDoBraco(lead: Pick<CrmLead, 'produto' | 'id' | 'empresa' | 'plus'>, link: { rotulo: string; url: string }): {
+export function followupDoBraco(
+  lead: Pick<CrmLead, 'produto' | 'id' | 'empresa' | 'plus'> & Partial<Pick<CrmLead, 'links' | 'achados'>>,
+  link: { rotulo: string; url: string },
+): {
   link: { rotulo: string; url: string }; rascunho: string; registro?: string
 } {
   const controle = textoDoLink(link.url) ?? ''
   const meta = metadataDoFollowup(lead.produto, lead.id, lead.plus?.oferta)
-  const texto = textoDoFollowup(lead.produto, lead.empresa, meta.braco, lead.plus?.oferta, controle)
+  // Só o B leva o fato: o A é o controle e não pode mudar entre versões.
+  const fato = meta.braco === 'B' ? fatoDoFollowup(lead) : null
+  const texto = textoDoFollowup(lead.produto, lead.empresa, meta.braco, lead.plus?.oferta, controle, fato)
   if (!controle || linkDosEua(link.url)) return { link, rascunho: controle }
   if (meta.braco === 'A') return { link, rascunho: controle, registro: textoDoRegistroFollowup(meta) }
   // B sem molde para a oferta devolve o controle: mostrado A, então não pode ser gravado como B.
   if (texto === controle) return { link, rascunho: controle }
-  return { link: { ...link, url: trocarTextoDoLink(link.url, texto) }, rascunho: texto, registro: textoDoRegistroFollowup(meta) }
+  return { link: { ...link, url: trocarTextoDoLink(link.url, texto) }, rascunho: texto, registro: textoDoRegistroFollowup({ ...meta, fato: Boolean(fato) }) }
 }
 
 /**
@@ -633,7 +648,9 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
       titulo:l.atendimentoComercial?.titulo??pedidoDePreco?.titulo??plano.acao,contexto:pedidoDePreco?.contexto??'Revisão comercial interna',porque:l.atendimentoComercial?.motivo??pedidoDePreco?.porque??'Sinal comercial recebido; fonte e condições dependem de revisão humana.',
       tatica:`${plano.acao} ${plano.resultado}`,primeiroContato:false,quente:plano.urgente,prioridadeComercial:plano.ordem/10,evidenciaEm:plano.em}
   }))
-  fila.push(...leads.flatMap(l => { const a = acaoDaCadencia(l, ctx); return a ? [a] : [] }))
+  const cadencias = leads.flatMap(l => { const a = acaoDaCadencia(l, ctx); return a ? [a] : [] })
+  const comCadencia = new Set(cadencias.map(a => a.leadId))
+  fila.push(...cadencias)
   if (ctx.agora !== undefined) for (const l of leads) {
     if (l.etapa === 'perdido' || ['negativa', 'exclusao'].includes(l.resposta?.tipo ?? '') || (l.proximoPasso?.data && l.proximoPasso.data > new Date(ctx.agora - 10800_000).toISOString().slice(0, 10))) continue
     const pago = indicacaoPendente(l, ctx.agora)
@@ -654,6 +671,10 @@ export function filaDeVenda(visao: Pick<CrmVisao, 'hoje' | 'leads'> | null | und
   const propostas = leads.flatMap((l) => {
     const ciclo = cicloDoLead(l, ctx.agora)
     if (ciclo.historico.length && !['negativa','exclusao'].includes(l.resposta?.tipo ?? '') && !l.perdaManual) {
+      // A validade da proposta encerrou o lead (cadencia.ts): nada a acompanhar. No dia de um toque da
+      // cadência, o toque é o passo; o cartão "acompanhe a decisão" repetiria o mesmo lead na fila.
+      if (l.motivoPerda === 'proposta-sem-retorno') return []
+      if (comCadencia.has(l.id) && ciclo.envios.length && !ciclo.aceites.length) return []
       const pendente = ciclo.cobrancas.find(c => c.saldo > 0)
       const titulo = ciclo.problemas.length ? 'Revise os registros comerciais' : pendente ? 'Confira o recebimento e o saldo da cobrança' : !ciclo.envios.length ? 'Revise a proposta antes de enviar' : !ciclo.aceites.length ? 'Acompanhe a decisão e registre o aceite com documento' : !ciclo.condicoes.length ? 'Defina a condição de cobrança contratada' : !ciclo.cobrancas.length ? 'Confira o gatilho antes de registrar a cobrança' : 'Confira a entrega e a próxima competência'
       return [{ chave: `${l.id}|ciclo-comercial`, leadId: l.id, empresa: l.empresa, produto: l.produto, tipo: 'combinado' as const,
@@ -879,14 +900,17 @@ export interface DesfechosDoLead {
  * da aba CRM, não colunas de planilha). Perdido pelo prazo (7 dias sem mensagem) não teve desfecho:
  * ainda cabe ganhar e marcar a proposta, que o trazem de volta; perder de novo não faz sentido.
  */
-export function desfechosDoLead(lead: Pick<CrmLead, 'etapa' | 'motivoPerda' | 'perdaManual' | 'ganhoManual' | 'proposta'>): DesfechosDoLead {
+export function desfechosDoLead(lead: Pick<CrmLead, 'etapa' | 'motivoPerda' | 'perdaManual' | 'ganhoManual' | 'proposta'> & Partial<Pick<CrmLead, 'motivoDaPerda'>>): DesfechosDoLead {
   const aberto = lead.etapa !== 'ganho' && lead.etapa !== 'perdido'
-  const peloPrazo = lead.etapa === 'perdido' && !lead.perdaManual && (lead.motivoPerda === 'expirou' || lead.motivoPerda === 'esfriou')
+  // A proposta vencida (10 dias corridos, cadencia.ts) também saiu pelo prazo: ninguém marcou desfecho.
+  const peloPrazo = lead.etapa === 'perdido' && !lead.perdaManual && (lead.motivoPerda === 'expirou' || lead.motivoPerda === 'esfriou' || lead.motivoPerda === 'proposta-sem-retorno')
+  // O motivo da lista fechada (motivos-de-perda.ts) diz a perda marcada; sem ele, o texto de antes.
+  const motivo = lead.motivoDaPerda ? `Perdeu: ${ROTULO_DO_MOTIVO_DE_PERDA[lead.motivoDaPerda].toLocaleLowerCase('pt-BR')}.` : undefined
   const marcados: DesfechoMarcado[] = []
   if (lead.ganhoManual) marcados.push({ id: 'ganhou', texto: 'Ganhou: marcado na Central.', desfazer: { tipo: 'ganhou_desfeito', rotulo: 'Desfazer o ganho' } })
   else if (lead.etapa === 'ganho') marcados.push({ id: 'ganho', texto: 'Ganho informado pela planilha. Use “Revisar classificação” nesta ficha se precisar corrigir.' })
-  if (lead.perdaManual === 'recusou') marcados.push({ id: 'recusou', texto: 'Perdeu: ele disse não.', desfazer: { tipo: 'recusou_desfeito', rotulo: 'Desfazer a recusa' } })
-  else if (lead.perdaManual === 'sem-contato') marcados.push({ id: 'sem-contato', texto: 'Perdeu: sem contato fácil.', desfazer: { tipo: 'sem_contato_desfeito', rotulo: 'Desfazer a perda' } })
+  if (lead.perdaManual === 'recusou') marcados.push({ id: 'recusou', texto: motivo ?? 'Perdeu: ele disse não.', desfazer: { tipo: 'recusou_desfeito', rotulo: 'Desfazer a recusa' } })
+  else if (lead.perdaManual === 'sem-contato') marcados.push({ id: 'sem-contato', texto: motivo ?? 'Perdeu: sem contato fácil.', desfazer: { tipo: 'sem_contato_desfeito', rotulo: 'Desfazer a perda' } })
   else if (lead.perdaManual === 'dispensado') marcados.push({ id: 'dispensado', texto: 'Dispensado na Triagem.', desfazer: { tipo: 'dispensado_desfeito', rotulo: 'Desfazer o dispensar' } })
   else if (lead.etapa === 'perdido' && !peloPrazo) marcados.push({ id: 'perdido', texto: 'Perda informada pela planilha. Use “Revisar classificação” nesta ficha se precisar corrigir.' })
   if (lead.etapa === 'proposta') {

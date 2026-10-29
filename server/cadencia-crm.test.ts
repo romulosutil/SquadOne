@@ -35,9 +35,10 @@ it('Enviei é durável no CRM entre dias e reinícios; contexto alterado não gr
     assert.equal((await criar().registrar(entrada, new Date(agora))).ok, true)
     assert.equal((await criar().registrar(entrada, new Date(agora + 86_400_000))).repetido, true)
     assert.equal(chamadas, 1)
-    const proximo = cadenciaDoLead(l, agora + 2 * 86_400_000)!.registro!
-    l.resposta = { tipo: 'neutra', trecho: 'vamos conversar amanhã', em: new Date(agora + 2 * 86_400_000).toISOString() }
-    await assert.rejects(() => criar().registrar({ ...entrada, texto: textoDoRegistroCadencia(proximo) }, new Date(agora + 2 * 86_400_000)), RegistroInvalido)
+    // Proposta na sexta 16/10: o próximo degrau é o do 4º dia útil, quinta 22/10 (cadencia.ts, 28/10/2026).
+    const proximo = cadenciaDoLead(l, agora + 3 * 86_400_000)!.registro!
+    l.resposta = { tipo: 'neutra', trecho: 'vamos conversar amanhã', em: new Date(agora + 3 * 86_400_000).toISOString() }
+    await assert.rejects(() => criar().registrar({ ...entrada, texto: textoDoRegistroCadencia(proximo) }, new Date(agora + 3 * 86_400_000)), RegistroInvalido)
     assert.equal(chamadas, 1)
   } finally { await fs.rm(dir, { recursive: true, force: true }) }
 })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_PERDA, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDaSubEtapa, textoDeDias, textoDoPrazo } from './crm-formato'
+import { DICA_DA_ETAPA, ETAPAS, ROTULO_DA_ETAPA, ROTULO_DA_OFERTA_DO_PLUS, ROTULO_DA_RESPOSTA, SIGLA_DO_PRODUTO, dataCurta, ehConvite, diaEscolhido, diasNaEtapa, hora, onde, textoDaLeitura, textoDaSubEtapa, textoDeDias, textoDoPrazo } from './crm-formato'
 import {
   SENTIDO_INICIAL, chaveDoNicho, contagemDaEtapa, gravarVistaDoFunil, juntarAbertas, lerVistaDoFunil, opcoesDeNicho, opcoesDePasso, ordenarLista, sinalMaisForte,
   textoDaColunaProximo, textoDosDescartados, textoDoProximoPasso,
@@ -9,6 +9,7 @@ import {
 import { passoAtual } from './jornada'
 import { acaoDoLead, type AcaoDeVenda } from './proxima-venda'
 import { textoParaATela } from './marcadores-da-conversa'
+import { resumoDosMotivos } from './motivos-de-perda'
 import type { CrmEtapa, CrmLead, CrmProduto, CrmSinal, CrmVisao } from './types'
 
 // "Funil": no desktop, quatro colunas — Novo, Em contato, Proposta e os
@@ -112,9 +113,8 @@ const descartados = computed(() => porEtapa.value.perdido.filter(l => l.motivoPe
 /** O número da etapa no Quadro, nas abas e na Lista: um só, pela mesma escolha de descartados (AC-03). */
 const contagem = (etapa: CrmEtapa) => contagemDaEtapa(porEtapa.value[etapa], etapa, mostrarDescartados.value)
 /** "Recusou 90 · Sem resposta 12 · Descartado 750": só os motivos que têm alguém. */
-const perdasDaColuna = computed(() => (Object.keys(ROTULO_DA_PERDA) as Array<keyof typeof ROTULO_DA_PERDA>)
-  .map(m => [ROTULO_DA_PERDA[m], porEtapa.value.perdido.filter(l => l.motivoPerda === m).length] as const)
-  .filter(([, n]) => n).map(([rotulo, n]) => `${rotulo} ${n}`).join(' · '))
+// Desde 28/10/2026 pelo motivo da lista fechada (motivos-de-perda.ts), o mesmo da Ficha e de Resultados.
+const perdasDaColuna = computed(() => resumoDosMotivos(porEtapa.value.perdido))
 const conversas = computed(() => porEtapa.value.contato.filter(emConversa).length)
 const cartoes = (etapa: CrmEtapa) => {
   const lista = etapa === 'perdido' && !mostrarDescartados.value ? porEtapa.value.perdido.filter(l => l.motivoPerda !== 'descartado') : porEtapa.value[etapa]

@@ -55,7 +55,7 @@ class SpicedDoRegistro(unittest.TestCase):
         for q in [0,-1,1.5]: self.assertFalse(validar({**base,'oferta':'iris','componente':'mensalidade','quantidade':q}, 'iris', tipo='pagamento_confirmado')['ok'])
 
     def test_aarr_categorias_calendario_indicacoes_e_reversao_longa(self):
-        for tipo, valores in [('origem',['cacador','plus','indicacao','CDL','anuncio']),('motivo_perda',['preco','timing','sem-dor','decisor','concorrente','sumiu'])]:
+        for tipo, valores in [('origem',['cacador','plus','indicacao','CDL','anuncio']),('motivo_perda',['preco','timing','decisor','ja_tem','sem_dor','sumiu','contato_errado'])]:
             for valor in valores: self.assertTrue(validar({'versao':1,'valor':valor}, tipo=tipo)['ok'])
             self.assertFalse(validar({'versao':1,'valor':'inventado'}, tipo=tipo)['ok'])
         retencao = {'versao':1,'referencia':'encontrado','inicio':'2026-01-31','data':'2026-03-31','ativa':True}
@@ -70,9 +70,11 @@ class SpicedDoRegistro(unittest.TestCase):
     def test_cadencia_duravel_valida_degraus_e_origem(self):
         origem = '2026-10-19T15:00:00.000Z'
         for produto in ['site', 'prumo', *OFERTAS, 'plus']:
-            for degrau in ['dia-1', 'dia-3']:
+            # Cadência da proposta de 28/10/2026: D+1 útil, D+4 úteis, D+8 corridos; o "dia-3" antigo não se grava mais.
+            for degrau in ['dia-1', 'dia-4', 'dia-8']:
                 s = {'versao': 1, 'tipo': 'proposta', 'origem': origem, 'degrau': degrau}
                 self.assertTrue(validar(s, produto, tipo='cadencia_enviada')['ok'])
+            self.assertFalse(validar({'versao': 1, 'tipo': 'proposta', 'origem': origem, 'degrau': 'dia-3'}, produto, tipo='cadencia_enviada')['ok'])
         conversa = {'versao': 1, 'tipo': 'conversa', 'origem': origem, 'degrau': 'dia-2', 'base': origem}
         self.assertTrue(validar(conversa, tipo='cadencia_enviada')['ok'])
         for extra in [{'base': None}, {'origem': 123}, {'origem': 'invalida'}, {'degrau': 'dia-3'}, {'extra': True}]:

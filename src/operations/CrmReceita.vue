@@ -6,7 +6,8 @@ const rascunhosComerciais = new Map<string, RascunhoComercial>()
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { CrmLead } from './types'
-import { aarrDoLead, chaveDoPagamento, contratosMensais, diaAarr, MOTIVOS_PERDA_AARR, opcoesDeterministicasDeReceita, ORIGENS_AARR, terceiroMes, textoDoRegistroAarr, textoDoRegistroReceita, type RegistroReceita, type TipoAarr } from './aarr'
+import { aarrDoLead, chaveDoPagamento, contratosMensais, diaAarr, opcoesDeterministicasDeReceita, ORIGENS_AARR, terceiroMes, textoDoRegistroAarr, textoDoRegistroReceita, type RegistroReceita, type TipoAarr } from './aarr'
+import { MOTIVOS_DE_PERDA, ROTULO_DO_MOTIVO_DE_PERDA } from './motivos-de-perda'
 
 const props = defineProps<{ lead: CrmLead; disponivel: boolean }>()
 const emit = defineEmits<{ registrado: [] }>()
@@ -29,7 +30,8 @@ const contrato = computed(() => contratos.value.find(p => p.referencia === rascu
 const pagamento = computed(() => pagamentos.value.find(p => p.chave === rascunho.value.pagamento))
 const bloqueado = computed(() => !props.disponivel || estado.value === 'salvando' || estado.value === 'aguardando')
 const rotulosOrigem: Record<string, string> = { cacador: 'Caçador', plus: 'Plus', indicacao: 'Indicação', CDL: 'CDL', anuncio: 'Anúncio' }
-const rotulosMotivo: Record<string, string> = { preco: 'Preço', timing: 'Timing', 'sem-dor': 'Sem dor', decisor: 'Decisor', concorrente: 'Concorrente', sumiu: 'Sumiu' }
+// A lista fechada de 28/10/2026, a mesma do "Perdeu" da Ficha (motivos-de-perda.ts).
+const rotulosMotivo: Record<string, string> = ROTULO_DO_MOTIVO_DE_PERDA
 watch(identidade, (atual, anterior) => {
   if (anterior) rascunhosComerciais.set(anterior, { ...rascunho.value })
   rascunho.value = { ...(rascunhosComerciais.get(atual) ?? novo()) }
@@ -113,7 +115,7 @@ async function desfazer(tipo: 'valor_proposta' | 'pagamento_confirmado', registr
           <p class="crm-nota-pequena">Confirme apenas se o valor deste fato é igual ao item escolhido. Sem preço livre, estimativa ou atualização de propostas antigas. Para mensalidade, use uma referência diferente por competência.</p>
         </template>
         <label v-if="rascunho.tipo === 'origem'"><span>Origem confirmada</span><select v-model="rascunho.origem" required :disabled="bloqueado"><option value="">Escolha a origem</option><option v-for="o in ORIGENS_AARR" :key="o" :value="o">{{ rotulosOrigem[o] }}</option></select></label>
-        <label v-if="rascunho.tipo === 'motivo_perda'"><span>Razão informada pelo lead</span><select v-model="rascunho.motivo" required :disabled="bloqueado"><option value="">Escolha o motivo</option><option v-for="m in MOTIVOS_PERDA_AARR" :key="m" :value="m">{{ rotulosMotivo[m] }}</option></select></label>
+        <label v-if="rascunho.tipo === 'motivo_perda'"><span>Razão informada pelo lead</span><select v-model="rascunho.motivo" required :disabled="bloqueado"><option value="">Escolha o motivo</option><option v-for="m in MOTIVOS_DE_PERDA" :key="m" :value="m">{{ rotulosMotivo[m] }}</option></select></label>
         <template v-if="rascunho.tipo === 'retencao_3m' || rascunho.tipo === 'indicacao_pedida'">
           <label v-if="rascunho.tipo === 'retencao_3m'"><span>Contrato com mensalidade confirmada</span><select v-model="rascunho.pagamento" :disabled="bloqueado"><option value="">Selecione um contrato</option><option v-for="c in contratos" :key="c.referencia" :value="c.referencia">{{ c.referencia }} · início {{ c.inicio }}</option></select></label>
           <label v-else><span>Pagamento ligado à indicação</span><select v-model="rascunho.pagamento" :disabled="bloqueado"><option value="">Selecione um registro confirmado</option><option v-for="p in pagamentos" :key="p.chave" :value="p.chave">{{ p.referencia }} · {{ p.data }} · {{ dinheiro(p.valor_centavos) }}</option></select></label>

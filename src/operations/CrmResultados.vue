@@ -19,7 +19,7 @@ import { aprendizadosDosLeads, ROTULO_DO_TESTE } from './aprendizado-comercial'
 import { MINIMO_POR_BRACO_DO_RECIBO, leituraDoTesteDoRecibo } from './ab-recibo'
 import { LIMITE_DA_RESPOSTA_RAPIDA_H, duracao, velocidadeDaVenda, type Medida } from './velocidade'
 import { leituraDoTestePlus, TAMANHO_DO_TESTE_PLUS } from './plus-experimento'
-import { FOLLOWUP_NOVO_APROVADO, leituraDoFollowup, MINIMO_POR_BRACO_DO_FOLLOWUP } from './followup-experimento'
+import { FOLLOWUP_NOVO_APROVADO, leituraDoFollowup, MINIMO_POR_BRACO_DO_FOLLOWUP, VERSOES_ANTERIORES_DO_FOLLOWUP } from './followup-experimento'
 import { EVENTO_CRITICO_APROVADO } from '../../server/site-mensagem'
 import { ROTULO_DA_ORIGEM, ROTULO_DO_MOTIVO, leituraAarr } from './aarr'
 
@@ -40,6 +40,8 @@ const periodo = ref<Periodo>('30')
 const respostas = computed(() => resumoDasRespostas(props.leads.filter(l => enviadoNoPeriodo(l, periodo.value, props.agora)), props.agora))
 const testePlus = computed(() => leituraDoTestePlus(props.leads, props.agora))
 const testeFollowup = computed(() => leituraDoFollowup(props.leads))
+// 29/10/2026: o B mudou de texto e de versão. A de 19/10 segue à parte (só a contagem), nunca na mesma taxa da nova.
+const testeFollowupAnterior = computed(() => leituraDoFollowup(props.leads, VERSOES_ANTERIORES_DO_FOLLOWUP[0]))
 const aprendizados = computed(() => aprendizadosDosLeads(props.leads))
 const SECOES: Array<{ id: Criterio; titulo: string; explicacao: string; soSite: boolean }> = [
   { id: 'nicho', titulo: 'Por nicho', explicacao: 'Quem responde e quem fecha em cada busca.', soSite: false },
@@ -130,8 +132,11 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
           <table v-else class="crm-spiced-comparacao"><caption>Origem anotada na Ficha. Quem não tem origem anotada fica em “Sem origem”, sem palpite.</caption><thead><tr><th scope="col">Origem</th><th scope="col">Enviados · 30 dias</th><th scope="col">Respostas de gente</th><th scope="col">“Quero ver” qualificados</th><th scope="col">Resposta</th><th scope="col">Recebimentos</th></tr></thead><tbody><tr v-for="l in aarr.canais.linhas" :key="l.canal"><th scope="row">{{ ROTULO_DA_ORIGEM[l.canal] }}</th><td>{{ l.enviados }}</td><td>{{ l.respostas }}</td><td>{{ l.ativados }}</td><td>{{ taxaDaOrigem(l.taxaDeResposta) }}</td><td>{{ l.pagamentos }}</td></tr></tbody></table>
           <p v-if="aarr.canais.linhas.length && !aarr.canais.comOrigem" class="crm-nota-pequena">Nenhuma origem confirmada nas Fichas desta seleção: tudo cai em “Sem origem”. A comparação entre origens começa quando elas forem anotadas.</p>
           <h3 class="crm-aarr-detalhe__titulo">Motivo das perdas</h3>
-          <p v-if="!aarr.perdas.comMotivo" class="crm-nota-pequena">Sem registro: {{ aarr.perdas.perdidos }} {{ aarr.perdas.perdidos === 1 ? 'Perdido' : 'Perdidos' }} na seleção, nenhum com o motivo confirmado na Ficha.</p>
-          <p v-else class="crm-resultado__numeros"><template v-for="(m, i) in aarr.perdas.porMotivo" :key="m.motivo"><span v-if="i">· </span>{{ ROTULO_DO_MOTIVO[m.motivo] }}: <strong>{{ m.quantidade }}</strong> </template></p>
+          <p v-if="!aarr.perdas.perdidos" class="crm-nota-pequena">Nenhum Perdido de venda na seleção.</p>
+          <template v-else>
+            <p class="crm-resultado__numeros"><template v-for="(m, i) in aarr.perdas.porMotivo" :key="m.motivo"><span v-if="i">· </span>{{ ROTULO_DO_MOTIVO[m.motivo] }}: <strong>{{ m.quantidade }}</strong> </template></p>
+            <p class="crm-nota-pequena">{{ aarr.perdas.comMotivo }} de {{ aarr.perdas.perdidos }} com o motivo escolhido na Ficha; os demais pelo motivo automático (sem resposta conta como “Sumiu”). Descartados antes do contato ficam fora.</p>
+          </template>
           <h3 class="crm-aarr-detalhe__titulo">Valor das propostas registrado</h3>
           <p v-if="!aarr.propostas.registros" class="crm-nota-pequena">Sem registro: nenhum valor de proposta confirmado na Ficha desde 19/10/2026.<template v-if="aarr.propostas.semValor"> {{ aarr.propostas.semValor }} em Proposta sem valor registrado.</template></p>
           <template v-else>
@@ -163,10 +168,11 @@ const largura = (l: LinhaDeResultado) => `${l.enviados ? Math.round((l.responder
       </section>
       <section class="crm-grupo" aria-labelledby="crm-followup-teste">
         <header class="crm-grupo__cabeca"><h2 id="crm-followup-teste">Follow-up · texto em teste</h2></header>
-        <p class="crm-grupo__explicacao">A conserva o texto anterior; B faz uma pergunta sobre a operação. {{ FOLLOWUP_NOVO_APROVADO ? 'Texto novo: aprovado para teste controlado.' : 'O texto novo aguarda revisão do Rômulo.' }} Só entra envio confirmado com braço e versão registrados; o histórico não recebe letra retroativa.</p>
+        <p class="crm-grupo__explicacao">A conserva o texto anterior; B faz uma pergunta só, sem preço nem link, e abre pelo fato do raio-x quando ele existe (texto de 29/10). {{ FOLLOWUP_NOVO_APROVADO ? 'Texto novo: aprovado para teste controlado.' : 'O texto novo aguarda revisão do Rômulo.' }} Só entra envio confirmado com braço e versão registrados; o histórico não recebe letra retroativa.</p>
         <p class="crm-resultado__numeros">A: {{ testeFollowup.bracos.A.enviados }} envios · B: {{ testeFollowup.bracos.B.enviados }} envios.</p>
         <p v-if="!testeFollowup.lido" class="crm-nota-pequena">Taxas e comparação só com {{ MINIMO_POR_BRACO_DO_FOLLOWUP }} envios confirmados em cada braço.</p>
         <p v-else-if="testeFollowup.numeros" class="crm-resultado__numeros">Respondeu depois do follow-up: A {{ porcento(testeFollowup.bracos.A.responderam, testeFollowup.bracos.A.enviados) }} · B {{ porcento(testeFollowup.bracos.B.responderam, testeFollowup.bracos.B.enviados) }} · {{ textoDoP(testeFollowup.numeros.p) }}. Resultado exploratório; não autoriza envios.</p>
+        <p v-if="testeFollowupAnterior.bracos.A.enviados + testeFollowupAnterior.bracos.B.enviados" class="crm-nota-pequena">Texto de 19/10, medido à parte: A {{ testeFollowupAnterior.bracos.A.enviados }} · B {{ testeFollowupAnterior.bracos.B.enviados }} envios<template v-if="testeFollowupAnterior.numeros">; respondeu depois: A {{ porcento(testeFollowupAnterior.bracos.A.responderam, testeFollowupAnterior.bracos.A.enviados) }} · B {{ porcento(testeFollowupAnterior.bracos.B.responderam, testeFollowupAnterior.bracos.B.enviados) }} · {{ textoDoP(testeFollowupAnterior.numeros.p) }}</template>.</p>
       </section>
 
       <section class="crm-grupo" aria-labelledby="crm-aprendizados">

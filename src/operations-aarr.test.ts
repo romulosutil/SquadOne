@@ -170,12 +170,15 @@ describe('origem, motivo da perda e valor de proposta na leitura AARRR (Fase 4, 
     assert.deepEqual(r.canais.linhas.map(x => x.canal), ['plus'])
   })
 
-  it('motivo da perda só entre os Perdidos; sem motivo é categoria, e o motivo do sistema não entra', () => {
-    const perdido = (id: string, eventos: CrmEvento[]) => lead('site', { id: `site:${id}`, etapa: 'perdido', motivoPerda: 'expirou', eventos } as Partial<CrmLead>)
-    const r = leituraAarr([perdido('1', [motivo('preco')]), perdido('2', [motivo('preco')]), perdido('3', [motivo('timing')]), perdido('4', []),
-      lead('site', { id: 'site:aberto', eventos: [motivo('sumiu')] })], AGORA)
-    assert.deepEqual(r.perdas, { perdidos: 4, comMotivo: 3, porMotivo: [{ motivo: 'preco', quantidade: 2 }, { motivo: 'timing', quantidade: 1 }, { motivo: 'sem-motivo', quantidade: 1 }] })
-    assert.deepEqual(leituraAarr([perdido('x', [])], AGORA).perdas, { perdidos: 1, comMotivo: 0, porMotivo: [{ motivo: 'sem-motivo', quantidade: 1 }] })
+  it('motivo da perda só entre os Perdidos de venda; o registrado manda e o automático entra traduzido (28/10/2026)', () => {
+    const perdido = (id: string, eventos: CrmEvento[], motivoPerda = 'expirou') => lead('site', { id: `site:${id}`, etapa: 'perdido', motivoPerda, eventos } as Partial<CrmLead>)
+    const antigo = evento('motivo_perda', JSON.stringify({ versao: 1, valor: 'concorrente' }))
+    const r = leituraAarr([perdido('1', [motivo('preco')]), perdido('2', [motivo('preco')]), perdido('3', [motivo('timing')]), perdido('4', []), perdido('5', [antigo]),
+      perdido('d', [], 'descartado'), lead('site', { id: 'site:aberto', eventos: [motivo('sumiu')] })], AGORA)
+    assert.deepEqual(r.perdas, { perdidos: 5, comMotivo: 4, porMotivo: [{ motivo: 'preco', quantidade: 2, registrados: 2 }, { motivo: 'timing', quantidade: 1, registrados: 1 },
+      { motivo: 'ja_tem', quantidade: 1, registrados: 1 }, { motivo: 'sumiu', quantidade: 1, registrados: 0 }] })
+    assert.deepEqual(leituraAarr([perdido('x', [])], AGORA).perdas, { perdidos: 1, comMotivo: 0, porMotivo: [{ motivo: 'sumiu', quantidade: 1, registrados: 0 }] })
+    assert.deepEqual(leituraAarr([lead('site', { id: 'site:y', etapa: 'perdido', eventos: [] } as Partial<CrmLead>)], AGORA).perdas, { perdidos: 1, comMotivo: 0, porMotivo: [{ motivo: 'sem-motivo', quantidade: 1, registrados: 0 }] })
   })
 
   it('soma só o valor de proposta registrado (cardápio), separa implantação de mensalidade e conta quem está em Proposta sem valor', () => {

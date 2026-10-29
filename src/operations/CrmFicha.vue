@@ -34,6 +34,8 @@ import RecadoDeTravas from './RecadoDeTravas.vue'
 import type { CrmLead, CrmTipoDeRegistro, CrmVisao } from './types'
 import { raioXAvulso } from '../../server/site-mensagem.ts'
 import { agoraDaFicha, desfechosDoLead, textoDoLink, type RegistroDeDesfecho, type SugestaoDeVenda } from './proxima-venda'
+import { MOTIVOS_DE_PERDA, ROTULO_DO_MOTIVO_DE_PERDA, desfechoDoMotivo, type MotivoDePerda } from './motivos-de-perda'
+import { textoDoRegistroAarr } from './aarr'
 import { acaoDaFicha, primeiroContatoDaFicha } from './primeiro-da-ficha'
 import { pedeMaterial, textoParaATela, type PapelDaMensagem } from './marcadores-da-conversa'
 import { useAssistente } from '../casca/assistente'
@@ -107,6 +109,8 @@ const hoje = hojeEmSP()
 const aberto = computed(() => props.lead.etapa !== 'ganho' && props.lead.etapa !== 'perdido')
 // Perdido pelo tempo (regra dos 7 dias) não teve desfecho: a proposta ainda pode ser marcada, e o traz de volta.
 const saiuPeloPrazo = computed(() => props.lead.motivoPerda === 'expirou' || props.lead.motivoPerda === 'esfriou')
+// A proposta venceu (10 dias corridos sem resposta, cadencia.ts): também sem desfecho de ninguém.
+const propostaVenceu = computed(() => props.lead.etapa === 'perdido' && props.lead.motivoPerda === 'proposta-sem-retorno')
 const eventos = computed(() => [...props.lead.eventos].reverse())
 const disponivel = computed(() => props.visao.registro.disponivel)
 
@@ -298,7 +302,7 @@ const avisoDoPrazo = computed(() => {
   return `Vai para Perdido ${d <= 1 ? 'amanhã' : `em ${d} dias`} se ele não escrever. Salvar um próximo passo segura o lead.`
 })
 const temAvisos = computed(() => Boolean(props.lead.plus?.fixo) || Boolean(avisoDoPrazo.value)
-  || saiuPeloPrazo.value || props.lead.divergencias.length > 0 || Boolean(props.lead.demoPedidoEm) || Boolean(props.lead.demoApagadoEm) || !disponivel.value)
+  || saiuPeloPrazo.value || propostaVenceu.value || props.lead.divergencias.length > 0 || Boolean(props.lead.demoPedidoEm) || Boolean(props.lead.demoApagadoEm) || !disponivel.value)
 
 // ------------------------------------------------------------ editar o próximo passo ali mesmo
 
@@ -454,6 +458,7 @@ watch(() => props.lead.id, () => {
   editando.value = false
   confirmandoGanho.value = false
   escolhendoPerda.value = false
+  motivoDaPerda.value = ''
   marcandoProposta.value = false
   propostaData.value = hoje
   propostaResumo.value = ''
@@ -511,7 +516,7 @@ const FEITO: Record<RegistroDeDesfecho, string> = {
   ganhou_desfeito: 'Ganho desfeito.',
   recusou: 'Recusa marcada: sai do funil no próximo retrato.',
   recusou_desfeito: 'Recusa desfeita.',
-  sem_contato: 'Perda marcada: sem contato fácil.',
+  sem_contato: 'Perda marcada: sai do funil no próximo retrato.',
   sem_contato_desfeito: 'Perda desfeita.',
   proposta: 'Proposta marcada.',
   proposta_desfeita: 'Proposta desfeita.',
@@ -534,8 +539,30 @@ function tocarGanhou() {
 onBeforeUnmount(() => window.clearTimeout(relogioDoGanho))
 const escolhendoPerda = ref(false)
 const marcandoProposta = ref(false)
+/**
+ * "Perdeu" pede o motivo da lista fechada antes de gravar (28/10/2026, motivos-de-perda.ts): sem
+ * motivo, nada grava. São dois registros no formato de sempre: o `motivo_perda` (o mesmo de Receita)
+ * e, só se ele gravou, o desfecho que tira o lead do funil (`recusou` ou `sem_contato`, desfechoDoMotivo).
+ * Se o segundo falhar, o motivo já gravado não se repete na nova tentativa: o registro durável recusaria
+ * o mesmo fato antes de ele aparecer no retrato.
+ */
+const motivoDaPerda = ref<MotivoDePerda | ''>('')
+let motivoJaGravado: { lead: string; motivo: MotivoDePerda } | null = null
+const marcarPerda = async () => {
+  const motivo = motivoDaPerda.value
+  if (!motivo) { origem.value = 'desfecho'; mensagem.value = ''; erro.value = 'Escolha o motivo da perda: sem ele, nada é gravado.'; return }
+  const rotulo = ROTULO_DO_MOTIVO_DE_PERDA[motivo]
+  if (motivoJaGravado?.lead !== props.lead.id || motivoJaGravado.motivo !== motivo) {
+    if (!await registrar('motivo_perda', textoDoRegistroAarr('motivo_perda', motivo), '', `Motivo: ${rotulo}.`, 'desfecho')) return
+    motivoJaGravado = { lead: props.lead.id, motivo }
+  }
+  const tipo = desfechoDoMotivo(motivo)
+  if (await registrar(tipo, '', '', `${FEITO[tipo]} Motivo: ${rotulo}.`, 'desfecho')) {
+    escolhendoPerda.value = false; motivoDaPerda.value = ''; motivoJaGravado = null
+  } else erro.value += ' O motivo ficou registrado; toque de novo para marcar a perda.'
+}
 // Os toques somem quando a escolha abre: o foco vai para dentro dela, senão o teclado cai no começo da folha.
-const primeiraDaEscolha = ref<HTMLButtonElement | HTMLInputElement | null>(null)
+const primeiraDaEscolha = ref<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | null>(null)
 async function abrirEscolha(qual: 'perda' | 'proposta') {
   confirmandoGanho.value = false
   escolhendoPerda.value = qual === 'perda'
@@ -658,6 +685,9 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
         <li v-else-if="saiuPeloPrazo">
           Saiu depois de {{ DIAS_SEM_RESPOSTA }} dias sem mensagem dele. Volta sozinho se ele escrever; para trazer agora, salve um próximo passo ou marque a proposta.
         </li>
+        <li v-else-if="propostaVenceu">
+          A proposta venceu: 10 dias corridos sem resposta. Motivo: Sumiu. Volta sozinho se ele escrever, ou com uma proposta nova.
+        </li>
         <li v-if="lead.divergencias.length" class="is-erro" role="note">
           Planilha e pasta não batem: {{ lead.divergencias.map((d) => d.replace(/\.$/, '')).join('; ') }}. Vale a planilha; confira as duas.
         </li>
@@ -772,14 +802,18 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
         <button v-if="desfecho.proposta && !temQualificacaoComercial(lead) && !cicloDoLead(lead).historico.length" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="abrirEscolha('proposta')">Proposta enviada</button>
       </div>
       <p v-if="confirmandoGanho" class="crm-muted" role="status">Toque de novo para confirmar. O lead sai do funil como Ganho.</p>
-      <div v-if="escolhendoPerda" class="crm-form" role="group" aria-labelledby="crm-ficha-perdeu">
-        <p id="crm-ficha-perdeu" class="crm-ficha__rotulo">Por que perdeu?</p>
+      <form v-if="escolhendoPerda" class="crm-form" @submit.prevent="marcarPerda">
+        <label><span>Por que perdeu?</span>
+          <select ref="primeiraDaEscolha" v-model="motivoDaPerda" required :disabled="!disponivel || salvando !== null">
+            <option value="">Escolha o motivo</option>
+            <option v-for="m in MOTIVOS_DE_PERDA" :key="m" :value="m">{{ ROTULO_DO_MOTIVO_DE_PERDA[m] }}</option>
+          </select>
+        </label>
         <div class="crm-form__botoes">
-          <button ref="primeiraDaEscolha" class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarDesfecho('recusou')">{{ salvando === 'recusou' ? 'Marcando…' : 'Disse não' }}</button>
-          <button class="botao" type="button" :disabled="!disponivel || salvando !== null" @click="marcarDesfecho('sem_contato')">{{ salvando === 'sem_contato' ? 'Marcando…' : 'Sem contato fácil' }}</button>
-          <button class="botao botao--leve" type="button" @click="escolhendoPerda = false">Cancelar</button>
+          <button class="botao" type="submit" :disabled="!disponivel || salvando !== null || !motivoDaPerda">{{ salvando === 'motivo_perda' || salvando === 'recusou' || salvando === 'sem_contato' ? 'Marcando…' : 'Marcar como Perdido' }}</button>
+          <button class="botao botao--leve" type="button" @click="escolhendoPerda = false; motivoDaPerda = ''">Cancelar</button>
         </div>
-      </div>
+      </form>
       <form v-if="marcandoProposta" class="crm-form" @submit.prevent="marcarProposta">
         <p class="crm-nota-pequena">Confirme somente depois de enviar. Abrir o WhatsApp não conta como proposta enviada.</p>
         <label><span>Proposta enviada em</span><input ref="primeiraDaEscolha" v-model="propostaData" type="date" :max="hoje" :disabled="!disponivel"></label>

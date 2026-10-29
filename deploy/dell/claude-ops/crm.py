@@ -208,7 +208,9 @@ if (AARR.includes(b.tipo)) {
   const hoje = new Date(Date.now()-10800000).toISOString().slice(0,10);
   if (typeof b.texto !== 'string' || b.texto.length > 1000 || !v || Array.isArray(v) || v.versao !== 1) return recusa('Registro comercial inválido.');
   if (['origem','motivo_perda'].includes(b.tipo)) {
-    const valores = b.tipo === 'origem' ? ['cacador','plus','indicacao','CDL','anuncio'] : ['preco','timing','sem-dor','decisor','concorrente','sumiu'];
+    // motivo_perda: a lista fechada de 28/10/2026 (src/operations/motivos-de-perda.ts). A Central já grava
+    // traduzido; "sem-dor" e "concorrente" antigos continuam na aba e são lidos lá, nunca regravados aqui.
+    const valores = b.tipo === 'origem' ? ['cacador','plus','indicacao','CDL','anuncio'] : ['preco','timing','decisor','ja_tem','sem_dor','sumiu','contato_errado'];
     if (!keys(['versao','valor']) || !valores.includes(v.valor)) return recusa('Categoria comercial inválida.');
     v = {versao:1,valor:v.valor}; data = '';
   } else {
@@ -268,7 +270,7 @@ if (b.tipo === 'cadencia_enviada') {
   if (String(b.texto).length > 1000 || !r || Array.isArray(r) || r.versao !== 1 || !['proposta','conversa'].includes(r.tipo)
     || typeof r.origem !== 'string' || !Number.isFinite(Date.parse(r.origem))
     || Object.keys(r).some(k => !['versao','tipo','origem','degrau','base'].includes(k))
-    || (r.tipo === 'proposta' ? !['dia-1','dia-3'].includes(r.degrau) : r.degrau !== 'dia-2' || typeof r.base !== 'string' || !Number.isFinite(Date.parse(r.base)))) return recusa('Cadência inválida.');
+    || (r.tipo === 'proposta' ? !['dia-1','dia-4','dia-8'].includes(r.degrau) : r.degrau !== 'dia-2' || typeof r.base !== 'string' || !Number.isFinite(Date.parse(r.base)))) return recusa('Cadência inválida.');
 }
 if (b.tipo === 'nota' && !texto) return recusa('Nota vazia.');
 const em = new Date().toISOString();

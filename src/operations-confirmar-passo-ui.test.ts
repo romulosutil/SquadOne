@@ -57,9 +57,9 @@ describe('Ficha real: confirmação da cadência', () => {
   const acao=acaoDoLead(v,l.id,Date.now())!;assert.equal(acao.anota,'followup_enviado');assert.ok(acao.textoDoRegistro)
   const posts:any[]=[];globalThis.fetch=(async(_u,op)=>{if(op?.method){posts.push(JSON.parse(String(op.body)));return new Response('{}',{status:201})}return new Response(JSON.stringify(v))}) as typeof fetch
   const{raiz,app}=montar(l,acao)
-  try{assert.equal(posts.length,0);todos(raiz).find(n=>n.tagName==='INPUT').props['onUpdate:modelValue'](true);await runtime.nextTick();await todos(raiz).find(n=>n.type==='button').props.onClick();assert.equal(posts.length,1);assert.match(posts[0].texto,/followup-2026-10-19/);assert.match(posts[0].texto,/"braco":"A"/)}finally{app.unmount();Date.now=relogio;globalThis.fetch=anterior}
+  try{assert.equal(posts.length,0);todos(raiz).find(n=>n.tagName==='INPUT').props['onUpdate:modelValue'](true);await runtime.nextTick();await todos(raiz).find(n=>n.type==='button').props.onClick();assert.equal(posts.length,1);assert.match(posts[0].texto,/followup-2026-10-29/);assert.match(posts[0].texto,/"braco":"A"/)}finally{app.unmount();Date.now=relogio;globalThis.fetch=anterior}
  })
- it('dia zero sem cobrança; abertura não grava; confirmação grava degrau, reload conserva e dia3 libera', async () => {
+ it('dia zero sem cobrança; abertura não grava; confirmação grava degrau, reload conserva e o 4º dia útil libera', async () => {
   const relogio = Date.now, fetchAnterior=globalThis.fetch
   let agora=Date.parse(iso('2026-10-15')); Date.now=()=>agora
   const l=lead(); let v=visao(l)
@@ -77,8 +77,8 @@ describe('Ficha real: confirmação da cadência', () => {
    await botao.props.onClick();await runtime.nextTick()
    assert.equal(chamadas.length,1);assert.deepEqual(JSON.parse(chamadas[0].texto),JSON.parse(acao.textoDoRegistro!))
    assert.match(texto(raiz),/Aguardando a Ficha atualizada/)
-   agora=Date.parse(iso('2026-10-19'));assert.equal(acaoDoLead(visao(l),l.id,agora),null)
-   agora=Date.parse(iso('2026-10-20'));assert.equal(JSON.parse(acaoDoLead(visao(l),l.id,agora)!.textoDoRegistro!).degrau,'dia-3')
+   agora=Date.parse(iso('2026-10-20'));assert.equal(acaoDoLead(visao(l),l.id,agora),null)
+   agora=Date.parse(iso('2026-10-21'));assert.equal(JSON.parse(acaoDoLead(visao(l),l.id,agora)!.textoDoRegistro!).degrau,'dia-4')
   }finally{app.unmount();globalThis.fetch=fetchAnterior;Date.now=relogio}
  })
  it('resposta nova na fonte recusa cartão antigo sem registrar',async()=>{

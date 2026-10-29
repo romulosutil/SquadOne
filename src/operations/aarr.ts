@@ -5,6 +5,7 @@ import { dataRealDoSpiced, qualificadoParaProposta } from './spiced'
 import { pedeMaterial } from './marcadores-da-conversa'
 import { AMOSTRA_MINIMA } from './resultados'
 import { ultimaRespostaHumanaEm } from './resposta-humana'
+import { MOTIVOS_DE_PERDA, ROTULO_DO_MOTIVO_DE_PERDA, lerMotivoDePerda, motivoDaPerdaDoLead, motivoRegistrado, type MotivoDePerda } from './motivos-de-perda'
 import type { CrmLead } from './types'
 
 export const INICIO_AARR = '2026-10-19T00:00:00-03:00'
@@ -12,9 +13,15 @@ export const TIPOS_AARR = ['valor_proposta', 'pagamento_confirmado', 'receita_de
 export type TipoAarr = typeof TIPOS_AARR[number]
 export const ORIGENS_AARR = ['cacador', 'plus', 'indicacao', 'CDL', 'anuncio'] as const
 export type OrigemAarr = typeof ORIGENS_AARR[number]
-export const MOTIVOS_PERDA_AARR = ['preco', 'timing', 'sem-dor', 'decisor', 'concorrente', 'sumiu'] as const
-export type MotivoPerdaAarr = typeof MOTIVOS_PERDA_AARR[number]
-/** `sem-origem` e `sem-motivo`: o registro não traz o dado. Nunca se infere o canal nem a razão da perda. */
+/**
+ * O motivo da perda é a lista fechada de 28/10/2026 (motivos-de-perda.ts), a mesma do "Perdeu" da
+ * Ficha. Os registros antigos ("sem-dor", "concorrente") são lidos já traduzidos; nada se reescreve.
+ */
+export type MotivoPerdaAarr = MotivoDePerda
+/**
+ * `sem-origem`: o registro não traz o canal, e o canal nunca se infere. `sem-motivo`: o Perdido não tem
+ * motivo registrado nem automático que se traduza (motivos-de-perda.ts diz qual automático vira qual).
+ */
 export type CanalAarr = OrigemAarr | 'sem-origem'
 export type MotivoAgregadoAarr = MotivoPerdaAarr | 'sem-motivo'
 export type OfertaReceita = 'encontrado' | 'respondido' | 'anuncios' | 'anuncios-duas' | 'redes' | 'fonte' | 'fonte-em-dia' | 'iris' | 'estampa' | 'pacote'
@@ -81,9 +88,14 @@ export function lerRegistroAarr(tipo: string, bruto: unknown, agora = Number.POS
   try {
     const v = JSON.parse(bruto)
     if (!v || typeof v !== 'object' || Array.isArray(v) || v.versao !== 1) return null
-    if (tipo === 'origem' || tipo === 'motivo_perda') {
-      if (!chaves(v, ['versao', 'valor']) || !((tipo === 'origem' ? ORIGENS_AARR : MOTIVOS_PERDA_AARR) as readonly string[]).includes(v.valor)) return null
+    if (tipo === 'origem') {
+      if (!chaves(v, ['versao', 'valor']) || !(ORIGENS_AARR as readonly string[]).includes(v.valor)) return null
       return { versao: 1, valor: v.valor }
+    }
+    // O valor antigo é lido já traduzido; gravar passa por aqui também, então só a lista nova chega à aba CRM.
+    if (tipo === 'motivo_perda') {
+      const motivo = chaves(v, ['versao', 'valor']) ? lerMotivoDePerda(v.valor) : null
+      return motivo ? { versao: 1, valor: motivo } : null
     }
     if (!texto(v.referencia, tipo === 'receita_desfeita' || tipo === 'indicacao_pedida' ? 400 : 200) || !data(v.data) || (Number.isFinite(agora) && v.data > diaAarr(agora))) return null
     if (tipo === 'receita_desfeita') {
@@ -139,7 +151,7 @@ export function aarrDoLead(lead: Pick<CrmLead, 'eventos' | 'produto'> & Partial<
       if (e.tipo === 'pagamento_confirmado') r.pagamentos.push({ ...v, chave, em: e.em })
       else r.propostas.push({ ...v, em: e.em })
     } else if (e.tipo === 'origem') r.origem = (v as { valor: OrigemAarr }).valor
-    else if (e.tipo === 'motivo_perda') r.motivoPerda = (v as { valor: MotivoPerdaAarr }).valor
+    else if (e.tipo === 'motivo_perda') continue // Lido abaixo, com o desfazer da perda (motivos-de-perda.ts).
     else if (e.tipo === 'retencao_3m') {
       const ret = v as RegistroRetencao
       r.retencoes = r.retencoes.filter(p => referenciaNormal(p.referencia) !== referenciaNormal(ret.referencia))
@@ -150,6 +162,9 @@ export function aarrDoLead(lead: Pick<CrmLead, 'eventos' | 'produto'> & Partial<
       if (!lista.some(p => referenciaNormal(p.referencia) === referenciaNormal(indicacao.referencia))) lista.push({ ...indicacao, em: e.em })
     }
   }
+  // O motivo registrado vale até um desfazer de perda: o lead reaberto não carrega o porquê da perda anterior.
+  const motivo = motivoRegistrado(lead, agora)
+  if (motivo) r.motivoPerda = motivo.motivo
   // Valores humanos do ciclo são preservados; não passam pela tabela do legado.
   const ciclo = cicloDoLead(lead, agora)
   for (const p of ciclo.pagamentos) {
@@ -170,7 +185,7 @@ export function resumoDoRegistroAarr(tipo: TipoAarr, v: RegistroAarr): string {
   if (tipo === 'receita_desfeita') return `Registro de ${(v as ReceitaDesfeita).tipo === 'pagamento_confirmado' ? 'pagamento' : 'valor da proposta'} desfeito · ${(v as ReceitaDesfeita).data}`
   if ('oferta' in v) return `${tipo === 'pagamento_confirmado' ? 'Pagamento confirmado' : 'Valor de proposta registrado'} · ${v.oferta} · ${v.componente} · ${(v.valor_centavos / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} · ${v.data}`
   if ('ativa' in v) return `Mensalidade no terceiro mês: ${v.ativa ? 'ativa' : 'inativa'} · ${v.data}`
-  if ('valor' in v) return `${tipo === 'origem' ? 'Origem' : 'Motivo da perda'}: ${v.valor}`
+  if ('valor' in v) return tipo === 'origem' ? `Origem: ${v.valor}` : `Motivo da perda: ${ROTULO_DO_MOTIVO_DE_PERDA[v.valor as MotivoDePerda] ?? v.valor}`
   return `Indicação ${tipo === 'indicacao_pedida' ? 'pedida' : 'recebida'} · ${v.data}`
 }
 export function indicacaoPendente(lead: Pick<CrmLead, 'eventos' | 'produto'> & Partial<Pick<CrmLead, 'plus'>>, agora: number) {
@@ -198,12 +213,14 @@ export interface LinhaDeCanal {
   /** Respostas / enviados, só com ao menos AMOSTRA_MINIMA enviados; abaixo disso não há taxa. */
   taxaDeResposta: number | null
 }
-export interface LinhaDeMotivo { motivo: MotivoAgregadoAarr; quantidade: number }
+/** `registrados`: quantos da linha têm o motivo registrado à mão; o resto veio do motivo automático traduzido. */
+export interface LinhaDeMotivo { motivo: MotivoAgregadoAarr; quantidade: number; registrados: number }
 export interface LeituraDeCanais {
   linhas: LinhaDeCanal[]
   /** Leads com a origem confirmada na Ficha. Zero = nenhum registro: a tela diz "sem registro". */
   comOrigem: number
 }
+/** `perdidos`: Perdidos de venda (o descartado antes do contato fica fora); `comMotivo`: com o motivo registrado à mão. */
 export interface LeituraDePerdas { perdidos: number; comMotivo: number; porMotivo: LinhaDeMotivo[] }
 export interface LeituraDePropostas {
   /** Registros de valor, leads distintos e a soma do que foi registrado (implantação e mensalidade separadas, como a receita). */
@@ -214,7 +231,7 @@ export interface LeituraDePropostas {
 export const CANAIS_AARR: readonly CanalAarr[] = [...ORIGENS_AARR, 'sem-origem']
 /** Os nomes na tela (Ficha e Resultados leem daqui); os dois "sem" dizem que o registro não traz o dado. */
 export const ROTULO_DA_ORIGEM: Record<CanalAarr, string> = { cacador: 'Caçador', plus: 'Plus', indicacao: 'Indicação', CDL: 'CDL', anuncio: 'Anúncio', 'sem-origem': 'Sem origem' }
-export const ROTULO_DO_MOTIVO: Record<MotivoAgregadoAarr, string> = { preco: 'Preço', timing: 'Timing', 'sem-dor': 'Sem dor', decisor: 'Decisor', concorrente: 'Concorrente', sumiu: 'Sumiu', 'sem-motivo': 'Sem motivo registrado' }
+export const ROTULO_DO_MOTIVO: Record<MotivoAgregadoAarr, string> = { ...ROTULO_DO_MOTIVO_DE_PERDA, 'sem-motivo': 'Sem motivo registrado' }
 
 export function leituraAarr(leads: readonly CrmLead[], agora: number) {
   const inicio = Date.parse(INICIO_AARR), hoje = diaAarr(agora)
@@ -244,9 +261,12 @@ export function leituraAarr(leads: readonly CrmLead[], agora: number) {
       ativados: responderam.filter(l => quisVerHumano(l) && qualificadoParaProposta(l)).length, pagamentos: pagos,
       taxaDeResposta: envios.length >= AMOSTRA_MINIMA ? responderam.length / envios.length : null }
   }).filter(l => l.enviados || l.pagamentos)
-  const perdidos = leituras.filter(l => l.lead.etapa === 'perdido')
-  const porMotivo: LinhaDeMotivo[] = ([...MOTIVOS_PERDA_AARR, 'sem-motivo'] as MotivoAgregadoAarr[])
-    .map(motivo => ({ motivo, quantidade: perdidos.filter(l => (l.r.motivoPerda ?? 'sem-motivo') === motivo).length })).filter(l => l.quantidade)
+  // Descartado antes do contato não é venda perdida (motivos-de-perda.ts): fica fora da conta.
+  const perdidos = leituras.filter(l => l.lead.etapa === 'perdido' && l.lead.motivoPerda !== 'descartado')
+    .map(l => ({ ...l, motivo: (motivoDaPerdaDoLead(l.lead, agora) ?? 'sem-motivo') as MotivoAgregadoAarr }))
+  const porMotivo: LinhaDeMotivo[] = ([...MOTIVOS_DE_PERDA, 'sem-motivo'] as MotivoAgregadoAarr[])
+    .map(motivo => { const deste = perdidos.filter(l => l.motivo === motivo); return { motivo, quantidade: deste.length, registrados: deste.filter(l => l.r.motivoPerda === motivo).length } })
+    .filter(l => l.quantidade)
   const propostas = leituras.flatMap(l => l.r.propostas.filter(p => p.data >= INICIO_AARR.slice(0, 10)).map(p => ({ ...p, leadId: l.lead.id })))
   const comValor = new Set(propostas.map(p => p.leadId))
   const contratos = leads.flatMap(l => contratosMensais(l, agora))

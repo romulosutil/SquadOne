@@ -165,6 +165,11 @@ export interface CrmLead {
   sinal: CrmSinal
   subEtapa: string
   motivoPerda?: 'recusou' | 'expirou' | 'esfriou' | 'descartado' | 'sem-interesse' | 'sem-contato' | 'proposta-sem-retorno'
+  /**
+   * Só em Perdido (28/10/2026): o porquê na lista fechada de motivos-de-perda.ts. O `motivo_perda`
+   * registrado à mão manda; sem ele, o `motivoPerda` acima traduzido. Ausente no descartado.
+   */
+  motivoDaPerda?: import('./motivos-de-perda').MotivoDePerda
   /** A perda marcada na Central (aba CRM), que dá para desfazer de lá (16/10/2026, OT-06). */
   perdaManual?: 'sem-contato' | 'recusou' | 'dispensado'
   /**

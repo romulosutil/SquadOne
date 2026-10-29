@@ -102,6 +102,10 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           `|depois-do-link`; o "quanto custa" `|negociacao-humana`; e o urgente), teto de 8 avisos que SAÍRAM por dia (`MAX_AVISOS_POR_DIA`)
                           e 1 por lead por dia (`leadsAvisados`); o urgente (`avisoUrgente`: "quero ver" quente, pagamento, aceite, Pix, contrato) passa por cima
                           dos dois; primeiro contato, follow-up, cadência, revisões e internos ficam só na Central; o dia do servidor (venda-do-dia) é obrigatório
+  server/resumo-de-bloco.ts  PURO (29/10/2026, Rotina do PM): às 08h55 (bloco 1, fechar) e 13h55 (bloco 2, conversar), seg–sex, até 20 min de atraso,
+                          o vendedor manda um resumo do bloco no Telegram (blocoDevido; blocoDaAcao sobre a mesma filaDeVenda; montarResumoDeBloco:
+                          empresas sim, telefone/id/R$ nunca, validarAviso); um por bloco por dia em `blocosResumidos` do vendedor.json; conta 1 no
+                          teto de 8 sem ser barrado por ele; fila do bloco vazia = "nada pendente"; SQUADONE_RESUMO_DE_BLOCO=false desliga
   server/frente-comercial.ts  (19/10/2026) a Central do time comercial: GET /crm/frente (estado, sem número), POST /crm/frente/config ({ ativo }),
                           POST /crm/frente/reservar (o time pede UM primeiro contato: mesma janela e ritmo da Central, gate em "bloquear", grava o
                           primeiro do dia `por: "time"` na fila do venda-do-dia); `doTime` em GET /crm/venda. O time em si é deploy/dell/frente-comercial.py:
@@ -277,13 +281,19 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     spiced.ts             PURO (19/10/2026, Fase 2): a qualificação SPICED confirmada pelo Rômulo (registro `spiced` na aba CRM, ≤ 200 caracteres por campo, 1000 no JSON,
                           data real); `qualificadoParaProposta` = dor + impacto + decisor confirmado, a TRAVA da proposta nas cinco linhas (mandar-proposta, proxima-venda,
                           copiloto, AssistenteSugestao). Sugestão do copiloto nunca entra no registro. CrmSpiced.vue = faixa BP-SPICED da Ficha
-    cadencia.ts           PURO (19/10/2026, Fase 3): o que fazer depois do silêncio, em dias úteis (seg–sex, sem feriado). Proposta: nada no dia 0, toque no 1º e no 3º dia útil, perde
-                          no 10º dia corrido; conversa: um toque no 2º dia útil depois da nossa saída, revisão no 7º corrido. Recusa, perda manual, pausa, resposta humana e próximo
-                          passo futuro preservam. Só vira fato com `cadencia_enviada` (confirmação humana, uma por proposta e degrau); entra na fila de venda (proxima-venda.ts)
+    cadencia.ts           PURO (19/10/2026, Fase 3; proposta refeita em 28/10/2026): o que fazer depois do silêncio (dias úteis seg–sex, sem feriado). Proposta: validade de 10 dias
+                          corridos (condição, não promoção), toques D+1 útil (dúvida e quem decide), D+4 úteis (10 min com quem decide junto) e D+8 corridos (validade e encerramento
+                          honesto), textos em TOQUES_DA_PROPOSTA, sem preço nem link; Perdido no D+10 (motivoPerda `proposta-sem-retorno` = motivo "sumiu"). Vale também para a
+                          proposta do ciclo comercial (última versão enviada, sem aceite). Conversa: um toque no 2º dia útil depois da nossa saída, revisão no 7º corrido. Recusa,
+                          perda manual, pausa, resposta humana e próximo passo futuro preservam. Só vira fato com `cadencia_enviada` (confirmação humana, uma por proposta e degrau;
+                          o "dia-3" antigo é lido e vale como o do D+4); entra na fila de venda (proxima-venda.ts)
+    motivos-de-perda.ts   PURO (28/10/2026): a lista fechada dos motivos de perda (preco, timing, decisor, ja_tem, sem_dor, sumiu, contato_errado) com o rótulo da tela; o
+                          `motivo_perda` registrado manda, sem ele o `motivoPerda` automático se traduz (MOTIVO_DA_PERDA_AUTOMATICA; descartado fica fora); registro antigo
+                          ("sem-dor", "concorrente") é lido traduzido, nunca regravado. O "Perdeu" da Ficha pede o motivo antes de gravar; `CrmLead.motivoDaPerda` sai do servidor
     aarr.ts               PURO (19/10/2026, Fase 4): AARRR comercial só de fatos confirmados na aba CRM (valor_proposta, pagamento_confirmado, receita_desfeita, origem, motivo_perda,
                           retencao_3m, indicacao_*), desde 19/10; centavos vêm do catálogo da oferta (precos-iris.ts: Iris por ficha ativa em faixas marginais; Estamparia sem preço).
                           A Estrela-guia = recebimentos (pagamentos) confirmados na semana de São Paulo, nas cinco linhas; "ganhou" não é dinheiro; sem registro é "não medida".
-                          CrmReceita.vue grava os fatos na Ficha; `leituraAarr` também agrega por origem (`canais`, taxa só com 10+ enviados), motivo de perda (`perdas`) e valor de proposta registrado (`propostas`), na seção BP-AARRR de Números; a faixa AARRR e os testes (Plus, abertura A × D, follow-up) moram em CrmResultados.vue (Números)
+                          CrmReceita.vue grava os fatos na Ficha; `leituraAarr` também agrega por origem (`canais`, taxa só com 10+ enviados), motivo de perda (`perdas`, lista de motivos-de-perda.ts) e valor de proposta registrado (`propostas`), na seção BP-AARRR de Números; a faixa AARRR e os testes (Plus, abertura A × D, follow-up) moram em CrmResultados.vue (Números)
     copiloto.ts           PURO (15/10/2026): dossiê do lead do "respondeu" à proposta (jornada, colinha, Raio-X, notas; sem telefone),
                           prompt, leitura da saída (id só do cardápio, "R$" só dos preços abertos, número fora do dossiê = aviso)
                           e o rascunho da proposta com preço do cardápio; desde 17/10/2026 a sugestão aparece no cartão do

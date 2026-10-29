@@ -5,12 +5,13 @@ import { PREFIXO_RESPONSAVEL, lerResponsavelConversa, textoResponsavelConversa, 
 import { timingSafeEqual } from 'node:crypto';
 import fs from "node:fs/promises";
 import { PREFIXO_QUALIFICACAO_COMERCIAL, lerNotaQualificacaoComercial, textoDaQualificacaoComercial, projetarQualificacaoComercial, qualificacaoComercialAtual, temQualificacaoComercial, type QualificacaoComercial } from '../src/operations/qualificacao-comercial.ts';
-import { PREFIXO_CICLO, lerEventoCiclo, textoEventoCiclo, cicloDoLead } from '../src/operations/ciclo-comercial.ts';
+import { PREFIXO_CICLO, lerEventoCiclo, textoEventoCiclo, cicloDoLead, ultimoEnvioDaProposta } from '../src/operations/ciclo-comercial.ts';
+import { motivoDaPerdaDoLead, type MotivoDePerda } from '../src/operations/motivos-de-perda.ts';
 import { RegistroComercialDuravel, hashCanonicoComercial, type ChaveComercial, type FatoComercialNaFonte } from './registro-comercial-duravel.ts';
 import { validarTransicaoDoCicloComercial } from './ciclo-comercial.ts';
 import { qualificadoParaProposta } from '../src/operations/spiced.ts';
 import { lerRegistroSpiced, type Spiced } from '../src/operations/spiced.ts';
-import { cadenciaDoLead, cadenciaJaConfirmada, lerRegistroCadencia } from '../src/operations/cadencia.ts';
+import { VALIDADE_DA_PROPOSTA_DIAS, cadenciaDoLead, cadenciaJaConfirmada, lerRegistroCadencia, textoDaCadenciaConfirmada } from '../src/operations/cadencia.ts';
 import { lerRegistroFollowup } from '../src/operations/followup-experimento.ts';
 import { alocarAberturasPrumo } from '../src/operations/abertura-prumo.ts';
 import { TIPOS_AARR, aarrDoLead, chaveDoPagamento, contratosMensais, ehTipoAarr, indicacaoPendente, lerRegistroAarr, registroCompativelComLead, resumoDoRegistroAarr, type ReceitaDoLead, type ReceitaDesfeita, type RegistroReceita, type RegistroRetencao, type RegistroIndicacao } from '../src/operations/aarr.ts';
@@ -558,6 +559,11 @@ export interface CrmLead {
   subEtapa: string;
   /** `expirou`: nunca respondeu em DIAS_SEM_RESPOSTA; `esfriou`: respondeu e parou de responder. */
   motivoPerda?: "recusou" | "expirou" | "esfriou" | "descartado" | "sem-interesse" | "sem-contato" | "proposta-sem-retorno";
+  /**
+   * Só em Perdido: o porquê na lista fechada de 28/10/2026 (motivos-de-perda.ts). O `motivo_perda`
+   * registrado à mão manda; sem ele, o `motivoPerda` acima traduzido. Ausente no descartado.
+   */
+  motivoDaPerda?: MotivoDePerda;
   /** A perda marcada na Central (aba CRM), que dá para desfazer de lá: "sem contato fácil", "recusou" ou o "Dispensar" da Triagem. */
   perdaManual?: "sem-contato" | "recusou" | "dispensado";
   /** O ganho marcado na Central (registro `ganhou`, AC-08), que dá para desfazer de lá; o da planilha não entra. */
@@ -1053,7 +1059,7 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
       : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL) ? { texto: 'Revisão humana da qualificação comercial.' }
       : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_RESPONSAVEL) ? { texto:'Responsável pelo atendimento confirmado na Central.' }
       : r.tipo === 'spiced' ? { texto: 'Qualificação comercial confirmada pelo Rômulo.' }
-      : r.tipo === 'cadencia_enviada' ? { texto: lerRegistroCadencia(r.texto)?.tipo === 'conversa' ? 'Retomada da conversa confirmada.' : lerRegistroCadencia(r.texto)?.degrau === 'dia-3' ? 'Último retorno da proposta confirmado.' : 'Primeiro retorno da proposta confirmado.' }
+      : r.tipo === 'cadencia_enviada' ? { texto: textoDaCadenciaConfirmada(lerRegistroCadencia(r.texto)) }
       : r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto) ? { texto: 'Follow-up confirmado pelo Rômulo.' }
       : r.tipo === "proximo_passo"
       ? { texto: r.texto ? `${r.texto}${r.data ? ` (para ${formatarDia(r.data)})` : ""}` : r.data ? `Próximo passo concluído em ${formatarDia(r.data)}` : "Próximo passo limpo" }
@@ -2197,10 +2203,24 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
       lead.followupHoje = false; lead.respostaNova = false; delete lead.interesseParado;
     }
     const ciclo = cicloDoLead(lead, agora);
-    const cadencia = ciclo.historico.length ? undefined : cadenciaDoLead(lead, agora);
+    // A proposta versionada (ciclo comercial) vira a proposta do lead ANTES da cadência (28/10/2026):
+    // a cadência conta da última versão enviada, e o vencimento abaixo é a última palavra. Na ordem
+    // antiga o ciclo vinha depois e devolvia a Proposta o lead que a validade já tinha encerrado.
+    if (ciclo.envios.length && !lead.perdaManual && !['recusou','recusou-pasta','sem-interesse','descartado'].includes(lead.sinal) && !['negativa','exclusao'].includes(lead.resposta?.tipo ?? '')) {
+      lead.proposta = ultimoEnvioDaProposta(lead, agora)!;
+      if (lead.etapa !== 'ganho') {
+        lead.etapa = 'proposta'; lead.sinal = 'proposta';
+        lead.subEtapa = ciclo.recebido ? 'Recebimento confirmado · confira saldo e entrega' : ciclo.aceites.length ? 'Aceite registrado · conferir cobrança e pagamento' : 'Proposta enviada · aguardando decisão';
+        delete lead.motivoPerda; delete lead.diasParaSair;
+      }
+      lead.followupHoje = false;
+    }
+    // A validade da proposta (10 dias corridos, cadencia.ts) encerra sozinha: motivo do sistema
+    // `proposta-sem-retorno`, que motivos-de-perda.ts lê como "sumiu".
+    const cadencia = cadenciaDoLead(lead, agora);
     if (cadencia?.estado === 'expirar') {
       lead.etapa = 'perdido'; lead.sinal = 'esfriou'; lead.motivoPerda = 'proposta-sem-retorno';
-      lead.subEtapa = 'Proposta sem retorno'; lead.desde = new Date(cadencia.base + 10 * DIA_MS).toISOString();
+      lead.subEtapa = 'Proposta sem retorno'; lead.desde = new Date(cadencia.base + VALIDADE_DA_PROPOSTA_DIAS * DIA_MS).toISOString();
       lead.diasNaEtapa = dias(Date.parse(lead.desde), agora); lead.respostaNova = false; lead.followupHoje = false;
     }
     lead.revisaoComercial = revisao ? undefined : revisaoComercialDoLead(lead, agora);
@@ -2210,17 +2230,8 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
       lead.followupHoje = false;
       delete lead.interesseParado;
     }
-    if (ciclo.envios.length && !lead.perdaManual && !['recusou','recusou-pasta','sem-interesse','descartado'].includes(lead.sinal) && !['negativa','exclusao'].includes(lead.resposta?.tipo ?? '')) {
-      const envio = ciclo.envios.at(-1)!;
-      const em = lead.eventos.find(e => lerEventoCiclo(e.registroTexto ?? e.texto ?? '', agora)?.id === envio.id)?.em ?? `${envio.data}T12:00:00-03:00`;
-      lead.proposta = { em, data: envio.data };
-      if (lead.etapa !== 'ganho') {
-        lead.etapa = 'proposta'; lead.sinal = 'proposta';
-        lead.subEtapa = ciclo.recebido ? 'Recebimento confirmado · confira saldo e entrega' : ciclo.aceites.length ? 'Aceite registrado · conferir cobrança e pagamento' : 'Proposta enviada · aguardando decisão';
-        delete lead.motivoPerda; delete lead.diasParaSair;
-      }
-      lead.followupHoje = false;
-    }
+    if (lead.etapa === 'perdido') { const motivo = motivoDaPerdaDoLead(lead, agora); if (motivo) lead.motivoDaPerda = motivo; else delete lead.motivoDaPerda; }
+    else delete lead.motivoDaPerda;
     contagens[lead.etapa].total += 1;
     contagens[lead.etapa][lead.produto] += 1;
   }
