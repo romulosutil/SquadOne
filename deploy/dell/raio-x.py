@@ -135,6 +135,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 import unicodedata
 import urllib.parse
 import urllib.request
@@ -1627,6 +1628,22 @@ def baixar(url: str, timeout: int = 30, navegador: bool = False) -> tuple[int | 
         return getattr(e, "code", str(e)), b""
 
 
+# A borda da Vercel pode servir a versão anterior por alguns segundos depois do deploy. Em 29/10/2026 (Arnoldo)
+# a primeira leitura veio velha, o Raio-X novo estava no ar idêntico pouco depois, e o recibo ficou sem gravar.
+ESPERAS_DO_DEPLOY = (5, 10, 20)
+
+
+def conferir_no_ar(url: str, esperado: bytes) -> tuple[bool, int | str]:
+    """GET até a página no ar ser `esperado`, esperando ESPERAS_DO_DEPLOY (segundos) entre as tentativas."""
+    codigo, corpo = baixar(url)
+    for espera in ESPERAS_DO_DEPLOY:
+        if codigo == 200 and corpo == esperado:
+            break
+        time.sleep(espera)
+        codigo, corpo = baixar(url)
+    return codigo == 200 and corpo == esperado, codigo
+
+
 def chave_places(arquivo: Path | None = None) -> str | None:
     """A chave do Places: PLACES_API_KEY no ambiente ou no arquivo (PLACES_API_KEY= ou
     GOOGLE_MAPS_API_KEY=). None = sem chave: o Raio-X sai sem concorrência e sem avaliações."""
@@ -1928,8 +1945,8 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
     if alias.rstrip("/") != site_url:
         return False, f"o deploy respondeu outro endereço ({alias or 'sem linha Aliased:'}) em vez de {site_url}"
     url = f"{site_url}/{CAMINHO}"
-    codigo, corpo = baixar(url)
-    if codigo != 200 or corpo != arquivos[f"{CAMINHO}/index.html"]:
+    igual, codigo = conferir_no_ar(url, arquivos[f"{CAMINHO}/index.html"])
+    if not igual:
         return False, f"publicado, mas {url} não respondeu com este Raio-X ({codigo})"
     codigo, corpo = baixar(site_url + "/")
     if codigo != 200 or corpo != arquivos["index.html"]:
@@ -2014,8 +2031,8 @@ def publicar_avulso(pasta: Path, dados: dict, diag: dict, pagina_html: str, reci
                 alvo.write_bytes(anterior)
             raise
     url = f"{AVULSO_URL}/{nome}"
-    codigo, no_ar = baixar(url)
-    if codigo != 200 or no_ar != corpo:
+    igual, codigo = conferir_no_ar(url, corpo)
+    if not igual:
         return False, f"publicado, mas {url} não respondeu com este Raio-X ({codigo})"
     gravar_recibo_avulso(pasta, dados, {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
                                         "raio_x_achados": achados(diag), "raio_x_versao": VERSAO,
@@ -2444,6 +2461,8 @@ DEMO_EXEMPLO = """<html><body><header id="topo"><h1>Higor</h1></header>
 
 def testar() -> int:
     import unittest
+
+    globals()["ESPERAS_DO_DEPLOY"] = (0, 0, 0)  # as mesmas tentativas, sem esperar de verdade
 
     class Leitura(unittest.TestCase):
         def test_campos_nota_e_sinais(self):
@@ -3225,6 +3244,33 @@ def testar() -> int:
             self.assertEqual(r["raio_x_molde"], MOLDE)
             self.assertTrue((self.pasta / "raio-x.html").is_file())
 
+        def test_borda_que_ainda_serve_a_versao_anterior_ganha_outra_leitura(self):
+            # 29/10/2026 (Arnoldo): a 1ª leitura depois do deploy veio velha; segundos depois, a página nova.
+            leituras = []
+            atual = globals()["baixar"]
+
+            def baixar_atrasado(url, timeout=30, navegador=False):
+                if url.endswith("/raio-x"):
+                    leituras.append(url)
+                    if len(leituras) <= 2:
+                        return 200, b"<html>raio-x anterior</html>"
+                return atual(url, timeout, navegador)
+            globals()["baixar"] = baixar_atrasado
+            ok, msg = publicar(self.pasta, self.deploy)
+            self.assertTrue(ok, msg)
+            self.assertEqual(len(leituras), 3)
+            self.assertEqual(self.recibo()["raio_x_molde"], MOLDE)
+            # Velha em todas as tentativas: falha, e o recibo não ganha o Raio-X.
+            globals()["baixar"] = lambda url, timeout=30, navegador=False: (
+                (200, b"<html>raio-x anterior</html>") if url.endswith("/raio-x") else atual(url, timeout, navegador))
+            (self.pasta / "publicado.json").write_text(json.dumps({
+                "place_id": "ChIJteste", "slug": "higor", "nome": "Higor", "site_url": "https://demo-higor.vercel.app",
+                "vercel_project": "demo-higor"}), encoding="utf-8")
+            ok, msg = publicar(self.pasta, self.deploy)
+            self.assertFalse(ok)
+            self.assertIn("não respondeu com este Raio-X", msg)
+            self.assertNotIn("raio_x_url", self.recibo())
+
         def test_leva_de_novo_os_arquivos_do_seo_do_demo(self):
             # Cada deploy troca o projeto inteiro: sem eles, o Raio-X tiraria robots, sitemap e llms do ar.
             for nome in ("robots.txt", "sitemap.xml", "llms.txt"):
@@ -3418,6 +3464,24 @@ def testar() -> int:
         test_raio_x_que_nao_responde_ou_e_antigo_nao_grava_o_campo = None
         test_alias_diferente_nao_grava_o_campo = None
         test_pendentes_so_pronto_na_raiz_sem_raio_x_e_nunca_com_o_gerador_rodando = None
+        test_borda_que_ainda_serve_a_versao_anterior_ganha_outra_leitura = None
+
+        def test_avulso_com_a_borda_atrasada_grava_o_recibo_na_segunda_leitura(self):
+            # O caso do Arnoldo (29/10/2026): a página nova subiu, a 1ª leitura veio velha e o recibo não foi gravado.
+            leituras = []
+            atual = globals()["baixar"]
+
+            def baixar_atrasado(url, timeout=30, navegador=False):
+                if url == f"{AVULSO_URL}/higor":
+                    leituras.append(url)
+                    if len(leituras) == 1:
+                        return 200, b"<html>raio-x anterior</html>"
+                return atual(url, timeout, navegador)
+            globals()["baixar"] = baixar_atrasado
+            ok, url = publicar(self.pasta, self.deploy_avulso)
+            self.assertTrue(ok, url)
+            self.assertEqual(len(leituras), 2)
+            self.assertEqual(self.recibo()["raio_x_url"], url)
 
     class Versao6(unittest.TestCase):
         """29/10/2026: o editorial no automático e o que o Raio-X feito à mão faz melhor, com o lead advogado
