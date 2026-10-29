@@ -1887,6 +1887,11 @@ primeira mensagem do Balcão. Desde a versão 4 (abaixo) a página é em três a
 (veredito, por quê, o que fazer) e termina no WhatsApp do PRUMO; desde a versão 5,
 é o Raio-X aprovado do piloto CDL; desde 15/10/2026, termina no convite para o Mapa (abaixo).
 
+> **O padrão atual (Versão 6, 29/10/2026) está em [`docs/referencia/raio-x.md`](../../docs/referencia/raio-x.md):**
+> o fato mais forte abre a página, o Índice Prumo como apoio, a Prioridade 01 que resolve o ponto 01, as
+> buscas, a OAB, o fecho, a homologação, como levar o molde da Prumo e por que `VERSAO` continua 5. O que
+> segue é o histórico das versões; onde discordar daquele arquivo, vale ele (e o código).
+
 - **Feito por código, sem modelo.** A única fonte é o `content.md` do Caçador:
   nota e avaliações, telefone (celular ou fixo, pela regra do nó "Pontuar"),
   situação do site no Google (fora do ar, rede social, nenhum) e as linhas de
