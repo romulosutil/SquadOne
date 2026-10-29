@@ -1,7 +1,8 @@
 /**
  * PURO (17/10/2026): "Ler os sinais deste lote" na Triagem. Os sinais do site (anúncio, agência,
  * agendamento, blog; server/sinais-do-site.ts) só eram lidos quando a Ficha de um lead abria, então a
- * Prioridade da Triagem só melhorava para quem já tinha sido aberto. Aqui fica a regra do botão que lê
+ * Prioridade da Triagem só melhorava para quem já tinha sido aberto (desde 29/10/2026 eles não pesam na
+ * pontuação, só no filtro por motivo e na Ficha). Aqui fica a regra do botão que lê
  * os do LOTE ATUAL de 10 (nunca a fila de ~1.400), um de cada vez, quando a pessoa toca:
  *
  *  - quem entra: o prospect com site próprio e sem leitura guardada (`lead.sinais` ausente). Quem já

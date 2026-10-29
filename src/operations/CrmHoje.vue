@@ -11,7 +11,7 @@ import { envioTravado, type EnviosLiberados } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import {
   DESFAZER_MS, corpoDoRegistro, decidir, detalheSemPrioridade, dispensado, esquecerDecisao, gravarDecisoes, lerDecisoes, loteDaTriagem, mesmoLote,
-  motivoDoConviteTravado, podarDecisoes, prioridadesDiferem, textoDaPrioridade, type DecisoesDaTriagem, type RegistroDaTriagem,
+  motivoDoConviteTravado, podarDecisoes, prioridadesDiferem, textoDaPrioridade, textoDasPartes, type DecisoesDaTriagem, type RegistroDaTriagem,
 } from './triagem'
 import type { CrmGrupoHoje, CrmItemHoje, CrmLead } from './types'
 
@@ -132,6 +132,11 @@ const numero = (n: number) => n.toLocaleString('pt-BR')
 
 const comPontuacao = computed(() => prioridadesDiferem(props.grupo.itens, props.leads))
 const pontuacao = (item: CrmItemHoje) => props.leads.get(item.leadId)?.triagem?.prioridade
+// As partes só com o selo à vista: com o mesmo número em todos, o porquê também não diferencia.
+const partes = (item: CrmItemHoje) => {
+  const p = comPontuacao.value ? props.leads.get(item.leadId)?.triagem?.pontuacao : undefined
+  return p ? textoDasPartes(p) : ''
+}
 
 // ------------------------------------------------------------------ convidar
 
@@ -309,9 +314,9 @@ watch(() => lote.value.ids, () => { confirmando.value = false })
 
 // Só os do lote que está na tela e só quando a pessoa toca: nada automático e nada da fila inteira. Os
 // que esperam decisão e têm site próprio sem leitura guardada entram, um de cada vez (POST
-// /api/operations/crm/sinais, o mesmo da Ficha). Ao fim a visão é relida: a Prioridade e o filtro por
-// motivo passam a enxergar a leitura, e o lote continua o mesmo (loteDaTriagem só troca de lote quando
-// ninguém dele espera decisão). Só informa: nada daqui convida, dispensa ou envia.
+// /api/operations/crm/sinais, o mesmo da Ficha). Ao fim a visão é relida: o filtro por motivo passa a
+// enxergar a leitura (a pontuação não usa os sinais do site desde 29/10/2026), e o lote continua o
+// mesmo (loteDaTriagem só troca de lote quando ninguém dele espera decisão). Só informa: nada daqui convida, dispensa ou envia.
 const tentadosNosSinais = ref<Set<string>>(new Set())
 const alvosDeSinais = computed(() => alvosDoLote(lote.value.pendentes.map((i) => i.leadId), props.leads, tentadosNosSinais.value))
 const lendoSinais = ref<Andamento | null>(null)
@@ -447,6 +452,8 @@ onBeforeUnmount(() => {
               <span v-if="comPontuacao && pontuacao(linha.item) !== undefined" class="crm-sinal">{{ textoDaPrioridade(pontuacao(linha.item)!) }}</span>
             </div>
             <p class="crm-item__acao"><strong>{{ linha.item.acao }}</strong> <span>{{ detalheSemPrioridade(linha.item.detalhe) }}</span></p>
+            <!-- De onde sai a pontuação do selo: as quatro partes da soma 100 (pontuacao-da-triagem.ts). -->
+            <p v-if="partes(linha.item)" class="crm-item__porque"><strong>Pontuação:</strong> {{ partes(linha.item) }}</p>
             <!-- O motivo à vista: por que este prospect passou pelo filtro (só com o filtro ligado). -->
             <p v-if="motivosDe(linha.item).length" class="crm-item__porque"><strong>Motivo:</strong> {{ motivosDe(linha.item).join(' · ') }}</p>
             <div class="crm-triagem__decisoes">

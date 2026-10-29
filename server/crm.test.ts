@@ -676,17 +676,22 @@ describe("CRM: Iris e estamparias no mesmo funil do PRUMO (14/10/2026)", () => {
     const revisar = v.hoje.find((g) => g.id === "revisar")!.itens;
     // 15/10/2026: o WhatsApp não confirmado vem depois de todo confirmado, mesmo de Prioridade menor.
     // 17/10/2026: a Prioridade é a da Central (prioridadeDaTriagem), não a do caçador, e o PRUMO entra
-    // na mesma conta: alta 58 (poucas avaliações, contato, site, 2 sinais), baixa 45, PRUMO 40.
+    // na mesma conta. 29/10/2026 (soma 100): alta 45 (dor 20 de dois sinais do Iris, celular publicado
+    // 15, nicho sem 30 envios 10, porte 0), baixa 35 (um sinal), PRUMO 25 (site próprio, sem achados nem
+    // nota: dor 0), sem-zap 15 (não confirmado 5).
     assert.deepEqual(revisar.map((i) => i.leadId), ["iris:alta", "iris:baixa", "prumo:revisar", "iris:sem-zap"]);
     const alta = revisar[0];
-    assert.match(alta.detalhe, /Prioridade 58 · nota 5 \(43\) · convênio · ABA\./);
+    assert.match(alta.detalhe, /Prioridade 45 · nota 5 \(43\) · convênio · ABA\./);
+    assert.deepEqual(lead(v.leads, "iris:alta").triagem?.pontuacao?.porque.dor, ["convênio", "aba"]);
     assert.deepEqual(alta.links.map((l) => l.rotulo), ["Ver o site da empresa", "Ver no Google Maps", "Abrir convite no WhatsApp (não registra envio)"]);
     assert.equal(lead(v.leads, "iris:alta").links.maps, "https://maps.google.com/?cid=1");
     const semZap = revisar[3];
     assert.equal(semZap.acao, "Conferir o WhatsApp e decidir o convite");
     assert.match(semZap.detalhe, /WhatsApp não confirmado/);
-    assert.match(semZap.detalhe, /Prioridade 23\./);
-    assert.deepEqual(lead(v.leads, "prumo:revisar").triagem, { prioridade: 40 }, "o Prospects ganha só a Prioridade");
+    assert.match(semZap.detalhe, /Prioridade 15\./);
+    const prumo = lead(v.leads, "prumo:revisar").triagem;
+    assert.deepEqual(Object.keys(prumo ?? {}), ["prioridade", "pontuacao"], "o Prospects ganha só a Prioridade e as partes dela");
+    assert.deepEqual([prumo?.prioridade, prumo?.pontuacao?.dor, prumo?.pontuacao?.decisor, prumo?.pontuacao?.nicho, prumo?.pontuacao?.porte], [25, 0, 15, 10, 0]);
   });
 
   it("registro aceita as quatro ofertas e recusa o resto", () => {
@@ -1343,13 +1348,15 @@ describe("CRM: sinais do site (17/10/2026)", () => {
     assert.equal(lead(v.leads, "iris:c").sinais, undefined, "perfil de rede social não é o site do negócio");
   });
 
-  it("a leitura guardada entra no lead e soma à Prioridade (+4 anúncio, +2 sem agenda); outro endereço não vale", () => {
+  // 29/10/2026: os sinais do site saíram da Prioridade (a soma 100 não tem parte para eles): a leitura entra
+  // no lead para a Ficha e o filtro por motivo, e a Prioridade fica a mesma.
+  it("a leitura guardada entra no lead e não mexe na Prioridade; outro endereço não vale", () => {
     const sem = montarCrm(comIris(), { agora: AGORA, pastas: PASTAS });
     const site = lead(sem.leads, "iris:a").links.site!;
     const guardados = new Map([["iris:a", { url: site, sinais: { ...sinais } }]]);
     const com = montarCrm(comIris(), { agora: AGORA, pastas: PASTAS, sinaisDoSite: guardados });
     assert.deepEqual(lead(com.leads, "iris:a").sinais, sinais);
-    assert.equal(lead(com.leads, "iris:a").triagem!.prioridade, lead(sem.leads, "iris:a").triagem!.prioridade! + 6);
+    assert.equal(lead(com.leads, "iris:a").triagem!.prioridade, lead(sem.leads, "iris:a").triagem!.prioridade);
     const velho = montarCrm(comIris(), { agora: AGORA, pastas: PASTAS, sinaisDoSite: new Map([["iris:a", { url: "https://outro-site.example/", sinais: { ...sinais } }]]) });
     assert.equal(lead(velho.leads, "iris:a").sinais, undefined);
     assert.equal(lead(velho.leads, "iris:a").triagem!.prioridade, lead(sem.leads, "iris:a").triagem!.prioridade);

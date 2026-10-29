@@ -117,7 +117,7 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           destinatario_diferente bloqueia sempre. Nunca reescreve nem envia. Fonte única desde 19/10/2026 (a cópia em JS do Balcão, que só escrevia uma coluna que
                           ninguém lia, saiu); o time comercial também o cumpre em "bloquear" ao pedir a reserva.
   server/sinais-do-site.ts  PURO (17/10/2026, estágio PROFILE do Harvey, MIT): HTML do site do lead -> sinais tri-estado (temAgencia com confiança ≥ 0,75, rodandoGoogleAds/MetaAds,
-                          semAgendamentoOnline, semSchema, blogParado, semSite; null = sem fonte), ajusteDaPrioridade (−4 a +6: anúncio +4, sem agenda +2, agência −4) e linhasDosSinais (a Ficha)
+                          semAgendamentoOnline, semSchema, blogParado, semSite; null = sem fonte) e linhasDosSinais (a Ficha); desde 29/10/2026 não pesam na Prioridade da Triagem
   server/sinais-do-site-leitor.ts  leitura sob demanda de UM lead (POST /api/operations/crm/sinais, ao abrir a Ficha): ≤ 3 requisições, 10 s, 2 MB, bloqueio de SSRF (IP privado/loopback/
                           metadata/tailnet, redirecionamento conferido, IP conferido na conexão), cache em disco 600 (sinais-do-site/sinais.json, 7 dias); SQUADONE_SINAIS_DO_SITE=false desliga
   server/lead-quente.ts   (17/10/2026, SOMBRA) o agente que mantém o lead quente depois do link: decisão PURA responder|escalar|calar a cada mensagem nova do lead
@@ -146,7 +146,8 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
   server/crm.ts           Central: CRM do PRUMO (/crm) a partir do retrato das planilhas que o n8n grava; registro pelo webhook do n8n;
                           quatro ofertas no mesmo funil: Site antes da venda, serviços PRUMO, Iris, CRM de estamparia (14/10/2026);
                           registros ganhou/dispensado (+ _desfeito, 17/10/2026, AC-08/AC-10): Ganho em todas as ofertas e Perdido
-                          (Descartado) saindo da Triagem; a Prioridade da Triagem é da Central (prioridadeDaTriagem, PURA), não do caçador
+                          (Descartado) saindo da Triagem; a Prioridade da Triagem é da Central (prioridadeDaTriagem, PURA: lê o retrato e chama
+                          src/operations/pontuacao-da-triagem.ts), não do caçador
   server/site-mensagem.ts PURO: espelho do site-mensagem.js do n8n (follow-up e segunda mensagem, EN nos EUA) para os links do CRM;
                           o reenvio do só-robô (REENVIO_ROBO*, "Pedir o responsável") é só do CRM, sem par no JS nem inglês
   server/prumo-mensagem.ts PURO: 2ª mensagem (o Raio-X) e reenvio do só-robô do PRUMO (só número 55)
@@ -238,7 +239,13 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     triagem.ts            PURO (17/10/2026, AC-10): a Triagem (/crm?ver=triagem, CrmHoje.vue) em lotes de 10 fixos (o próximo só
                           depois de decidir o atual); Convidar (travas de horário e ritmo com o motivo curto) e Dispensar (registro
                           dispensado, Desfazer por 8 s, "Dispensar os que sobraram" em série com segundo toque); marca local podada
-                          quando o retrato confirma
+                          quando o retrato confirma; o selo "Pontuação N de 100" e as partes dele numa linha (textoDasPartes)
+    pontuacao-da-triagem.ts  PURO (29/10/2026, decisão do PM "Triagem (soma 100)"): a ordem da Triagem, maior primeiro. Dor 50 (PRUMO: sem
+                          site 15, site fora do ar ou domínio vencido 15, nota < 4,3 = 8, fora do top 10 da busca 7, < 20 avaliações 5;
+                          Iris e estamparias: 10 por sinal da oferta), acesso ao decisor 20 (SPICED confirmado 20, celular publicado 15,
+                          fixo 8, não confirmado 5), aderência do nicho 20 ("quero ver" do nicho / da oferta em 90 dias, pela regra de
+                          resultados.ts; < 30 envios = 10) e porte 10 (CNPJ EPP/DEMAIS ou "equipe no site"). Sinal ausente vale 0; o
+                          total é a soma das partes. O "não confirmado" continua depois de todo confirmado (server/crm.ts)
     cohort.ts             PURO (17/10/2026): filtro por motivo da Triagem ("cohort como consulta", ideia do Harvey): "deve" (todos) e "desqualifica" (qualquer um) sobre campos
                           do lead (oferta, nicho, cidade, passo, site, WhatsApp publicado, pontuação) e sobre `lead.sinais` do servidor (ChaveDeSinal; null/ausente = sem leitura).
                           Sem leitura nunca bate nem desqualifica: vai para semLeitura e a tela diz "N sem leitura". Só filtra quem entra nos lotes de 10; as travas, o Convidar,

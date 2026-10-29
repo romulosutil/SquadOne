@@ -146,8 +146,15 @@ página sem Finanças, junção pelo `n`, etapas e falhas, erro HTTP → falha, 
 polling com relógio e visibilidade falsos; fase 2: `gastoDoTexto`, `textoDoValor` e `linhaDoTempo`, que intercala os gastos da aba
 com as mensagens do servidor),
 `server/crm-desfecho.test.ts` (17/10/2026, AC-08 e AC-10: ganho e dispensa marcados na Central nas cinco ofertas, com desfazer e
-ganho × perda (vale o mais novo); `validarRegistro`/`conferirDesfecho` em tabela; `prioridadeDaTriagem`, `notaDoGoogle` e
-`taxasDeRespostaPorNicho` em tabela),
+ganho × perda (vale o mais novo); `validarRegistro`/`conferirDesfecho` em tabela; `notaDoGoogle`; a pontuação saiu para o arquivo abaixo em 29/10/2026),
+`src/operations-pontuacao-da-triagem.test.ts` (29/10/2026, `pontuacao-da-triagem.ts`, "Triagem (soma 100)": a dor do PRUMO item a item
+(sem site no cadastro, rede social, fora do ar, domínio vencido, sem site + domínio vencido somando 30, nota 4,2 × 4,3, a do Raio-X sem a
+da planilha, 19 × 20 avaliações, contagem ausente, top 10 por posição e pelos lidos, os 50 exatos); Iris e estamparias pelos sinais da
+oferta (marcas do caçador fora, a equipe no site no porte, nota e site não entram) e o rótulo da equipe conferido em `prumo-ofertas.json`;
+o decisor (celular, fixo, não confirmado, SPICED); o nicho (sem envio e menos de 30 envios = 10, média = 10, dobro = 20, teto, zero);
+o porte; 2.592 combinações sem parte acima do teto, total = soma e de 0 a 100, o máximo de 100 nos dois caminhos e o mínimo 0;
+`aderenciaDosNichos` com a regra de Números (oferta e janela, robô, saudação, negativa e exclusão fora, licença dentro, nicho vazio) e
+`textoDasPartes`),
 `src/operations-agora-e-desfecho.test.ts` (17/10/2026, AC-05/08/09/12: `fraseDaAcao`, uma frase por tipo de ação e a mesma no cartão da
 Próxima venda e no "Agora" da Ficha, com e sem o copiloto; `acaoDoLead` dá ação ao segundo lead "pronto"; `agoraDaFicha` sem ação (ganho,
 perdido, próximo passo salvo, esperando desde, vez do robô); `linkDoPasso` nunca abre o gerar_demo; `desfechosDoLead`, estados e desfazer
@@ -157,7 +164,7 @@ na tabela do `fraseDaAcao`),
 `src/operations-leitura-de-sinais.test.ts` (17/10/2026: `podeLerSinais` e `alvosDoLote` (só o lote, na ordem, sem repetir, sem quem já foi tentado), `desfechoDaResposta` (409, 422 e 503; estado e origem), `lerEmSerie` (pausa só entre leituras que foram ao site, a falha de um não derruba os outros, parar interrompe, 503 para) e `textoDoResumo`),
 `src/operations-copiloto.test.ts` ganhou o bloco "sinais do site no dossiê" (com e sem sinais: hash, JSON e prompt idênticos sem fonte; `null` some; agência com e sem nome limpo de telefone e marcação; cautela de anúncio instalado; ordem de peso; `serveParaAbrir`; regras no prompt só com sinais) e `server/copiloto.test.ts` +2 (prompt com a observação e a cautela, hash novo só com sinal, gate ainda barra),
 `server/gate-de-envio.test.ts` (17/10/2026; fonte única desde 19/10/2026, a cópia em JS do Balcão saiu: tabela por código de problema, modos bloquear/avisar e o gate sobre TODOS os textos atuais (VARIACOES do JS do n8n via vm, site-mensagem, prumo-mensagem, plus-mensagem, colinha inteira, rascunho de proposta) exigindo zero problema; também há casos do gate em `copiloto.test.ts`, `vendedor.test.ts` e `jornadas-de-venda.test.ts`),
-`server/sinais-do-site.test.ts` (17/10/2026: extração em tabela com HTML sintético em português: anúncios, agendamento, schema, agência com confiança e rótulo fraco não registrado, blog pelo sitemap, tri-estado e página-casca; `ehSiteProprio`/`siteProprioDoLead`, ajuste da Prioridade, linhas da Ficha, validação do que vem do disco),
+`server/sinais-do-site.test.ts` (17/10/2026: extração em tabela com HTML sintético em português: anúncios, agendamento, schema, agência com confiança e rótulo fraco não registrado, blog pelo sitemap, tri-estado e página-casca; `ehSiteProprio`/`siteProprioDoLead`, linhas da Ficha, validação do que vem do disco; o ajuste da Prioridade saiu em 29/10/2026),
 `server/sinais-do-site-leitor.test.ts` (17/10/2026: `ipEhPublico` e SSRF (loopback, 10.x, 169.254.x, tailnet, IPv6, v4 embutido, `.ts.net`, porta, usuário na URL, redirecionamento para rede privada sem fazer a requisição), orçamento de 3 requisições, laço de redirecionamento, ISO-8859-1, cache em pasta temporária (validade, `forcar`, single-flight, arquivo ilegível) e o buscador real contra `localhost`; mais o bloco "CRM: sinais do site" em `crm.test.ts`),
 `src/operations-triagem.test.ts` (17/10/2026, AC-10, `triagem.ts`: o lote nasce com os 10 primeiros na ordem do servidor; dispensar tira o
 item na hora sem puxar o 11º; o convidado fica à vista sem contar como pendente; decidido o lote, vêm os 10 seguintes; dispensado no retrato

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { prioridadeDaTriagem, siteProprioDoLead } from "./crm.ts";
+import { siteProprioDoLead } from "./crm.ts";
 import {
-  DIAS_DO_BLOG_PARADO, SEM_FONTE, agenciaDoRodape, ajusteDaPrioridade, blogParadoNoMapa, ehSiteProprio, extrairSinais, linhasDosSinais,
+  DIAS_DO_BLOG_PARADO, SEM_FONTE, agenciaDoRodape, blogParadoNoMapa, ehSiteProprio, extrairSinais, linhasDosSinais,
   sinaisValidos, type PaginasDoSite, type SinaisDoSite,
 } from "./sinais-do-site.ts";
 
@@ -204,58 +204,10 @@ describe("ehSiteProprio e siteProprioDoLead", () => {
   });
 });
 
-describe("prioridade e Ficha", () => {
-  const base = { nota: "4,5 (80)", temSite: true, temWhatsapp: true };
+// 29/10/2026: os sinais do site saíram da Prioridade da Triagem (a soma 100 não tem parte para eles);
+// a pontuação se testa em src/operations-pontuacao-da-triagem.test.ts.
+describe("Ficha", () => {
   const com = (s: Partial<SinaisDoSite>): SinaisDoSite => ({ ...SEM_FONTE, ...s });
-
-  it("sem sinais, a conta é a de sempre", () => {
-    assert.equal(prioridadeDaTriagem({ ...base }), prioridadeDaTriagem({ ...base, sinaisDoSite: SEM_FONTE }));
-    assert.equal(prioridadeDaTriagem({ ...base, sinaisDoSite: com({ semSite: false, semSchema: true }) }), prioridadeDaTriagem({ ...base }));
-  });
-
-  const casos: Array<[string, Partial<SinaisDoSite>, number]> = [
-    ["anúncio do Google no ar: +4", { rodandoGoogleAds: true }, 4],
-    ["anúncio do Meta no ar: +4", { rodandoMetaAds: true }, 4],
-    ["os dois anúncios não somam duas vezes: +4", { rodandoGoogleAds: true, rodandoMetaAds: true }, 4],
-    ["sem agendamento online: +2", { semAgendamentoOnline: true }, 2],
-    ["com agendamento online: 0", { semAgendamentoOnline: false }, 0],
-    ["agência creditada: −4", { temAgencia: true, agencia: { nome: "Agência Alfa", confianca: 0.9 } }, -4],
-    ["anúncio e sem agenda: +6", { rodandoGoogleAds: true, semAgendamentoOnline: true }, 6],
-    ["anúncio, sem agenda e com agência: +2", { rodandoGoogleAds: true, semAgendamentoOnline: true, temAgencia: true, agencia: { nome: "A", confianca: 0.9 } }, 2],
-    ["sem site não pesa (temSite já pontua a favor de quem tem)", { semSite: true }, 0],
-    ["blog parado e sem schema não pesam", { blogParado: true, semSchema: true }, 0],
-  ];
-  for (const [nome, sinais, pontos] of casos) {
-    it(nome, () => {
-      assert.equal(ajusteDaPrioridade(com(sinais)).pontos, pontos);
-      assert.equal(prioridadeDaTriagem({ ...base, sinaisDoSite: com(sinais) }), prioridadeDaTriagem({ ...base }) + pontos);
-    });
-  }
-
-  it("dor comprovada supera boa reputação e os acréscimos respeitam 0..100", () => {
-    const contato = { temSite: true, temWhatsapp: true, porte: "EPP" as const, taxaDoNicho: 0.5, sinais: "a · b · c" };
-    const dor = { ...contato, nota: "1,0 (8)" };
-    const reputacao = { ...contato, nota: "5,0 (900)" };
-    const acrescimo = com({ rodandoGoogleAds: true, semAgendamentoOnline: true });
-    assert.equal(ajusteDaPrioridade(acrescimo).pontos, 6, "sinais do site mantêm seu peso pequeno");
-    assert.ok(prioridadeDaTriagem(dor) > prioridadeDaTriagem(reputacao), "com o mesmo contato, a dor explícita tem prioridade");
-    assert.equal(prioridadeDaTriagem({ ...reputacao, sinaisDoSite: acrescimo }), prioridadeDaTriagem(reputacao) + 6);
-    // Extremo positivo aceito pelo helper, não uma afirmação sobre uma nota real do Google.
-    const extremo = { ...contato, nota: "0,1 (5)", sinaisDoSite: acrescimo };
-    assert.equal(prioridadeDaTriagem(extremo), 100, "o acréscimo não ultrapassa o teto");
-    for (const entrada of [dor, reputacao, extremo, { ...contato, nota: "ilegível" },
-      { temSite: false, temWhatsapp: false, sinais: "profissional que atende sozinho", taxaDoNicho: -10,
-        sinaisDoSite: com({ temAgencia: true, agencia: { nome: "A", confianca: 0.9 } }) }]) {
-      const prioridade = prioridadeDaTriagem(entrada);
-      assert.ok(Number.isInteger(prioridade) && prioridade >= 0 && prioridade <= 100, JSON.stringify(entrada));
-    }
-    assert.equal(prioridadeDaTriagem({ temSite: false, temWhatsapp: false, sinais: "profissional que atende sozinho", taxaDoNicho: 0 }), 0);
-  });
-
-  it("os motivos dizem os pontos", () => {
-    assert.deepEqual(ajusteDaPrioridade(com({ rodandoMetaAds: true, temAgencia: true, agencia: { nome: "A", confianca: 0.9 } })).motivos, ["anúncios no ar (+4)", "já tem agência (−4)"]);
-    assert.deepEqual(ajusteDaPrioridade(undefined), { pontos: 0, motivos: [] });
-  });
 
   it("a Ficha mostra só o que tem fonte", () => {
     assert.deepEqual(linhasDosSinais(SEM_FONTE), []);

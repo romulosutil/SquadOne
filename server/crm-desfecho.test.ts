@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  AMOSTRA_MINIMA_DO_NICHO, RegistroInvalido, conferirDesfecho, montarCrm, notaDoGoogle, prioridadeDaTriagem, taxasDeRespostaPorNicho,
-  validarRegistro, validarRetrato, type CrmLead, type CrmVisao, type EntradaDaPrioridade,
+  RegistroInvalido, conferirDesfecho, montarCrm, notaDoGoogle,
+  validarRegistro, validarRetrato, type CrmLead, type CrmVisao,
 } from "./crm.ts";
 import type { LeadPlus } from "./plus-catalogo.ts";
 import { filaDeVenda } from "../src/operations/proxima-venda.ts";
@@ -220,72 +220,6 @@ describe("Prioridade da Triagem", () => {
     assert.deepEqual(notaDoGoogle("sem nota"), {});
   });
 
-  const base: EntradaDaPrioridade = { temSite: true, temWhatsapp: true };
-  const casos: Array<[string, EntradaDaPrioridade, number]> = [
-    ["só contato e site, nicho sem amostra", base, 40],
-    ["4,8 com 300 avaliações tem pouca dor demonstrada", { ...base, nota: "4,8 (300)" }, 42],
-    ["5,0 com 2 avaliações tem pouco volume explícito", { ...base, nota: "5 (2)" }, 57],
-    ["4,8 com 20 avaliações", { ...base, nota: "4,8 (20)" }, 50],
-    ["nota baixa, 3,6 com 80", { ...base, nota: "3,6 (80)" }, 54],
-    ["dois sinais do segmento", { ...base, sinais: "convênio · ABA" }, 50],
-    ["cinco sinais param em 15", { ...base, sinais: "a · b · c · d · e" }, 55],
-    ["as marcas do caçador não são sinal", { ...base, sinais: "perfil não confirmado (sem site) · nenhum sinal no site" }, 40],
-    ["quem atende sozinho perde 20", { ...base, sinais: "profissional que atende sozinho? · TEA" }, 25],
-    ["WhatsApp não confirmado", { ...base, origemWhatsapp: "não confirmado: celular do Google" }, 23],
-    ["sem WhatsApp e sem site", { temSite: false, temWhatsapp: false }, 5],
-    ["porte conferido pelo CNPJ", { ...base, porte: "EPP" }, 45],
-    ["nicho com interesse em 30% ou mais dos envios", { ...base, taxaDoNicho: 0.4 }, 45],
-    ["nicho sem interesse na amostra medida", { ...base, taxaDoNicho: 0 }, 35],
-  ];
-  for (const [nome, entrada, esperado] of casos) {
-    it(`${nome}: ${esperado}`, () => assert.equal(prioridadeDaTriagem(entrada), esperado));
-  }
-
-  it("diferencia: 20 prospects diferentes não dão um número só", () => {
-    const valores = new Set(Array.from({ length: 20 }, (_, i) => prioridadeDaTriagem({ ...base, nota: `${(3.5 + (i % 6) * 0.3).toFixed(1)} (${i * 17})` })));
-    // Nota saudável não diferencia por prestígio; ainda há diversidade de dor, sem saturação em 100.
-    assert.ok(valores.size >= 10, `só ${valores.size} valores distintos`);
-  });
-
-  it("taxa por nicho só com a amostra mínima, por oferta", () => {
-    const lead = (produto: CrmLead["produto"], nicho: string, respondeu: boolean): Pick<CrmLead, "produto" | "nicho" | "marcos" | "resposta"> =>
-      ({ produto, nicho, marcos: { enviado: dias(5), ...(respondeu ? { respondeu: dias(4) } : {}) }, ...(respondeu ? { resposta: { tipo: 'licenca', trecho: 'Pode mandar', em: dias(4) } } : {}) });
-    const amostra = [
-      ...Array.from({ length: AMOSTRA_MINIMA_DO_NICHO }, (_, i) => lead("iris", "Psicólogo", i < 3)),
-      ...Array.from({ length: AMOSTRA_MINIMA_DO_NICHO - 1 }, () => lead("iris", "Fonoaudiólogo", true)),
-      ...Array.from({ length: AMOSTRA_MINIMA_DO_NICHO }, () => lead("site", "pilates", true)),
-    ];
-    const taxas = taxasDeRespostaPorNicho(amostra);
-    assert.deepEqual([...taxas], [["iris:psicologo", 0.3]]);
-  });
-  it('dor sobe com nota menor ou contagem menor, mas dado ausente não inventa dor', () => {
-    assert.ok(prioridadeDaTriagem({ ...base, nota: '3 (80)' }) > prioridadeDaTriagem({ ...base, nota: '4.9 (80)' }));
-    assert.ok(prioridadeDaTriagem({ ...base, nota: '4.8 (2)' }) > prioridadeDaTriagem({ ...base, nota: '4.8 (300)' }));
-    assert.equal(prioridadeDaTriagem({ ...base, nota: 'ilegível' }), prioridadeDaTriagem(base));
-    assert.ok(prioridadeDaTriagem({ ...base, nota: '0 (0)' }) > prioridadeDaTriagem(base));
-    const diferencaDaNota = (n: number) => prioridadeDaTriagem({ ...base, nota: `3 (${n})` }) - prioridadeDaTriagem({ ...base, nota: `4.9 (${n})` });
-    assert.ok(diferencaDaNota(1) < diferencaDaNota(20), 'uma avaliação dá pouca evidência para nota baixa');
-  });
-  it('peso do nicho vem de interesse humano, sem confundir respostas negativas ou robôs', () => {
-    const l = (nicho: string, tipo: CrmLead['resposta']['tipo'], produto: CrmLead['produto'] = 'prumo') => ({ produto, nicho,
-      marcos: { enviado: dias(5), respondeu: dias(4) }, resposta: { tipo, trecho: tipo === 'licenca' ? 'Pode mandar' : 'Resposta fictícia', em: dias(4) } });
-    const amostra = [
-      ...Array.from({ length: 10 }, () => l('negativas', 'negativa')),
-      ...Array.from({ length: 10 }, (_, i) => l('interesse', i < 3 ? 'interesse' : i < 5 ? 'licenca' : 'bot')),
-      ...Array.from({ length: 10 }, () => l('robo', 'bot')),
-      ...Array.from({ length: 9 }, () => l('insuficiente', 'interesse')),
-      ...Array.from({ length: 10 }, () => l('interesse', 'exclusao', 'iris')),
-      ...Array.from({ length: 10 }, () => ({ ...l('classificado-errado', 'interesse'), conversa: { desde: dias(6), mensagens: 1, entradas: { gente: 0, recepcao: 0, robo: 1 }, ultima: { direcao: 'entrada' as const, em: dias(4), trecho: 'Atendimento automático', papel: 'robo' as const } } })),
-      ...Array.from({ length: 10 }, () => ({ ...l('robo-sem-contagens', 'interesse'), conversa: { desde: dias(6), mensagens: 1, ultima: { direcao: 'entrada' as const, em: dias(4), trecho: 'Atendimento automático', papel: 'robo' as const } } })),
-    ];
-    const taxas = taxasDeRespostaPorNicho(amostra);
-    assert.equal(taxas.get('prumo:negativas'), 0);
-    assert.equal(taxas.get('prumo:interesse'), 0.5);
-    assert.equal(taxas.get('prumo:robo'), 0);
-    assert.equal(taxas.get('iris:interesse'), 0, 'oferta Iris não recebe resultado de serviços PRUMO');
-    assert.equal(taxas.get('prumo:classificado_errado'), 0);
-    assert.equal(taxas.get('prumo:robo_sem_contagens'), 0);
-    assert.equal(taxas.has('prumo:insuficiente'), false);
-    assert.equal(taxasDeRespostaPorNicho([]).size, 0);
-  });
+  // A pontuação (29/10/2026, soma 100) se testa em src/operations-pontuacao-da-triagem.test.ts; a leitura
+  // do retrato até ela, em server/crm.test.ts ("Prospects para revisar").
 });

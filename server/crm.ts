@@ -35,7 +35,8 @@ import { OFERTAS_DO_PLUS, type LeadPlus, type OfertaDoPlus } from "./plus-catalo
 import { reenvioDoPrumo, segundaDoPrumo } from "./prumo-mensagem.ts";
 import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, followupDe, raioXAvulso, reenvioDoRoboDe, segundaDe } from "./site-mensagem.ts";
 import { bracoDoRecibo, entraNoTesteDoRecibo, type BracoDoRecibo } from "../src/operations/ab-recibo.ts";
-import { ajusteDaPrioridade, ehSiteProprio, extrairSinais, type SinaisDoSite } from "./sinais-do-site.ts";
+import { ehSiteProprio, extrairSinais, type SinaisDoSite } from "./sinais-do-site.ts";
+import { aderenciaDosNichos, chaveDoNicho, notaDoGoogle, pontuacaoDaTriagem, type AderenciaDoNicho, type PontuacaoDaTriagem } from "../src/operations/pontuacao-da-triagem.ts";
 
 // CRM da Central: Site antes da venda + PRUMO num modelo só (30/09/2026).
 //
@@ -618,7 +619,7 @@ export interface CrmLead {
    * achados no site, a nota do Google e de onde veio o WhatsApp ("não confirmado: celular do Google" pede
    * conferência antes do convite). Ausentes nos outros produtos.
    */
-  triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string };
+  triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string; pontuacao?: PontuacaoDaTriagem };
   /**
    * Os sinais do site do lead (17/10/2026, server/sinais-do-site.ts): lidos sob demanda pela Ficha, com
    * validade em disco. Cada um é `true`, `false` ou `null` (sem fonte). Ausente = o site ainda não foi
@@ -1710,128 +1711,32 @@ function leadDoPlus(plus: LeadPlus, contexto: { agora: number; registros: Map<st
   };
 }
 
-// ------------------------------------------------------------------ Triagem: a prioridade
+// ------------------------------------------------------------------ Triagem: a pontuação
 
-/** "4,5 (10)" ou "4.5 (10)", como o caçador e o Lead Scout gravam a Nota Google; o que não ler fica ausente. */
-export function notaDoGoogle(valor: string | undefined): { nota?: number; avaliacoes?: number } {
-  const m = /^\s*(\d+(?:[.,]\d+)?)\s*(?:\((\d+)\))?/.exec(valor ?? "");
-  if (!m) return {};
-  const nota = Number(m[1].replace(",", "."));
-  const avaliacoes = m[2] !== undefined ? Number(m[2]) : undefined;
-  return {
-    ...(nota > 0 && nota <= 5 ? { nota } : {}),
-    ...(avaliacoes !== undefined && Number.isFinite(avaliacoes) ? { avaliacoes } : {}),
-  };
-}
-
-// As marcas que o caçador põe na coluna Sinais junto com os sinais do segmento (prumo-ofertas-triar.js):
-// não são sinal de nada a favor, então não contam como sinal.
-const MARCAS_DO_CACADOR = ["perfil não confirmado", "profissional que atende sozinho", "nenhum sinal no site"];
-
-export interface EntradaDaPrioridade {
-  /** A Nota Google crua ("4,5 (10)"). */
-  nota?: string;
-  /** A coluna Sinais do caçador, " · " entre os itens. */
-  sinais?: string;
-  origemWhatsapp?: string;
-  temSite: boolean;
-  temWhatsapp: boolean;
-  porte?: PorteDoCnpj;
-  /** Pedidos humanos de material / convites do mesmo nicho e oferta, só com amostra mínima. */
-  taxaDoNicho?: number;
-  /** Os sinais do site já lidos (server/sinais-do-site.ts): só o que tem fonte pesa, e pouco. */
-  sinaisDoSite?: SinaisDoSite;
-}
-
-/** Nota média que se supõe para quem tem poucas avaliações, e quantas avaliações "valem" essa suposição. */
-const NOTA_A_PRIORI = 4.3;
-const PESO_DA_NOTA_A_PRIORI = 10;
-/** Avaliações que dão o volume inteiro (escala log): 500 é negócio estabelecido no bairro. */
-const AVALIACOES_DO_TETO = 500;
-/** Convites no nicho para a taxa de resposta valer, e a taxa que já dá os pontos todos. */
-export const AMOSTRA_MINIMA_DO_NICHO = 10;
-const TAXA_DO_TETO = 0.3;
+export { notaDoGoogle };
 
 /**
- * PURA. A Prioridade da Triagem (17/10/2026): de 0 a 100, ordena a revisão humana, não diagnostica a
- * empresa. A do caçador (prumo-ofertas-triar.js) satura: sinais do segmento valiam até 50, e com
- * contato, avaliações e nota o teto de 100 chegava para quase todos (os 1.423 da Triagem ao vivo
- * mostravam "Prioridade 100", e a ordem virava a da data). Esta pesa o que diferencia, com o que o
- * retrato já tem, e cada parte é contínua para quase não empatar:
+ * PURA. A Prioridade da Triagem de um prospect (29/10/2026, "Triagem (soma 100)" do PM): a regra mora em
+ * src/operations/pontuacao-da-triagem.ts, importável pela tela; aqui só se diz de que coluna do retrato sai
+ * cada sinal. Substitui a de 17/10/2026 (dor do Google 35, contato 25, site 10, sinais 15, porte 5, nicho
+ * 10, solo −20, sinais do site ±): a decisão fixou quatro partes e nada por fora delas.
  *
- * - Dor verificável no Google, até 35: nota baixa até 15 (média bayesiana com prior 4,3/10),
- *   poucas avaliações até 20 em log invertido. Só uma contagem explícita gera pontos de volume;
- *   dado ausente não equivale a zero avaliações. É prioridade de revisão, não diagnóstico.
- * - Contato, até 25: WhatsApp publicado pela empresa (site, link do Google) 25; "não confirmado" (o
- *   celular do Google) 8, porque é quem mais denuncia (trava de ritmo, 15/10); sem WhatsApp, 0.
- * - Site, 10: é onde a revisão confere o perfil; sem site o caçador já marca "perfil não confirmado".
- * - Sinais do segmento, 5 cada, até 15 (eram 10 cada até 50: é aqui que saturava).
- * - Porte conferido pelo CNPJ (EPP ou DEMAIS, só PRUMO), 5.
- * - Nicho, até 10: pedidos humanos de material / convites do mesmo nicho na mesma oferta, com pelo menos
- *   AMOSTRA_MINIMA_DO_NICHO convites (10 × taxa / 30%, teto 10); sem amostra, 5 (neutro: nem prêmio
- *   nem castigo por não saber).
- * - "Profissional que atende sozinho?" (marca do caçador do Iris, que é para clínica com equipe), -20.
- * - Sinais do site (17/10/2026, só quando a Ficha já leu o site do lead; ajusteDaPrioridade): anúncio no ar
- *   +4, sem agendamento online +2, agência já creditada no rodapé -4. Pouco de propósito: o site só é lido
- *   sob demanda, e o sinal desempata, não decide.
- *
- * Arredondada e presa entre 0 e 100. O "não confirmado" continua indo depois de todo confirmado na
- * Hoje (montarHoje): a regra da trava de ritmo vem antes desta conta.
+ * O site próprio sai de siteProprioDoLead (rede social no lugar do site é "sem site"); os achados, do
+ * Raio-X à mão do PRUMO (Iris e estamparias não têm); o decisor confirmado, do SPICED gravado.
  */
-export function prioridadeDaTriagem(e: EntradaDaPrioridade): number {
-  const { nota, avaliacoes } = notaDoGoogle(e.nota);
-  const n = avaliacoes ?? 1;
-  const media = nota === undefined ? undefined : (nota * n + NOTA_A_PRIORI * PESO_DA_NOTA_A_PRIORI) / (n + PESO_DA_NOTA_A_PRIORI);
-  const pontosDaNota = media === undefined ? 0 : 15 * Math.min(1, Math.max(0, (4.5 - media) / 1.5));
-  const pontosDoVolume = avaliacoes === undefined ? 0 : 20 * (1 - Math.min(1, Math.log10(1 + avaliacoes) / Math.log10(1 + AVALIACOES_DO_TETO)));
-  const naoConfirmado = (e.origemWhatsapp ?? "").startsWith("não confirmado");
-  const pontosDoContato = !e.temWhatsapp ? 0 : naoConfirmado ? 8 : 25;
-  const itens = (e.sinais ?? "").split("·").map((s) => s.trim().toLowerCase()).filter(Boolean);
-  const sinais = itens.filter((s) => !MARCAS_DO_CACADOR.some((m) => s.startsWith(m))).length;
-  const solo = itens.some((s) => s.startsWith("profissional que atende sozinho"));
-  const pontosDoNicho = e.taxaDoNicho === undefined ? 5 : 10 * Math.min(1, Math.max(0, e.taxaDoNicho / TAXA_DO_TETO));
-  const total = pontosDaNota + pontosDoVolume + pontosDoContato + (e.temSite ? 10 : 0) + Math.min(15, sinais * 5)
-    + (e.porte ? 5 : 0) + pontosDoNicho - (solo ? 20 : 0) + ajusteDaPrioridade(e.sinaisDoSite).pontos;
-  return Math.round(Math.min(100, Math.max(0, total)));
-}
-
-const chaveDoNicho = (lead: Pick<CrmLead, "produto" | "nicho">) => `${lead.produto}:${normalizarCabecalho(lead.nicho)}`;
-
-/**
- * PURA. Pedidos humanos de material por convite, separados por oferta e nicho. Respostas negativas,
- * exclusões, robôs e um marco de resposta isolado não são interesse. Menos de 10 envios ou nenhum
- * envio não produz taxa: amostra ausente permanece neutra na prioridade.
- */
-export function taxasDeInteressePorNicho(leads: ReadonlyArray<Pick<CrmLead, "produto" | "nicho" | "marcos" | "resposta"> & Partial<Pick<CrmLead, 'conversa'>>>, agora = Date.now()): Map<string, number> {
-  const contas = new Map<string, { enviados: number; responderam: number }>();
-  for (const lead of leads) {
-    const enviado = Date.parse(lead.marcos.enviado ?? '');
-    if (!(PRODUTOS_DE_PROSPECCAO as readonly string[]).includes(lead.produto) || !lead.nicho || !Number.isFinite(enviado) || enviado > agora) continue;
-    const chave = chaveDoNicho(lead);
-    const conta = contas.get(chave) ?? { enviados: 0, responderam: 0 };
-    conta.enviados += 1;
-    const em = lead.resposta?.em ?? lead.marcos.respondeu;
-    const soRobo = lead.conversa?.ultima?.direcao === 'entrada' && lead.conversa.ultima.papel === 'robo' && !lead.conversa.ultimaEntrada;
-    if (pedeMaterial(lead.resposta) && !soRobo && quemRespondeu(lead) !== 'robo' && (!em || (Date.parse(em) >= enviado && Date.parse(em) <= agora))) conta.responderam += 1;
-    contas.set(chave, conta);
-  }
-  return new Map([...contas].filter(([, c]) => c.enviados >= AMOSTRA_MINIMA_DO_NICHO).map(([chave, c]) => [chave, c.responderam / c.enviados]));
-}
-
-/** Compatibilidade dos consumidores existentes; agora mede interesse, nunca resposta bruta. */
-export const taxasDeRespostaPorNicho = taxasDeInteressePorNicho;
-
-/** A Prioridade de um lead de prospecção pelo que ele traz no retrato. */
-function prioridadeDoLead(lead: CrmLead, taxas: Map<string, number>): number {
-  return prioridadeDaTriagem({
+export function prioridadeDaTriagem(lead: CrmLead, aderencia: ReadonlyMap<string, AderenciaDoNicho>): PontuacaoDaTriagem {
+  const site = siteProprioDoLead(lead);
+  return pontuacaoDaTriagem({
+    ofertaPropria: ehOfertaPropria(lead.produto),
     ...(lead.triagem?.nota ? { nota: lead.triagem.nota } : {}),
     ...(lead.triagem?.sinais ? { sinais: lead.triagem.sinais } : {}),
     ...(lead.triagem?.origemWhatsapp ? { origemWhatsapp: lead.triagem.origemWhatsapp } : {}),
-    temSite: Boolean(lead.links.site),
-    temWhatsapp: Boolean(lead.links.whatsapp),
+    ...(lead.links.whatsapp ? { whatsapp: lead.links.whatsapp } : {}),
+    temSiteProprio: typeof site === "string",
+    ...(lead.achados ? { achados: lead.achados } : {}),
     ...(lead.porte ? { porte: lead.porte } : {}),
-    ...(taxas.has(chaveDoNicho(lead)) ? { taxaDoNicho: taxas.get(chaveDoNicho(lead)) } : {}),
-    ...(lead.sinais ? { sinaisDoSite: lead.sinais } : {}),
+    ...(lead.spiced?.decisao.decisor_confirmado === "sim" ? { decisorConfirmado: true } : {}),
+    ...(aderencia.has(chaveDoNicho(lead)) ? { aderencia: aderencia.get(chaveDoNicho(lead)) } : {}),
   });
 }
 
@@ -2133,10 +2038,10 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
       leads.push(lead);
     }
   }
-  // A Prioridade da Triagem (17/10/2026) troca a do caçador, que saturava em 100: depende da taxa do
-  // nicho, que só se sabe com todos os leads lidos. Só onde ela serve (Novo, a revisão) ou onde a
-  // planilha já trazia uma, para a ficha não mostrar dois números.
-  const taxas = taxasDeInteressePorNicho(leads, agora);
+  // A Prioridade da Triagem (17/10/2026; soma 100 desde 29/10) troca a do caçador, que saturava em 100:
+  // depende da aderência do nicho, que só se sabe com todos os leads lidos. Só onde ela serve (Novo, a
+  // revisão) ou onde a planilha já trazia uma, para a ficha não mostrar dois números.
+  const aderencia = aderenciaDosNichos(leads, PRODUTOS_DE_PROSPECCAO, agora);
   for (const lead of leads) {
     lead.qualificacaoComercial = projetarQualificacaoComercial(lead, agora);
     const confirmados = (registros.get(lead.id) ?? []).filter(r => r.tipo === 'spiced' && r.em <= agora);
@@ -2145,8 +2050,9 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
       if (s) lead.spiced = s;
     }
   }
-  // Os sinais do site (17/10/2026) entram antes da Prioridade: só a leitura já guardada, que vale para o
-  // endereço de agora (se o site do lead mudou, a leitura velha não conta). Nada aqui chama a rede.
+  // Os sinais do site (17/10/2026): só a leitura já guardada, que vale para o endereço de agora (se o site
+  // do lead mudou, a leitura velha não conta). Nada aqui chama a rede. Desde 29/10 não pesam na Prioridade
+  // (a soma 100 não tem parte para eles); a Ficha e o filtro por motivo continuam lendo.
   for (const lead of leads) {
     const site = siteProprioDoLead(lead);
     if (site === null) lead.sinais = extrairSinais({ url: null });
@@ -2158,7 +2064,8 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
   for (const lead of leads) {
     if (!(PRODUTOS_DE_PROSPECCAO as readonly string[]).includes(lead.produto)) continue;
     if (lead.etapa !== "novo" && lead.triagem?.prioridade === undefined) continue;
-    lead.triagem = { ...lead.triagem, prioridade: prioridadeDoLead(lead, taxas) };
+    const pontuacao = prioridadeDaTriagem(lead, aderencia);
+    lead.triagem = { ...lead.triagem, prioridade: pontuacao.total, pontuacao };
   }
   const aberturasPrumo = alocarAberturasPrumo(leads.filter(l => l.produto === 'prumo').map(l => {
     const confirmado = ultimoConviteConfirmado(l.eventos);

@@ -21,6 +21,7 @@
 import type { Guardador } from './guardador'
 import type { CrmItemHoje, CrmLead, CrmProduto } from './types'
 import { motivoCurtoDoRitmo, type EstadoDoRitmo } from './trava-de-ritmo'
+import { TETO, type PontuacaoDaTriagem } from './pontuacao-da-triagem'
 
 export const TAMANHO_DO_LOTE = 10
 export const CHAVE_DAS_DECISOES = 'squadone:crm:triagem-decisoes'
@@ -141,8 +142,18 @@ export function prioridadesDiferem(itens: readonly CrmItemHoje[], leads: Readonl
   return valores.size > 1
 }
 
-/** O selo diz o que o número é: pontos de 0 a 100 do caçador, não uma posição na fila. */
+/** O selo diz o que o número é: pontos de 0 a 100 da Central, não uma posição na fila. */
 export const textoDaPrioridade = (prioridade: number) => `Pontuação ${prioridade} de 100`
+
+/**
+ * As quatro partes da pontuação numa linha, para o porquê ao lado do selo (29/10/2026): cada parte com o
+ * seu teto, e o motivo da dor entre parênteses (é a parte que mais varia e a que a revisão confere no site
+ * e no Maps). Os outros porquês ficam fora para a linha caber no celular; a soma das partes é o selo.
+ */
+export function textoDasPartes(p: PontuacaoDaTriagem): string {
+  const dor = p.porque.dor.length ? ` (${p.porque.dor.join(', ')})` : ''
+  return `Dor ${p.dor}/${TETO.dor}${dor} · Decisor ${p.decisor}/${TETO.decisor} · Nicho ${p.nicho}/${TETO.nicho} · Porte ${p.porte}/${TETO.porte}`
+}
 
 /**
  * O detalhe que o servidor monta traz "Prioridade N" no meio; a tela mostra a pontuação no selo

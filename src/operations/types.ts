@@ -2,6 +2,7 @@ import type { ResumoSinaisComerciais } from './sinais-comerciais.ts'
 import type { SinaisDoSite } from '../../server/sinais-do-site.ts'
 import type { QualificacaoComercial } from './qualificacao-comercial'
 import type { Spiced } from './spiced'
+import type { PontuacaoDaTriagem } from './pontuacao-da-triagem'
 import type { CrmProduto, LinkDaOfertaPropria } from '../../server/ofertas.ts'
 
 export type OperationalState = 'healthy' | 'syncing' | 'unavailable' | 'unknown'
@@ -215,8 +216,11 @@ export interface CrmLead {
   demoApagadoEm?: string
   /** Site, demo sob pedido (14/10/2026): o botão "Gerar demo" foi tocado e o gerador ainda não publicou. */
   demoPedidoEm?: string
-  /** Caçadores do Iris e das estamparias (14/10/2026): Prioridade, sinais do site, nota do Google e de onde veio o WhatsApp. */
-  triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string }
+  /**
+   * Caçadores do Iris e das estamparias (14/10/2026): Prioridade, sinais do site, nota do Google e de onde veio o WhatsApp.
+   * `pontuacao` (29/10/2026): as quatro partes da Prioridade (pontuacao-da-triagem.ts); `prioridade` é o total delas.
+   */
+  triagem?: { prioridade?: number; sinais?: string; nota?: string; origemWhatsapp?: string; pontuacao?: PontuacaoDaTriagem }
   /** Os sinais do site do lead (17/10/2026, server/sinais-do-site.ts): cada um true, false ou null (sem fonte). Ausente = site ainda não lido. */
   sinais?: SinaisDoSite
   /** Plus (15/10/2026): os leads do Catálogo de Negócios Maçônicos. A oferta é o fluxo que o lead recebe. */

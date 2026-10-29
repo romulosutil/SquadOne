@@ -637,6 +637,7 @@ Entregue e instalado na Mel em 19/10 (relato fase a fase em `docs/PRUMO-IMPLEMEN
   LID desconhecido não bloqueia os eventos seguintes e a hora original é preservada. O adaptador publica uma captura imutável por evento
   (`capturas-adaptador/<sha256>.json`) que o `observador.py` confirma em disco antes de remover. Grupos e ruído nunca entram.
 - **Triagem e avisos.** `prioridadeDaTriagem` (`server/crm.ts`) pontua a dor no Google (nota baixa até 15, poucas avaliações até
-  20, nicho até 10 só por pedido humano de material com 10+ convites); P0 e as 5 origens de falha ficam numa outbox exclusiva do
+  20, nicho até 10 só por pedido humano de material com 10+ convites; desde 29/10/2026 é a soma 100 de
+  `src/operations/pontuacao-da-triagem.ts`: dor 50, decisor 20, nicho 20, porte 10); P0 e as 5 origens de falha ficam numa outbox exclusiva do
   Telegram (lista única nas três pontas, com teste de paridade; o prefixo `n8n:` ainda tem reserva no WhatsApp, decisão em aberto).
   O fluxo 01 sanitizado (`ops/n8n/workflows/01-Cacador.sanitizado.json`) é só auditoria: inativo, sem importação automática.

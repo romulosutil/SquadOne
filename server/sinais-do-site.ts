@@ -280,24 +280,11 @@ export function extrairSinais(paginas: PaginasDoSite, agora?: Date): SinaisDoSit
   return sinais;
 }
 
-// ------------------------------------------------------------------ prioridade e Ficha
+// ------------------------------------------------------------------ Ficha
 
-/**
- * PURA. O acréscimo da Prioridade da Triagem pelos sinais, pequeno e explicável (de −4 a +6, contra 0 a 100
- * da conta toda): anúncio no ar +4 (já gasta com cliente: atende e entende o valor), sem agendamento online
- * +2 (a oferta é concreta), agência já creditada −4 (o incumbente faz a venda mais difícil). `semSite` não
- * pesa: `temSite` já dá 10 pontos a quem tem site, porque é onde a revisão confere o perfil, e somar de novo
- * a falta dele contradiria essa conta.
- */
-export function ajusteDaPrioridade(sinais?: SinaisDoSite): { pontos: number; motivos: string[] } {
-  if (!sinais) return { pontos: 0, motivos: [] };
-  const motivos: string[] = [];
-  let pontos = 0;
-  if (sinais.rodandoGoogleAds === true || sinais.rodandoMetaAds === true) { pontos += 4; motivos.push("anúncios no ar (+4)"); }
-  if (sinais.semAgendamentoOnline === true) { pontos += 2; motivos.push("sem agendamento online (+2)"); }
-  if (sinais.temAgencia === true) { pontos -= 4; motivos.push("já tem agência (−4)"); }
-  return { pontos, motivos };
-}
+// O `ajusteDaPrioridade` (anúncio +4, sem agenda +2, agência −4) saiu em 29/10/2026: a pontuação da
+// Triagem passou a somar 100 em quatro partes (src/operations/pontuacao-da-triagem.ts) e nenhuma delas é
+// dos sinais do site. Eles seguem na Ficha e no filtro por motivo, que é onde decidem algo.
 
 export interface LinhaDeSinal {
   /** `oportunidade` ajuda a venda; `atencao` atrapalha; `neutro` só informa. */
