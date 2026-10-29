@@ -41,7 +41,7 @@ describe('follow-up: o braço sorteado é o texto mostrado, aberto e gravado', (
   it('braço B: o texto novo no rascunho E no wa.me, e o registro diz B (antes o antigo saía como B)', () => {
     const { lead, visao } = leadComFollowup('site', chaveDoBraco('site', 'B'))
     const acao = acaoDoLead(visao, lead.id, AGORA)!
-    const esperado = FOLLOWUP_NOVO.site.replace('{EMPRESA}', 'Pousada do Mar')
+    const esperado = FOLLOWUP_NOVO.site.semFato.replace('{EMPRESA}', 'Pousada do Mar')
     assert.equal(acao.rascunho, esperado)
     assert.equal(textoDoLink(acao.link!.url), esperado, 'o que o WhatsApp abre é o que a tela mostra')
     assert.ok(acao.link!.url.startsWith('https://wa.me/5511999990000?text='))
@@ -52,7 +52,7 @@ describe('follow-up: o braço sorteado é o texto mostrado, aberto e gravado', (
   it('PRUMO no braço B usa o molde do PRUMO', () => {
     const { lead, visao } = leadComFollowup('prumo', chaveDoBraco('prumo', 'B'))
     const acao = acaoDoLead(visao, lead.id, AGORA)!
-    assert.equal(acao.rascunho, FOLLOWUP_NOVO.prumo)
+    assert.equal(acao.rascunho, FOLLOWUP_NOVO.prumo.semFato)
     assert.equal(lerRegistroFollowup(acao.textoDoRegistro!)?.braco, 'B')
   })
 

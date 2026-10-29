@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { FOLLOWUP_NOVO_APROVADO, leituraDoFollowup, metadataDoFollowup, textoDoFollowup, textoDoRegistroFollowup, lerRegistroFollowup } from './operations/followup-experimento.ts'
+import { FOLLOWUP_NOVO_APROVADO, VERSAO_DO_FOLLOWUP, leituraDoFollowup, metadataDoFollowup, textoDoFollowup, textoDoRegistroFollowup, lerRegistroFollowup } from './operations/followup-experimento.ts'
 import { leituraDoTestePlus, INICIO_DO_TESTE_PLUS } from './operations/plus-experimento.ts'
 import { leituraDoAbMensagem } from './operations/ab-mensagem.ts'
 import { colinhaDoLead } from './operations/colinha.ts'
@@ -41,7 +41,7 @@ describe('follow-up: braço enviado e versão duráveis', () => {
     assert.throws(() => textoDoRegistroFollowup({ ...meta, braco: 'C' as any }))
     assert.equal(leituraDoFollowup([lead('sem-registro', 'site', { eventos: [{ tipo: 'followup_enviado', em: iso(2), origem: 'manual', fonte: 'teste', rotulo: 'Envio confirmado' }] })]).bracos.A.enviados, 0)
   })
-  const enviados = (n: number, braco: 'A' | 'B') => Array.from({ length: n }, (_, i) => lead(`${braco}${i}`, 'site', { marcos: { enviado: iso(1), ...(i % 2 ? {} : { respondeu: iso(4) }) }, resposta: { tipo: i % 2 ? 'bot' : 'interesse', trecho: 'Quero ver', em: iso(4) }, eventos: [{ tipo: 'followup_enviado', em: iso(3), origem: 'manual', fonte: 'teste', rotulo: 'Envio confirmado', texto: textoDoRegistroFollowup({ braco, versao: 'followup-2026-10-19' }) }] }))
+  const enviados = (n: number, braco: 'A' | 'B') => Array.from({ length: n }, (_, i) => lead(`${braco}${i}`, 'site', { marcos: { enviado: iso(1), ...(i % 2 ? {} : { respondeu: iso(4) }) }, resposta: { tipo: i % 2 ? 'bot' : 'interesse', trecho: 'Quero ver', em: iso(4) }, eventos: [{ tipo: 'followup_enviado', em: iso(3), origem: 'manual', fonte: 'teste', rotulo: 'Envio confirmado', texto: textoDoRegistroFollowup({ braco, versao: VERSAO_DO_FOLLOWUP }) }] }))
   it('29/31: nenhuma taxa ou p; 30/30 mede resposta posterior de gente', () => {
     const cedo = leituraDoFollowup([...enviados(29, 'A'), ...enviados(31, 'B')])
     assert.equal(cedo.lido, false); assert.equal(cedo.numeros, undefined)
