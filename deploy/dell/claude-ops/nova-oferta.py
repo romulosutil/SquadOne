@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
-"""Oferta nova do PRUMO: um bloco em prumo-ofertas.json + este comando. 28/10/2026. Sem rede.
+"""Oferta nova do PRUMO: um bloco em prumo-ofertas.json + este comando. 28/10/2026. Sem rede, fora o
+`git fetch` que só atualiza a origin/main da Prumo para ler o catálogo (prumo_contexto.ler_da_prumo).
 
 Pedido do Rômulo (vai criar mais três ofertas): que seja fácil. Antes eram ~50 pontos em ~35 arquivos,
 metade calada (ops/n8n/NOVA-OFERTA.md). Agora o lado Python/n8n deriva do JSON (ofertas.py) e o lado TS
 é gerado (scripts/ofertas-gerar.ts); sobra o texto de negócio e os passos na Mel, que este comando lista.
 
-  python3 nova-oferta.py <id> --como iris [--rotulo "Prisma PDV" --plural lojas --aba Lojas --sigla PDV --empresa loja]
+  python3 nova-oferta.py <id> --como iris [--rotulo "Ótica" --plural óticas --aba Óticas --sigla Ótica --empresa ótica
+                                           --catalogo-prumo <id do produto na Prumo>]
       Cria `ofertas.<id>` no JSON copiando a estrutura da oferta-modelo, com os nomes derivados
       (convite-<id>, caçador e clique "PRUMO · <rótulo> — ...", webhook_id novo, sala prumo--<id>,
       link planilha<Id>, tipo "propria", teto 15) e "TODO: ..." em todo campo de negócio. Nunca
       sobrescreve uma oferta; insere o texto no fim do bloco "ofertas" sem reescrever o resto do arquivo.
 
-  python3 nova-oferta.py --conferir [<id>]
+  python3 nova-oferta.py --conferir [<id>] [--prumo <repo prumo>]
       Lint da oferta (ou de todas), código gerado de todas as ofertas com `node --check`, testes Python de
       contrato e, no fim, o que falta, na ordem: lado TS, listas escritas fora de claude-ops, decisões e
       os passos na Mel. Sai com 1 se houver o que corrigir antes de publicar.
+
+  Trava do portfólio (28/10/2026): toda oferta aponta `catalogo_prumo` para um produto de
+  prumo/06-qualidade/catalogo.json com `funil: true` e `receita` fora de "incubacao". Produto em incubação,
+  sem preço, cobrança real ou cliente não vira oferta, caçador, convite nem proposta. O catálogo vem de
+  --prumo, senão de PRUMO_REPO, senão de ../prumo ao lado do repo, senão de ~/prumo; não achar é problema.
 
   --arquivo <json>  outro registro (testes: nunca o JSON real).  --sem-testes  pula os testes Python.
 
@@ -40,6 +47,7 @@ sys.dont_write_bytecode = True  # roda também no checkout de produção da Mel:
 sys.path.insert(0, str(AQUI))
 import ofertas as registro  # noqa: E402
 import prospeccao_contrato  # noqa: E402
+import prumo_contexto  # noqa: E402
 
 DEPLOY = AQUI.parent.parent
 REPO = DEPLOY.parent
@@ -61,6 +69,7 @@ NEGOCIO = {
     "fonte": "TODO: \"PRUMO — <aba> (<rótulo>)\" (nome da fonte na Central)",
     "mensagem": "TODO: {OLA}! Sou o Rômulo, do Prumo. <o que é, sem prometer o que não existe>\n\n<uma pergunta só, com {NOME}>?",
     "proxima_enviado": "TODO: a Próxima ação que o observador grava quando o convite sai",
+    "catalogo_prumo": "TODO: id do produto em prumo/06-qualidade/catalogo.json (funil true, receita fora de incubacao)",
 }
 NEGOCIO_LISTAS = {
     "nichos": ["TODO: busca curta no Google Places (a que rende mais primeiro)"],
@@ -93,7 +102,7 @@ def _atomico(arquivo, texto):
     os.replace(tmp, arquivo)
 
 
-def bloco_novo(cfg, id_, como, rotulo=None, plural=None, aba=None, sigla=None, empresa=None):
+def bloco_novo(cfg, id_, como, rotulo=None, plural=None, aba=None, sigla=None, empresa=None, catalogo_prumo=None):
     """O bloco da oferta nova: a ordem de chaves do modelo, nomes derivados e TODO no negócio."""
     if not registro.ID.fullmatch(id_ or "") or id_ in registro.RESERVADOS:
         raise SystemExit(f"id {id_!r}: use 3 a 12 letras minúsculas, fora de {', '.join(sorted(registro.PRODUTOS_FORA_DO_REGISTRO + ('registros',)))}"
@@ -104,7 +113,8 @@ def bloco_novo(cfg, id_, como, rotulo=None, plural=None, aba=None, sigla=None, e
         raise SystemExit(f"--como {como!r}: modelo inexistente (há: {', '.join(cfg['ofertas'])}).")
     modelo = cfg["ofertas"][como]
     valores = {**NEGOCIO, **{k: copy.deepcopy(v) for k, v in NEGOCIO_LISTAS.items()}, "conversa": dict(CONVERSA)}
-    for k, v in (("rotulo", rotulo), ("plural", plural), ("aba", aba), ("sigla", sigla), ("empresa", empresa)):
+    for k, v in (("rotulo", rotulo), ("plural", plural), ("aba", aba), ("sigla", sigla), ("empresa", empresa),
+                 ("catalogo_prumo", catalogo_prumo)):
         if v:
             valores[k] = v
     r = rotulo or "TODO: rótulo"
@@ -195,8 +205,68 @@ def _regex(fonte):
     return None
 
 
-def problemas_da_oferta(cfg, id_):
-    """O que impede publicar esta oferta. Lista vazia = pronta para os passos na Mel."""
+CATALOGO = prumo_contexto.CATALOGO
+
+
+def raizes_da_prumo(prumo=None):
+    """Onde procurar o repo da Prumo, na ordem. --prumo explícito é o único candidato (um caminho errado
+    dado à mão é erro, não motivo para ler outro catálogo)."""
+    if prumo:
+        return [Path(prumo)]
+    raizes = [Path(os.environ["PRUMO_REPO"])] if os.environ.get("PRUMO_REPO") else []
+    return list(dict.fromkeys([*raizes, REPO.parent / "prumo", Path.home() / "prumo"]))
+
+
+def achar_catalogo(prumo=None, buscar=True):
+    """{"produtos": {id: produto} | None, "de": de onde veio, "erro": str | None}.
+
+    Lê pela mesma função do contexto do n8n (origin/main quando a raiz é um repo git, disco senão),
+    para o PC e a Mel conferirem contra o mesmo catálogo mesmo com o ~/prumo da Mel atrasado."""
+    tentados = []
+    for raiz in raizes_da_prumo(prumo):
+        try:
+            texto, lido_de = prumo_contexto.ler_da_prumo(raiz, CATALOGO, buscar)
+        except OSError:
+            tentados.append(str(raiz))
+            continue
+        try:
+            produtos = json.loads(texto).get("produtos", [])
+            return {"produtos": {x["id"]: x for x in produtos}, "de": f"{raiz} ({lido_de})", "erro": None}
+        except (ValueError, AttributeError, KeyError, TypeError) as e:
+            return {"produtos": None, "de": str(raiz), "erro": f"catálogo da Prumo ilegível em {raiz}/{CATALOGO}: {e}"}
+    return {"produtos": None, "de": None,
+            "erro": f"catálogo da Prumo não encontrado (procurei {CATALOGO} em {', '.join(tentados)});"
+                    " passe --prumo <repo prumo> ou PRUMO_REPO. Sem ele não há como saber se o produto pode ir ao funil."}
+
+
+def problemas_do_catalogo(o, catalogo):
+    """A trava do portfólio: a oferta só existe para um produto que a Prumo pôs no funil."""
+    cid = o.get("catalogo_prumo")
+    if not isinstance(cid, str) or not cid.strip():
+        return ["catalogo_prumo: obrigatório (id do produto em prumo/06-qualidade/catalogo.json)"]
+    if TODO in cid:
+        return []  # já sai na lista de TODO
+    if catalogo["erro"]:
+        return [catalogo["erro"]]
+    produto = catalogo["produtos"].get(cid)
+    if produto is None:
+        return [f"catalogo_prumo {cid!r} não está em prumo/{CATALOGO} (qualidade.py --novo-produto)"]
+    if "receita" not in produto or "funil" not in produto:
+        return [f"catalogo_prumo {cid!r}: o produto não tem `receita` e `funil` no catálogo lido ({catalogo['de']});"
+                " rode a versão nova do catálogo da Prumo (a main de 28/10/2026 em diante)"]
+    p = []
+    if produto["receita"] not in prumo_contexto.RECEITAS:
+        p.append(f"catalogo_prumo {cid!r}: receita {produto['receita']!r} fora de {', '.join(prumo_contexto.RECEITAS)}")
+    elif produto["receita"] == "incubacao":
+        p.append(f"catalogo_prumo {cid!r} está em incubação na Prumo: não vira oferta, caçador, convite nem proposta")
+    if produto["funil"] is not True:
+        p.append(f"catalogo_prumo {cid!r} tem funil false na Prumo: não pode ir ao funil de vendas")
+    return p
+
+
+def problemas_da_oferta(cfg, id_, catalogo=None):
+    """O que impede publicar esta oferta. Lista vazia = pronta para os passos na Mel.
+    `catalogo` vem de achar_catalogo(); sem ele, procura pelo caminho padrão."""
     o = cfg["ofertas"][id_]
     p = []
     todo = [c for c, t in _textos(o) if TODO in t and not c.startswith("_")]
@@ -240,11 +310,7 @@ def problemas_da_oferta(cfg, id_):
     if isinstance(o.get("fluxo"), str) and TODO in o["fluxo"] and TODO not in str(o.get("rotulo")) + str(o.get("plural")):
         p.append(f"fluxo/clique ainda com TODO; sugestão: \"PRUMO · {o['rotulo']} — Caçador de {o['plural']}\" e"
                  f" \"PRUMO · {o['rotulo']} — Clique em Enviar convite\" (depois de publicado, nunca renomeie)")
-    catalogo = REPO.parent / "prumo/06-qualidade/catalogo.json"
-    if o.get("catalogo_prumo") and catalogo.exists():
-        ids_catalogo = {x.get("id") for x in json.loads(catalogo.read_text(encoding="utf-8")).get("produtos", [])}
-        if o["catalogo_prumo"] not in ids_catalogo:
-            p.append(f"catalogo_prumo {o['catalogo_prumo']!r} não está em prumo/06-qualidade/catalogo.json (qualidade.py --novo-produto)")
+    p += problemas_do_catalogo(o, catalogo if catalogo is not None else achar_catalogo())
     return list(dict.fromkeys(p))
 
 
@@ -374,7 +440,7 @@ def passos(ids_alvo):
     ]
 
 
-def conferir(arquivo, ids_alvo, rodar_testes=True):
+def conferir(arquivo, ids_alvo, rodar_testes=True, prumo=None):
     cfg = registro.carregar(arquivo)
     ids_alvo = ids_alvo or registro.ids(cfg)
     for k in ids_alvo:
@@ -382,8 +448,10 @@ def conferir(arquivo, ids_alvo, rodar_testes=True):
             raise SystemExit(f"oferta {k!r} não está em {arquivo}.")
     bloqueios = 0
     print(f"== registro: {arquivo} ({', '.join(cfg['ofertas'])})")
+    catalogo = achar_catalogo(prumo)
+    print(f"== catálogo da Prumo: {catalogo['de'] or 'não encontrado'}")
     for k in ids_alvo:
-        p = problemas_da_oferta(cfg, k)
+        p = problemas_da_oferta(cfg, k, catalogo)
         bloqueios += len(p)
         print(f"-- {k}: " + ("ok" if not p else f"{len(p)} problema(s)"))
         for x in p:
@@ -453,15 +521,16 @@ def main(argv=None):
     a.add_argument("--conferir", action="store_true", help="lint, código gerado, testes e o que falta")
     a.add_argument("--arquivo", default=str(registro.ARQUIVO), help="registro (padrão: prumo-ofertas.json ao lado)")
     a.add_argument("--sem-testes", action="store_true")
-    for campo in ("rotulo", "plural", "aba", "sigla", "empresa"):
+    a.add_argument("--prumo", help="repo da Prumo com 06-qualidade/catalogo.json (padrão: PRUMO_REPO, ../prumo, ~/prumo)")
+    for campo in ("rotulo", "plural", "aba", "sigla", "empresa", "catalogo-prumo"):
         a.add_argument(f"--{campo}")
     args = a.parse_args(argv)
     if args.conferir:
-        return conferir(args.arquivo, args.id, rodar_testes=not args.sem_testes)
+        return conferir(args.arquivo, args.id, rodar_testes=not args.sem_testes, prumo=args.prumo)
     if len(args.id) != 1 or not args.como:
         a.error("use `nova-oferta.py <id> --como <modelo>` ou `nova-oferta.py --conferir [<id>]`")
     bloco = criar(args.arquivo, args.id[0], args.como, rotulo=args.rotulo, plural=args.plural, aba=args.aba,
-                  sigla=args.sigla, empresa=args.empresa)
+                  sigla=args.sigla, empresa=args.empresa, catalogo_prumo=args.catalogo_prumo)
     todo = [c for c, t in _textos(bloco) if TODO in t and not c.startswith("_")]
     print(f"ofertas.{args.id[0]} criada em {args.arquivo} (modelo {args.como}; webhook_id {bloco['webhook_id']}).")
     print(f"{len(todo)} campo(s) com TODO: {', '.join(todo)}" if todo else "Sem TODO.")

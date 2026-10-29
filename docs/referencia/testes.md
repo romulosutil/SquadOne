@@ -330,9 +330,13 @@ recusas, R$, gravação atômica, nunca levanta) e o primeiro script que a usa,
 
 Registro único das ofertas próprias (28/10/2026, rodam no PC e no Dell):
 `python3 deploy/dell/claude-ops/ofertas.test.py` (o registro lê o `prumo-ofertas.json` ao lado,
-falta do JSON é erro, e as listas que ficam escritas fora de `claude-ops` batem com ele) e
+falta do JSON é erro, e as listas que ficam escritas fora de `claude-ops` batem com ele),
 `python3 deploy/dell/claude-ops/nova-oferta.test.py` (o esqueleto e o `--conferir` numa cópia
-temporária; o JSON real não muda).
+temporária; o JSON real não muda; a trava do portfólio contra um catálogo sintético da Prumo via
+`--prumo`: incubação, `funil` false, id ausente, catálogo ausente e oferta sem `catalogo_prumo` falham) e
+`python3 deploy/dell/claude-ops/prumo_contexto.test.py` (o contexto do n8n lê a `origin/main` de um
+remoto git temporário sem tocar a árvore divergente, cai no disco sem git, e `comercial` tolera catálogo
+antigo).
 (aviso aceito pelo dell-status, a fila ausente sem derrubar a rodada; desde 19/10/2026 sem o
 "jeito antigo": sem a lib o aviso não é gravado e vai ao stderr; na limpeza também o texto do aviso do
 acervo inteiro dentro de 4000 caracteres e o estado "avisado" só quando o aviso ficou na fila; o

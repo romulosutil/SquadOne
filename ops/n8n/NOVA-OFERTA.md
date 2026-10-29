@@ -23,14 +23,26 @@ nome, oferta ou fluxo. A ordem para um produto entrar no portfólio (`prumo/00-c
 1. **Ficha** do produto preenchida.
 2. **Titularidade** confirmada (quem é o autor, cessão por escrito quando não for o Rômulo).
 3. **Id no catálogo em incubação**: `qualidade.py --novo-produto` em `prumo/06-qualidade/catalogo.json`.
-4. Só então **proposta**, site ou prospecção.
+4. **Sai da incubação na Prumo**: o produto ganha `funil: true` e `receita` diferente de `incubacao`
+   (`isca`, `porta`, `projeto`, `recorrente` ou `assinatura`). Decisão de 28/10/2026: produto em incubação,
+   sem preço, cobrança real ou cliente não vira oferta, caçador, convite nem proposta.
+5. Só então **proposta**, site ou prospecção.
+
+**Trava no código.** `catalogo_prumo` é obrigatório em toda oferta, e `nova-oferta.py --conferir` recusa
+produto ausente do catálogo, com `funil` false, com receita `incubacao` ou sem os dois campos (catálogo
+antigo: atualize a main da Prumo). O catálogo vem de `--prumo <dir>`, senão de `PRUMO_REPO`, senão de
+`../prumo` ao lado do repo, senão de `~/prumo`; não achar é problema, nunca pula. Quando a pasta é um
+repositório git, lê a `origin/main` (`git fetch` + `git show`, sem tocar a árvore de trabalho; a mesma
+função do contexto do n8n, `prumo_contexto.ler_da_prumo`), para o PC e a Mel conferirem a mesma coisa
+mesmo com o `~/prumo` da Mel atrasado. O contexto do n8n também leva `comercial` (`receita` e `funil`
+por produto) e a regra de que produto fora do funil não é oferecido a lead.
 
 O id do catálogo da Prumo **não é** o id do SquadOne: o CRM de estamparia é `crm` lá, `estampa` aqui,
 e `crm-estamparia` em `src/operations/jornada.ts:212`. Registre os dois.
 
-Situação dos candidatos em 28/10/2026: Prisma PDV tem autoria de outra pessoa e cessão a confirmar;
-SGP Escolar é protótipo sem backend nem Git; Follow-up de cobrança e IVA Dual são só ideia, e o IVA
-Dual é área regulada. Prospectar sem a ficha mínima faz a abordagem prometer o que não existe.
+Situação dos candidatos em 28/10/2026 (catálogo da Prumo): Prisma PDV é o app Android, com cobrança, Pix
+e API simulados e sem NFC-e, `funil: false`; SGP Escolar e TaxShield (o antigo IVA Dual, área regulada)
+estão em incubação; Follow-up de cobrança é só ideia. Nenhum deles vira oferta hoje. Prospectar sem a ficha mínima faz a abordagem prometer o que não existe.
 
 ### Decisões que o molde preserva (não negociar no código)
 
@@ -72,9 +84,10 @@ Dual é área regulada. Prospectar sem a ficha mínima faz a abordagem prometer 
 
 ```bash
 cd deploy/dell/claude-ops
-python3 nova-oferta.py pdv --como iris --rotulo "Prisma PDV" --plural lojas --aba Lojas   # cria o bloco
-# preencha os "TODO: ..." do bloco (segmento, perfil, nichos, cidades, mensagem, conversa...)
-python3 nova-oferta.py --conferir pdv                                                      # diz o que falta
+# exemplo fictício: "otica" não é produto da Prumo
+python3 nova-oferta.py otica --como iris --rotulo "Ótica" --plural óticas --aba Óticas --catalogo-prumo otica   # cria o bloco
+# preencha os "TODO: ..." do bloco (segmento, perfil, nichos, cidades, mensagem, conversa, catalogo_prumo...)
+python3 nova-oferta.py --conferir otica [--prumo ../prumo]                                                     # diz o que falta
 ```
 
 O primeiro copia a estrutura da oferta-modelo para `ofertas.<id>` com os nomes derivados (`convite-<id>`,
@@ -243,35 +256,36 @@ Rode no PC: `python3 nova-oferta.py --conferir <id>`, `npx vue-tsc --noEmit`, `n
 
 O JSON não aceita comentário; o arquivo usa chaves `_campo` como nota. Os campos sem marca **já
 existem** e são lidos por `prumo-ofertas.py`/`prumo-ofertas-triar.js`/`ofertas.py` (e pelo gerador TS).
-Os marcados **PROPOSTO** ainda não existem nem são lidos por ninguém.
+Os marcados **PROPOSTO** ainda não existem nem são lidos por ninguém. O exemplo é fictício (`otica`).
 
 ```jsonc
-"pdv": {
+"otica": {
   // ---- identidade
-  "rotulo": "Prisma PDV",              // nome longo: Ficha, aviso do caçador, prefixo do Motivo em Descartados
-  "sigla": "PDV",                       // rótulo curto único (gerador TS); único entre as ofertas
-  "catalogo_prumo": "pdv",              // PROPOSTO: id em prumo/06-qualidade/catalogo.json (pode diferir: estampa ↔ crm)
+  "rotulo": "Ótica",                    // nome longo: Ficha, aviso do caçador, prefixo do Motivo em Descartados
+  "sigla": "Ótica",                     // rótulo curto único (gerador TS); único entre as ofertas
+  "catalogo_prumo": "otica",            // OBRIGATÓRIO: id em prumo/06-qualidade/catalogo.json (pode diferir: estampa ↔ crm),
+                                        // com funil true e receita fora de "incubacao" (nova-oferta.py --conferir recusa)
   "tipo": "propria",                    // só "propria": caminho curto sem Raio-X/Mapa/cardápio
-  "sala": "prumo--pdv",                 // sala do Escritório ("prumo--<slug>", única); criar no roster à mão
-  "cacador_rotulo": "Encontrado pelo Caçador de lojas",  // o "de onde veio" da Ficha
-  "fonte": "PRUMO — Lojas (Prisma PDV)",  // nome da fonte na Central
-  "link_retrato": "planilhaPdv",        // chave do link da aba no crm.json ("planilha<Nome>", única)
+  "sala": "prumo--otica",               // sala do Escritório ("prumo--<slug>", única); criar no roster à mão
+  "cacador_rotulo": "Encontrado pelo Caçador de óticas",  // o "de onde veio" da Ficha
+  "fonte": "PRUMO — Óticas (Ótica)",    // nome da fonte na Central
+  "link_retrato": "planilhaOtica",      // chave do link da aba no crm.json ("planilha<Nome>", única)
 
   // ---- planilha e n8n
-  "aba": "Lojas",                       // aba na planilha do PRUMO; criada por prumo-ofertas.py; única
-  "fluxo": "PRUMO · Prisma PDV — Caçador de lojas",          // nome do caçador; achado e trocado POR NOME; começa com "PRUMO"
-  "clique": "PRUMO · Prisma PDV — Clique em Enviar convite", // fluxo do clique; só abre o wa.me
-  "convite": "convite-pdv",             // path do webhook (GET /webhook/convite-pdv?id=<ID>); sempre "convite-<id>"
+  "aba": "Óticas",                      // aba na planilha do PRUMO; criada por prumo-ofertas.py; única
+  "fluxo": "PRUMO · Ótica — Caçador de óticas",          // nome do caçador; achado e trocado POR NOME; começa com "PRUMO"
+  "clique": "PRUMO · Ótica — Clique em Enviar convite",  // fluxo do clique; só abre o wa.me
+  "convite": "convite-otica",           // path do webhook (GET /webhook/convite-otica?id=<ID>); sempre "convite-<id>"
   "webhook_id": "<uuid4 novo>",         // id fixo do nó Webhook; único entre os fluxos (dois iguais colidem)
   "teto_por_rodada": 15,                // máximo gravado em Revisar por rodada; o resto fica para a próxima
 
   // ---- quem entra (regex sem acento e sem caixa, contra nome + tipo do Google + texto do site)
-  "empresa": "loja",                    // palavra do convite quando o nome da empresa é ilegível ({NOME})
-  "plural": "lojas",                    // nos motivos "Fora do segmento (nada de <plural>…)" e no aviso
-  "segmento": "loja|varejo|…",          // tem de casar no nome/tipo ou no site, senão "Fora do segmento"
+  "empresa": "ótica",                   // palavra do convite quando o nome da empresa é ilegível ({NOME})
+  "plural": "óticas",                   // nos motivos "Fora do segmento (nada de <plural>…)" e no aviso
+  "segmento": "otica|optica|oculos|…",  // tem de casar no nome/tipo ou no site, senão "Fora do segmento"
   "fora": "atacadista|distribuidora|…", // casou no nome/tipo: descarte "Fora do perfil (<tipo>)"
-  "perfil": "caixa|pdv|balc[aã]o|…",    // obrigatório no nome, tipo ou site; sem site: "perfil não confirmado"
-  "perfil_motivo": "Fora do perfil do Prisma PDV (…)",
+  "perfil": "exame de vista|optometr|…", // obrigatório no nome, tipo ou site; sem site: "perfil não confirmado"
+  "perfil_motivo": "Fora do perfil da Ótica (…)",
   "fora_sem_perfil": "…",               // casou e não tem perfil: descarte com o motivo abaixo
   "fora_sem_perfil_motivo": "Fora do perfil (…)",
   "solo": "",                           // opcional: profissional sozinho → entra marcado, prioridade menor
@@ -280,7 +294,7 @@ Os marcados **PROPOSTO** ainda não existem nem são lidos por ninguém.
   "fora_entidade_motivo": "",           // opcional: motivo desse descarte (sem ele, um texto genérico)
   "site_diretorio": "",                 // opcional: site de diretório; o WhatsApp dele não é da empresa
   "site_diretorio_motivo": "",          // opcional: motivo desse descarte
-  "sinais": [["um caixa", "…"], ["NFC-e", "nfc-?e"]],  // [rótulo, regex]: coluna Sinais e Prioridade
+  "sinais": [["exame de vista", "…"], ["lentes de contato", "lentes? de contato"]],  // [rótulo, regex]: coluna Sinais e Prioridade
   "nichos": ["…"],                      // a frase curta que rende mais vem primeiro (busca = nicho × cidade, menos usada antes)
   "cidades": ["Vitória ES", "…"],
 
@@ -295,7 +309,7 @@ Os marcados **PROPOSTO** ainda não existem nem são lidos por ninguém.
   },
   "followup": "…",                      // PROPOSTO: hoje FOLLOWUP_NOVO em followup-experimento.ts
   "pergunta_depois_do_link": "…",       // PROPOSTO: hoje PERGUNTA_DEPOIS_DO_LINK em proxima-venda.ts
-  "receita": null,                      // PROPOSTO: null = sem preço aprovado (como estampa)
+  // receita e funil NÃO moram aqui: são do produto no catálogo da Prumo (catalogo_prumo acima)
   "ativo": false                        // PROPOSTO: só documenta a decisão; quem liga é --ativar, nunca o gerador
 }
 ```
@@ -340,7 +354,8 @@ Hermes) ficaram com a lista escrita e um teste de paridade (`ofertas.test.py`): 
 lugares de instalação custava mais que uma linha por oferta.
 
 **Comando: feito.** `nova-oferta.py` (seção 2.0). Não confere ainda a vaga de sala no roster (fica no
-servidor da Mel) nem `catalogo_prumo` quando o campo não existe.
+servidor da Mel). `catalogo_prumo` é obrigatório desde 28/10/2026 e conferido contra o catálogo da Prumo
+(seção 1, "Trava no código").
 
 **Ordem em lotes** (cada um com `npm test` verde; do lado Python, a parte de 1 e os lotes 3, 5 e 6 foram
 feitos em 28/10/2026):

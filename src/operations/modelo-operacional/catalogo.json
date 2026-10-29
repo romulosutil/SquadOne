@@ -631,32 +631,32 @@
       "id": "pdv",
       "nome": "Prisma PDV",
       "familia": "Incubação / Portfólio SaaS",
-      "publico": "Loja com uma estação de caixa Windows; segmento a confirmar.",
-      "problema": "Venda, estoque e caixa local.",
+      "publico": "Pequeno varejo de bairro com 1 a 3 pessoas no balcão: mercadinho, padaria, banca, loja de bairro.",
+      "problema": "Frente de caixa no celular Android (câmera como leitor, dinheiro, Pix ou cartão, sem internet), sem computador nem leitor.",
       "entregaveis": [
-        "Candidata técnica local com produtos, estoque, venda, caixa e comprovante não fiscal",
-        "Backup local SQLite descrito"
+        "Protótipo do app Android (github.com/romulosutil/prisma-pdv-app, commits só do Rômulo; APK de teste 0.1.3)",
+        "Cobrança, Pix e API simulados; sem NFC-e; dados ainda no aparelho"
       ],
       "exclusoes": [
         "Não apresentar como produto pronto",
-        "Não prometer emissão fiscal, compliance ou integração não construída"
+        "Não prometer emissão de nota (sem NFC-e), cobrança real ou integração não construída"
       ],
       "dependencias": [
-        "Titularidade/cessão",
-        "Piloto em loja, leitor e impressora",
-        "Liberação Windows e modelo comercial"
+        "Cobrança e pagamentos reais (Play Billing ou gateway) e API publicada",
+        "Piloto com 3 lojas reais e evidências de qualidade",
+        "Cessão à empresa dona, marca e revisão jurídica dos textos de cobrança"
       ],
-      "condicaoComercial": "Sem condição comercial aprovada para venda padronizada. Não gerar preço, assinatura ou cobrança.",
+      "condicaoComercial": "Planos planejados de R$ 19,90, 34,90 e 49,90 por mês, sem cobrança real. Fora do funil (funil false no catálogo da Prumo, 28/10/2026): não vira oferta, convite, proposta nem cobrança.",
       "prazo": "Não aprovado.",
       "suporte": "Não definido; precisa fazer parte da ficha antes de promessa.",
-      "criterioAceite": "Completar ficha, titularidade, cadastro de incubação e avaliação de qualidade; passar pelos gates do produto antes de vender como pronto.",
+      "criterioAceite": "Cobrança e pagamentos reais, API publicada, piloto com lojas reais e avaliação de qualidade; só então a Prumo pode pôr no funil.",
       "estado": "bloqueada",
       "decisoesPendentes": [
-        "Titularidade/cessão",
-        "Piloto em loja, leitor e impressora",
-        "Liberação Windows e modelo comercial"
+        "Cobrança e pagamentos reais e API publicada",
+        "Piloto com 3 lojas reais",
+        "Cessão, marca e revisão jurídica da cobrança"
       ],
-      "fonte": "produtos; qualidade"
+      "fonte": "produtos (ficha do Prisma PDV, 28/10/2026); qualidade"
     },
     {
       "id": "sgp",
@@ -719,34 +719,34 @@
       "fonte": "produtos; qualidade"
     },
     {
-      "id": "iva-dual",
-      "nome": "Conformidade operacional e emissão fiscal no IVA Dual",
+      "id": "taxshield",
+      "nome": "TaxShield",
       "familia": "Incubação / Portfólio SaaS",
-      "publico": "Público e contexto fiscal a confirmar.",
-      "problema": "Problema e responsabilidade de software ainda precisam ser delimitados.",
+      "publico": "Empresa de porte médio que fatura e expede (analista fiscal de atacadista); público a confirmar.",
+      "problema": "Rejeições de nota e cadastro na transição do IBS e da CBS. Área regulada; não é contabilidade nem emite nota.",
       "entregaveis": [
-        "Somente ideia no portfólio; não é contabilidade"
+        "Protótipo de telas em taxshield/ (HTML estático, dados fictícios; sem motor de regras, backend nem Git)"
       ],
       "exclusoes": [
         "Não apresentar como produto pronto",
-        "Não prometer emissão fiscal, compliance ou integração não construída"
+        "Não prometer emissão fiscal, conformidade, parecer ou integração não construída"
       ],
       "dependencias": [
-        "Ficha e público",
+        "Repositório versionado e titularidade",
         "Especialista responsável pelas regras e limites",
-        "Produto, conformidade, preço e suporte"
+        "Motor de regras, base normativa, preço e suporte"
       ],
-      "condicaoComercial": "Sem condição comercial aprovada para venda padronizada. Não gerar preço, assinatura ou cobrança.",
+      "condicaoComercial": "Em incubação no catálogo da Prumo (28/10/2026): sem preço, cobrança nem cliente. Não vira oferta, convite, proposta nem cobrança.",
       "prazo": "Não aprovado.",
       "suporte": "Não definido; precisa fazer parte da ficha antes de promessa.",
-      "criterioAceite": "Completar ficha, titularidade, cadastro de incubação e avaliação de qualidade; passar pelos gates do produto antes de vender como pronto.",
+      "criterioAceite": "Completar ficha, titularidade e avaliação de qualidade; sair da incubação na Prumo antes de qualquer promessa.",
       "estado": "bloqueada",
       "decisoesPendentes": [
-        "Ficha e público",
+        "Repositório versionado e titularidade",
         "Especialista responsável pelas regras e limites",
-        "Produto, conformidade, preço e suporte"
+        "Motor de regras, base normativa, preço e suporte"
       ],
-      "fonte": "produtos; qualidade"
+      "fonte": "produtos (ficha do TaxShield, 28/10/2026); qualidade"
     }
   ]
 }

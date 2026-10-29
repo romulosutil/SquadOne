@@ -41,10 +41,10 @@ A disponibilidade humana qualitativa foi confirmada pelo Rômulo em 25/10. Antes
 | Manutenção da Fonte | pronta | R$ 190/mês, opcional, em qualquer modalidade. Começa depois dos 30 dias de ajustes; cancela quando quiser. |
 | Íris | pode-orcar | Tabela marginal por ficha ativa/mês: primeiras 15 a R$39 cada; da 16ª à 40ª a R$32 por ficha adicional; acima da 40ª a R$25 por ficha adicional. Faixas anteriores não são recalculadas. Quantidade e total exigem confirmação. Jornada registra cadastro grátis e sete dias de teste. |
 | CRM de estamparia | pode-orcar | Não existe preço de assinatura aprovado nesta fonte. Nenhum preço de serviços ou de outro produto pode ser aplicado por padrão. Elaborar orçamento após condição humana explícita. |
-| Prisma PDV | bloqueada | Sem condição comercial aprovada para venda padronizada. Não gerar preço, assinatura ou cobrança. |
+| Prisma PDV | bloqueada | Planos planejados de R$ 19,90, 34,90 e 49,90 por mês, sem cobrança real. Fora do funil (funil false no catálogo da Prumo, 28/10/2026): não vira oferta, convite, proposta nem cobrança. |
 | SGP Escolar | bloqueada | Sem condição comercial aprovada para venda padronizada. Não gerar preço, assinatura ou cobrança. |
 | Follow-up de cobrança no WhatsApp | bloqueada | Sem condição comercial aprovada para venda padronizada. Não gerar preço, assinatura ou cobrança. |
-| Conformidade operacional e emissão fiscal no IVA Dual | bloqueada | Sem condição comercial aprovada para venda padronizada. Não gerar preço, assinatura ou cobrança. |
+| TaxShield | bloqueada | Em incubação no catálogo da Prumo (28/10/2026): sem preço, cobrança nem cliente. Não vira oferta, convite, proposta nem cobrança. |
 
 ## Fichas por oferta
 
@@ -359,18 +359,18 @@ A disponibilidade humana qualitativa foi confirmada pelo Rômulo em 25/10. Antes
 | Campo | Regra de operação |
 | --- | --- |
 | Família | Incubação / Portfólio SaaS |
-| Público | Loja com uma estação de caixa Windows; segmento a confirmar. |
-| Problema atendido | Venda, estoque e caixa local. |
-| Entregáveis | Candidata técnica local com produtos, estoque, venda, caixa e comprovante não fiscal; Backup local SQLite descrito |
-| Exclusões | Não apresentar como produto pronto; Não prometer emissão fiscal, compliance ou integração não construída |
-| Pré-requisitos | Titularidade/cessão; Piloto em loja, leitor e impressora; Liberação Windows e modelo comercial |
-| Preço e condição | Sem condição comercial aprovada para venda padronizada. Não gerar preço, assinatura ou cobrança. |
+| Público | Pequeno varejo de bairro com 1 a 3 pessoas no balcão: mercadinho, padaria, banca, loja de bairro. |
+| Problema atendido | Frente de caixa no celular Android (câmera como leitor, dinheiro, Pix ou cartão, sem internet), sem computador nem leitor. |
+| Entregáveis | Protótipo do app Android (github.com/romulosutil/prisma-pdv-app, commits só do Rômulo; APK de teste 0.1.3); Cobrança, Pix e API simulados; sem NFC-e; dados ainda no aparelho |
+| Exclusões | Não apresentar como produto pronto; Não prometer emissão de nota (sem NFC-e), cobrança real ou integração não construída |
+| Pré-requisitos | Cobrança e pagamentos reais (Play Billing ou gateway) e API publicada; Piloto com 3 lojas reais e evidências de qualidade; Cessão à empresa dona, marca e revisão jurídica dos textos de cobrança |
+| Preço e condição | Planos planejados de R$ 19,90, 34,90 e 49,90 por mês, sem cobrança real. Fora do funil (funil false no catálogo da Prumo, 28/10/2026): não vira oferta, convite, proposta nem cobrança. |
 | Prazo | Não aprovado. |
 | Suporte | Não definido; precisa fazer parte da ficha antes de promessa. |
-| Pronto e aceite | Completar ficha, titularidade, cadastro de incubação e avaliação de qualidade; passar pelos gates do produto antes de vender como pronto. |
+| Pronto e aceite | Cobrança e pagamentos reais, API publicada, piloto com lojas reais e avaliação de qualidade; só então a Prumo pode pôr no funil. |
 | Estado comercial | bloqueada |
-| Definir na oportunidade | Titularidade/cessão; Piloto em loja, leitor e impressora; Liberação Windows e modelo comercial |
-| Fontes | produtos; qualidade |
+| Definir na oportunidade | Cobrança e pagamentos reais e API publicada; Piloto com 3 lojas reais; Cessão, marca e revisão jurídica da cobrança |
+| Fontes | produtos (ficha do Prisma PDV, 28/10/2026); qualidade |
 
 ### SGP Escolar (`sgp`)
 
@@ -408,23 +408,23 @@ A disponibilidade humana qualitativa foi confirmada pelo Rômulo em 25/10. Antes
 | Definir na oportunidade | Ficha de produto e público; Escopo, titularidade, preço e suporte; Produto e piloto |
 | Fontes | produtos; qualidade |
 
-### Conformidade operacional e emissão fiscal no IVA Dual (`iva-dual`)
+### TaxShield (`taxshield`)
 
 | Campo | Regra de operação |
 | --- | --- |
 | Família | Incubação / Portfólio SaaS |
-| Público | Público e contexto fiscal a confirmar. |
-| Problema atendido | Problema e responsabilidade de software ainda precisam ser delimitados. |
-| Entregáveis | Somente ideia no portfólio; não é contabilidade |
-| Exclusões | Não apresentar como produto pronto; Não prometer emissão fiscal, compliance ou integração não construída |
-| Pré-requisitos | Ficha e público; Especialista responsável pelas regras e limites; Produto, conformidade, preço e suporte |
-| Preço e condição | Sem condição comercial aprovada para venda padronizada. Não gerar preço, assinatura ou cobrança. |
+| Público | Empresa de porte médio que fatura e expede (analista fiscal de atacadista); público a confirmar. |
+| Problema atendido | Rejeições de nota e cadastro na transição do IBS e da CBS. Área regulada; não é contabilidade nem emite nota. |
+| Entregáveis | Protótipo de telas em taxshield/ (HTML estático, dados fictícios; sem motor de regras, backend nem Git) |
+| Exclusões | Não apresentar como produto pronto; Não prometer emissão fiscal, conformidade, parecer ou integração não construída |
+| Pré-requisitos | Repositório versionado e titularidade; Especialista responsável pelas regras e limites; Motor de regras, base normativa, preço e suporte |
+| Preço e condição | Em incubação no catálogo da Prumo (28/10/2026): sem preço, cobrança nem cliente. Não vira oferta, convite, proposta nem cobrança. |
 | Prazo | Não aprovado. |
 | Suporte | Não definido; precisa fazer parte da ficha antes de promessa. |
-| Pronto e aceite | Completar ficha, titularidade, cadastro de incubação e avaliação de qualidade; passar pelos gates do produto antes de vender como pronto. |
+| Pronto e aceite | Completar ficha, titularidade e avaliação de qualidade; sair da incubação na Prumo antes de qualquer promessa. |
 | Estado comercial | bloqueada |
-| Definir na oportunidade | Ficha e público; Especialista responsável pelas regras e limites; Produto, conformidade, preço e suporte |
-| Fontes | produtos; qualidade |
+| Definir na oportunidade | Repositório versionado e titularidade; Especialista responsável pelas regras e limites; Motor de regras, base normativa, preço e suporte |
+| Fontes | produtos (ficha do TaxShield, 28/10/2026); qualidade |
 
 ## Regras transversais
 

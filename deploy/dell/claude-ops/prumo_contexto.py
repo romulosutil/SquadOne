@@ -3,21 +3,84 @@ from copy import deepcopy
 import hashlib
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 PREFIXO = "prumo-organizacao-"
 GATILHOS = {"scheduleTrigger", "manualTrigger", "webhook", "executeWorkflowTrigger", "formTrigger", "errorTrigger", "cron"}
 
 
-def carregar(raiz=None):
-    raiz = Path(raiz or os.environ.get("PRUMO_REPO", str(Path.home() / "prumo")))
-    doc = (raiz / "00-contexto/organizacao.md").read_text(encoding="utf-8").replace("\r\n", "\n")
-    catalogo = json.loads((raiz / "06-qualidade/catalogo.json").read_text(encoding="utf-8"))
+RECEITAS = ("isca", "porta", "projeto", "recorrente", "assinatura", "incubacao")
+ORGANIZACAO = "00-contexto/organizacao.md"
+CATALOGO = "06-qualidade/catalogo.json"
+_BUSCADOS = set()
+
+
+def raiz_padrao():
+    return Path(os.environ.get("PRUMO_REPO") or str(Path.home() / "prumo"))
+
+
+def _git(raiz, *args, timeout=20):
+    """Saída do git em bytes, ou None. Sem prompt de senha: falha vira None, nunca trava o timer."""
+    git = shutil.which("git")
+    if not git:
+        return None
+    try:
+        r = subprocess.run([git, "-C", str(raiz), *args], capture_output=True, stdin=subprocess.DEVNULL, timeout=timeout,
+                           env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def ler_da_prumo(raiz, caminho, buscar=True):
+    """(texto, lido_de) de um arquivo da Prumo, preferindo a origin/main à árvore de trabalho.
+
+    29/10/2026: o ~/prumo da Mel estava 46 commits atrás e com 22 arquivos mexidos à mão por outro trabalho;
+    o contexto lia um catálogo velho, e um `git pull` automático ali atropelaria esse trabalho. Então: fetch
+    (só atualiza a referência remota) e `git show origin/main:<caminho>`, a mesma main que `origem` declara,
+    sem tocar a árvore. Fetch que falha usa a origin/main já conhecida; sem repositório ou sem o arquivo
+    nela, cai no disco. Nunca pull, checkout nem reset.
+
+    lido_de = "origin/main@<commit>" (o último commit da main que mexeu NESTE arquivo: commit alheio na Prumo
+    não muda o contexto nem regrava os fluxos do n8n) ou "disco"."""
+    raiz = Path(raiz)
+    if (raiz / ".git").exists():  # só a raiz do repo: subpasta de outro repo não pode ler o git do pai
+        # Um fetch por raiz por processo: o n8n.py carrega o contexto a cada PUT de fluxo do escopo.
+        if buscar and raiz.resolve() not in _BUSCADOS:
+            _BUSCADOS.add(raiz.resolve())
+            _git(raiz, "fetch", "-q", "origin", "main", timeout=60)
+        texto = _git(raiz, "show", f"origin/main:{caminho}")
+        commit = _git(raiz, "log", "-1", "--format=%h", "origin/main", "--", caminho)
+        if texto is not None and commit and commit.strip():
+            return texto.decode("utf-8"), "origin/main@" + commit.decode().strip()
+    return (raiz / caminho).read_text(encoding="utf-8"), "disco"
+
+
+def comercial(catalogo):
+    """{id: {receita, funil}} só dos produtos que já trazem os dois campos (catálogo antigo: fica de fora)."""
+    saida = {}
+    for p in catalogo.get("produtos", []):
+        if p.get("receita") in RECEITAS and isinstance(p.get("funil"), bool):
+            saida[p["id"]] = {"receita": p["receita"], "funil": p["funil"]}
+    return saida
+
+
+def carregar(raiz=None, buscar=True):
+    raiz = Path(raiz) if raiz else raiz_padrao()
+    doc, de_doc = ler_da_prumo(raiz, ORGANIZACAO, buscar)
+    doc = doc.replace("\r\n", "\n")
+    texto, de_cat = ler_da_prumo(raiz, CATALOGO, buscar=False)  # um fetch só por carga
+    catalogo = json.loads(texto)
     return {"versao": 1, "organizacao_sha256": hashlib.sha256(doc.encode()).hexdigest(),
             "origem": "https://github.com/romulosutil/prumo/blob/main/00-contexto/organizacao.md",
+            "lido_de": de_doc if de_doc == de_cat else f"organizacao {de_doc}; catalogo {de_cat}",
             "organizacao": doc, "familias": catalogo["familias"],
             "produtos": {p["id"]: p["nome"] for p in catalogo["produtos"]},
-            "regra": "Profissional exige 100% dos obrigatórios e IQS completo. Pronto no funil não é selo de qualidade. A publicação é validada pelo executor sobre os bytes finais.",
+            "comercial": comercial(catalogo),
+            "regra": "Profissional exige 100% dos obrigatórios e IQS completo. Pronto no funil não é selo de qualidade. A publicação é validada pelo executor sobre os bytes finais."
+                     " Produto com funil false ou receita incubacao (em comercial) não é oferecido a lead: nem convite, nem proposta, nem preço.",
             "indices": {"conformidade": "0–100% dos obrigatórios", "iqs": "Comunicação e Estrutura, 50% cada", "indice_prumo": "0–18, diagnóstico do cliente"}}
 
 

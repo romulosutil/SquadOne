@@ -205,8 +205,9 @@ convite tiveram 0.
 - Webhooks com header auth (credencial "CRM Central", criada pelo próprio `crm.py`).
 - Gerador: `python3 crm.py` (+ ganchos `workflow_comercial`, `workflow_publicacao_crm`).
 - Armadilhas: cada registro dispara releitura completa das 5 abas. Clínicas e Estamparias vão
-  **pelo nome** da aba. A lista de produtos do `VALIDAR_JS` é fixa (`crm.py:164`): oferta nova fora
-  dela volta "Produto inválido" (ver `NOVA-OFERTA.md`).
+  **pelo nome** da aba. A lista de produtos do `VALIDAR_JS` vem do registro
+  (`prumo-ofertas.json` lido por `ofertas.py`, `produtos_do_crm()`; `crm.py validar_js()`): oferta nova entra
+  sozinha ao republicar o 08 · CRM, e oferta que não está no JSON volta "Produto inválido" (ver `NOVA-OFERTA.md`).
 
 ### 3.3 PRUMO: diagnóstico e convites
 
