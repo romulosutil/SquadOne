@@ -10,8 +10,8 @@ Contexto: zero ganho em todas as linhas e meta de 5 propostas e 1 pagante até 0
 
 - **Mensagens às oportunidades abertas:** "Automatize as mensagens e pode disparar." É a decisão que estava aberta em
   `RULES.md` (resposta automática a conversa e ampliação do envio automático) e em `perfis-e-experimentos.md`
-  (envio do lead quente). O `RULES.md` ainda não foi atualizado: ele está modificado no checkout de produção da Mel, e um
-  commit nele trava o `atualizar-central`. Atualizar quando esse trabalho entrar na `main`.
+  (envio do lead quente). O `RULES.md` registra a autorização das retomadas por disparo supervisionado ("Primeiros
+  contatos pelo time"); um envio automático contínuo a conversas ainda exige implementação e registro próprios.
 - **Chip único:** deixou de ser risco. O Rômulo cria números novos na Flu.ke se um levar softban. As travas de ritmo seguem.
 - Aprovados sem mudança: congelar a construção, cadência e fim da proposta, motivo de perda obrigatório, uma oferta
   principal, rotina, novo follow-up, Triagem pela dor e medição.
