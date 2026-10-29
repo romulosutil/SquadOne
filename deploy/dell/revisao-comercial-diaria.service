@@ -1,0 +1,13 @@
+[Unit]
+Description=Revisão comercial do dia anterior: só lê a Central e as conversas e grava o relatório (nunca envia nem reserva)
+After=network-online.target squadone-operations.service
+Wants=squadone-operations.service
+OnFailure=falha-pelo-telegram@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/revisao-comercial-diaria
+TimeoutStartSec=10min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

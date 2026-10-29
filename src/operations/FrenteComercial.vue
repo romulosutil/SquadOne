@@ -5,6 +5,7 @@ import { esquecerAFrente, lerFrente, useFrente } from '../casca/frente'
 import { dataHora, hora } from './crm-formato'
 import { recomendacoesDoTime } from './recomendacoes-do-time'
 import RevisarRodada from './RevisarRodada.vue'
+import { textoDaPausa } from './pausa-do-time'
 const props = defineProps<{ configurar?: boolean }>()
 // O estado e a leitura são compartilhados com a Central (casca/frente.ts): uma leitura por ciclo.
 const { frente, erro } = useFrente()
@@ -69,7 +70,7 @@ async function alterarConfiguracao() {
     <header class="cabecalho-bloco"><div><p class="sobretitulo">Prospecção pelo time</p><h2 id="frente-titulo">Primeiros contatos</h2></div><span class="etiqueta" :data-tom="erro || frente?.estado === 'bloqueado' ? 'atencao' : 'neutro'" role="status">{{ rotulo }}</span></header>
     <p class="texto-2">Site/Encontrado é a frente principal. CRM de estamparia entra com necessidade, impacto e decisor confirmados. Cada escolha explica o motivo comercial e o que ainda falta validar.</p>
     <div v-if="frente?.respostasHoje" class="metricas-venda frente-comercial__metricas" aria-label="Respostas aos disparos de hoje">
-      <div><strong>{{ frente.respostasHoje.enviados }}<small> / {{ frente.limite }}</small></strong><span>disparos confirmados hoje</span></div>
+      <div><strong>{{ frente.respostasHoje.enviados }}<small> / {{ frente.limite }}</small></strong><span>disparos confirmados hoje{{ frente.pausa ? ' · time pausado' : '' }}</span></div>
       <div><strong>{{ frente.respostasHoje.humanas }}</strong><span>respostas humanas</span></div>
       <div><strong>{{ frente.respostasHoje.robos }}</strong><span>somente robôs</span></div>
       <div><strong>{{ frente.respostasHoje.semResposta }}</strong><span>sem resposta</span></div>
@@ -77,11 +78,12 @@ async function alterarConfiguracao() {
     <p v-if="frente?.respostasHoje" class="texto-2 texto-pequeno">Somente destinatários com disparo confirmado hoje, no horário de São Paulo, pelo time ou por você. Cada contato aparece em uma categoria; uma resposta humana substitui a automática.</p>
     <p v-else class="texto-2 texto-pequeno" role="status">Contagem do dia indisponível. Aguardando uma leitura atual de Vendas.</p>
     <section v-if="frente?.pausaAutomatica" class="recado recado--atencao" aria-label="Pausa automática dos primeiros contatos" role="status">
-      <strong>Pausa automática desde {{ dataHora(frente.pausaAutomatica.desde) }}</strong>
+      <strong>{{ frente.pausa ? textoDaPausa(frente.pausa) : `Pausa automática desde ${dataHora(frente.pausaAutomatica.desde)}` }}</strong>
       <p>{{ frente.pausaAutomatica.detalhe }}</p>
       <p v-if="frente.pausaAutomatica.revisarApos">Revisão a partir de {{ dataHora(frente.pausaAutomatica.revisarApos) }}. O prazo não reativa os envios.</p>
       <p>Retomada somente manual, após nova conferência da conta e dos retornos. Respostas às conversas existentes continuam disponíveis.</p>
     </section>
+    <p v-else-if="frente?.pausa" class="recado recado--atencao" role="status"><strong>{{ textoDaPausa(frente.pausa) }}.</strong> Nenhum primeiro contato do time sai até a retomada pela Central.</p>
     <p v-if="erro" class="recado recado--atencao" role="status">{{ erro }}</p>
     <p v-else-if="frente?.cicloParado" class="recado recado--atencao" role="status"><strong>Ativo, mas o ciclo está parado {{ desdeQuando }}.</strong> O time não está avaliando nem enviando; o timer do Dell (frente-comercial.timer) precisa voltar.</p>
     <p v-else-if="frente?.detalhe && !frente.pausaAutomatica" class="frente-comercial__detalhe">{{ frente.detalhe }}</p>

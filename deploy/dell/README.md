@@ -348,6 +348,36 @@ Instalação: o Python vai para `~/.local/bin/frente-comercial`; service/timer v
 `~/.config/systemd/user/`. Validar com `python3 deploy/dell/frente-comercial.test.py`. O timer não
 substitui o observador nem o n8n: os dois precisam estar no ar.
 
+## Rotinas comerciais agendadas (29/10/2026)
+
+**Pausa dos primeiros contatos de 28/10/2026, 19:41.** Ninguém pausou à mão: a Evolution teve um `stream errored out`
+(503) às 19:41:53, a proteção automática da Central (`server/protecao-prospeccao.ts`, conferência a cada 60 s) viu a conta
+reconectando às 19:41:54 e gravou `prospeccao-pausa.json` (`desconectado`) e `ativo: false` no
+`frente-comercial-config.json`; a conta voltou às 19:41:57. A pausa não sai sozinha: só a retomada pela Central
+(`POST /crm/frente/config {"ativo":true}`, com conta `open`, CRM atual e sem pausa nova candidata). Desde 29/10 a config
+guarda `pausadoEm`, `pausadoPor` e `motivoDaPausa`, e a Central diz "Pausado desde <data> por <motivo>"
+(`src/operations/pausa-do-time.ts`).
+
+**`disparo-conversa.timer`** (seg–sex 09:00:30, `Persistent=true`): roda `disparo-conversa --do-dia --enviar`, que lê a
+lista do dia em `~/.local/share/disparo-conversa/listas/AAAA-MM-DD.json` (dia de SP). Sem a lista, não envia nada e sai
+com 0; a lista de um dia nunca vale no outro. A lista entra lá só depois de aprovada (hoje, o "pode disparar" do Rômulo
+sobre as retomadas do PM). O script confere de novo cada lead antes de enviar (conversa nova dele, saída nossa no dia,
+Evolution `open`, observador de pé, 9h–11h) e anota na Ficha. Substitui o timer temporário do `systemd-run` de 28/10, que
+sumia num reinício da Mel. Retomada é conversa: não passa pela trava de ritmo nem pela pausa dos primeiros contatos.
+
+**`revisao-comercial-diaria.timer`** (seg–sex 08:30, `Persistent=true`): roda `revisao-comercial-diaria`, só leitura
+(Central, conversas, `registro.sqlite` em `mode=ro`), e grava `~/.local/share/revisao-comercial-diaria/historico/<dia>.json`
+e `ultima.json`. Nunca envia nem reserva. Antes rodava pelo chat do Codex (automação do PC).
+
+Os dois têm `OnFailure=falha-pelo-telegram@%n.service`: `falha-pelo-telegram` põe um aviso na fila com a origem
+`rotina-comercial` (só Telegram, um por unit e dia), com o nome da unit e o resultado, nunca o log.
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now disparo-conversa.timer revisao-comercial-diaria.timer
+systemctl --user list-timers disparo-conversa.timer revisao-comercial-diaria.timer
+```
+
 ## Monitor do Dell (`dell-status`)
 
 Roda a cada minuto e faz duas coisas: grava

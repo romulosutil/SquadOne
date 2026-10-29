@@ -250,8 +250,9 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           fila de venda (que ganhou o "Liberar"), o time comercial e o Telegram; o trecho do Roteiro não abre o WhatsApp antes do 1º contato;
                           primeiro contato = envio, convite e o reenvio do só-robô (linksDePrimeiroContato), nunca o follow-up de sempre
     trava-de-ritmo.ts     PURO (15/10/2026, depois da restrição de 24 h do WhatsApp por 25 envios em 25 min): primeiro contato
-                          no máximo 1 a cada 5 min, 12 por hora e 30 por dia (19/10/2026 à noite, Fase 0 do diagnóstico de vendas;
-                          foi 100 de 18 a 19/10, antes 4 min, 8/h e a rampa 10/20/30; tetosPorSemana ainda aceita rampa), AVISO_DO_RITMO no recado,
+                          no máximo 1 a cada 30 min, 2 por hora e 15 por dia compartilhados, com dez pendentes por rodada (retomada
+                          de 22–23/10/2026; os números valem só em REGRAS_DO_RITMO, e src/ritmo-nos-documentos.test.ts falha se um
+                          documento citar outros; tetosPorSemana ainda aceita rampa), AVISO_DO_RITMO no recado,
                           pausadoAte; sem "Liberar". Conta o retrato e os toques desta tela (localStorage, 24 h). No servidor,
                           no mesmo dia: follow-up só para quem leu (Site, PRUMO e o 05 · Acompanhamento) e Revisar com o
                           WhatsApp publicado antes do "não confirmado"
@@ -484,4 +485,4 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 
 ## Fase 0 do diagnóstico de vendas (19/10/2026)
 
-Decisão do Rômulo já tomada: teto único de 30 primeiros contatos/dia, somando time comercial, telas e Telegram; manter 5 min e 12/h. As cinco linhas dividem a fila sem cotas e nenhuma fica congelada. Iris e CRM de estamparia estão prontos; os caçadores continuam pausados (AC-11). Plus é rede quente: teste de 20 envios feitos só pelo Rômulo, fora do executor automático. A abertura com um fato verificável do Raio-X virou a variante D do A/B e o follow-up novo o braço B, ambos aprovados pelo Rômulo em 19/10 para teste ("Aprovar os textos para teste"; o envio segue humano). Registro completo em `docs/referencia/perfis-e-experimentos.md`, seção "Fase 0 do diagnóstico de vendas".
+Decisão do Rômulo já tomada, com os números da retomada de 22–23/10/2026 (fonte única: `REGRAS_DO_RITMO` em `src/operations/trava-de-ritmo.ts`): teto único de 15 primeiros contatos/dia compartilhados, somando time comercial, telas e Telegram; 2/h, 30 min entre envios e dez pendentes por rodada. Nenhuma linha fica congelada; até o 1º pagamento o mix do PM divide os 15 (`docs/PRUMO-DECISOES-PM-2026-10-28.md`). Iris e CRM de estamparia estão prontos; os caçadores continuam pausados (AC-11). Plus é rede quente: teste de 20 envios feitos só pelo Rômulo, fora do executor automático. A abertura com um fato verificável do Raio-X virou a variante D do A/B e o follow-up novo o braço B, ambos aprovados pelo Rômulo em 19/10 para teste ("Aprovar os textos para teste"; o envio segue humano). Registro completo em `docs/referencia/perfis-e-experimentos.md`, seção "Fase 0 do diagnóstico de vendas".

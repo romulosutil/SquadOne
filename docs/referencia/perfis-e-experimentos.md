@@ -409,7 +409,7 @@ leads e um executor sem modelo que manda o **primeiro contato** pelo número do 
 único agente do SquadOne que envia mensagem a lead. Respostas e tudo depois do primeiro contato seguem com o Rômulo.
 
 **Por que as regras abaixo.** Ligado na Mel em 18/10/2026 sem elas, ele escolheu 35 estamparias em `revisar` (passava por cima da
-Triagem), tinha ritmo próprio (100/dia, 12/h, 5 min, até 18h) contra o da Central, um dia depois da restrição de 24 h do WhatsApp por
+Triagem), tinha ritmo próprio (<!-- ritmo-histórico -->100/dia, 12/h, 5 min, até 18h<!-- /ritmo-histórico -->) contra o da Central, um dia depois da restrição de 24 h do WhatsApp por
 25 envios em 25 min (15/10), e não anotava nada no CRM; a Próxima venda e o Telegram ofereciam os mesmos leads ao Rômulo. Foi parado e
 o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
 
@@ -417,10 +417,12 @@ o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
 - **Uma regra de ritmo e expediente**: o .py não tem mais ritmo. Cada envio pede `POST /api/operations/crm/frente/reservar { leadId }`;
   a Central decide com `EXPEDIENTE_DE_VENDA` e `REGRAS_DO_RITMO` (`reservaDoTime`), contando o retrato (`marcos.enviado`) e os primeiros do
   dia de todas as superfícies (venda-do-dia.json), confere a mensagem no gate de envio em modo "bloquear" e, podendo, grava o primeiro do
-  dia `por: "time"` no mesmo passo da fila (dois pedidos juntos não passam os dois). As telas e o Telegram passam a contar o do time. Teto único: 30/dia, 12/h, 5 min, sem cota por linha.
-  Os números são os de `REGRAS_DO_RITMO`: 5 min entre primeiros contatos, 12 por hora móvel e 30 por dia de São Paulo, somando
-  time, telas e Telegram (30 desde a noite de 19/10/2026, Fase 0 do diagnóstico de vendas; foi 100 de 18 a 19/10, antes 4 min,
-  8/h e a rampa 10/20/30). São tetos internos, não um limite
+  dia `por: "time"` no mesmo passo da fila (dois pedidos juntos não passam os dois). As telas e o Telegram passam a contar o do time. Teto único: 15/dia, 2/h, 30 min; até o 1º pagamento, o mix do PM divide os 15 por linha.
+  Os números são os de `REGRAS_DO_RITMO` (fonte única; `src/ritmo-nos-documentos.test.ts` falha se este arquivo, o CLAUDE.md ou as
+  decisões do PM citarem outros): 30 min entre primeiros contatos, 2 por hora móvel e 15 por dia de São Paulo compartilhados, somando
+  time, telas e Telegram, e dez pendentes por rodada (`LIMITE_DA_RODADA`: com dez sem resposta humana, a rodada exige revisão antes de
+  novos contatos). Vale desde a retomada a 50% de 22–23/10/2026 (<!-- ritmo-histórico -->foi 30/dia, 12/h e 5 min de 19 a 22/10, na
+  Fase 0; 100/dia de 18 a 19/10; antes 4 min, 8/h e a rampa 10/20/30<!-- /ritmo-histórico -->). São tetos internos, não um limite
   publicado pelo WhatsApp; `pausadoAte` segue sendo o freio depois de um aviso ou restrição.
 - **O registro é o da Central**: antes de enviar, o time faz o clique no link rastreado do n8n (`http://127.0.0.1:5679/webhook/enviar?place_id=`,
   fluxo "04 · Clique no wa_link"), que grava `clique_em` (abrir nunca marca envio: regra `[abrir-nao-envia]` de 18/10/2026); o
@@ -555,9 +557,10 @@ um dos quatro fluxos e abrem com a saudação da Ordem.
 O diagnóstico e o plano completo estão em `docs/PRUMO-DIAGNOSTICO-VENDAS-2026-10-19.md`. Estas são as decisões que vêm
 antes de qualquer código das Fases 1 a 5:
 
-1. **Teto de primeiros contatos: 30 por dia**, somando o time comercial, as telas e o Telegram (`REGRAS_DO_RITMO`).
-   O motivo é o chip único (prospecção, Hermes e alertas) três dias depois da restrição de 24 h. Vale até existir um
-   segundo chip só para prospecção. Os 5 min e os 12 por hora não mudaram.
+1. **Teto de primeiros contatos compartilhado**, somando o time comercial, as telas e o Telegram (`REGRAS_DO_RITMO`).
+   O motivo foi o chip único (prospecção, Hermes e alertas) três dias depois da restrição de 24 h. Hoje valem 15 por dia,
+   2 por hora, 30 min entre primeiros contatos e dez pendentes por rodada, da retomada a 50% de 22–23/10/2026
+   (<!-- ritmo-histórico -->na Fase 0 eram 30 por dia, com 5 min e 12 por hora<!-- /ritmo-histórico -->).
 2. **Nenhuma linha é congelada.** Iris e o CRM de estamparia são produtos prontos; condicionar a prospecção deles a um
    primeiro pagamento os travaria para sempre, porque ainda não há cliente em nenhuma linha. As cinco linhas dividem o
    teto do dia pela ordem da fila de venda, sem cota por linha. Os caçadores de Iris e estamparias seguem pausados (AC-11)
@@ -586,7 +589,7 @@ Entregue e instalado na Mel em 19/10 (relato fase a fase em `docs/PRUMO-IMPLEMEN
   7º dia (o mesmo `DIAS_SEM_RESPOSTA` do CRM, da planilha e da limpeza do demo, que apaga 2 dias depois).
 - **Vendedor do Telegram em silêncio das 22h às 7h** (`silencioDoVendedor`): nada sai nessa janela. Fora dela os avisos que não
   são de primeiro contato (responder, proposta qualificada, combinado, depois do link) saem inclusive fora do expediente de venda e
-  passam antes das revisões; o primeiro contato conserva horário, ritmo e o teto compartilhado de 30 por dia.
+  passam antes das revisões; o primeiro contato conserva horário, ritmo e o teto compartilhado de 15 por dia.
 - **AARRR e Estrela-guia (Fase 4).** `src/operations/aarr.ts` lê só fatos confirmados na aba CRM, desde 19/10 (`valor_proposta`,
   `pagamento_confirmado`, `receita_desfeita`, `origem`, `motivo_perda`, `retencao_3m`, `indicacao_*`), gravados na Ficha por
   `CrmReceita.vue`. Os centavos vêm do catálogo da oferta (Iris por ficha ativa em faixas marginais, `precos-iris.ts`; Estamparia

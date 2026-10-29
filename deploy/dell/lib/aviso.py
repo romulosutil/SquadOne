@@ -64,7 +64,7 @@ ORDEM_DOS_CAMPOS = ("titulo", "texto", "origem", "chave", "prioridade", "expira_
 # Mesma lista do ORIGENS_PELO_TELEGRAM do dell-status.py e do ORIGENS_QUE_EXIGEM_TELEGRAM do server/avisos.ts (eram 5, 2 e 2:
 # um aviso de backup gravado por aqui saía como aviso comum). O aviso.test.py compara com o dell-status e o
 # server/avisos.test.ts lê o texto desta linha: mude as três juntas. O prefixo `n8n:` não entra (ver README do Dell).
-ORIGENS_TELEGRAM_EXCLUSIVO = {"socorro", "dell-status", "backup-dell", "atualizar-central", "silmer-drive-sync", "frente-comercial"}
+ORIGENS_TELEGRAM_EXCLUSIVO = {"socorro", "dell-status", "backup-dell", "atualizar-central", "silmer-drive-sync", "frente-comercial", "rotina-comercial"}
 MAX_CARACTERES = {"titulo": 120, "texto": 4000, "origem": 80, "chave": 200, "link": 500}
 MAX_BYTES_AVISO = 16 * 1024
 # Qualquer "R$", com ou sem número, maiúscula ou não (o mesmo do server/avisos.ts).

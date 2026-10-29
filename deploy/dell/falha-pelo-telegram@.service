@@ -1,0 +1,9 @@
+[Unit]
+Description=Avisa pelo Telegram que %i falhou (origem rotina-comercial; nunca o log, só a unit e o resultado)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/falha-pelo-telegram %i
+TimeoutStartSec=1min
+UMask=0077
+NoNewPrivileges=true

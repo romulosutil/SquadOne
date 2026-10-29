@@ -1,0 +1,14 @@
+[Unit]
+Description=Retomadas aprovadas: envia a lista do dia (~/.local/share/disparo-conversa/listas/AAAA-MM-DD.json); sem lista, nada
+After=network-online.target squadone-operations.service
+Wants=network-online.target
+OnFailure=falha-pelo-telegram@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/disparo-conversa --do-dia --enviar
+# Até 15 retomadas espaçadas de 5 a 6 min, dentro do bloco das 9h às 11h.
+TimeoutStartSec=2h
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

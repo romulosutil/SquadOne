@@ -1,3 +1,5 @@
+import { textoDaPausa, type PausaDoTime } from './pausa-do-time'
+
 /** Leitura do trabalho comercial existente; não agenda nem autoriza ações. */
 export interface TrabalhoDoTime {
   ativo: boolean
@@ -6,6 +8,7 @@ export interface TrabalhoDoTime {
   detalhe?: string
   proximoEnvioEm?: string | null
   rodada?: { bloqueado: boolean; motivo: string } | null
+  pausa?: PausaDoTime | null
   fila: readonly { id: string; empresa: string; estado: string; produto?: string }[]
 }
 
@@ -18,6 +21,8 @@ export interface ProximoPassoDoTime {
   tom: 'neutro' | 'atencao'
   condicao?: string
   cliente?: { id: string; empresa: string }
+  /** "Pausado desde 28/10 19:41 por …", só com o time pausado. */
+  pausa?: string
 }
 
 export function proximoPassoDoTime(frente: TrabalhoDoTime | null, erro = '', agora = Date.now()): ProximoPassoDoTime {
@@ -27,7 +32,11 @@ export function proximoPassoDoTime(frente: TrabalhoDoTime | null, erro = '', ago
   if (erro || !frente || frente.estado === 'sem-sinal' || !Number.isFinite(atualizado) || agora - atualizado > 10 * 60_000) {
     return { ...base, titulo: 'Próximo passo ainda não confirmado', acao: 'Atualizar a leitura do time.', quando: 'Sem informação recente para prever a próxima ação.', depois: 'Confira o estado atualizado antes de intervir.', tom: 'atencao' }
   }
-  if (!frente.ativo || frente.estado === 'pausado') return { ...base, titulo: 'Primeiros contatos pausados', acao: 'Manter a pausa dos primeiros contatos.', quando: 'Sem retomada prevista nesta leitura.', depois: 'Você pode continuar as conversas já iniciadas.' }
+  if (!frente.ativo || frente.estado === 'pausado') {
+    // Sem desde e sem motivo, a pausa de 28/10 ficou uma noite sem ninguém saber por quê (pausa-do-time.ts).
+    const pausa = frente.pausa ? textoDaPausa(frente.pausa) : undefined
+    return { ...base, titulo: 'Primeiros contatos pausados', acao: pausa ? 'Conferir o motivo antes de retomar pela Central.' : 'Manter a pausa dos primeiros contatos.', quando: pausa ?? 'Sem retomada prevista nesta leitura.', depois: 'Você pode continuar as conversas já iniciadas.', ...(pausa ? { pausa, tom: 'atencao' as const } : {}) }
+  }
   if (frente.estado === 'bloqueado' || frente.rodada?.bloqueado || frente.fila.some(c => c.estado === 'incerto')) {
     return { ...base, titulo: 'O time está aguardando uma conferência', acao: (frente.rodada?.bloqueado && frente.rodada.motivo) || frente.detalhe || 'Conferir o envio sem confirmação antes de continuar.', quando: 'Novos contatos aguardam a liberação da condição indicada.', depois: 'O time precisa confirmar a condição de espera antes de iniciar outro contato.', tom: 'atencao' }
   }

@@ -169,7 +169,7 @@ const turnoDoTime = computed(() => passoDoTime.value.titulo)
 function abrirFichaDaMissao(id: string) { painel.value = null; navegar(`/crm?lead=${encodeURIComponent(id)}&detalhe=ficha`) }
 const resumoAgentes = computed(() => ({
   resumo: passoDoTime.value.cliente ? 'Carla · próximo contato' : passoDoTime.value.titulo,
-  detalhe: passoDoTime.value.cliente?.empresa ?? passoDoTime.value.acao,
+  detalhe: passoDoTime.value.cliente?.empresa ?? passoDoTime.value.pausa ?? passoDoTime.value.acao,
 }))
 const resumoDecisoes = computed(() => ({
   resumo: erroDoCrm.value ? 'Sem leitura recente' : !crmLido.value ? 'Lendo as conversas…' : `${totalDecisoes.value} na sua vez`,

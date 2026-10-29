@@ -12,6 +12,7 @@ import { conferirMensagem } from './gate-de-envio.ts';
 import type { MemoriaDaVenda } from './venda-do-dia.ts';
 import type { RodadaComercial } from './rodada-comercial.ts';
 import { lerJustificativaComercial } from '../src/operations/justificativa-comercial.ts';
+import { pausaDoTime } from '../src/operations/pausa-do-time.ts';
 
 /**
  * O time comercial na Central (19/10/2026). O time em si roda no Dell (deploy/dell/frente-comercial.py,
@@ -59,7 +60,9 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
   // O teto é o da trava de ritmo da Central, dividido com as telas e o Telegram: não é uma cota do time.
   const limite = tetoDoDia(agora);
   const respostasHoje = visao?.estado === 'ok' ? respostasDoDia(visao.leads, agora) : null;
-  const metricas = { respostasHoje, pausaAutomatica, intervaloMinutos: REGRAS_DO_RITMO.intervaloMs / 60_000, porHora: REGRAS_DO_RITMO.porHora };
+  // Desde quando e por quê (29/10/2026): a pausa de 28/10 às 19:41 ficou sem autor nem motivo na tela.
+  const pausa = pausaDoTime(config, pausaAutomatica);
+  const metricas = { respostasHoje, pausaAutomatica, pausa, intervaloMinutos: REGRAS_DO_RITMO.intervaloMs / 60_000, porHora: REGRAS_DO_RITMO.porHora };
   const ativo = config.ativo === true && !pausaAutomatica;
   // A última rodada: a hora gravada pelo script (`atualizadoEm`); sem ela legível, o mtime do arquivo de estado.
   const gravada = bruto ? Date.parse(bruto.atualizadoEm) : NaN;

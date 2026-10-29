@@ -243,6 +243,13 @@ contando retrato e todas as superfícies, e a Próxima venda e o vendedor do Tel
 `deploy/dell/frente-comercial.test.py` (Python, roda no Dell: sem ritmo próprio, a reserva recusada não envia, o clique rastreado antes
 do envio e conferido pelo redirecionamento, clique que falha não envia e libera o número, lead tocado pelo Rômulo não é pedido, plano
 antigo com `revisar` não vira fila, a fila parcial não substitui a anterior),
+`deploy/dell/disparo-conversa.test.py` (29/10/2026, Python, roda no Dell: sem a lista do dia em `listas/AAAA-MM-DD.json` nada é lido
+nem enviado e sai com 0, a lista de ontem não vale hoje), `deploy/dell/revisao-comercial-diaria.test.py` (28/10/2026, Python: a revisão
+do dia anterior só lê),
+`src/operations-pausa-do-time.test.ts` (29/10/2026: "Pausado desde <data> por <motivo>" da pausa automática, da manual e da config
+antiga sem autor, sem motivo inventado, e o passo do time na Central),
+`src/ritmo-nos-documentos.test.ts` (29/10/2026: o CLAUDE.md, `perfis-e-experimentos.md` e as decisões do PM citam só os números de
+`REGRAS_DO_RITMO` e `LIMITE_DA_RODADA`; a história fica entre `<!-- ritmo-histórico -->` e `<!-- /ritmo-histórico -->`),
 `server/vendedor.test.ts` (17/10/2026, AC-06: o aviso aberto resolvido na Central fecha na volta seguinte sem botões, o "Enviei" atrasado
 responde "Já estava feito." sem anotar de novo, o aviso expirado vira pulado também para a Central, e a trava de ritmo soma retrato,
 servidor e reforço local contando cada lead uma vez; desde 19/10/2026 o dia do servidor é a única fonte dos primeiros contatos e o vendedor não os guarda mais; o teto de avisos do dia, a gravação que falha sem reenviar e a volta pulada com o dia ilegível ainda NÃO têm teste próprio).

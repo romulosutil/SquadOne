@@ -77,7 +77,9 @@ export function criarProtecaoProspeccao(deps: { dir: string; agora: () => number
     // O cadeado vem primeiro: mesmo se a configuração falhar, as reservas continuam barradas.
     await gravar(path.join(deps.dir, PAUSA), { ...pausa, ativa: true });
     const config = (await lerJson(path.join(deps.dir, CONFIG))) ?? {};
-    await gravar(path.join(deps.dir, CONFIG), { ...config, ativo: false, atualizadoEm: new Date(deps.agora()).toISOString() });
+    const em = new Date(deps.agora()).toISOString();
+    // Quem e por quê ficam na config: a Central diz "pausado desde <data> por <motivo>" (src/operations/pausa-do-time.ts).
+    await gravar(path.join(deps.dir, CONFIG), { ...config, ativo: false, atualizadoEm: em, pausadoEm: em, pausadoPor: 'protecao', motivoDaPausa: pausa.detalhe });
     return pausa;
   }
   async function verificarInterno(visao?: Pick<CrmVisao, 'estado' | 'leads'> | null, sinal?: SinalDaConta) {
@@ -108,7 +110,10 @@ export function criarProtecaoProspeccao(deps: { dir: string; agora: () => number
       }
       const arquivo = path.join(deps.dir, CONFIG);
       const anterior = (await lerJson(arquivo)) ?? {};
-      await gravar(arquivo, { ...anterior, ativo, atualizadoEm: new Date(deps.agora()).toISOString() });
+      const em = new Date(deps.agora()).toISOString();
+      const { pausadoEm: _em, pausadoPor: _por, motivoDaPausa: _motivo, ...semPausa } = anterior;
+      await gravar(arquivo, ativo ? { ...semPausa, ativo, atualizadoEm: em }
+        : { ...semPausa, ativo, atualizadoEm: em, pausadoEm: em, pausadoPor: 'central', motivoDaPausa: 'Pausa manual na Central' });
       // A liberação só ocorre nesta ação explícita e depois de todas as conferências.
       if (ativo) await gravar(path.join(deps.dir, PAUSA), { ativa: false, retomadaEm: new Date(deps.agora()).toISOString(), sinaisRevisadosAte: new Date(deps.agora()).toISOString() });
       return { ativo };

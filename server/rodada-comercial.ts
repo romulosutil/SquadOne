@@ -4,12 +4,15 @@ import { createHash, randomUUID } from 'node:crypto'
 import type { CrmLead } from '../src/operations/types.ts'
 import { chaveDoNumero } from './conversa-do-lead.ts'
 
+/** Primeiros contatos sem resposta humana por rodada (23/10/2026); os documentos citam este número, ver src/ritmo-nos-documentos.test.ts. */
+export const LIMITE_DA_RODADA = 10
+
 interface Reserva { leadId: string; em: number }
 interface Rodada { versao: 1; inicio: string; limite: number; reservas: Record<string, Reserva>; revisoes: { em: string; motivo: string; inicioAnterior: string | null; pendentes: number }[] }
 const valido = (v: unknown): v is Rodada => {
   if (!v || typeof v !== 'object') return false
   const r = v as Rodada
-  return r.versao === 1 && Number.isFinite(Date.parse(r.inicio)) && r.limite === 10 && !!r.reservas && typeof r.reservas === 'object' && !Array.isArray(r.reservas)
+  return r.versao === 1 && Number.isFinite(Date.parse(r.inicio)) && r.limite === LIMITE_DA_RODADA && !!r.reservas && typeof r.reservas === 'object' && !Array.isArray(r.reservas)
     && Object.entries(r.reservas).every(([k,p]) => /^[a-f0-9]{64}$/.test(k) && p && typeof p.leadId === 'string' && Number.isFinite(p.em)) && Array.isArray(r.revisoes)
 }
 const chave = (l: CrmLead) => {
@@ -58,8 +61,8 @@ export function criarRodadaComercial(arquivo: string, agora = Date.now) {
   }
   function resumo(r: Rodada | null, leads: readonly CrmLead[]) {
     const itens = r ? pendentes(r,leads,agora()) : []
-    return { inicio:r?.inicio ?? null, limite:10, pendentes:itens.length, bloqueado:!r || itens.length >= 10,
-      motivo:!r ? 'Inicie a rodada após revisão humana.' : itens.length >= 10 ? 'Dez contatos aguardando resposta humana. Revise a rodada antes de novos contatos.' : 'Vagas disponíveis; expediente e ritmo continuam valendo.',
+    return { inicio:r?.inicio ?? null, limite:LIMITE_DA_RODADA, pendentes:itens.length, bloqueado:!r || itens.length >= LIMITE_DA_RODADA,
+      motivo:!r ? 'Inicie a rodada após revisão humana.' : itens.length >= LIMITE_DA_RODADA ? 'Dez contatos aguardando resposta humana. Revise a rodada antes de novos contatos.' : 'Vagas disponíveis; expediente e ritmo continuam valendo.',
       clientes:itens.map(([,p]) => ({ leadId:p.leadId, reservadoEm:new Date(p.em).toISOString() })), revisoes:r?.revisoes ?? [] }
   }
   return {
@@ -69,7 +72,7 @@ export function criarRodadaComercial(arquivo: string, agora = Date.now) {
       const anterior = await ler()
       if ((anterior?.inicio ?? null) !== inicioAnterior) throw new Error('A rodada mudou. Atualize antes de revisar.')
       const em = new Date(agora()).toISOString()
-      const r: Rodada = { versao:1, inicio:em, limite:10, reservas:{}, revisoes:[...(anterior?.revisoes ?? []),{ em, motivo:motivo.trim(), inicioAnterior, pendentes:anterior ? pendentes(anterior,leads,agora()).length : 0 }] }
+      const r: Rodada = { versao:1, inicio:em, limite:LIMITE_DA_RODADA, reservas:{}, revisoes:[...(anterior?.revisoes ?? []),{ em, motivo:motivo.trim(), inicioAnterior, pendentes:anterior ? pendentes(anterior,leads,agora()).length : 0 }] }
       await gravar(r); return resumo(r,leads)
     }),
     reservar: <R extends { ok: boolean }>(lead: CrmLead, leads: readonly CrmLead[], executar: () => Promise<R>) => serie(async (): Promise<R | { ok:false; motivo:'sem-resposta' | 'rodada-nao-iniciada' | 'ja-reservado'; ate:null }> => {

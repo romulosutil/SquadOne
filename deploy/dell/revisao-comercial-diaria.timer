@@ -1,0 +1,10 @@
+[Unit]
+Description=Revisão comercial diária, seg–sex às 08:30 (antes dependia do chat do Codex)
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08:30:00 America/Sao_Paulo
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

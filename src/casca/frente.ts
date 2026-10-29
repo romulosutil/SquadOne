@@ -9,6 +9,7 @@
  */
 import { ref } from 'vue'
 import type { JustificativaComercial } from '../operations/justificativa-comercial'
+import type { PausaDoTime } from '../operations/pausa-do-time'
 
 export interface AvaliacaoDaFrente { agente: string; nota: number; motivo: string }
 export interface ContatoDaFrente { id: string; empresa: string; produto: string; setor?: string; nota: number; estado: string; motivo: string; avaliacoes: AvaliacaoDaFrente[]; mensagem: string; justificativaComercial?: JustificativaComercial | null }
@@ -29,6 +30,8 @@ export interface FrenteLida {
   intervaloMinutos?: number
   porHora?: number
   pausaAutomatica?: { motivo: string; desde: string; detalhe: string; revisarApos: string | null } | null
+  /** Desde quando e por que o time está pausado (server/frente-comercial.ts); null rodando. */
+  pausa?: PausaDoTime | null
   avaliados?: number
   selecionados?: number
   setores?: SetorDaFrente[]

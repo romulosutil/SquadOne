@@ -119,6 +119,7 @@ export const ORIGENS_QUE_EXIGEM_TELEGRAM: readonly string[] = [
   'atualizar-central',
   'silmer-drive-sync',
   'frente-comercial',
+  'rotina-comercial',
 ];
 
 export function avisoExigeTelegram(a: Pick<Aviso, 'prioridade' | 'origem'>): boolean {

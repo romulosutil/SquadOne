@@ -1,0 +1,12 @@
+[Unit]
+Description=Retomadas aprovadas do dia, seg–sex às 09:00:30 (substitui o timer temporário do systemd-run de 28/10/2026)
+
+[Timer]
+# O script só envia das 9h às 11h de SP: o Persistent recupera a Mel que ligou às 10h, e
+# uma recuperação depois das 11h só registra "fora do expediente". A lista de um dia nunca vale no outro.
+OnCalendar=Mon..Fri *-*-* 09:00:30 America/Sao_Paulo
+Persistent=true
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
