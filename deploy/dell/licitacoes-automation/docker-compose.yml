@@ -82,6 +82,10 @@ services:
       N8N_SSRF_PROTECTION_ENABLED: "true"
       N8N_SSRF_BLOCKED_IP_RANGES: default,100.64.0.0/10
       N8N_SSRF_ALLOWED_HOSTNAMES: collector,luna-workflows
+      # O guarda de posse da aquisição (aquisicao-guarda, 25/10/2026) escuta no gateway do host e os
+      # caçadores o chamam pelo IP: sem esta linha o SSRF recusa ("restricted IP address") e o
+      # 01 · Caçador parou de 26 a 29/10. É o mesmo IP do luna-workflows, já liberado pelo nome.
+      N8N_SSRF_ALLOWED_IP_RANGES: ${N8N_LUNA_HOST_IP:-172.23.0.1}/32
       EXECUTIONS_DATA_PRUNE: "true"
       # Em HORAS (o padrão do n8n é 336 = 14 dias). Até 30/09/2026 estava 14, e o
       # n8n apagava tudo com mais de 14 h: o Caçador (06:00) sumia à noite.
