@@ -66,7 +66,12 @@ fi
 if ! saida_do_merge=$(git merge -q --ff-only origin/main 2>&1); then
   echo "$saida_do_merge" >&2
   # "error: The following untracked working tree files would be overwritten by merge:" e um nome por linha, com tab.
-  nomes=$(printf '%s\n' "$saida_do_merge" | sed -n 's/^[[:space:]]\+\([^[:space:]].*\)$/\1/p' | paste -sd, - || true)
+  lista=$(printf '%s\n' "$saida_do_merge" | sed -n 's/^[[:space:]]\+\([^[:space:]].*\)$/\1/p' || true)
+  # Só os 10 primeiros: a fila recusa texto acima de 4000 caracteres, e em 28/10/2026 uma
+  # colisão de ~200 arquivos virou 43 avisos recusados que nunca chegaram (dell-status, fila-avisos).
+  total=$(printf '%s' "$lista" | grep -c . || true)
+  nomes=$(printf '%s\n' "$lista" | head -n 10 | paste -sd, - || true)
+  [ "${total:-0}" -gt 10 ] && nomes="$nomes e mais $((total - 10))"
   if [ -n "$nomes" ]; then
     DETALHE="O merge parou por arquivos não rastreados que colidem: $nomes"
   else
