@@ -171,6 +171,26 @@ export class RegistroComercialDuravel {
     })
   }
 
+  /**
+   * Recusa explícita (29/10/2026): o n8n respondeu que NÃO gravou (a validação do 08 · CRM recusou
+   * antes do append, ou o webhook nem rodou). Só aí a reserva sai do journal, e o mesmo fato pode ser
+   * tentado de novo. Antes ela virava ambígua e bloqueava todo registro comercial da oportunidade
+   * até alguém conferir a fonte, por um fato que comprovadamente não existe. Só a reserva ainda
+   * `pendente` sai: ambígua, com ACK ou projetada não se apaga por uma resposta posterior.
+   */
+  async liberarNaoGravado(entrada: ChaveComercial): Promise<boolean> {
+    validarChave(entrada)
+    return this.exclusivo(async estado => {
+      const i = estado.registros.findIndex(r => identidade(r) === identidade(entrada))
+      if (i < 0) return false
+      if (estado.registros[i]!.hash !== entrada.hash) throw new RegistroComercialConflitante()
+      if (estado.registros[i]!.estado !== 'pendente') return false
+      estado.registros.splice(i, 1)
+      await this.salvar(estado)
+      return true
+    })
+  }
+
   /** Somente registros extraídos da aba CRM real. Não passar ACK, overlay ou estado otimista da UI. */
   async reconciliar(fonte: FonteComercialReal, agora = new Date()): Promise<TentativaComercial[]> {
     if (!fonte || fonte.origem !== 'aba-crm' || !Array.isArray(fonte.registros) || !Number.isFinite(agora.getTime())) throw new Error('Reconciliação exige a fonte comercial real e data válida.')

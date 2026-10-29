@@ -48,8 +48,8 @@ import type { MemoriaDaVenda, Resolvida, VendaDoDia } from "./venda-do-dia.ts";
 import { conferirMensagem, resumoDosProblemas, type ResultadoDoGate, type TipoDeMensagem } from "./gate-de-envio.ts";
 import { criarEmSerie } from "./em-serie.ts";
 import { acaoInternaComercial } from "../src/operations/acao-interna-comercial.ts";
-import { AvisoInvalido, textoDoAviso as textoDoAvisoDaFila, validarAviso } from "./avisos.ts";
-import { blocoDevido, montarResumoDeBloco } from "./resumo-de-bloco.ts";
+import { AvisoInvalido, textoDoAviso as textoDoAvisoDaFila, validarAviso, type Aviso } from "./avisos.ts";
+import { blocoDevido, montarResumoDeBloco, montarResumoSemRetrato } from "./resumo-de-bloco.ts";
 
 export const ESPERA_DO_AVISO_MS = 30 * 60_000;
 /**
@@ -660,7 +660,16 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       return { tipo: "nada", motivo: "fora-do-expediente" };
     }
     const visao = await deps.lerVisao();
-    if (visao.estado !== "ok") return { tipo: "nada", motivo: "fila-vazia" };
+    if (visao.estado !== "ok") {
+      // Sem retrato não há fila, mas o bloco é horário marcado: sai a linha curta, sem nomes, mandando à
+      // Central (montarResumoSemRetrato), e o bloco fica resumido.
+      if (deps.resumoDeBloco) {
+        const antes = lido.blocosResumidos.length;
+        await resumirBloco(lido, agora, (devido) => montarResumoSemRetrato(devido.bloco, devido.chave, agora, deps.origemCentral));
+        if (lido.blocosResumidos.length !== antes) await gravarEstado(lido);
+      }
+      return { tipo: "nada", motivo: "fila-vazia" };
+    }
     const sugestoes = deps.copiloto ? await deps.copiloto.prontas(visao).catch(() => undefined) : undefined;
     let doDia: VendaDoDia;
     try {
@@ -675,8 +684,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     let pausaPrimeiros = true;
     try { pausaPrimeiros = deps.pausaPrimeiros ? await deps.pausaPrimeiros() : false; } catch { /* Sem leitura da proteção: primeiros contatos continuam barrados. */ }
     const decidido = decidir(visao, lido, agora, sugestoes, doDia, doTime, pausaPrimeiros);
-    const { estado, fechados } = decidido;
-    let { decisao } = decidido;
+    const { estado, fechados, decisao } = decidido;
     const historico = fechadosNaVolta(fechados, agora);
     // O que a Central resolveu fecha aqui também; o que expirou vale como pular lá (AC-06).
     for (const { aberto, resolvida } of fechados.fora) await fecharMensagens(aberto, rodapeDeFora(resolvida));
@@ -687,11 +695,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       });
     }
     // O resumo de bloco sai antes do aviso individual da mesma volta: às 08h55 o plano vem primeiro.
-    if (deps.resumoDeBloco && await resumirBloco(estado, decidido.fila, visao, doDia, agora)
-      && decisao.tipo === "avisar" && !avisoUrgente(decisao.acao) && estado.avisosHoje >= MAX_AVISOS_POR_DIA) {
-      // O resumo levou o último lugar do teto: o aviso de rotina desta volta fica para a Central.
-      decisao = { tipo: "nada", motivo: "teto-do-dia" };
-    }
+    if (deps.resumoDeBloco) await resumirBloco(estado, agora, resumoDaFilaDoBloco(decidido.fila, visao, doDia, agora));
     // O copiloto só gera quando a última mensagem da conversa guardada é do lead (conversaDaVez, copiloto.ts):
     // nos outros passos (depois do link, follow-up, proposta) ele nunca responde, e segurar o aviso por 4 min
     // seria esperar à toa.
@@ -760,24 +764,31 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     return decisao;
   }
 
+  /** O resumo cheio do bloco: a fila pendente de agora (resumo-de-bloco.ts). */
+  function resumoDaFilaDoBloco(fila: readonly AcaoDeVenda[], visao: CrmVisao, doDia: VendaDoDia, agora: number) {
+    return (devido: NonNullable<ReturnType<typeof blocoDevido>>): Aviso => {
+      const porId = new Map(visao.leads.map((l) => [l.id, l]));
+      // O que a Central ou o Telegram já fizeram hoje sai do resumo; o pulado continua pendente (vai para o fim da fila).
+      const pendente = fila.filter((a) => { const r = doDia.resolvidas[a.chave]; return !r || r.como === "pulada"; });
+      return montarResumoDeBloco(devido.bloco, devido.chave, pendente, porId, agora, {
+        roboOuRecepcao: (a) => respostaDeRoboOuRecepcao(a, porId.get(a.leadId)),
+        ...(deps.origemCentral ? { origemCentral: deps.origemCentral } : {}),
+      });
+    };
+  }
+
   /**
-   * O resumo de bloco devido agora, se houver (resumo-de-bloco.ts). Conta 1 no teto do dia (`avisosHoje`):
-   * a Rotina fala de "8 avisos/dia" no Telegram, e o resumo é um deles. Não é barrado pelo teto: sai no
-   * máximo 2 vezes por dia, em hora marcada, e é o que substitui os avisos um a um; calá-lo justamente no
-   * dia cheio esconderia o plano do bloco. Devolve true quando saiu.
+   * O resumo de bloco devido agora, se houver (resumo-de-bloco.ts). Fica FORA do teto do dia
+   * (`avisosHoje`, decisão de 29/10/2026), como pagamento e aceite: não conta e não é barrado. Sai no
+   * máximo 2 vezes por dia, em hora marcada, e é o que substitui os avisos um a um; contado, ele tirava
+   * a vaga de um aviso de lead justamente no dia cheio. Devolve true quando saiu.
    * Falha do Telegram não marca: tenta de novo na volta seguinte, até 20 min depois do horário. O aviso
    * barrado pela trava de R$ marca (repetir não muda o texto) e só loga.
    */
-  async function resumirBloco(estado: EstadoDoVendedor, fila: readonly AcaoDeVenda[], visao: CrmVisao, doDia: VendaDoDia, agora: number): Promise<boolean> {
+  async function resumirBloco(estado: EstadoDoVendedor, agora: number, montar: (devido: NonNullable<ReturnType<typeof blocoDevido>>) => Aviso): Promise<boolean> {
     const devido = blocoDevido(agora, estado.blocosResumidos);
     if (!devido) return false;
-    const porId = new Map(visao.leads.map((l) => [l.id, l]));
-    // O que a Central ou o Telegram já fizeram hoje sai do resumo; o pulado continua pendente (vai para o fim da fila).
-    const pendente = fila.filter((a) => { const r = doDia.resolvidas[a.chave]; return !r || r.como === "pulada"; });
-    const aviso = montarResumoDeBloco(devido.bloco, devido.chave, pendente, porId, agora, {
-      roboOuRecepcao: (a) => respostaDeRoboOuRecepcao(a, porId.get(a.leadId)),
-      ...(deps.origemCentral ? { origemCentral: deps.origemCentral } : {}),
-    });
+    const aviso = montar(devido);
     const marcar = () => {
       pendentes.dia = estado.dia;
       pendentes.blocos.add(devido.chave);
@@ -798,10 +809,8 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       console.warn(`[vendedor] resumo de bloco não saiu (${devido.chave}), tento de novo no próximo minuto: ${err instanceof Error ? err.message : String(err)}`);
       return false;
     }
+    // Lembrado antes de gravar (pendentes.blocos), como o aviso: gravação que falha não reenvia o resumo.
     marcar();
-    // Lembrado antes de gravar, como o aviso: gravação que falha não reenvia o resumo nem esquece o teto.
-    pendentes.avisos++;
-    estado.avisosHoje++;
     return true;
   }
 

@@ -40,7 +40,10 @@ para uma entrega seguinte.
 D+4 úteis (chamada de 10 min com quem decide junto) e D+8 corridos (validade e encerramento honesto). Perdido em D+10,
 motivo "sumiu". A cadência atual (`src/operations/cadencia.ts`) tem 1º e 3º dia útil e fim no 10º dia, e não cobre as
 propostas do ciclo comercial (`crm.ts:2203`, `proxima-venda.ts:296`): corrigir quando `crm.ts` e `proxima-venda.ts`
-puderem ser commitados.
+puderem ser commitados. Ajuste de 29/10: quando o D+8 cai no sábado ou no domingo, o toque da validade sai no último dia
+útil antes dele (a sexta, sempre um dia útil depois do D+4), sem mudar o "vale até" (D+9) nem o Perdido em D+10; as
+propostas do ciclo enviadas antes de 29/10 contam a cadência e o vencimento a partir de 29/10, para não vencerem todas no
+primeiro retrato sem nenhum toque; e o lead com qualificação comercial também recebe os três toques da proposta enviada.
 
 **Motivos de perda (lista fechada):** preco, timing, decisor, ja_tem, sem_dor, sumiu, contato_errado. Hoje há duas listas
 que não se falam (`motivoPerda` do sistema e `motivo_perda` do AARRR); a Ficha não pede o motivo no "Perdeu".

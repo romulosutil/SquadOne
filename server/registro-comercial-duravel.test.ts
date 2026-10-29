@@ -159,3 +159,16 @@ test('dois processos também não recebem permissão para POST da mesma oportuni
   assert.equal(respostas.filter(r => JSON.parse(r.stdout).bloqueado).length, 1)
   assert.equal((await new RegistroComercialDuravel(arquivo).listar()).length, 1)
 }))
+
+test('recusa explícita libera só a reserva pendente; ambígua, com ACK ou projetada não se apaga', async () => fixture(async arquivo => {
+  const journal = new RegistroComercialDuravel(arquivo)
+  await journal.reservar(entrada())
+  assert.equal(await journal.liberarNaoGravado(chave()), true)
+  assert.deepEqual(await journal.listar(), [])
+  assert.equal((await journal.reservar(entrada())).criada, true, 'o mesmo fato pode ser tentado de novo')
+  await journal.marcarAmbiguo(chave())
+  assert.equal(await journal.liberarNaoGravado(chave()), false)
+  assert.equal((await journal.listar())[0].estado, 'ambiguo')
+  await assert.rejects(journal.liberarNaoGravado({ ...chave(), hash: hashCanonicoComercial({ outro: true }) }), RegistroComercialConflitante)
+  assert.equal(await journal.liberarNaoGravado(chave('inexistente')), false)
+}))

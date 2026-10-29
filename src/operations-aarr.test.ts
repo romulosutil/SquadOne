@@ -171,7 +171,8 @@ describe('origem, motivo da perda e valor de proposta na leitura AARRR (Fase 4, 
   })
 
   it('motivo da perda só entre os Perdidos de venda; o registrado manda e o automático entra traduzido (28/10/2026)', () => {
-    const perdido = (id: string, eventos: CrmEvento[], motivoPerda = 'expirou') => lead('site', { id: `site:${id}`, etapa: 'perdido', motivoPerda, eventos } as Partial<CrmLead>)
+    // Saiu do funil pelo automático em 18/10; o motivo de Receita (19/10) vem depois e vale (motivos-de-perda.ts).
+    const perdido = (id: string, eventos: CrmEvento[], motivoPerda = 'expirou') => lead('site', { id: `site:${id}`, etapa: 'perdido', desde: '2026-10-18T12:00:00Z', motivoPerda, eventos } as Partial<CrmLead>)
     const antigo = evento('motivo_perda', JSON.stringify({ versao: 1, valor: 'concorrente' }))
     const r = leituraAarr([perdido('1', [motivo('preco')]), perdido('2', [motivo('preco')]), perdido('3', [motivo('timing')]), perdido('4', []), perdido('5', [antigo]),
       perdido('d', [], 'descartado'), lead('site', { id: 'site:aberto', eventos: [motivo('sumiu')] })], AGORA)

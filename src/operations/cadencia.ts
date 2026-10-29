@@ -41,11 +41,31 @@ export type DegrauDaProposta = typeof DEGRAUS_DA_PROPOSTA[number]
 type DegrauAntigoDaProposta = 'dia-3'
 const DEGRAUS_LEGIVEIS_DA_PROPOSTA: readonly string[] = [...DEGRAUS_DA_PROPOSTA, 'dia-3']
 
+const fimDeSemana = (dia: number) => { const s = new Date(dia * DIA).getUTCDay(); return s === 0 || s === 6 }
+
+/**
+ * O dia (diaDaCadencia) em que o toque da validade fica disponível. Ajuste de 29/10/2026: a Rotina é
+ * seg–sex, e a proposta enviada na sexta tinha o D+8 no sábado e vencia na segunda (D+10) sem o
+ * toque da validade em dia útil. Quando o D+8 cai no sábado ou no domingo, o toque sai no último dia
+ * útil antes dele (a sexta); o "vale até" (D+9) e o vencimento (D+10) não mudam. Pelo menos no dia
+ * útil seguinte ao do D+4: com seg–sex e sem feriados o D+4 útil cai no máximo em D+6 e essa sexta é
+ * sempre D+6 ou D+7, então os três toques saem em dias úteis distintos; o `max` só protege a regra
+ * de um dia, e nunca passa de D+7, antes do vencimento.
+ */
+export function diaDoToqueDaValidade(base: number): number {
+  const b = diaDaCadencia(base)
+  let validade = b + 8
+  while (fimDeSemana(validade)) validade--
+  let dia4 = b, uteis = 0
+  while (uteis < 4) { dia4++; if (!fimDeSemana(dia4)) uteis++ }
+  return Math.max(validade, dia4 + 1)
+}
+
 /** O degrau da proposta em que o lead está hoje: só o atual vale; um toque perdido não se acumula. */
 export function degrauDaProposta(base: number, agora: number): DegrauDaProposta | 'expirar' | null {
   const corridos = diaDaCadencia(agora) - diaDaCadencia(base)
   if (corridos >= VALIDADE_DA_PROPOSTA_DIAS) return 'expirar'
-  if (corridos >= 8) return 'dia-8'
+  if (diaDaCadencia(agora) >= diaDoToqueDaValidade(base)) return 'dia-8'
   const uteis = diasUteisDaCadencia(base, agora)
   return uteis >= 4 ? 'dia-4' : uteis >= 1 ? 'dia-1' : null
 }
@@ -143,6 +163,16 @@ type LeadDaCadencia = Pick<CrmLead, 'id' | 'etapa' | 'proposta' | 'eventos' | 'c
  * (proposta em rascunho) não tem cadência nenhuma, nem a da conversa: é o caminho comercial que guia.
  * `undefined` = sem ciclo, vale `lead.proposta`; `null` = sem cadência.
  */
+/**
+ * Início da cadência para as propostas do ciclo comercial (29/10/2026). Antes de 29/10 (d6ad54c) elas
+ * não tinham cadência nenhuma; sem este piso, o primeiro retrato depois do deploy vencia de uma vez,
+ * como "sumiu", todo envio do ciclo com 10 dias ou mais, sem que a fila tivesse oferecido um toque
+ * sequer. Para o envio do ciclo anterior a esta data, a cadência e o vencimento contam daqui (o D+0 é
+ * 29/10). A resposta de gente continua comparada com o envio real. As propostas legadas (lead.proposta,
+ * fora do ciclo) já tinham cadência antes e não mudam.
+ */
+export const INICIO_DA_CADENCIA_DO_CICLO = '2026-10-29'
+
 function propostaDoCiclo(lead: LeadDaCadencia, agora: number): { em: string; data?: string } | null | undefined {
   const ciclo = cicloDoLead(lead, agora)
   if (!ciclo.historico.length) return undefined
@@ -165,11 +195,14 @@ export function cadenciaDoLead(lead: LeadDaCadencia, agora: number): CadenciaDoL
     .map(e => lerRegistroCadencia(e.registroTexto ?? e.texto)).filter((v): v is RegistroDeCadencia => !!v)
   if (lead.etapa === 'proposta' && proposta) {
     const origem = proposta.em
-    const base = proposta.data ? instante(`${proposta.data}T12:00:00-03:00`) : instante(origem)
-    if (!Number.isFinite(base)) return null
+    const envio = proposta.data ? instante(`${proposta.data}T12:00:00-03:00`) : instante(origem)
+    if (!Number.isFinite(envio)) return null
+    // O ciclo anterior a 29/10 conta a partir de 29/10 (INICIO_DA_CADENCIA_DO_CICLO).
+    const piso = instante(`${INICIO_DA_CADENCIA_DO_CICLO}T12:00:00-03:00`)
+    const base = doCiclo && diaDaCadencia(envio) < diaDaCadencia(piso) ? piso : envio
     const r: CadenciaDoLead = { tipo: 'proposta', origem, base, estado: 'aguardar' }
     const anotado = instante(origem)
-    const corteDaResposta = diaDaCadencia(anotado) === diaDaCadencia(base) ? anotado : diaDaCadencia(base) * DIA + 3 * 3600_000
+    const corteDaResposta = diaDaCadencia(anotado) === diaDaCadencia(envio) ? anotado : diaDaCadencia(envio) * DIA + 3 * 3600_000
     if (preservar || humana > corteDaResposta) return { ...r, estado: 'preservar' }
     const degrau = degrauDaProposta(base, agora)
     if (degrau === 'expirar') return { ...r, estado: 'expirar' }

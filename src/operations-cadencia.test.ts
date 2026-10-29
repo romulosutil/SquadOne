@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { TOQUES_DA_PROPOSTA, VALIDADE_DA_PROPOSTA_DIAS, cadenciaDoLead, degrauDaProposta, diasUteisDaCadencia, lerRegistroCadencia, textoDaCadenciaConfirmada, textoDoRegistroCadencia, validadeDaProposta } from './operations/cadencia.ts'
+import { INICIO_DA_CADENCIA_DO_CICLO, TOQUES_DA_PROPOSTA, VALIDADE_DA_PROPOSTA_DIAS, cadenciaDoLead, degrauDaProposta, diaDaCadencia, diaDoToqueDaValidade, diasUteisDaCadencia, lerRegistroCadencia, textoDaCadenciaConfirmada, textoDoRegistroCadencia, validadeDaProposta } from './operations/cadencia.ts'
 import { textoEventoCiclo, type EventoCiclo } from './operations/ciclo-comercial.ts'
 import { notaDoAprendizado } from './operations/aprendizado-comercial.ts'
 import { acaoDoLead, filaDeVenda } from './operations/proxima-venda.ts'
+import { qualificacaoComercialVazia, type QualificacaoComercial } from './operations/qualificacao-comercial.ts'
 import type { CrmLead } from './operations/types.ts'
 
 const sp = (dia: string, hora = '12:00') => Date.parse(`${dia}T${hora}:00-03:00`)
@@ -25,10 +26,11 @@ describe('cadência de proposta (28/10/2026): D+1 útil, D+4 úteis, D+8 e D+10 
     assert.equal(r.estado, estado)
     assert.equal(r.registro?.degrau, degrau)
   })
-  // Proposta na sexta 16/10: o fim de semana logo depois empurra os degraus úteis; o 8º corrido cai no sábado.
+  // Proposta na sexta 16/10: o fim de semana logo depois empurra os degraus úteis; o 8º corrido cai no
+  // sábado, e o toque da validade sai na sexta antes (ajuste de 29/10/2026), sem mudar o D+10.
   for (const [dia, esperado] of [
     ['2026-10-17', null], ['2026-10-18', null], ['2026-10-19', 'dia-1'], ['2026-10-21', 'dia-1'],
-    ['2026-10-22', 'dia-4'], ['2026-10-23', 'dia-4'], ['2026-10-24', 'dia-8'], ['2026-10-25', 'dia-8'], ['2026-10-26', 'expirar'],
+    ['2026-10-22', 'dia-4'], ['2026-10-23', 'dia-8'], ['2026-10-24', 'dia-8'], ['2026-10-25', 'dia-8'], ['2026-10-26', 'expirar'],
   ] as const) it(`degrauDaProposta, sexta → ${dia}: ${esperado ?? 'nenhum'}`, () => assert.equal(degrauDaProposta(sp('2026-10-16'), sp(dia)), esperado))
   it('fim de semana não acrescenta dias úteis', () => assert.equal(diasUteisDaCadencia(sp('2026-10-16'), sp('2026-10-19')), 1))
   it('a validade é de 10 dias corridos contando o envio: vale até o D+9', () => {
@@ -132,39 +134,122 @@ describe('cadência de conversa: só um toque e revisão no sétimo dia', () => 
 describe('cadência da proposta do ciclo comercial (proposta versionada, 28/10/2026)', () => {
   const fato = (tipo: EventoCiclo['tipo'], id: string, data: string, extra: Partial<EventoCiclo> = {}): EventoCiclo => ({ v: 1, id, tipo, data, humano: true, referencia: id, ...extra })
   // Valores sintéticos da fixture; não são preços de clientes.
-  const versao = fato('proposta', 'prop-01', '2026-10-15', { referencia: 'P-TESTE', ofertaId: 'encontrado', versao: 1, escopo: 'Escopo fictício', prazo: 'Prazo fictício',
+  const versao = fato('proposta', 'prop-01', '2026-11-05', { referencia: 'P-TESTE', ofertaId: 'encontrado', versao: 1, escopo: 'Escopo fictício', prazo: 'Prazo fictício',
     condicoes: 'Condições fictícias', responsavel: 'Operador', valor: 10000, mensalidade: 1000 })
   const nota = (e: EventoCiclo, dia: string) => ({ tipo: 'nota', origem: 'manual' as const, em: iso(dia), texto: textoEventoCiclo(e, sp(dia)), rotulo: '', fonte: '' })
   const doCiclo = (...extra: ReturnType<typeof nota>[]): CrmLead => proposta({ proposta: undefined, etapa: 'proposta',
-    eventos: [nota(versao, '2026-10-15'), nota(fato('proposta_enviada', 'env-01', '2026-10-15', { vinculo: 'prop-01', evidencia: 'Print da conversa' }), '2026-10-15'), ...extra] })
+    eventos: [nota(versao, '2026-11-05'), nota(fato('proposta_enviada', 'env-01', '2026-11-05', { vinculo: 'prop-01', evidencia: 'Print da conversa' }), '2026-11-05'), ...extra] })
   it('conta da última versão enviada e chega ao vencimento no D+10', () => {
     const l = doCiclo()
-    for (const [dia, estado, degrau] of [['2026-10-16', 'tocar', 'dia-1'], ['2026-10-21', 'tocar', 'dia-4'], ['2026-10-23', 'tocar', 'dia-8'], ['2026-10-25', 'expirar', undefined]] as const) {
+    for (const [dia, estado, degrau] of [['2026-11-06', 'tocar', 'dia-1'], ['2026-11-11', 'tocar', 'dia-4'], ['2026-11-13', 'tocar', 'dia-8'], ['2026-11-15', 'expirar', undefined]] as const) {
       const c = cadenciaDoLead(l, sp(dia))!
       assert.equal(c.estado, estado, dia)
       assert.equal(c.registro?.degrau, degrau, dia)
-      assert.equal(c.origem, iso('2026-10-15'))
+      assert.equal(c.origem, iso('2026-11-05'))
     }
   })
   it('com aceite registrado a decisão saiu: sem cadência', () => {
-    const l = doCiclo(nota(fato('aceite', 'aceite-01', '2026-10-16', { vinculo: 'prop-01', evidencia: 'Mensagem do cliente', documento: 'Documento fictício' }), '2026-10-16'))
-    assert.equal(cadenciaDoLead(l, sp('2026-10-21')), null)
+    const l = doCiclo(nota(fato('aceite', 'aceite-01', '2026-11-06', { vinculo: 'prop-01', evidencia: 'Mensagem do cliente', documento: 'Documento fictício' }), '2026-11-06'))
+    assert.equal(cadenciaDoLead(l, sp('2026-11-11')), null)
   })
   it('proposta só em rascunho (sem envio) não tem cadência nenhuma', () => {
-    const l = proposta({ proposta: undefined, etapa: 'proposta', eventos: [nota(versao, '2026-10-15')] })
-    assert.equal(cadenciaDoLead(l, sp('2026-10-21')), null)
+    const l = proposta({ proposta: undefined, etapa: 'proposta', eventos: [nota(versao, '2026-11-05')] })
+    assert.equal(cadenciaDoLead(l, sp('2026-11-11')), null)
   })
   it('na fila o toque do degrau substitui o cartão de acompanhar a decisão, com o texto do degrau', () => {
-    const l = { ...doCiclo(), proposta: { em: iso('2026-10-15'), data: '2026-10-15' } }
+    const l = { ...doCiclo(), proposta: { em: iso('2026-11-05'), data: '2026-11-05' } }
     const visao = { leads: [l], hoje: [] }
-    const fila = filaDeVenda(visao, { primeiroLiberado: false, agora: sp('2026-10-21') })
-    assert.deepEqual(fila.map(a => a.chave), [`${l.id}|cadencia|proposta|${iso('2026-10-15')}|dia-4`])
-    assert.equal(fila[0]!.rascunho, TOQUES_DA_PROPOSTA['dia-4'].mensagem('24/10'))
+    const fila = filaDeVenda(visao, { primeiroLiberado: false, agora: sp('2026-11-11') })
+    assert.deepEqual(fila.map(a => a.chave), [`${l.id}|cadencia|proposta|${iso('2026-11-05')}|dia-4`])
+    assert.equal(fila[0]!.rascunho, TOQUES_DA_PROPOSTA['dia-4'].mensagem('14/11'))
     assert.equal(fila[0]!.titulo, 'Convide Empresa para 10 minutos com quem decide')
     assert.equal(JSON.parse(fila[0]!.textoDoRegistro!).degrau, 'dia-4')
     // Com o toque confirmado, o cartão do ciclo comercial volta a guiar até o próximo degrau.
-    l.eventos.push(evento(fila[0]!.textoDoRegistro!, iso('2026-10-21')))
-    assert.deepEqual(filaDeVenda(visao, { primeiroLiberado: false, agora: sp('2026-10-22') }).map(a => a.chave), [`${l.id}|ciclo-comercial`])
-    assert.equal(acaoDoLead(visao, l.id, sp('2026-10-23'))?.contexto, 'Proposta: 8º dia, vale até 24/10')
+    l.eventos.push(evento(fila[0]!.textoDoRegistro!, iso('2026-11-11')))
+    assert.deepEqual(filaDeVenda(visao, { primeiroLiberado: false, agora: sp('2026-11-12') }).map(a => a.chave), [`${l.id}|ciclo-comercial`])
+    assert.equal(acaoDoLead(visao, l.id, sp('2026-11-13'))?.contexto, 'Proposta: 8º dia, vale até 14/11')
+  })
+})
+
+describe('toque da validade em dia útil (ajuste de 29/10/2026): envio em cada dia da semana', () => {
+  // Semana de 02/11/2026 (seg) a 08/11 (dom): o primeiro dia de cada degrau, o vale até e o vencimento.
+  for (const [envio, dia1, dia4, dia8, valeAte, vence] of [
+    ['2026-11-02', '2026-11-03', '2026-11-06', '2026-11-10', '11/11', '2026-11-12'],
+    ['2026-11-03', '2026-11-04', '2026-11-09', '2026-11-11', '12/11', '2026-11-13'],
+    ['2026-11-04', '2026-11-05', '2026-11-10', '2026-11-12', '13/11', '2026-11-14'],
+    ['2026-11-05', '2026-11-06', '2026-11-11', '2026-11-13', '14/11', '2026-11-15'],
+    // Sexta: o D+8 cai no sábado 14; o toque sai na sexta 13, um dia útil depois do D+4.
+    ['2026-11-06', '2026-11-09', '2026-11-12', '2026-11-13', '15/11', '2026-11-16'],
+    // Sábado: o D+8 cai no domingo 15; o toque sai na sexta 13.
+    ['2026-11-07', '2026-11-09', '2026-11-12', '2026-11-13', '16/11', '2026-11-17'],
+    ['2026-11-08', '2026-11-09', '2026-11-12', '2026-11-16', '17/11', '2026-11-18'],
+  ] as const) it(`envio em ${envio}: D+1 ${dia1}, D+4 ${dia4}, validade ${dia8}, vence ${vence}`, () => {
+    const base = sp(envio), primeiro = new Map<string, string>()
+    for (let n = 0; n <= 12; n++) {
+      const dia = new Date(base + n * 86_400_000 - 3 * 3600_000).toISOString().slice(0, 10)
+      const d = degrauDaProposta(base, sp(dia))
+      if (d && !primeiro.has(d)) primeiro.set(d, dia)
+    }
+    assert.deepEqual(Object.fromEntries(primeiro), { 'dia-1': dia1, 'dia-4': dia4, 'dia-8': dia8, expirar: vence })
+    assert.equal(validadeDaProposta(base), valeAte)
+    for (const d of [dia1, dia4, dia8]) assert.ok(![0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay()), `${d} é dia útil`)
+    assert.equal(new Set([dia1, dia4, dia8]).size, 3)
+    assert.equal(diaDoToqueDaValidade(base), diaDaCadencia(sp(dia8)))
+  })
+})
+
+const notaManual = (texto: string, dia: string) => ({ tipo: 'nota', origem: 'manual' as const, em: iso(dia), texto, rotulo: '', fonte: '' })
+// Valores sintéticos da fixture; não são preços de clientes.
+const envioDoCiclo = (data: string) => [
+  notaManual(textoEventoCiclo({ v: 1, id: 'prop-01', tipo: 'proposta', data, humano: true, referencia: 'P-TESTE', ofertaId: 'encontrado', versao: 1, escopo: 'Escopo fictício',
+    prazo: 'Prazo fictício', condicoes: 'Condições fictícias', responsavel: 'Operador', valor: 10000, mensalidade: 1000 }, sp(data)), data),
+  notaManual(textoEventoCiclo({ v: 1, id: 'env-01', tipo: 'proposta_enviada', data, humano: true, referencia: 'env-01', vinculo: 'prop-01', evidencia: 'Print da conversa' }, sp(data)), data),
+]
+
+describe('proposta do ciclo enviada antes de 29/10/2026: a cadência conta de 29/10 (deploy de d6ad54c)', () => {
+  const doCiclo = (data: string, extra: Partial<CrmLead> = {}): CrmLead => proposta({ proposta: undefined, etapa: 'proposta', ...extra, eventos: envioDoCiclo(data) })
+  it('o envio de 15/10 não vence no primeiro retrato: D+0 em 29/10, toques depois, vence em 08/11', () => {
+    assert.equal(INICIO_DA_CADENCIA_DO_CICLO, '2026-10-29')
+    const l = doCiclo('2026-10-15')
+    for (const [dia, estado, degrau] of [['2026-10-29', 'aguardar', undefined], ['2026-10-30', 'tocar', 'dia-1'], ['2026-11-04', 'tocar', 'dia-4'],
+      ['2026-11-06', 'tocar', 'dia-8'], ['2026-11-08', 'expirar', undefined]] as const) {
+      const c = cadenciaDoLead(l, sp(dia))!
+      assert.equal(c.estado, estado, dia)
+      assert.equal(c.registro?.degrau, degrau, dia)
+    }
+    assert.equal(validadeDaProposta(cadenciaDoLead(l, sp('2026-10-29'))!.base), '07/11')
+  })
+  it('a resposta de gente depois do envio real (antes de 29/10) continua preservando', () => {
+    const l = doCiclo('2026-10-15', { resposta: { tipo: 'neutra', trecho: 'vou ver com meu sócio', em: iso('2026-10-20') } })
+    assert.equal(cadenciaDoLead(l, sp('2026-10-30'))!.estado, 'preservar')
+  })
+  it('envio do ciclo de 29/10 em diante conta do próprio envio', () => {
+    assert.equal(cadenciaDoLead(doCiclo('2026-10-29'), sp('2026-11-08'))!.estado, 'expirar')
+    assert.equal(cadenciaDoLead(doCiclo('2026-10-29'), sp('2026-11-07'))!.estado, 'tocar')
+  })
+  it('a proposta legada (fora do ciclo) já tinha cadência e não muda', () => {
+    assert.equal(cadenciaDoLead(proposta(), sp('2026-10-29'))!.estado, 'expirar')
+  })
+})
+
+describe('lead com qualificação comercial e proposta do ciclo enviada (29/10/2026)', () => {
+  const qualificacao = (): QualificacaoComercial => ({ ...qualificacaoComercialVazia(sp('2026-11-05')), id: 'qual-001', necessidade: 'Apresentar os serviços no Google',
+    adequacao: { estado: 'confirmada', oferta: 'encontrado', motivo: 'Site com serviços e botão de contato' }, intencao: 'avaliar',
+    decisao: 'Dona e sócio decidem juntos', proximoPasso: { descricao: 'Receber proposta do site', aceito: true },
+    fonte: 'WhatsApp, 05/11, mensagens 1 a 4', evidencia: 'Quero avaliar a proposta com meu sócio.' })
+  const lead = (): CrmLead => proposta({ etapa: 'proposta', qualificacaoComercial: qualificacao(), eventos: envioDoCiclo('2026-11-05'),
+    proposta: { em: iso('2026-11-05'), data: '2026-11-05' } } as Partial<CrmLead>)
+  // O servidor vence essa proposta no D+10 (crm.ts): a fila tem de oferecer os três toques antes.
+  for (const [dia, degrau] of [['2026-11-06', 'dia-1'], ['2026-11-11', 'dia-4'], ['2026-11-13', 'dia-8']] as const) it(`${dia}: a fila oferece o toque ${degrau}`, () => {
+    const l = lead()
+    assert.equal(cadenciaDoLead(l, sp('2026-11-15'))!.estado, 'expirar')
+    const fila = filaDeVenda({ leads: [l], hoje: [] }, { primeiroLiberado: false, agora: sp(dia) })
+    assert.equal(fila.find(a => a.leadId === l.id && a.anota === 'cadencia_enviada')?.chave, `${l.id}|cadencia|proposta|${iso('2026-11-05')}|${degrau}`)
+  })
+  it('a retomada da conversa continua fora da fila para quem tem qualificação', () => {
+    const l = proposta({ etapa: 'contato', proposta: undefined, qualificacaoComercial: qualificacao(),
+      conversa: { desde: iso('2026-11-02'), mensagens: 2, ultimaEntrada: iso('2026-11-02'), ultimaSaida: iso('2026-11-03'), ultima: { direcao: 'saida', em: iso('2026-11-03'), trecho: 'resposta' } } } as Partial<CrmLead>)
+    assert.equal(cadenciaDoLead(l, sp('2026-11-05'))?.estado, 'tocar')
+    assert.equal(filaDeVenda({ leads: [l], hoje: [] }, { primeiroLiberado: false, agora: sp('2026-11-05') }).some(a => a.anota === 'cadencia_enviada'), false)
   })
 })

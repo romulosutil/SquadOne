@@ -300,12 +300,16 @@ function acaoMandarProposta(lead: CrmLead, momento?: MomentoDaVenda): AcaoDeVend
  * (TOQUES_DA_PROPOSTA, 28/10/2026): D+1 útil a dúvida e quem decide, D+4 úteis 10 minutos com quem
  * decide, D+8 corridos a validade. Vale também para a proposta do ciclo comercial: cadenciaDoLead
  * acompanha a última versão enviada enquanto espera a decisão.
+ * Com qualificação comercial (29/10/2026), só a cadência da PROPOSTA: o servidor vence a proposta
+ * enviada desse lead no D+10 (crm.ts aplica cadenciaDoLead a todo lead), e uma proposta nunca vence
+ * sem a fila ter oferecido os toques dela. A retomada da conversa continua com o caminho da
+ * qualificação, que tem as próprias perguntas.
  */
 function acaoDaCadencia(lead: CrmLead, ctx: ContextoDaVenda): AcaoDeVenda | null {
-  if (temQualificacaoComercial(lead, ctx.agora)) return null
   if (ctx.agora === undefined) return null
   const c = cadenciaDoLead(lead, ctx.agora)
   if (!c || (c.estado !== 'tocar' && c.estado !== 'revisar')) return null
+  if (c.tipo !== 'proposta' && temQualificacaoComercial(lead, ctx.agora)) return null
   const proposta = c.tipo === 'proposta'
   if (c.estado === 'revisar') return {
     chave: `${lead.id}|revisao-conversa|${c.origem}`, leadId: lead.id, empresa: lead.empresa, produto: lead.produto,

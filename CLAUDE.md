@@ -104,8 +104,9 @@ server.ts                 Express: monta o webhook do Telegram antes do porteiro
                           dos dois; primeiro contato, follow-up, cadência, revisões e internos ficam só na Central; o dia do servidor (venda-do-dia) é obrigatório
   server/resumo-de-bloco.ts  PURO (29/10/2026, Rotina do PM): às 08h55 (bloco 1, fechar) e 13h55 (bloco 2, conversar), seg–sex, até 20 min de atraso,
                           o vendedor manda um resumo do bloco no Telegram (blocoDevido; blocoDaAcao sobre a mesma filaDeVenda; montarResumoDeBloco:
-                          empresas sim, telefone/id/R$ nunca, validarAviso); um por bloco por dia em `blocosResumidos` do vendedor.json; conta 1 no
-                          teto de 8 sem ser barrado por ele; fila do bloco vazia = "nada pendente"; SQUADONE_RESUMO_DE_BLOCO=false desliga
+                          empresas sim, telefone/id/R$ nunca, validarAviso); um por bloco por dia em `blocosResumidos` do vendedor.json; fora do
+                          teto de 8 (não conta nem é barrado, 29/10/2026); sem retrato do CRM sai a linha curta (montarResumoSemRetrato);
+                          fila do bloco vazia = "nada pendente"; SQUADONE_RESUMO_DE_BLOCO=false desliga
   server/frente-comercial.ts  (19/10/2026) a Central do time comercial: GET /crm/frente (estado, sem número), POST /crm/frente/config ({ ativo }),
                           POST /crm/frente/reservar (o time pede UM primeiro contato: mesma janela e ritmo da Central, gate em "bloquear", grava o
                           primeiro do dia `por: "time"` na fila do venda-do-dia); `doTime` em GET /crm/venda. O time em si é deploy/dell/frente-comercial.py:

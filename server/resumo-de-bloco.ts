@@ -7,7 +7,8 @@
  * PURO, como o resumo matinal (resumo-matinal.ts): sem fetch, relógio, env ou estado. Quem chama é o
  * vendedor (vendedor.ts), não a vigia: o resumo precisa da MESMA fila de venda que o vendedor e a
  * Central já leem (filaDeVenda, src/operations/proxima-venda.ts), do dia do servidor (o que a Central
- * já resolveu) e do teto de 8 avisos por dia, que mora no estado do vendedor. A vigia só vê a agenda e
+ * já resolveu) e do registro do que já se resumiu hoje, que mora no estado do vendedor (o resumo fica
+ * fora do teto de 8 avisos por dia, vendedor.ts). A vigia só vê a agenda e
  * para inteira quando o Google desconecta, o que calaria um resumo que não depende do Google.
  *
  * Nenhum critério novo: cada ação da fila cai num bloco pelo tipo e pela chave que a fila já dá
@@ -182,13 +183,30 @@ export function montarResumoDeBloco(
   const fora = resumoDaFila(resto);
   if (fora) linhas.push(`Na Central, fora deste bloco: ${fora}.`);
 
-  const origem = opcoes.origemCentral?.trim().replace(/\/$/, "");
+  return avisoDoBloco(bloco, chave, linhas.join("\n"), agora, opcoes.origemCentral);
+}
+
+/** O texto do resumo quando o retrato do CRM não está legível (montarResumoSemRetrato). */
+export const TEXTO_SEM_RETRATO = "O retrato do CRM não está disponível agora; veja a Central.";
+
+/**
+ * PURO (29/10/2026): o resumo do bloco sem o retrato do CRM (o n8n não gravou, o arquivo está
+ * ilegível). Sem retrato não há fila, e o silêncio às 08h55 não se distingue de o vendedor estar
+ * parado: sai uma linha curta, sem nome nenhum, mandando à Central. Quem chama marca o bloco como
+ * resumido, como o resumo cheio: o retrato que volta 5 min depois não manda um segundo.
+ */
+export function montarResumoSemRetrato(bloco: Bloco, chave: string, agora: number, origemCentral?: string): Aviso {
+  return avisoDoBloco(bloco, chave, TEXTO_SEM_RETRATO, agora, origemCentral);
+}
+
+function avisoDoBloco(bloco: Bloco, chave: string, texto: string, agora: number, origemCentral?: string): Aviso {
+  const origem = origemCentral?.trim().replace(/\/$/, "");
   // Vale até o fim do bloco: depois dele o resumo não diz mais nada.
   const { data } = relogioSP(agora);
   const fim = Date.parse(`${data}T${hhmm(bloco.fimMin).replace("h", ":")}:00-03:00`);
   return {
-    titulo: umaLinha(`🗓 Bloco ${bloco.numero} · ${c.nome} · ${hhmm(bloco.inicioMin)}–${hhmm(bloco.fimMin)}`, LIMITES_DO_AVISO.titulo),
-    texto: linhas.join("\n").slice(0, LIMITES_DO_AVISO.texto),
+    titulo: umaLinha(`🗓 Bloco ${bloco.numero} · ${CABECALHO[bloco.id].nome} · ${hhmm(bloco.inicioMin)}–${hhmm(bloco.fimMin)}`, LIMITES_DO_AVISO.titulo),
+    texto: texto.slice(0, LIMITES_DO_AVISO.texto),
     origem: ORIGEM_DO_RESUMO_DE_BLOCO,
     chave: `resumo-de-bloco:${chave}`,
     prioridade: 2,

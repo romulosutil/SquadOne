@@ -5,7 +5,8 @@
  * sem-contato, proposta-sem-retorno), que diz COMO o lead saiu, e o `motivo_perda` do AARRR (preco,
  * timing, sem-dor, decisor, concorrente, sumiu), que diz POR QUÊ e só existia quando alguém lembrava de
  * registrar em Receita. Agora o porquê tem uma lista só, e todo Perdido de venda tem um:
- *  - o registrado à mão (`motivo_perda` na aba CRM, que a Ficha pede no "Perdeu") manda;
+ *  - o registrado à mão (`motivo_perda` na aba CRM, que a Ficha pede no "Perdeu") manda, quando ligado
+ *    a uma perda (motivoRegistrado, 29/10/2026);
  *  - sem ele, o motivo automático antigo se traduz pela tabela MOTIVO_DA_PERDA_AUTOMATICA.
  * `motivoPerda` (o como) continua igual no servidor e na API: o Dell (site-demos-limpeza.py) e o Funil
  * decidem por ele. Nada da aba CRM é reescrito: os registros antigos ("sem-dor", "concorrente") são
@@ -81,15 +82,33 @@ export function desfechoDoMotivo(m: MotivoDePerda): 'recusou' | 'sem_contato' {
 /** Os registros que desfazem uma perda marcada: o motivo registrado antes deles não vale mais. */
 const DESFAZ_A_PERDA: ReadonlySet<string> = new Set(['recusou_desfeito', 'sem_contato_desfeito', 'dispensado_desfeito'])
 
-type LeadDoMotivo = Pick<CrmLead, 'motivoPerda' | 'eventos'>
+/** Os registros que tiram o lead do funil à mão: o desfecho que o motivo acompanha. */
+const MARCA_A_PERDA: ReadonlySet<string> = new Set(['recusou', 'sem_contato', 'dispensado'])
 
-/** O último `motivo_perda` registrado à mão que ainda vale (depois do último desfazer de perda). */
-export function motivoRegistrado(lead: Pick<CrmLead, 'eventos'>, agora = Number.POSITIVE_INFINITY): { motivo: MotivoDePerda; em: string } | null {
+/** `etapa` e `desde` (o instante em que saiu do funil) só pesam no motivo registrado sem desfecho marcado. */
+type LeadDoMotivoRegistrado = Pick<CrmLead, 'eventos'> & Partial<Pick<CrmLead, 'etapa' | 'desde'>>
+type LeadDoMotivo = Pick<CrmLead, 'motivoPerda' | 'eventos'> & Partial<Pick<CrmLead, 'etapa' | 'desde'>>
+
+/**
+ * O último `motivo_perda` registrado à mão que ainda vale (depois do último desfazer de perda).
+ * Desde 29/10/2026, o motivo só vale ligado a uma perda: o "Perdeu" da Ficha grava o motivo e depois
+ * o desfecho, e se o desfecho falha sobra um motivo solto, que meses depois apareceria como o porquê
+ * de um vencimento automático que nada tem com ele. Vale quando, depois do último desfazer:
+ *  - há um desfecho de perda marcado à mão (recusou, sem_contato, dispensado), antes, junto ou depois
+ *    do motivo (depois: a nova tentativa do "Perdeu"; antes: o motivo registrado em Receita para quem
+ *    já tinha saído); ou
+ *  - não há, mas o motivo foi registrado com o lead já fora do funil pelo automático (`desde` do
+ *    Perdido), o motivo de Receita para a proposta vencida ou a conversa que esfriou.
+ * Senão vale o automático (motivoDaPerdaDoLead).
+ */
+export function motivoRegistrado(lead: LeadDoMotivoRegistrado, agora = Number.POSITIVE_INFINITY): { motivo: MotivoDePerda; em: string } | null {
   const manuais = (lead.eventos ?? []).filter(e => e.origem === 'manual' && Date.parse(e.em) <= agora)
     .sort((a, b) => Date.parse(a.em) - Date.parse(b.em))
   let atual: { motivo: MotivoDePerda; em: string } | null = null
+  let perdaMarcada = false
   for (const e of manuais) {
-    if (DESFAZ_A_PERDA.has(e.tipo)) { atual = null; continue }
+    if (DESFAZ_A_PERDA.has(e.tipo)) { atual = null; perdaMarcada = false; continue }
+    if (MARCA_A_PERDA.has(e.tipo)) { perdaMarcada = true; continue }
     if (e.tipo !== 'motivo_perda') continue
     try {
       const v = JSON.parse(e.registroTexto ?? e.texto)
@@ -97,7 +116,9 @@ export function motivoRegistrado(lead: Pick<CrmLead, 'eventos'>, agora = Number.
       if (motivo) atual = { motivo, em: e.em }
     } catch { /* Texto ilegível não vira motivo. */ }
   }
-  return atual
+  if (!atual || perdaMarcada) return atual
+  const saiu = lead.etapa === 'perdido' ? Date.parse(lead.desde ?? '') : Number.NaN
+  return Number.isFinite(saiu) && Date.parse(atual.em) >= saiu ? atual : null
 }
 
 /** O motivo do Perdido: o registrado manda; sem ele, a tradução do automático. */

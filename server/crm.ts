@@ -2443,6 +2443,19 @@ export function envioRecenteNoLead(lead: Pick<CrmLead, "eventos">, tipo: CrmTipo
   return lead.eventos.find((e) => e.tipo === tipo && e.origem === "manual" && Math.abs(agora - Date.parse(e.em)) < JANELA_DE_REPETICAO_MS)?.em;
 }
 
+/**
+ * PURO. O n8n disse, sem dúvida, que nada foi gravado? Só três respostas provam isso, pelo desenho do
+ * 08 · CRM (deploy/dell/claude-ops/crm.py): 400 com `{ok:false}` é o "Responder recusa" do "Validar
+ * registro", que roda ANTES do append na aba CRM ("Categoria comercial inválida."); 401/403 é o header
+ * auth do webhook e 404 é o webhook sem fluxo ativo, e nos dois o fluxo nem começou. O 502 do
+ * "Responder falha" NÃO entra: o append tem retryOnFail, e a primeira tentativa pode ter gravado antes
+ * do erro. Sem resposta, 5xx e 2xx sem `ok:true` também não: não se sabe se gravou.
+ */
+export function naoGravouNoN8n(status: number, corpo: Record<string, unknown>): boolean {
+  if (status === 401 || status === 403 || status === 404) return true;
+  return status === 400 && corpo.ok === false;
+}
+
 function chaveComercialDoRegistro(registro: { tipo: string; texto: string }, oportunidade: string, agora: number, ocorrencia = 0): ChaveComercial | undefined {
   const ciclo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora) : null;
   const q = registro.tipo === 'nota' ? lerNotaQualificacaoComercial(registro.texto, agora) : null;
@@ -2803,7 +2816,13 @@ export class CrmStore {
       throw new RegistroFalhou(chaveComercial ? 'O n8n não confirmou o resultado. Aguarde a fonte; não repita a operação.' : 'O n8n não respondeu. Nada foi confirmado na planilha.', null);
     }
     const corpo = await resposta.json().catch(() => ({})) as Record<string, unknown>;
-    if (chaveComercial && (!resposta.ok || corpo.ok !== true)) await this.journalComercial.marcarAmbiguo(chaveComercial);
+    if (chaveComercial && (!resposta.ok || corpo.ok !== true)) {
+      // Recusa explícita = nada foi gravado: a reserva sai e o Rômulo corrige e tenta de novo
+      // (naoGravouNoN8n). O resto (5xx, a planilha que falhou depois de tentar, 2xx sem ok) continua
+      // ambíguo: o append pode ter entrado, e repetir gravaria o fato duas vezes.
+      if (naoGravouNoN8n(resposta.status, corpo)) await this.journalComercial.liberarNaoGravado(chaveComercial);
+      else await this.journalComercial.marcarAmbiguo(chaveComercial);
+    }
     if (resposta.status === 401 || resposta.status === 403) throw new RegistroFalhou("O n8n recusou o segredo do registro.", resposta.status);
     if (resposta.status === 404) throw new RegistroFalhou("O fluxo 08 · CRM não está ativo no n8n.", resposta.status);
     if (!resposta.ok || corpo.ok !== true) {

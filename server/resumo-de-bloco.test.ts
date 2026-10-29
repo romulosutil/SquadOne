@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  ATRASO_MAXIMO_MIN, BLOCOS, MAX_NOMES, blocoDaAcao, blocoDevido, montarResumoDeBloco, resumoDeBlocoLigado,
+  ATRASO_MAXIMO_MIN, BLOCOS, MAX_NOMES, TEXTO_SEM_RETRATO, blocoDaAcao, blocoDevido, montarResumoDeBloco, montarResumoSemRetrato, resumoDeBlocoLigado,
 } from "./resumo-de-bloco.ts";
 import { validarAviso, textoDoAviso } from "./avisos.ts";
 import { MAX_AVISOS_POR_DIA, criarVendedor, estadoNovo } from "./vendedor.ts";
@@ -178,7 +178,7 @@ describe("resumo de bloco: a cola no vendedor", () => {
     return { dir, textos, deps };
   }
 
-  it("às 08h55 o resumo sai antes do aviso, conta no teto, e um reinício não o repete", async () => {
+  it("às 08h55 o resumo sai antes do aviso, fica fora do teto, e um reinício não o repete", async () => {
     const agora = { t: sp(QUARTA, "08:55") };
     const { dir, textos, deps } = await montar(agora);
     const vendedor = criarVendedor(deps);
@@ -194,7 +194,7 @@ describe("resumo de bloco: a cola no vendedor", () => {
       assert.match(textos[1] ?? "", /Estúdio A/, "o aviso da resposta sai depois do resumo");
       const estado = JSON.parse(await readFile(deps.arquivoDeEstado, "utf8"));
       assert.deepEqual(estado.blocosResumidos, [`${QUARTA}|fechar`]);
-      assert.equal(estado.avisosHoje, 2, "o resumo conta 1 no teto, o aviso outro");
+      assert.equal(estado.avisosHoje, 1, "só o aviso do lead conta no teto; o resumo fica fora (29/10/2026)");
       agora.t += 3 * min;
       reiniciado = criarVendedor(deps);
       await reiniciado.volta();
@@ -212,24 +212,56 @@ describe("resumo de bloco: a cola no vendedor", () => {
     } finally { vendedor.parar(); await rm(dir, { recursive: true, force: true }); }
   });
 
-  for (const [nome, antes] of [
-    ["o resumo leva o último lugar do teto: o aviso de rotina da mesma volta fica para a Central", MAX_AVISOS_POR_DIA - 1],
-    ["com o teto já cheio o resumo sai assim mesmo (2 por dia, em hora marcada)", MAX_AVISOS_POR_DIA],
-  ] as const) {
-    it(nome, async () => {
-      const agora = { t: sp(QUARTA, "08:56") };
-      const { dir, textos, deps } = await montar(agora);
-      await writeFile(deps.arquivoDeEstado, JSON.stringify({ ...estadoNovo(agora.t), avisosHoje: antes }));
-      const vendedor = criarVendedor(deps);
-      try {
-        const d = await vendedor.volta();
-        assert.equal(textos.length, 1);
-        assert.match(textos[0], /^🗓 Bloco 1/);
-        assert.deepEqual(d, { tipo: "nada", motivo: "teto-do-dia" });
-        assert.equal(JSON.parse(await readFile(deps.arquivoDeEstado, "utf8")).avisosHoje, antes + 1);
-      } finally { vendedor.parar(); await rm(dir, { recursive: true, force: true }); }
-    });
-  }
+  // Decisão de 29/10/2026: os resumos de bloco ficam fora do teto de 8 (como pagamento e aceite), não
+  // contam e não são barrados; assim nunca tiram a vaga de um aviso de lead.
+  it("com uma vaga no teto, o resumo não a toma: o aviso de rotina da mesma volta sai", async () => {
+    const agora = { t: sp(QUARTA, "08:56") };
+    const { dir, textos, deps } = await montar(agora);
+    await writeFile(deps.arquivoDeEstado, JSON.stringify({ ...estadoNovo(agora.t), avisosHoje: MAX_AVISOS_POR_DIA - 1 }));
+    const vendedor = criarVendedor(deps);
+    try {
+      const d = await vendedor.volta();
+      assert.equal(textos.length, 2);
+      assert.match(textos[0], /^🗓 Bloco 1/);
+      assert.match(textos[1], /Estúdio A/);
+      assert.equal(d.tipo, "avisar");
+      assert.equal(JSON.parse(await readFile(deps.arquivoDeEstado, "utf8")).avisosHoje, MAX_AVISOS_POR_DIA);
+    } finally { vendedor.parar(); await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it("com o teto já cheio o resumo sai assim mesmo e não conta; o aviso de rotina fica para a Central", async () => {
+    const agora = { t: sp(QUARTA, "08:56") };
+    const { dir, textos, deps } = await montar(agora);
+    await writeFile(deps.arquivoDeEstado, JSON.stringify({ ...estadoNovo(agora.t), avisosHoje: MAX_AVISOS_POR_DIA }));
+    const vendedor = criarVendedor(deps);
+    try {
+      const d = await vendedor.volta();
+      assert.equal(textos.length, 1);
+      assert.match(textos[0], /^🗓 Bloco 1/);
+      assert.deepEqual(d, { tipo: "nada", motivo: "teto-do-dia" });
+      assert.equal(JSON.parse(await readFile(deps.arquivoDeEstado, "utf8")).avisosHoje, MAX_AVISOS_POR_DIA);
+    } finally { vendedor.parar(); await rm(dir, { recursive: true, force: true }); }
+  });
+
+  it("sem retrato do CRM o resumo sai curto, sem nomes, e o bloco fica resumido", async () => {
+    const agora = { t: sp(QUARTA, "08:55") };
+    const { dir, textos, deps } = await montar(agora);
+    const vendedor = criarVendedor({ ...deps, lerVisao: async () => ({ estado: "indisponivel", leads: [], hoje: [] }) as unknown as CrmVisao });
+    try {
+      assert.deepEqual(await vendedor.volta(), { tipo: "nada", motivo: "fila-vazia" });
+      assert.deepEqual(textos, [["🗓 Bloco 1 · fechar · 09h00–10h30", TEXTO_SEM_RETRATO, "https://central.test/crm"].join("\n")]);
+      assert.doesNotMatch(textos[0], /Estúdio/);
+      const bloco2 = montarResumoSemRetrato(BLOCOS[1]!, `${QUARTA}|conversar`, sp(QUARTA, "13:55"));
+      validarAviso(bloco2);
+      assert.equal(textoDoAviso(bloco2), `🗓 Bloco 2 · conversar · 14h00–15h30\n${TEXTO_SEM_RETRATO}`);
+      const estado = JSON.parse(await readFile(deps.arquivoDeEstado, "utf8"));
+      assert.deepEqual(estado.blocosResumidos, [`${QUARTA}|fechar`]);
+      assert.equal(estado.avisosHoje, 0);
+      agora.t += min;
+      await vendedor.volta();
+      assert.equal(textos.length, 1, "o bloco já resumido não manda outro");
+    } finally { vendedor.parar(); await rm(dir, { recursive: true, force: true }); }
+  });
 
   it("falha do Telegram não marca: a volta seguinte tenta de novo", async () => {
     const agora = { t: sp(QUARTA, "08:55") };

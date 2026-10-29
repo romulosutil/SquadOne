@@ -95,3 +95,39 @@ it('rota real+CrmStore+n8n falso: dedup, reversão, correção e vínculos; nenh
     await fs.rm(dir, { recursive: true, force: true })
   }
 })
+
+it('recusa explícita do n8n libera a reserva comercial; resposta ambígua continua bloqueando (29/10/2026)', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aarr-recusa-'))
+  try {
+    const arquivo = path.join(dir, 'crm.json'), segredo = path.join(dir, 'segredo')
+    await fs.writeFile(segredo, 'segredo-somente-fixture')
+    const linhas: Record<string, string>[] = []
+    const salvar = () => fs.writeFile(arquivo, JSON.stringify(retrato(linhas)))
+    await salvar()
+    const respostas: Array<'recusa' | 'falha' | 'ok'> = []
+    let chamadas = 0
+    const store = new CrmStore({ retrato: arquivo, registroUrl: 'http://127.0.0.1:5679/webhook/crm-registro', segredoArquivo: segredo, entregasPrumo: path.join(dir, 'entregas'), conversas: path.join(dir, 'conversas'), journalComercial: path.join(dir, 'privado', 'journal.json') }, async (_url, init) => {
+      chamadas++
+      const vez = respostas.shift() ?? 'ok'
+      if (vez === 'recusa') return new Response(JSON.stringify({ ok: false, erro: 'Categoria comercial inválida.' }), { status: 400 })
+      if (vez === 'falha') return new Response(JSON.stringify({ ok: false, erro: 'A planilha não gravou: tempo esgotado' }), { status: 502 })
+      const corpo = JSON.parse(String(init!.body)), em = new Date(AGORA.getTime() - 5000).toISOString()
+      linhas.push({ ...corpo, em, origem: 'Central' }); await salvar()
+      return new Response(JSON.stringify({ ok: true, em }), { status: 200 })
+    })
+    const pagamento = entrada()
+    // Recusa da validação do 08 · CRM: o erro chega ao Rômulo e a mesma operação pode ser repetida.
+    respostas.push('recusa')
+    await assert.rejects(store.registrar(pagamento, AGORA), (e: Error) => e.name === 'RegistroFalhou' && /Categoria comercial inválida/.test(e.message))
+    const ok = await store.registrar(pagamento, AGORA)
+    assert.equal(ok.ok, true)
+    assert.equal(chamadas, 2)
+    assert.equal(linhas.length, 1)
+    // 502 (a planilha pode ter gravado antes do erro): ambíguo, sem segundo POST.
+    const outro = entrada(textoDoRegistroReceita('pagamento_confirmado', condicao, 'REC-002', '2026-10-19'))
+    respostas.push('falha')
+    await assert.rejects(store.registrar(outro, AGORA), (e: Error) => e.name === 'RegistroFalhou')
+    await assert.rejects(store.registrar(outro, AGORA), RegistroInvalido)
+    assert.equal(chamadas, 3)
+  } finally { await fs.rm(dir, { recursive: true, force: true }) }
+})
