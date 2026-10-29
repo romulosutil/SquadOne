@@ -1254,7 +1254,11 @@ def dados_do_modelo(dados: dict, diag: dict) -> dict:
     for b in buscas:  # o molde escreve "X de nota" e "N avaliações": sem número, o concorrente não entra
         b["concorrentes"] = [c for c in b["concorrentes"] if isinstance(c["nota"], (int, float))
                              and isinstance(c["avaliacoes"], int)]
-    acoes = sorted((acao_do_ponto(p, diag, site) for p in diag["pontos"]), key=lambda a: a["ordem"])
+    # A "Prioridade 01" resolve o ponto que abre a página (o fato mais forte, FORCA_DO_PONTO); as outras seguem
+    # "o que vocês fazem hoje vem antes". Com o site fora do ar na manchete e "responder às avaliações" como
+    # primeira ação (29/10/2026, Arnoldo), a página dizia uma coisa e mandava fazer outra.
+    acoes = [acao_do_ponto(p, diag, site) for p in diag["pontos"]]
+    acoes = acoes[:1] + sorted(acoes[1:], key=lambda a: a["ordem"])
     avals = (diag.get("avaliacoes_lidas") or {}).get("total") or 0
     hoje_site = diag.get("site_hoje")
     site_rotulo = ({"nenhum": "sem site", "rede": "site: rede social"}.get((site or {}).get("tipo", ""))
@@ -2810,9 +2814,9 @@ def testar() -> int:
             diag = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7))
             m = dados_do_modelo(dados, diag)
             self.assertEqual([(x["n"], x["titulo"], x["quem"]) for x in m["o_que_fazer"]],
-                             [("01", "Pedir avaliação a quem saiu satisfeito", "Vocês mesmos, a partir de hoje."),
-                              ("02", "Um site de vocês, que abra no botão “Site” do perfil",
+                             [("01", "Um site de vocês, que abra no botão “Site” do perfil",
                                "Um fornecedor de site de vocês, ou o PRUMO."),
+                              ("02", "Pedir avaliação a quem saiu satisfeito", "Vocês mesmos, a partir de hoje."),
                               ("03", "Anunciar para quem procura “advogado em Anápolis”",
                                "Quem cuida dos anúncios de vocês, ou o PRUMO.")])
             # Advocacia: a linha da OAB vai na primeira tela (uma vez), não no fim de uma ação.
@@ -3517,6 +3521,8 @@ def testar() -> int:
             self.assertEqual(ed["acao"]["pronto"], primeira["pronto"])
             self.assertNotEqual(ed["acao"]["preparar"], ed["abertura"]["prioridade"])
             self.assertEqual(ed["abertura"]["titulo"], m["pontos"][0]["titulo"])
+            # A Prioridade 01 resolve o fato da manchete (o site), não o que é mais fácil de fazer.
+            self.assertIn("site", primeira["titulo"].lower())
 
     suite = unittest.TestSuite()
     for c in (Leitura, Diagnostico, Pagina, Profundo, Presenca, TresAtos, Places, Publicar, Avulso, Versao6):
