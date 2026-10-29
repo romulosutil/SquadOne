@@ -370,8 +370,9 @@ fonte", nota só quando a página a mostra e nunca em advocacia, pergunta sem `d
 cache de 30 dias, robots/sitemap/llms, e o gerador levando os três arquivos ao palco; inclui o `main()` sem
 login e, desde 14/10/2026, o demo sob pedido: a fila só com o pedido e o lead de fora do Brasil, o pedido gerado em
 `_em-conversa/` com o recibo do Raio-X mesclado, uma tentativa por toque, o DESCARTAR ignorado), o `raio-x --testar`
-(72; o avulso: recibo criado sem `site_url`, a página feita à mão continua no deploy, republicar com o demo no mesmo
-endereço, deploy que falha tira a página da pasta, quem fica de fora dos novos; desde 29/10/2026 a classe `Versao6`,
+(74; o avulso: recibo criado sem `site_url`, a página feita à mão continua no deploy, republicar com o demo no mesmo
+endereço, deploy que falha tira a página da pasta, quem fica de fora dos novos, a borda da Vercel que ainda serve a
+página anterior ganha outra leitura antes de virar falha; desde 29/10/2026 a classe `Versao6`,
 com um advogado de Teresina inventado: o fato mais forte abre a página, a busca da especialidade só quando
 verificável, o condicional das respostas às avaliações, a linha da OAB e a trava de preço ou promessa, o mesmo achado
 no máximo duas vezes, o fecho depois do convite do Mapa e a Prioridade 01 resolvendo o ponto 01; padrão em
