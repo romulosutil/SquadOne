@@ -68,6 +68,25 @@ Raio-X daqui termina no convite para o Mapa (a variante "com equipe" do molde, `
 serviços sem preço: o Raio-X precisa dizer que o Mapa existe (pedido do Rômulo). Abaixo do padrão do piloto
 (AbaixoDoPadrao), não há página.
 
+Versão 6 (29/10/2026): o Raio-X editorial aprovado em 17/10/2026 (prumo, `00-contexto/decisoes.md`) chega ao
+automático pelo `modelo_raio_x.py` (refeito do `gerar.py` do piloto, que traz o `editorial_raio_x` e o
+`indice_prumo` dentro dele): abertura com o achado e três evidências, o Índice Prumo de Presença em destaque
+(nota de 18, régua, faixa e as seis dimensões), a primeira ação com entregáveis e critério de pronto, e o convite
+ao Mapa sem o catálogo dos quatro serviços. E o que um Raio-X feito à mão que vende melhor fazia e este não:
+- o fato mais forte abre a página: os pontos saem na ordem de FORCA_DO_PONTO (site que não abre ou perfil sem
+  site > nota abaixo dos primeiros > posição na busca), e o ponto 01 é o título da abertura (e o achados[0] que a
+  primeira mensagem do Balcão cita);
+- a busca da especialidade quando ela é verificável: o nome, o tipo do perfil ou o resumo que o Google escreve
+  do lugar (editorialSummary, agora pedido no Place Details) dizem a área, e uma das três buscas é a dela;
+- nada recomendado como fato sem ter sido conferido: as respostas às avaliações viram condicional ("Se ainda
+  não respondem…");
+- advocacia: a linha "Feito dentro das regras da OAB (Provimento 205/2021)..." na primeira tela, e a página que
+  tiver preço ou promessa não sai (`conferir_advocacia`);
+- o mesmo achado no máximo duas vezes no que se lê sem abrir detalhe (a calculadora não repete a posição);
+- o fecho pessoal: "Para conversar, é só responder na mesma conversa do WhatsApp." e a assinatura, depois do
+  convite do Mapa.
+VERSAO continua 5 de propósito (ver VERSAO): o recibo ganha `raio_x_molde`.
+
 Publicação: a Vercel troca o deployment inteiro, então o Raio-X sobe junto com o
 `index.html` e o `og.jpg` da pasta, no mesmo projeto `demo-<slug>` (sem projeto
 novo: o hobby limita projetos). Antes, o `index.html` da pasta é comparado byte a
@@ -201,6 +220,10 @@ SEM_PADRAO = "raio-x-sem-padrao.json"
 # 3 primeiros, "3 coisas, nesta ordem" com quem faz, redes e anúncios (marcados "não conferido") e os
 # quatro serviços com preço. Abaixo do padrão do piloto (3 pontos, 3 bons, 3 avaliações...), não sai.
 VERSAO = 5
+# A versão 6 (29/10/2026, o editorial) NÃO sobe VERSAO: na Mel, o raio-x.timer republica sozinho todo lead da
+# raiz com raio_x_versao menor, e a decisão de 17/10 é não republicar em massa os Raio-X já enviados. O que
+# sai daqui em diante leva o molde no recibo (`raio_x_molde`), que o --pendentes não lê.
+MOLDE = "editorial-2026-10-29"
 CAMINHO = "raio-x"
 # O que o deploy do demo sobe e o do Raio-X tem de levar de novo (cada deploy troca o projeto inteiro).
 # Os três últimos são do SEO técnico (seo-do-site.py, 15/10/2026): demo antigo sem eles segue igual.
@@ -219,8 +242,11 @@ WHATSAPP_PRUMO = "5527999762786"
 PLACES_ENV = Path(os.environ.get("RAIO_X_CHAVE", str(Path.home() / ".config/prumo/places.env")))
 PLACES_URL = "https://places.googleapis.com/v1"
 # Detalhes: Place Details Enterprise + Atmosphere (as avaliações puxam o SKU mais caro).
+# editorialSummary (29/10/2026): o resumo que o próprio Google escreve do lugar ("Escritório de advocacia
+# previdenciária..."), da mesma faixa de cobrança (Atmosphere, já paga pelas avaliações). Só serve de pista
+# para a busca da especialidade; nunca vai para a página.
 CAMPOS_DETALHES = ("id,displayName,rating,userRatingCount,reviews,regularOpeningHours,websiteUri,businessStatus,"
-                   "primaryTypeDisplayName,googleMapsUri,addressComponents")
+                   "primaryTypeDisplayName,googleMapsUri,addressComponents,editorialSummary")
 # Concorrência: Text Search Enterprise (nota, avaliações, site e se mostram horário; sem avaliações dos outros).
 # Três buscas por lead desde a versão 5 (consultas_das_buscas).
 CAMPOS_BUSCA = ("places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,"
@@ -545,6 +571,15 @@ def ler_demo(texto: str) -> dict:
                               texto or "") is not None}
 
 
+# A força de cada ponto: quanto menos o fato depende de interpretação, mais cedo ele aparece (e abre a página).
+# Um site que não abre (ou que não existe) qualquer pessoa confere num toque; a nota abaixo dos primeiros, numa
+# olhada na lista; a posição na busca muda de pessoa para pessoa. Antes (versão 5), a busca vinha primeiro e o
+# "Fora dos 20 primeiros" abria a página e se repetia; o Raio-X feito à mão que vende melhor abre pelo site.
+FORCA_DO_PONTO = {"site-fora-do-ar": 0, "sem-site": 0, "site-sem-nome": 1, "site-e-rede-social": 1, "nota-baixa": 2,
+                  "posicao-na-busca": 3, "poucas-avaliacoes": 4, "sem-horario": 5, "site-sem-celular-ou-whatsapp": 6,
+                  "fotos-de-terceiros": 7}
+
+
 def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos_baixadas: int = 0,
                 places: dict | None = None, demo: dict | None = None, site_pagina: dict | None = None) -> dict:
     """O que já está bom e os pontos de melhoria (no máximo 3, na ordem de peso).
@@ -585,9 +620,8 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
     sem_horario_comum = any(r in sem_acento(vertical).lower() for r in SEM_HORARIO_COMUM)
     quando = f" quando conferimos ({hoje})" if hoje else " quando conferimos"
 
-    # Os pontos que mandam cliente para o concorrente, na ordem de peso do modelo aprovado (a busca, o
-    # site, a nota, as avaliações, o perfil). Cada um com um número que o dono confere e a ação que o
-    # resolve (vira "3 coisas, nesta ordem"). Só existe o que está no content.md ou no Places.
+    # Os pontos que mandam cliente para o concorrente. Cada um com um número que o dono confere e a ação que
+    # o resolve. Só existe o que está no content.md ou no Places. A ordem final é a de FORCA_DO_PONTO.
     pontos: list[dict] = []
     fora_do_topo = [b for b in buscas if b["posicao"] is None or b["posicao"] > 3]
     if fora_do_topo:
@@ -694,7 +728,9 @@ def diagnostico(dados: dict, site_hoje: str | None = None, hoje: str = "", fotos
                        "porque": "Das primeiras fotos que o Google mostra no perfil, 0 foram publicadas por vocês: quem "
                                  "publicou foram outras pessoas. É a primeira impressão do lugar, e vocês não escolheram "
                                  "qual é."})
-    pontos = pontos[:MAX_PONTOS]
+    # A ordem é a da força do fato (versão 6, 29/10/2026): o que o dono confere num toque vem primeiro, e o
+    # ponto 01 abre a página. Ordenação estável: dentro do mesmo peso, a ordem de cima fica.
+    pontos = sorted(pontos, key=lambda p: FORCA_DO_PONTO.get(p["id"], len(FORCA_DO_PONTO)))[:MAX_PONTOS]
 
     # O que já está bom: cada um com o porquê em números quando a busca dá.
     bons: list[dict] = []
@@ -1014,31 +1050,90 @@ def onde_esta_o_demo(diag: dict) -> tuple[str, str]:
             "Se quiserem ver antes, montamos uma demonstração com as fotos e as avaliações de vocês, sem compromisso.")
 
 
+def eh_advocacia(diag: dict) -> bool:
+    """Advocacia pelo ramo do Caçador ou pela categoria do Google: a página segue o Provimento 205/2021 da OAB."""
+    return any(r in sem_acento(f"{diag.get('vertical', '')} {diag.get('categoria', '')}").lower()
+               for r in ("advoc", "advog", "juridic"))
+
+
+# Dito na primeira tela de todo Raio-X de advocacia (versão 6). Só vale enquanto for verdade: a página do advogado
+# não tem preço nem promessa de resultado (o teste confere).
+CONFORMIDADE_OAB = ("Feito dentro das regras da OAB (Provimento 205/2021): conteúdo informativo, sem promessa de "
+                    "resultado e sem preço.")
+
+
+def texto_visivel(doc: str) -> str:
+    """O que a pessoa lê na página (sem script, estilo nem marcação), em minúsculas. PURO."""
+    t = re.sub(r"<script.*?</script>|<style.*?</style>", " ", doc, flags=re.S)
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", t))).lower()
+
+
+# O que o Provimento 205/2021 não deixa na página de um advogado: valor em reais, garantia ou promessa de
+# resultado, e preço. A própria linha da conformidade ("sem promessa ... sem preço") sai antes da conta. A
+# calculadora ("R$ [campo] 1 cliente a mais por mês", "R$ ___") é o valor que o próprio dono digita, não preço.
+PROIBIDO_NA_ADVOCACIA = (r"r\$\s*\d+(?:[.,]\d+)*(?!\s*clientes?\b)", r"\bgarant", r"\bprometemos\b", r"\bpromete\b",
+                         r"\bpreç")
+
+
+def conferir_advocacia(doc: str) -> list[str]:
+    """A página de advocacia diz que segue a OAB e não desmente isso em outro lugar. PURO."""
+    t = texto_visivel(doc)
+    linha = CONFORMIDADE_OAB.lower()
+    erros = [] if linha in t else ["advocacia: falta a linha da OAB (Provimento 205/2021) na página"]
+    t = t.replace(linha, " ")
+    return erros + [f"advocacia: a página tem “{m.group()}” (preço ou promessa)"
+                    for p in PROIBIDO_NA_ADVOCACIA for m in [re.search(p, t)] if m]
+
+
 def acao_do_ponto(p: dict, diag: dict, site: dict | None) -> dict:
-    """A coisa a fazer que resolve o ponto, com quem faz. `ordem`: o que vocês fazem hoje vem antes."""
+    """A coisa a fazer que resolve o ponto, com quem faz. `ordem`: o que vocês fazem hoje vem antes.
+    Versão 6: cada ação traz também o porquê (`motivo`), os entregáveis (`itens`), o primeiro passo de vocês
+    (`preparar`) e como saber que ficou pronto (`pronto`); a primeira vira a "Prioridade 01" da página, e
+    sem eles o molde repetiria o mesmo texto três vezes. Nenhum deles repete o achado do ponto: ele já está
+    na abertura e no ponto (no máximo duas vezes no texto que se lê sem abrir detalhe)."""
     chave = p["chave"]
     demo_no_ar, demo_novo = onde_esta_o_demo(diag)
     if chave == "busca":
-        oab = " Sem promessa de resultado, como o Provimento 205/2021 da OAB pede." if any(
-            r in sem_acento(diag.get("vertical", "")).lower() for r in ("advoc", "advog")) else ""
-        return {"ordem": 3, "titulo": f"Anunciar para quem procura “{p['consulta']}”",
-                "texto": f"Um anúncio no Google para “{p['consulta']}”, levando ao site. O anúncio aparece acima da lista "
-                         "do mapa desde o primeiro dia; o lugar na lista sobe com o tempo, com site e avaliações." + oab,
-                "quem": "Quem cuida dos anúncios de vocês, ou o PRUMO."}
+        consulta = p["consulta"]
+        return {"ordem": 3, "titulo": f"Anunciar para quem procura “{consulta}”",
+                "texto": f"Um anúncio no Google para “{consulta}”, levando ao site. O anúncio aparece acima da lista "
+                         "do mapa desde o primeiro dia; o lugar na lista pode subir com o tempo, com site e avaliações.",
+                "quem": "Quem cuida dos anúncios de vocês, ou o PRUMO.",
+                # "pode subir", nunca "sobe": a página não promete resultado (e a de advocacia diz isso por escrito).
+                "motivo": "O anúncio põe vocês acima da lista enquanto o site e as avaliações trabalham pelo lugar na lista.",
+                "itens": [f"Uma campanha no Google só para “{consulta}” e buscas parecidas, na cidade de vocês",
+                          "O anúncio levando ao site, com o botão de WhatsApp à vista",
+                          "Um teto de gasto por dia, decidido antes de ligar a campanha"],
+                "preparar": "Decidir quanto vocês aceitam investir por mês e qual serviço o anúncio deve mostrar primeiro.",
+                "pronto": f"Procurar “{consulta}” no celular e ver o anúncio de vocês acima da lista do mapa."}
     if chave == "site" and diag.get("site_hoje") == "no_ar":
         return {"ordem": 2, "titulo": "Deixar o site pronto para o celular, com botão de WhatsApp",
                 "texto": "Quem chega pelo Google está no celular e quer chamar na hora. Um botão de WhatsApp com a "
                          "mensagem começada e a página no tamanho da tela resolvem; " + demo_no_ar,
-                "quem": "Quem cuida do site de vocês, ou o PRUMO."}
+                "quem": "Quem cuida do site de vocês, ou o PRUMO.",
+                "motivo": "Quem chega pelo Google está no celular e quer chamar na hora, sem copiar número.",
+                "itens": ["A página no tamanho da tela do celular", "Um botão de WhatsApp com a mensagem começada",
+                          "O botão “Site” do perfil levando a essa página"],
+                "preparar": "Avisar quem cuida do site e dizer qual número de WhatsApp deve receber os pedidos.",
+                "pronto": f"Abrir {dominio(site['url']) if site and site.get('url') else 'o site'} no celular, tocar no "
+                          "botão de WhatsApp e ver a conversa abrir com a mensagem começada."}
     if chave == "site":
         tipo = (site or {}).get("tipo")
+        # Sem "não abre" no título: o achado já está na abertura e no ponto; aqui vai o que fazer.
         titulo = ("Um site no botão “Site” do perfil" if tipo == "nenhum"
                   else f"Um site de vocês no lugar de {nome_da_rede(site['url'])}" if tipo == "rede"
-                  else "Um site no lugar da página que não abre")
+                  else "Um site de vocês, que abra no botão “Site” do perfil")
         return {"ordem": 2, "titulo": titulo,
                 "texto": "Os serviços, as fotos, como é a primeira conversa e o botão de WhatsApp, numa página que abre "
                          "bem no celular e fica no botão “Site” do Google. " + demo_novo,
-                "quem": "Um fornecedor de site de vocês, ou o PRUMO."}
+                "quem": "Um fornecedor de site de vocês, ou o PRUMO.",
+                "motivo": "Quem está comparando quer ver o trabalho e chamar no mesmo lugar, antes de decidir.",
+                "itens": ["Uma página com os serviços, as fotos e como é a primeira conversa",
+                          "O botão de WhatsApp com a mensagem começada",
+                          "O endereço da página no botão “Site” do Perfil da Empresa do Google"],
+                "preparar": "Separar as fotos que vocês querem mostrar e a lista dos serviços que mais procuram vocês.",
+                "pronto": "Procurar vocês no Google pelo celular, tocar em “Site” e chegar à página nova, com o botão de "
+                          "WhatsApp funcionando."}
     if chave == "avaliacoes":
         med = p.get("alvo") or (diag.get("concorrencia") or {}).get("mediana_avaliacoes")
         alvo = (f"chegar perto das {int(med)} avaliações que os primeiros da busca têm" if med
@@ -1046,21 +1141,44 @@ def acao_do_ponto(p: dict, diag: dict, site: dict | None) -> dict:
         return {"ordem": 1, "titulo": "Pedir avaliação a quem saiu satisfeito",
                 "texto": f"No fim de cada atendimento, mandar o link do perfil pelo WhatsApp e pedir uma avaliação. É o "
                          f"jeito mais barato de {alvo}.",
-                "quem": "Vocês mesmos, a partir de hoje."}
+                "quem": "Vocês mesmos, a partir de hoje.",
+                "motivo": "Entre duas opções parecidas, quem compara confia em quem tem mais gente dizendo que deu certo.",
+                "itens": ["O link curto do perfil para avaliação, copiado do Perfil da Empresa do Google",
+                          "Uma mensagem pronta no WhatsApp, para mandar no fim de cada atendimento"],
+                "preparar": "Copiar o link de avaliação do perfil e deixar a mensagem salva no WhatsApp de quem atende.",
+                "pronto": "A mensagem sai no fim de todo atendimento, e as avaliações novas aparecem no perfil."}
     if chave == "nota":
-        return {"ordem": 1, "titulo": "Responder às avaliações, a começar pelas críticas",
-                "texto": "Uma resposta curta e educada a cada avaliação, sem discutir, mostra a quem lê que do outro lado "
-                         "tem gente cuidando. E pedir avaliação a quem saiu satisfeito é o que mais sobe a nota.",
-                "quem": "Vocês mesmos, esta semana."}
+        # O Places não entrega as respostas às avaliações (a página diz "não conferimos"): a ação não pode
+        # afirmar que vocês não respondem. Por isso o condicional.
+        return {"ordem": 1, "titulo": "Responder às avaliações, se ainda não respondem",
+                "texto": "Se ainda não respondem às avaliações, comecem pelas críticas: uma resposta curta e educada a "
+                         "cada uma, sem discutir, mostra a quem lê que do outro lado tem gente cuidando. E pedir "
+                         "avaliação a quem saiu satisfeito é o que mais sobe a nota.",
+                "quem": "Vocês mesmos, esta semana.",
+                "motivo": "Quem lê as avaliações também lê as respostas: elas mostram como vocês tratam quem reclama.",
+                "itens": ["Se ainda não houver, uma resposta curta e educada a cada avaliação crítica",
+                          "Um agradecimento às avaliações boas mais recentes",
+                          "Uma mensagem pronta para pedir avaliação a quem saiu satisfeito"],
+                "preparar": "Abrir as avaliações no Perfil da Empresa do Google e ver quais ainda estão sem resposta.",
+                "pronto": "Toda avaliação crítica do perfil tem uma resposta de vocês, sem discussão."}
     if chave == "horario":
         return {"ordem": 0, "titulo": "Preencher o horário no perfil do Google",
                 "texto": "São 5 minutos no Perfil da Empresa do Google. Com o horário, vocês aparecem para quem usa o "
                          "filtro “Aberto agora”, e o cliente sabe quando chamar.",
-                "quem": "Vocês mesmos, hoje."}
+                "quem": "Vocês mesmos, hoje.",
+                "motivo": "Com o horário, o perfil aparece para quem usa o filtro “Aberto agora”.",
+                "itens": ["O horário de cada dia da semana no Perfil da Empresa do Google",
+                          "Os feriados e os dias de horário diferente, quando houver"],
+                "preparar": "Entrar no Perfil da Empresa do Google com a conta que administra o perfil.",
+                "pronto": "Procurar vocês no Google Maps e ver o horário de hoje no perfil."}
     return {"ordem": 1, "titulo": "Publicar fotos do lugar e do trabalho",
             "texto": "Fotos da fachada, da equipe e do trabalho pronto, publicadas pelo próprio perfil, passam a ser as "
                      "que o cliente vê primeiro. Dá para fazer do celular, no Perfil da Empresa do Google.",
-            "quem": "Vocês mesmos, esta semana."}
+            "quem": "Vocês mesmos, esta semana.",
+            "motivo": "A primeira impressão do lugar passa a ser a que vocês escolheram mostrar.",
+            "itens": ["Uma foto da fachada", "Uma foto da equipe", "Fotos do trabalho pronto"],
+            "preparar": "Tirar as fotos com o celular, de dia, com o lugar arrumado.",
+            "pronto": "Abrir o perfil no Google Maps e ver as fotos de vocês entre as primeiras."}
 
 
 def perfil_linhas(diag: dict) -> list[dict]:
@@ -1200,8 +1318,11 @@ def dados_do_modelo(dados: dict, diag: dict) -> dict:
         "pontos": [{"titulo": p["titulo"], "porque": p["porque"]} for p in diag["pontos"]],
         "comparacao": comparacao_com_os_3(diag) or {"busca": "", "linhas": [], "frase": ""},
         "redes": redes, "anuncios": anuncios,
-        "o_que_fazer": [{"n": f"{i:02d}", "titulo": a["titulo"], "texto": a["texto"], "quem": a["quem"]}
+        "o_que_fazer": [{"n": f"{i:02d}", "titulo": a["titulo"], "texto": a["texto"], "quem": a["quem"],
+                         **{k: a[k] for k in ("motivo", "itens", "preparar", "pronto") if a.get(k)}}
                         for i, a in enumerate(acoes, 1)],
+        # A linha da OAB na primeira tela (o molde só a mostra com o dado).
+        **({"conformidade": CONFORMIDADE_OAB} if eh_advocacia(diag) else {}),
         "mapa_link": mapa_link_do_lead(dados), "mapa_exemplo_url": MAPA_EXEMPLO_URL, "servicos_motivo": motivos, "termos": termos,
         # os ganchos do modelo_raio_x (GANCHOS): o automático só lê o Google
         "lede": "Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.",
@@ -1421,7 +1542,12 @@ def pagina(dados: dict, diag: dict, site_url: str, tem_og: bool) -> str:
     rx = sys.modules[__name__]
     doc, _ = modelo_raio_x.raio_x(modelo, rx, calculo_prumo, PRECOS)
     molde, _ = modelo_raio_x.raio_x(EXEMPLO, rx, calculo_prumo, PRECOS)
+    # A posição na busca já está no ponto e na busca em detalhe: a conta da calculadora não a repete
+    # (versão 6; antes o "fora dos 20 primeiros" aparecia até cinco vezes na mesma página).
+    doc = re.sub(r" \(hoje, fora dos \d+ primeiros\)", "", doc)
     erros = modelo_raio_x.conferir_pagina(doc) + modelo_raio_x.conferir_esqueleto(doc, molde)
+    if eh_advocacia(diag):
+        erros += conferir_advocacia(doc)
     if erros:
         raise AbaixoDoPadrao("; ".join(erros))
     return doc
@@ -1544,6 +1670,7 @@ def resumir_detalhes(d: dict) -> dict:
             "tipo": _texto(d.get("primaryTypeDisplayName")), "site": str(d.get("websiteUri") or ""),
             "horario": list((d.get("regularOpeningHours") or {}).get("weekdayDescriptions") or []) or None,
             "status": str(d.get("businessStatus") or ""), "maps": str(d.get("googleMapsUri") or ""), "textos": textos,
+            "resumo": _texto(d.get("editorialSummary")),
             "bairro": next((str(c.get("longText") or "") for c in d.get("addressComponents") or []
                             if isinstance(c, dict) and {"sublocality_level_1", "sublocality"} & set(c.get("types") or [])), "")}
 
@@ -1600,10 +1727,13 @@ RAMOS = (
 )
 
 
-def consultas_das_buscas(tipo: str, vertical: str, cidade: str, nome: str = "", bairro: str = "") -> list[str]:
-    """As três buscas (sem repetir): a do termo do ramo, a da área achada no nome ou no tipo (ou o outro
-    jeito de pedir o mesmo serviço) e a do serviço de valor da área (ou "melhor <termo>"). Ramo fora de
-    RAMOS: a de `consulta_da_busca`, "melhor <termo>" e o termo no bairro (sem bairro, só duas)."""
+def consultas_das_buscas(tipo: str, vertical: str, cidade: str, nome: str = "", bairro: str = "",
+                         resumo: str = "") -> list[str]:
+    """As três buscas (sem repetir): a do termo do ramo, a da área achada no nome, no tipo ou no resumo que o
+    Google escreve do lugar (`resumo`, o editorialSummary; ou o outro jeito de pedir o mesmo serviço) e a do
+    serviço de valor da área (ou "melhor <termo>"). A área só vale quando um desses campos já lidos a diz:
+    nada é inferido. O nome e o tipo pesam mais que o resumo (o resumo às vezes lista várias áreas). Ramo fora
+    de RAMOS: a de `consulta_da_busca`, "melhor <termo>" e o termo no bairro (sem bairro, só duas)."""
     cidade = (cidade or "").strip()
     if not cidade:
         return []
@@ -1612,8 +1742,11 @@ def consultas_das_buscas(tipo: str, vertical: str, cidade: str, nome: str = "", 
     ramo = next((r for r in RAMOS if any(x in texto for x in r[0])), None)
     if ramo:
         _, termo, outro, areas = ramo
-        pistas = sem_acento(f"{nome} {tipo}").lower()
-        area = next((a for a in areas if any(x in pistas for x in a[0])), None)
+        area = None
+        for pistas in (sem_acento(f"{nome} {tipo}").lower(), sem_acento(resumo or "").lower()):
+            area = next((a for a in areas if any(x in pistas for x in a[0])), None)
+            if area:
+                break
         lista = [em(termo)] + ([em(area[1]), em(area[2])] if area else [em(outro), em(f"melhor {termo}")])
     else:
         primeira = consulta_da_busca(tipo, vertical, cidade)
@@ -1644,7 +1777,8 @@ def ler_places(pasta: Path, dados: dict, chave: str | None, hoje: dt.datetime | 
         # (o cache da versão 1, de uma busca só, também não).
         g = guardado["detalhes"]
         esperadas = consultas_das_buscas(str(g.get("tipo") or ""), dados["campos"].get("Vertical", ""),
-                                         dados["campos"].get("Cidade", ""), dados["nome"], str(g.get("bairro") or ""))
+                                         dados["campos"].get("Cidade", ""), dados["nome"], str(g.get("bairro") or ""),
+                                         str(g.get("resumo") or ""))
         try:
             lido = dt.datetime.fromisoformat(str(guardado["lido_em"]))
             feitas = [b.get("consulta") for b in guardado.get("buscas") or [] if isinstance(b, dict)]
@@ -1662,7 +1796,8 @@ def ler_places(pasta: Path, dados: dict, chave: str | None, hoje: dt.datetime | 
     detalhes = resumir_detalhes(d)
     buscas = []
     for consulta in consultas_das_buscas(detalhes["tipo"], dados["campos"].get("Vertical", ""),
-                                         dados["campos"].get("Cidade", ""), dados["nome"], detalhes["bairro"]):
+                                         dados["campos"].get("Cidade", ""), dados["nome"], detalhes["bairro"],
+                                         detalhes["resumo"]):
         codigo, b = pedir("places:searchText", CAMPOS_BUSCA, chave,
                           {"textQuery": consulta, "languageCode": "pt-BR", "regionCode": "BR",
                            "pageSize": TAMANHO_DA_BUSCA})
@@ -1797,7 +1932,8 @@ def publicar(pasta: Path, deploy=None) -> tuple[bool, str]:
         return False, f"depois do deploy o demo mudou ou caiu ({codigo}); confira {site_url}"
     gravar_recibo(pasta / "publicado.json", {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
                                              "raio_x_achados": achados(diag), "raio_x_versao": VERSAO,
-                                             "raio_x_em": agora(), "qualidade_raio_x": qualidade})
+                                             "raio_x_em": agora(), "raio_x_molde": MOLDE,
+                                             "qualidade_raio_x": qualidade})
     try:
         (pasta / "raio-x.html").write_text(pagina_html, encoding="utf-8")  # cópia local, para o backup e para conferir
     except OSError:
@@ -1879,7 +2015,7 @@ def publicar_avulso(pasta: Path, dados: dict, diag: dict, pagina_html: str, reci
         return False, f"publicado, mas {url} não respondeu com este Raio-X ({codigo})"
     gravar_recibo_avulso(pasta, dados, {"raio_x_url": url, "raio_x_pontos": len(diag["pontos"]),
                                         "raio_x_achados": achados(diag), "raio_x_versao": VERSAO,
-                                        "raio_x_em": agora(), "raio_x_projeto": AVULSO_PROJETO,
+                                        "raio_x_em": agora(), "raio_x_molde": MOLDE, "raio_x_projeto": AVULSO_PROJETO,
                                         "qualidade_raio_x": qualidade})
     try:
         (pasta / "raio-x.html").write_text(pagina_html, encoding="utf-8")
@@ -2241,6 +2377,59 @@ def places_exemplo(posicao: int | None = 7, outras: tuple = (3, 9)) -> dict:
                        busca("melhor advogado em Anápolis", outras[1])]}
 
 
+# O lead advogado da versão 6 (inventado; o caso real que motivou é o de um advogado de Teresina): site do perfil
+# fora do ar, nota 4,1 com 9 avaliações e fora dos 20 primeiros nas três buscas. Prova a ordem pela força do fato,
+# a linha da OAB, o condicional das respostas, a repetição e o fecho. O domínio .invalid nunca resolve.
+CONTENT_ADVOGADO = """# Lima Souza Advocacia
+
+- **Vertical:** advocacia
+- **Cidade:** Teresina
+- **País:** Brasil
+- **Endereço:** Avenida Frei Serafim, Teresina - PI
+- **Telefone:** +55 86 99812-3456
+- **Site antigo, fora do ar:** https://limasouza-adv.invalid/ (domínio expirado, estacionado ou em construção)
+- **Nota Google:** 4.1 (9 avaliações)
+- **Google Maps:** https://maps.google.com/?cid=123456789
+- **place_id:** ChIJadvogado
+- **Criado em:** 2026-10-28T09:00:00.000-03:00
+- **Slug:** lima-souza-advocacia
+
+## Por que este lead
+
+- +40 site próprio fora do ar (domínio expirado, estacionado ou em construção): https://limasouza-adv.invalid/
+- +15 telefone do Google é celular (WhatsApp provável, chega em uma pessoa)
+- +10 3 foto(s) enviadas pelo próprio negócio no Google
+- +5 horário preenchido no Google
+"""
+
+
+def places_advogado(lido_em: str = "2026-10-29T10:00:00-03:00", tipo: str = "Advogado", resumo: str = "") -> dict:
+    """O raio-x-places.json do CONTENT_ADVOGADO: 20 resultados por busca, nenhum deles o lead."""
+    consultas = consultas_das_buscas(tipo, "advocacia", "Teresina", "Lima Souza Advocacia", "Centro", resumo)
+
+    def busca(consulta: str, k: int) -> dict:
+        return {"consulta": consulta, "resultados": [
+            {"id": f"ChIJconc{k}{i}", "nome": f"Escritório {k}{i:02d} Advocacia", "nota": 4.6 + (i % 4) / 10,
+             "avaliacoes": 30 + 7 * i, "site": "https://conc{}{}.adv.br".format(k, i) if i % 2 == 0 else "",
+             "status": "OPERATIONAL", "horario": True} for i in range(20)]}
+    textos = [
+        {"nota": 5, "texto": "Atendimento atencioso, explicou cada etapa com clareza.", "autor": "Ana", "autor_uri": "",
+         "quando": "há 2 meses"},
+        {"nota": 4, "texto": "Bom atendimento e explica tudo com paciência.", "autor": "Bia", "autor_uri": "",
+         "quando": "há 4 meses"},
+        {"nota": 2, "texto": "Demorou para retornar as mensagens.", "autor": "Caio", "autor_uri": "", "quando": "há 1 ano"},
+    ]
+    return {"versao": 2, "place_id": "ChIJadvogado", "lido_em": lido_em,
+            "detalhes": {"nome": "Lima Souza Advocacia", "nota": 4.1, "avaliacoes": 9, "tipo": tipo,
+                         "site": "https://limasouza-adv.invalid/", "status": "OPERATIONAL",
+                         "horario": ["segunda-feira: 08:00–18:00", "terça-feira: 08:00–18:00", "quarta-feira: 08:00–18:00",
+                                     "quinta-feira: 08:00–18:00", "sexta-feira: 08:00–18:00", "sábado: Fechado",
+                                     "domingo: Fechado"],
+                         "maps": "https://maps.google.com/?cid=123456789", "textos": textos, "bairro": "Centro",
+                         "resumo": resumo},
+            "buscas": [busca(c, k) for k, c in enumerate(consultas)]}
+
+
 DEMO_EXEMPLO = """<html><body><header id="topo"><h1>Higor</h1></header>
 <section class="topo" id="topo"><h2 class="revela">Você já leu o seu <em>contrato</em> inteiro?</h2></section>
 <section id="papeis"><div><h2 id="t">Os papéis que chegam &amp; ficam</h2></div><a href="https://wa.me/5562993920412?text=Ol%C3%A1">Zap</a></section>
@@ -2338,11 +2527,12 @@ def testar() -> int:
 
         def test_achados_sao_os_pontos_em_dado(self):
             # O recibo leva os mesmos pontos, na mesma ordem, com os números (a Central cita no porquê da oferta).
+            # Versão 6: a ordem é a da força do fato (o site que não abre antes da posição na busca).
             d = diagnostico(ler_content(CONTENT_EXEMPLO), "fora", "08/10/2026", 5, places_exemplo(7))
             self.assertEqual(achados(d), [
-                {"id": "posicao-na-busca", "consulta": "advogado em Anápolis", "posicao": 7, "lidos": 10},
                 {"id": "site-fora-do-ar", "dominio": "higorferreira.adv.br", "consulta": "advogado em Anápolis",
                  "topo_lidos": 3, "topo_com_site": 1},
+                {"id": "posicao-na-busca", "consulta": "advogado em Anápolis", "posicao": 7, "lidos": 10},
                 {"id": "poucas-avaliacoes", "avaliacoes": 18, "consulta": "advogado em Anápolis", "mediana_da_busca": 60,
                  "avaliacoes_do_topo": [40, 50, 60]}])
             # Sem o Places: só o que o content.md dá, e nenhum número inventado (sem busca, nada de topo).
@@ -2370,13 +2560,13 @@ def testar() -> int:
             self.assertIn("Bar &lt;b&gt;&amp;&lt;/b&gt; Cia", h)
             self.assertNotIn("<b>&</b>", h)
             self.assertIn("https://demo-x.vercel.app/og.jpg", h)
-            self.assertIn(f"<body {MARCA}>", h)
-            self.assertIn("3 pontos que mandam cliente para o concorrente", h)
+            self.assertIn(f'<body {MARCA} class="prumo-assinatura">', h)  # o Índice Prumo marca o body
+            self.assertIn("O que pode dificultar a contratação", h)
             self.assertIn("lidos em 08/10/2026", h)
-            for s in PRECOS["servicos"]:  # os quatro serviços, sem o preço: os preços vêm no fim do Mapa
-                self.assertIn(f">{html.escape(s['nome'])}<", h[h.index('class="servicos-curto"'):])
+            # O editorial (17/10/2026) termina no convite do Mapa, sem o catálogo de quatro serviços nem preço.
+            self.assertNotIn('class="servicos-curto"', h)
+            for s in PRECOS["servicos"]:
                 self.assertNotIn(html.escape(s["preco"]), h)
-            self.assertIn("Os preços vêm no fim do Mapa.", h)
             self.assertNotIn("R$ 990", h)
             self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
             self.assertTrue(h.rstrip().endswith("</html>"))
@@ -2402,7 +2592,8 @@ def testar() -> int:
         def test_so_afirma_o_que_conferiu(self):
             dados = ler_content(CONTENT_EXEMPLO)
             h = pagina(dados, diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7)), "https://demo-x.vercel.app", True)
-            self.assertIn("Feito pelo PRUMO só com o que qualquer pessoa vê no Google, sem pedir nada a vocês.", h)
+            # O editorial troca o lede pela leitura do achado; o que não foi conferido segue dito nos limites.
+            self.assertIn("O que não foi conferido está identificado nos detalhes.", h)
             self.assertNotIn("nas redes e nos anúncios, sem pedir", h)
             # As avaliações: as que o Google mostra primeiro, nas duas frases (e não "as mais recentes").
             self.assertIn("Lemos as 5 avaliações que o Google mostra primeiro no perfil de vocês", h)
@@ -2412,7 +2603,7 @@ def testar() -> int:
             self.assertNotIn("têm resposta de vocês", h)
             self.assertNotIn("Responde às avaliações</td>", h)
             redes = h[h.index("<summary>Redes sociais</summary>"):h.index("<summary>Anúncios</summary>")]
-            anuncios = h[h.index("<summary>Anúncios</summary>"):h.index("<summary>A nota e de onde vem cada dado</summary>")]
+            anuncios = h[h.index("<summary>Anúncios</summary>"):h.index("<summary>Como conferimos · nota, fontes e limites</summary>")]
             for trecho in (redes, anuncios):
                 self.assertIn('<li class="nc">', trecho)
                 self.assertNotIn('<li class="ok">', trecho)
@@ -2426,7 +2617,8 @@ def testar() -> int:
             self.assertNotIn(f'href="{MAPA_LINK}"', h)
             self.assertEqual(mapa_link_do_lead({"nome": "X", "campos": {}}), MAPA_LINK)  # sem place_id: o simples
             self.assertIn('href="https://prumo-piloto-cdl.vercel.app/mapa"', h)
-            self.assertIn("Responder as 16 perguntas do Mapa", h)
+            self.assertIn("Começar o Mapa grátis", h)
+            self.assertNotIn("Responder as 16 perguntas do Mapa", h)
             for s in PRECOS["servicos"]:  # o único R$ da página é o da calculadora
                 self.assertNotIn(html.escape(s["preco"]), h)
             # O vocabulário interno e a fórmula da nota não aparecem (a trava do modelo).
@@ -2482,13 +2674,14 @@ def testar() -> int:
             dados = ler_content(CONTENT_EXEMPLO)
             d = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(7, (3, None)))
             titulos = [p["titulo"] for p in d["pontos"]]
-            self.assertEqual(titulos, ["7º lugar em “advogado em Anápolis”", "O site que aparece no Google não abre",
+            # Versão 6: o site que não abre (fato que se confere num toque) vem antes da posição na busca.
+            self.assertEqual(titulos, ["O site que aparece no Google não abre", "7º lugar em “advogado em Anápolis”",
                                        "Só 18 avaliações no Google"])
-            self.assertIn("vê 6 outros resultados antes de vocês", d["pontos"][0]["porque"])
+            self.assertIn("vê 6 outros resultados antes de vocês", d["pontos"][1]["porque"])
             self.assertIn("Em “escritório de advocacia em Anápolis”, vocês estão em 3º; em “melhor advogado em Anápolis”, "
-                          "não estão entre os 9 primeiros.", d["pontos"][0]["porque"])
-            self.assertIn("relevância, distância e destaque", d["pontos"][0]["porque"])
-            self.assertIn("1 dos 3 primeiros mostra site próprio", d["pontos"][1]["porque"])
+                          "não estão entre os 9 primeiros.", d["pontos"][1]["porque"])
+            self.assertIn("relevância, distância e destaque", d["pontos"][1]["porque"])
+            self.assertIn("1 dos 3 primeiros mostra site próprio", d["pontos"][0]["porque"])
             self.assertIn("no meio da lista, 60 avaliações", d["pontos"][2]["porque"])
             self.assertEqual([b["titulo"] for b in d["bons"]],
                              ["Nota 5,0 no Google", "3º lugar em “escritório de advocacia em Anápolis”",
@@ -2502,7 +2695,7 @@ def testar() -> int:
             # Fora nas três: uma frase só para as outras duas.
             d = diagnostico(dados, "fora", "08/10/2026", 5, places_exemplo(None, (None, None)))
             self.assertIn("Em “escritório de advocacia em Anápolis” e “melhor advogado em Anápolis”, também não.",
-                          d["pontos"][0]["porque"])
+                          next(p for p in d["pontos"] if p["id"] == "posicao-na-busca")["porque"])
 
         def test_avaliacoes_abaixo_da_metade_da_busca_viram_ponto_mesmo_acima_de_20(self):
             p = places_exemplo(2, (1, 2))
@@ -2618,10 +2811,17 @@ def testar() -> int:
             m = dados_do_modelo(dados, diag)
             self.assertEqual([(x["n"], x["titulo"], x["quem"]) for x in m["o_que_fazer"]],
                              [("01", "Pedir avaliação a quem saiu satisfeito", "Vocês mesmos, a partir de hoje."),
-                              ("02", "Um site no lugar da página que não abre", "Um fornecedor de site de vocês, ou o PRUMO."),
+                              ("02", "Um site de vocês, que abra no botão “Site” do perfil",
+                               "Um fornecedor de site de vocês, ou o PRUMO."),
                               ("03", "Anunciar para quem procura “advogado em Anápolis”",
                                "Quem cuida dos anúncios de vocês, ou o PRUMO.")])
-            self.assertIn("Provimento 205/2021 da OAB", m["o_que_fazer"][2]["texto"])  # advocacia: sem promessa
+            # Advocacia: a linha da OAB vai na primeira tela (uma vez), não no fim de uma ação.
+            self.assertEqual(m["conformidade"], CONFORMIDADE_OAB)
+            self.assertNotIn("Provimento", json.dumps(m["o_que_fazer"], ensure_ascii=False))
+            # Versão 6: cada ação traz o porquê, os entregáveis, o primeiro passo e o critério de pronto.
+            for x in m["o_que_fazer"]:
+                self.assertTrue(x["motivo"] and x["itens"] and x["preparar"] and x["pronto"], x["titulo"])
+                self.assertNotEqual(x["preparar"], x["texto"])
             self.assertEqual(m["servicos_motivo"], {
                 "site": "No Raio-X: o site do perfil não abriu quando conferimos.",
                 "trafego": "No Raio-X: 7º lugar em “advogado em Anápolis”.",
@@ -2643,7 +2843,7 @@ def testar() -> int:
             self.assertNotIn("javascript:", h)
             self.assertIn("O que os clientes dizem", h)
             self.assertIn("3 de 5", h)
-            self.assertIn("lida em 08/10/2026", h)
+            self.assertIn("lidos em 08/10/2026", h)
             self.assertNotRegex(h.lower(), r"#(00f|0000ff|1e90ff|2563eb)|blue|border-radius:\s*[1-9]")
             # O 4º fechou: a lista pula do 3º para o 5º, sem renumerar.
             self.assertIn('<span class="pos">3º</span><span class="quem">Gama Advogados</span>', h)
@@ -2705,11 +2905,13 @@ def testar() -> int:
             self.assertIn('<label for="prumo-valor">', h)
             self.assertIn('inputmode="decimal"', h)
             self.assertIn("1 cliente a mais por mês × R$ ___ = R$ ___ por mês", h)
-            # Na frente, a faixa e a nota com o link para o que ela quer dizer; a explicação, sem a fórmula, embaixo.
+            # Na frente, o Índice Prumo (nota de 18, régua, faixa e as seis dimensões) e o link para o método;
+            # a explicação, sem a fórmula, embaixo.
             ato1 = h[h.index('id="veredito"'):h.index('id="por-que"')]
-            self.assertIn('<p class="faixa-rotulo">Em construção</p>', ato1)
-            self.assertIn('class="prumo-fio"', ato1)
-            self.assertIn("Nota de presença: <strong>10,8 de 18</strong>", ato1)
+            self.assertIn('<p class="ip-faixa">Em construção</p>', ato1)
+            self.assertIn('<strong>10,8</strong><span>de 18</span>', ato1)
+            self.assertIn('class="ip-fio"', ato1)
+            self.assertEqual(ato1.count('<li><span>'), 6)  # as seis dimensões
             self.assertIn('href="#a-nota"', ato1)
             nota = h[h.index('<details class="detalhe" id="a-nota">'):]
             self.assertIn("Nota de presença: 10,8 de 18", nota)
@@ -2717,7 +2919,7 @@ def testar() -> int:
             self.assertLess(nota.index("Nota de presença"), nota.index("De onde vem cada dado"))
             for formula in ("de 0 a 3", "mediana", "proporcional", "cálculo PRUMO"):
                 self.assertNotIn(formula, h)
-            self.assertLess(h.index("pontos que mandam cliente"), h.index("<summary>A busca, em detalhe"))
+            self.assertLess(h.index("O que pode dificultar a contratação"), h.index("<summary>A busca, em detalhe"))
 
         def test_ler_pagina_do_site(self):
             v = '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -2763,45 +2965,52 @@ def testar() -> int:
             atos = [h.index(f'id="{a}"') for a in ("veredito", "por-que", "o-que-fazer")]
             self.assertEqual(atos, sorted(atos))
             ato1, ato2, ato3 = h[atos[0]:atos[1]], h[atos[1]:atos[2]], h[atos[2]:]
-            for trecho in ("Como vocês aparecem para quem procura", "Bar &amp; Cia &lt;Ltda&gt;", 'class="nota"',
-                           "faixa-presenca", "O que segura cliente", "O que perde cliente"):
+            # Ato 1 (editorial de 17/10/2026): o Índice Prumo, o achado mais forte e três evidências.
+            for trecho in ("Raio-X · Anápolis", "Bar &amp; Cia &lt;Ltda&gt;", 'class="ip-instrumento"',
+                           '<h2 class="v2-tese">O site que aparece no Google não abre</h2>', 'class="v2-evidencias"',
+                           "Nossa primeira recomendação"):
                 self.assertIn(trecho, ato1)
-            # Ato 2: os pontos abertos e a comparação com os 3 primeiros, antes de qualquer detalhe.
-            self.assertIn("3 pontos que mandam cliente para o concorrente", ato2)
+            self.assertEqual(ato1.count("<li><strong>"), 3)
+            # Ato 2: os pontos abertos; a comparação com os 3 primeiros num detalhe logo depois.
+            self.assertIn("O que pode dificultar a contratação", ato2)
             self.assertIn("Vocês e os 3 primeiros em “advogado em Anápolis”", ato2)
             self.assertIn('<p class="frase">', ato2)
-            self.assertLess(ato2.index("pontos que mandam"), ato2.index("Vocês e os 3 primeiros"))
-            self.assertLess(ato2.index("Vocês e os 3 primeiros"), ato2.index("<details"))
-            # Ato 3: 3 coisas com quem faz, o convite do Mapa e os quatro serviços sem preço, cada um com o link.
-            self.assertIn("3 coisas, nesta ordem", ato3)
-            self.assertEqual(ato3.count('<p class="quem">'), 3)
-            self.assertIn("Agora, o olhar por dentro: o Mapa", ato3)
-            self.assertLess(ato3.index('class="mapa-convite"'), ato3.index('class="servicos-curto"'))
-            self.assertEqual(ato3.count('href="https://wa.me/'), 4)
+            self.assertLess(ato2.index("O que pode dificultar"), ato2.index("Vocês e os 3 primeiros"))
+            # Ato 3: a primeira ação com entregáveis e critério de pronto, as outras duas, o convite do Mapa
+            # (sem o catálogo dos quatro serviços) e o fecho pessoal por último.
+            self.assertIn("Prioridade 01", ato3)
+            self.assertIn("O que precisa ficar pronto", ato3)
+            self.assertIn("Como saber que ficou pronto", ato3)
+            self.assertEqual(ato3.count("<li><h3>"), 2)
+            self.assertIn('class="mapa-convite"', ato3)
+            self.assertNotIn('class="servicos-curto"', ato3)
+            self.assertEqual(ato3.count('href="https://wa.me/'), 0)
             self.assertNotIn('<article class="cartao', ato3)
 
         def test_detalhes_sao_details_fechados_na_ordem(self):
             h = self.h
             titulos = re.findall(r"<details class=\"detalhe[^\"]*\"(?: id=\"a-nota\")?><summary>([^<]+)</summary>", h)
-            self.assertEqual(titulos, ["O que já está bom", "A busca, em detalhe", "O que os clientes dizem",
-                                       "O perfil no Google, item por item", "Redes sociais", "Anúncios",
-                                       "A nota e de onde vem cada dado"])
-            self.assertEqual(h.count("<details"), 7)
-            self.assertEqual(h.count("</details>"), 7)
+            self.assertEqual(titulos, ["Comparar com os 3 primeiros da busca", "O que já está bom", "A busca, em detalhe",
+                                       "O que os clientes dizem", "O perfil no Google, item por item", "Redes sociais",
+                                       "Anúncios", "Como conferimos · nota, fontes e limites"])
+            # + "Por que 18?" do Índice Prumo, que não é um detalhe do diagnóstico.
+            self.assertEqual(h.count("<details"), 9)
+            self.assertEqual(h.count("</details>"), 9)
             self.assertNotIn("<details open", h)  # fechados por padrão
 
-        def test_botao_do_whatsapp_com_o_numero_novo_e_o_nome_na_mensagem(self):
+        def test_whatsapp_do_prumo_e_o_fecho_pessoal(self):
             h = self.h
-            texto = "Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero falar de site."
-            esperado = "https://wa.me/5527999762786?text=" + urllib.parse.quote(texto, safe="")
-            self.assertIn(f'href="{html.escape(esperado)}"', h)
-            self.assertNotIn("<Ltda>", h)  # o nome vai codificado no link e escapado no texto
-            self.assertEqual(h.count(html.escape(esperado)), 1)  # a lista dos serviços; a barra do celular vai ao Mapa
-            for servico in ("anúncios", "redes sociais", "produtos digitais"):
-                resp = f"Olá, PRUMO. Vi o Raio-X da Bar & Cia <Ltda> e quero falar de {servico}."
-                self.assertIn(html.escape("https://wa.me/5527999762786?text=" + urllib.parse.quote(resp, safe="")), h)
+            # Sem o catálogo (editorial de 17/10/2026), nenhum link de serviço; o número do PRUMO fica no rodapé
+            # e a resposta é na mesma conversa em que o Raio-X chegou (versão 6).
+            self.assertNotIn('href="https://wa.me/', h)
+            self.assertIn("WhatsApp +55 27 99976-2786", h)
+            self.assertNotIn("<Ltda>", h)  # o nome sai escapado
             for velho in ("5527997780954", "27997780954", "99778-0954", "997780954"):
                 self.assertNotIn(velho, h)
+            fim = texto_visivel(h[h.index('id="o-que-fazer"'):h.index("<footer>")])
+            self.assertTrue(fim.rstrip().endswith("para conversar, é só responder na mesma conversa do whatsapp. "
+                                                  "rômulo sutil corrêa · prumo"), fim[-200:])
+            self.assertLess(fim.index("começar o mapa grátis"), fim.index("para conversar"))  # o Mapa continua
 
         def test_sem_preco_e_nada_da_versao_4(self):
             h = self.h
@@ -3008,6 +3217,8 @@ def testar() -> int:
                              ("https://demo-higor.vercel.app/raio-x", 3, VERSAO, "ChIJteste", "https://demo-higor.vercel.app"))
             self.assertEqual(len(r["raio_x_achados"]), 3)
             self.assertTrue(all(a.get("id") for a in r["raio_x_achados"]))
+            # O molde vai num campo próprio: a versão continua 5, e o --pendentes não republica em massa.
+            self.assertEqual(r["raio_x_molde"], MOLDE)
             self.assertTrue((self.pasta / "raio-x.html").is_file())
 
         def test_leva_de_novo_os_arquivos_do_seo_do_demo(self):
@@ -3204,8 +3415,111 @@ def testar() -> int:
         test_alias_diferente_nao_grava_o_campo = None
         test_pendentes_so_pronto_na_raiz_sem_raio_x_e_nunca_com_o_gerador_rodando = None
 
+    class Versao6(unittest.TestCase):
+        """29/10/2026: o editorial no automático e o que o Raio-X feito à mão faz melhor, com o lead advogado
+        (site fora do ar, nota 4,1 com 9 avaliações, fora dos 20 em “advogado em Teresina”)."""
+
+        def setUp(self):
+            self.dados = ler_content(CONTENT_ADVOGADO)
+            self.diag = diagnostico(self.dados, "fora", "29/10/2026", 3, places_advogado())
+            self.diag["avulso"], self.diag["demo_url"] = True, None  # lead novo: demo sob pedido
+            self.h = pagina(self.dados, self.diag, "", False)
+            # Até o rodapé (o colofão "Feito pelo PRUMO com dados públicos", igual em toda página).
+            corpo = self.h[self.h.index("<main"):self.h.index("<footer>")]
+            # O que se lê sem abrir nenhum detalhe, e o que está dentro dos detalhes.
+            self.lido = texto_visivel(re.sub(r"<details.*?</details>", " ", corpo, flags=re.S))
+            self.detalhes = texto_visivel("".join(re.findall(r"<details.*?</details>", corpo, flags=re.S)))
+
+        def test_a_o_fato_mais_forte_abre_a_pagina(self):
+            self.assertEqual([p["id"] for p in self.diag["pontos"]], ["site-fora-do-ar", "nota-baixa", "posicao-na-busca"])
+            self.assertIn('<h2 class="v2-tese">O site que aparece no Google não abre</h2>', self.h)
+            # Perfil sem site também abre a página antes da nota e da busca; a nota vem antes da busca.
+            t = CONTENT_ADVOGADO.replace("- **Site antigo, fora do ar:** https://limasouza-adv.invalid/ (domínio "
+                                         "expirado, estacionado ou em construção)\n", "")
+            p = places_advogado()
+            p["detalhes"]["site"] = ""
+            d = diagnostico(ler_content(t), None, "29/10/2026", 3, p)
+            self.assertEqual([x["id"] for x in d["pontos"]], ["sem-site", "nota-baixa", "posicao-na-busca"])
+            self.assertEqual(achados(d)[0]["id"], "sem-site")  # a 1ª mensagem do Balcão cita o mesmo fato
+            p["detalhes"]["nota"] = 4.8
+            d = diagnostico(ler_content(t.replace("4.1 (9", "4.8 (9")), None, "29/10/2026", 3, p)
+            self.assertEqual([x["id"] for x in d["pontos"]], ["sem-site", "posicao-na-busca", "poucas-avaliacoes"])
+
+        def test_b_busca_da_especialidade_so_quando_verificavel(self):
+            # Sem especialidade no nome, no tipo nem no resumo do Google: as três buscas de sempre.
+            self.assertEqual(consultas_das_buscas("Advogado", "advocacia", "Teresina", "Lima Souza Advocacia"),
+                             ["advogado em Teresina", "escritório de advocacia em Teresina", "melhor advogado em Teresina"])
+            # O resumo que o Google escreve (editorialSummary) diz a área: uma das buscas é a da especialidade.
+            resumo = "Escritório de advocacia previdenciária, com foco em aposentadoria e benefícios do INSS."
+            self.assertIn("advogado previdenciário em Teresina",
+                          consultas_das_buscas("Advogado", "advocacia", "Teresina", "Lima Souza Advocacia", "", resumo))
+            # O tipo do perfil também vale; e o nome pesa mais que o resumo.
+            self.assertIn("advogado trabalhista em Teresina",
+                          consultas_das_buscas("Advogado trabalhista", "advocacia", "Teresina", "Lima Souza"))
+            self.assertIn("advogado criminalista em Teresina",
+                          consultas_das_buscas("Advogado", "advocacia", "Teresina", "Lima Souza Advocacia Criminal", "",
+                                               "Atende direito de família e trabalhista."))
+            # O resumo é lido do Places (mesma faixa de cobrança das avaliações) e o cache confere as buscas com ele.
+            self.assertIn("editorialSummary", CAMPOS_DETALHES)
+            self.assertEqual(resumir_detalhes({"editorialSummary": {"text": resumo}})["resumo"], resumo)
+            with tempfile.TemporaryDirectory() as tmp:
+                pasta = Path(tmp)
+                guardado = places_advogado(dt.datetime.now().astimezone().isoformat(timespec="seconds"), resumo=resumo)
+                (pasta / CACHE_PLACES).write_text(json.dumps(guardado, ensure_ascii=False), encoding="utf-8")
+                lido = ler_places(pasta, self.dados, None)
+                self.assertIn("advogado previdenciário em Teresina", [b["consulta"] for b in lido["buscas"]])
+
+        def test_c_nao_afirma_que_nao_respondem(self):
+            # A página diz que não conferiu as respostas; a ação fala no condicional, nunca como fato.
+            self.assertIn("se vocês respondem a elas não conferimos", self.detalhes)
+            self.assertIn("se ainda não respondem às avaliações", self.lido)
+            for afirmacao in ("vocês não respondem", "não respondem às avaliações", "sem resposta de vocês"):
+                self.assertNotIn(afirmacao, self.lido.replace("se ainda não respondem às avaliações", ""))
+
+        def test_d_advocacia_segue_a_oab(self):
+            self.assertIn(CONFORMIDADE_OAB.lower(), self.lido)
+            self.assertEqual(self.lido.count("provimento 205/2021"), 1)
+            self.assertEqual(conferir_advocacia(self.h), [])
+            self.assertEqual(modelo_raio_x.conferir_pagina(self.h), [])  # PROIBIDAS do molde não barram a linha
+            # Um preço ou uma garantia na página do advogado e ela não sai.
+            self.assertTrue(conferir_advocacia(self.h.replace("</main>", "<p>Site por R$ 990.</p></main>")))
+            self.assertTrue(conferir_advocacia(self.h.replace("</main>", "<p>Garantimos o primeiro lugar.</p></main>")))
+            # Fora da advocacia, a linha não aparece.
+            dados = ler_content(CONTENT_ADVOGADO.replace("advocacia", "contabilidade"))
+            d = diagnostico(dados, "fora", "29/10/2026", 3, places_advogado(tipo="Contador"))
+            self.assertNotIn("Provimento", pagina(dados, d, "", False))
+
+        def test_e_o_mesmo_achado_no_maximo_duas_vezes(self):
+            for p in self.diag["pontos"]:
+                titulo = p["titulo"].lower()
+                self.assertLessEqual(self.lido.count(titulo), 2, titulo)  # a abertura e o ponto
+                self.assertLessEqual(self.lido.count(titulo) + self.detalhes.count(titulo), 2, titulo)
+            # A busca: no ponto (título e porquê) e uma vez nos detalhes, sem a calculadora repetir.
+            self.assertLessEqual(self.lido.count("20 primeiros"), 2)
+            self.assertEqual(self.lido.count("fora dos 20 primeiros"), 1)
+            self.assertLessEqual(self.detalhes.count("“advogado em teresina” fora dos 20"), 1)
+            self.assertNotIn("(hoje, fora dos 20 primeiros)", self.detalhes)
+            # O site que não abre: abertura e ponto; a ação diz o que fazer, sem repetir o achado.
+            self.assertEqual(self.lido.count("não abre"), 2)
+
+        def test_f_fecho_pessoal_depois_do_convite_do_mapa(self):
+            self.assertTrue(self.lido.rstrip().endswith(
+                "para conversar, é só responder na mesma conversa do whatsapp. rômulo sutil corrêa · prumo"),
+                self.lido[-200:])
+            self.assertIn("começar o mapa grátis", self.lido)
+            self.assertLess(self.lido.index("começar o mapa grátis"), self.lido.index("para conversar"))
+
+        def test_a_primeira_acao_tem_entregaveis_e_criterio_de_pronto(self):
+            m = dados_do_modelo(self.dados, self.diag)
+            ed = modelo_raio_x.editorial_basico(m)
+            primeira = m["o_que_fazer"][0]
+            self.assertEqual(ed["acao"]["itens"], primeira["itens"])
+            self.assertEqual(ed["acao"]["pronto"], primeira["pronto"])
+            self.assertNotEqual(ed["acao"]["preparar"], ed["abertura"]["prioridade"])
+            self.assertEqual(ed["abertura"]["titulo"], m["pontos"][0]["titulo"])
+
     suite = unittest.TestSuite()
-    for c in (Leitura, Diagnostico, Pagina, Profundo, Presenca, TresAtos, Places, Publicar, Avulso):
+    for c in (Leitura, Diagnostico, Pagina, Profundo, Presenca, TresAtos, Places, Publicar, Avulso, Versao6):
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(c))
     return 0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1
 

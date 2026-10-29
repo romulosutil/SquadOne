@@ -325,5 +325,78 @@
   "cliente": "paciente",
   "clientes": "pacientes",
   "empresa": "clínica"
+ },
+ "editorial": {
+  "abertura": {
+   "titulo": "Quem já foi atendido gostou. Quem procura precisa conhecer melhor a clínica.",
+   "leitura": "Vocês têm nota 4,8, mas o perfil não tem site e aparece em 12º na busca de implante. A primeira melhoria é mostrar os tratamentos e facilitar o contato numa página própria.",
+   "prioridade": "Tratamentos, fotos da clínica, as avaliações e o botão de WhatsApp numa página que abre bem no celular. É o que fecha a distância para os 3 primeiros.",
+   "evidencias": [
+    {
+     "numero": "4,8",
+     "rotulo": "nota no Google",
+     "detalhe": "41 avaliações"
+    },
+    {
+     "numero": "3",
+     "rotulo": "buscas consultadas",
+     "detalhe": "Posições e concorrentes em detalhe abaixo"
+    },
+    {
+     "numero": "6º",
+     "rotulo": "dentista em Guarapari",
+     "detalhe": "20 resultados lidos"
+    }
+   ],
+   "confirmado": "Os dados disponíveis do perfil e das buscas, descritos nas fontes abaixo.",
+   "limites": "A ordem das buscas varia por pessoa. O que não foi conferido está identificado nos detalhes."
+  },
+  "pontos": [
+   {
+    "titulo": "O perfil do Google não tem site",
+    "porque": "O perfil não tem site. Os 3 primeiros da busca de dentista mostram página própria com tratamentos e contato. Uma página atual daria ao paciente mais informações para comparar e procurar a clínica."
+   },
+   {
+    "titulo": "41 avaliações, menos da metade do que os primeiros da busca têm",
+    "porque": "Entre duas clínicas com nota parecida, o paciente confia em quem tem mais avaliações. Os 3 primeiros de “dentista em Guarapari” têm 112 no meio da lista; contando as 8 clínicas das três buscas, 93. E só 1 das 5 avaliações mais recentes tem resposta de vocês: quem lê a reclamação do WhatsApp não vê o outro lado."
+   },
+   {
+    "titulo": "12º lugar em “implante dentário em Guarapari”",
+    "porque": "Implante é o tratamento de maior valor da clínica, e quem procura por ele hoje não chega em vocês sem rolar a lista. Em “dentista em Guarapari” vocês estão em 6º; em “clínica odontológica em Guarapari”, em 5º. Duas clínicas anunciam no Google para essa busca; vocês não."
+   }
+  ],
+  "acao": {
+   "titulo": "Um site ligado ao botão “Site” do Google",
+   "motivo": "Quem procura dentista em Guarapari compara duas ou três clínicas antes de chamar. Os 3 primeiros da busca mostram site próprio, com tratamentos, fotos e botão de WhatsApp. Vocês aparecem só com nome e nota, e quem compara escolhe quem mostra mais.",
+   "itens": [
+    "Tratamentos oferecidos, com uma seção própria de implante e fotos reais da clínica.",
+    "Telefone, contato de mensagem e link para as avaliações públicas.",
+    "Página que funcione no celular, ligada ao botão Site do Google."
+   ],
+   "preparar": "Separar fotos e tratamentos, confirmar o contato e escolher quem cuida da página.",
+   "quem": "Um fornecedor de site de vocês, ou o PRUMO.",
+   "pronto": "No celular, o paciente encontra o tratamento e abre o contato a partir do botão Site do Google.",
+   "sequencia": [
+    {
+     "titulo": "Pedir avaliação na saída e responder todas",
+     "texto": "Um cartão no balcão com o QR do perfil e cinco minutos por dia para responder, inclusive as antigas. Dá para fazer sozinhos, sem contratar ninguém."
+    },
+    {
+     "titulo": "Aparecer para quem procura implante",
+     "texto": "Uma página só de implante no site e um anúncio no Google para “implante dentário em Guarapari”. É o tratamento de maior valor e a busca em que vocês estão mais longe."
+    }
+   ]
+  },
+  "mapa": {
+   "titulo": "Do primeiro contato ao serviço fechado",
+   "ponte": "Agora vale entender o que acontece entre o primeiro contato e o serviço fechado.",
+   "texto": "O Mapa usa as respostas de vocês e uma conversa para entender como os pedidos chegam, quem acompanha os orçamentos e onde o atendimento pode melhorar. A recomendação vem dessa análise. O documento fica com vocês, contratem ou não."
+  },
+  "fontes": [
+   {
+    "nome": "Como o Google escolhe a ordem",
+    "url": "https://support.google.com/business/answer/7091?hl=pt-BR"
+   }
+  ]
  }
 }

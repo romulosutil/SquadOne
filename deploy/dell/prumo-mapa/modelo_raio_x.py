@@ -24,6 +24,229 @@ import html
 import re
 import urllib.parse
 
+"""Índice Prumo: assinatura aprovada para Raio-X e Mapa."""
+import html
+import re
+e = lambda t: html.escape(str(t), quote=True)
+
+def ip_numero(n):
+    return f'{n:.1f}'.replace('.', ',')
+
+
+def ip_dimensao(n):
+    return (f'{n:.2f}'.rstrip('0').rstrip('.').replace('.', ',') if n is not None else '—')
+
+
+def assinatura_indice(tipo, nota, faixa, dimensoes, leitura, explicacao):
+    rotulos = (['Pouco visível', 'Em construção', 'Bem visível'] if tipo == 'Presença'
+               else ['Quase tudo passa por você', 'Parte já anda sozinha', 'Anda sem você'])
+    indice = 0 if nota < 7 else 1 if nota < 13 else 2
+    labels = ''.join(f'<li class="{"ip-atual" if i == indice else ""}">{e(x)}'
+                     + ('<span class="visualmente-oculto"> · faixa atual</span>' if i == indice else '') + '</li>'
+                     for i, x in enumerate(rotulos))
+    linhas = ''.join(f'<li><span>{e(nome)}</span><b>{e(ip_dimensao(n))}<small> / 3</small></b></li>' for nome,n in dimensoes)
+    return (
+        f'<div class="ip-instrumento" aria-labelledby="ip-titulo" data-indice="{nota}" data-maximo="18">'
+        f'<div class="ip-cabecalho"><h2 id="ip-titulo">Índice Prumo <span>de {e(tipo)}</span></h2>'
+        '<span class="ip-edicao">Leitura inicial</span></div>'
+        f'<div class="ip-leitura"><div class="ip-valor" aria-label="{e(ip_numero(nota))} de 18 pontos">'
+        f'<strong>{e(ip_numero(nota))}</strong><span>de 18</span></div>'
+        f'<div class="ip-interpretacao"><p class="ip-faixa">{e(faixa)}</p><p>{e(explicacao)}</p></div></div>'
+        f'<div class="ip-escala" role="img" aria-label="Régua do Índice Prumo: {e(ip_numero(nota))} de 18, {e(faixa)}">'
+        '<div class="ip-extremos"><span>0</span><span>18</span></div>'
+        '<div class="ip-trilho"><span></span><span></span><span></span>'
+        f'<i class="ip-fio" style="--indice-pos:{nota / 18 * 100:.6f}%" aria-hidden="true"></i></div>'
+        f'<ol class="ip-faixas">{labels}</ol></div>'
+        '<details class="ip-metodo" id="ip-metodo"><summary>Por que 18? Conheça as 6 dimensões</summary>'
+        '<div><p>O método do Prumo reúne seis dimensões, com até três pontos em cada uma. A escala completa vai até 18. '
+        'A mesma régua é usada em todas as empresas; o diagnóstico explica o que precisa mudar em cada caso. Quando uma dimensão não foi conferida, ela fica fora da conta. A leitura identifica o que foi medido.</p>'
+        f'<ul class="ip-dimensoes">{linhas}</ul>'
+        '<p>A pontuação resume esta leitura. Para acompanhar a evolução, repetimos os critérios e registramos o que mudou; '
+        'uma nota maior, sozinha, não comprova aumento de vendas ou economia.</p></div></details>'
+        f'<p class="ip-origem">{e(leitura)}</p></div>'
+    )
+
+
+def aplicar_indice(doc, instrumento):
+    # O índice vem antes do diagnóstico; a frase editorial passa a explicá-lo.
+    ponto = '</h1>'
+    if doc.count(ponto) != 1 or doc.count('class="v2-tese"') != 1:
+        raise ValueError('A abertura de avaliação precisa ter um nome e uma tese')
+    doc = doc.replace(ponto, ponto + instrumento, 1)
+    doc = re.sub(r'<body([^>]*)>', lambda m: '<body' + (re.sub(r'class="([^"]*)"', lambda c: 'class="'+c[1]+' prumo-assinatura"', m[1]) if 'class=' in m[1] else m[1]+' class="prumo-assinatura"') + '>', doc, count=1)
+    return doc
+
+
+
+def acrescentar_presenca(doc, dados, presenca):
+    if presenca.get('nota') is None:
+        return doc
+    nomes=['Posição nas buscas','Nota dos clientes','Volume de avaliações','Respostas às avaliações','Perfil no Google','Site e contato']
+    dimensoes=list(zip(nomes,[x['nota'] for x in presenca['blocos']]))
+    cfg=dados.get('indice') or {}
+    instrumento=assinatura_indice('Presença',presenca['nota'],presenca['faixa']['rotulo'],dimensoes,
+        cfg.get('leitura') or f"{dados['nome']} · dados públicos lidos em {dados['lido_em']} · {presenca['medidos']} dimensões avaliadas.",
+        cfg.get('explicacao') or presenca['faixa']['texto'])
+    doc=aplicar_indice(doc,instrumento)
+    doc=re.sub(r'Nota [0-9,]+/18 · [^<]+?\. ', '',doc,count=1)
+    return doc
+
+CSS_INDICE = "/* Ensaio isolado: Índice Prumo como instrumento. Nenhuma regra altera o padrão. */\n.prumo-assinatura .v2-abertura h1{margin-bottom:1.25rem}\n.prumo-assinatura .v2-abertura .v2-tese{font-size:clamp(1.65rem,3.7vw,2.5rem);line-height:1.12;max-width:28ch;letter-spacing:-.035em;margin:2rem 0 1rem}\n.ip-instrumento{border-top:4px solid #e0490f;border-bottom:1px solid #9a9089;padding:1.2rem 0 1rem;color:#1b1512}\n.ip-cabecalho{display:flex;align-items:baseline;justify-content:space-between;gap:1rem}\n.ip-cabecalho h2{font-size:1.05rem;font-weight:800;line-height:1.3;margin:0;letter-spacing:-.015em;text-transform:uppercase}\n.ip-cabecalho h2 span{font-weight:500;text-transform:none;white-space:nowrap}\n.ip-edicao{font-size:.73rem;text-transform:uppercase;letter-spacing:.06em;color:#5e564f;white-space:nowrap}\n.ip-leitura{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:2rem;align-items:center;margin:1.35rem 0 1.1rem}\n.ip-valor{display:flex;align-items:baseline;gap:.6rem;font-variant-numeric:tabular-nums}\n.ip-valor strong{font-size:6.2rem;font-weight:850;line-height:.95;letter-spacing:-.065em}\n.ip-valor>span{font-size:1rem;white-space:nowrap;color:#5e564f}\n.ip-interpretacao .ip-faixa{font-size:1.55rem;font-weight:750;letter-spacing:-.025em;line-height:1.15;margin:0 0 .6rem;max-width:20ch}\n.ip-interpretacao p:not(.ip-faixa){font-size:.91rem;line-height:1.5;max-width:40ch;margin:0;color:#4a3e36}\n.ip-extremos{display:flex;justify-content:space-between;font-size:.7rem;color:#5e564f;margin-bottom:.5rem}\n.ip-trilho{position:relative;display:grid;grid-template-columns:7fr 6fr 5fr;height:10px;gap:3px}\n.ip-trilho>span:nth-child(1){background:#cfc7bd}.ip-trilho>span:nth-child(2){background:#9a9089}.ip-trilho>span:nth-child(3){background:#4a3e36}\n.ip-fio{position:absolute;left:var(--indice-pos);top:-11px;width:2px;height:32px;background:#e0490f;transform:translateX(-50%)}\n.ip-fio:after{content:'';position:absolute;left:-5px;bottom:-3px;width:12px;height:13px;background:#e0490f;clip-path:polygon(50% 100%,0 35%,15% 0,85% 0,100% 35%)}\n.ip-faixas{list-style:none;padding:0;margin:.85rem 0 0;display:grid;grid-template-columns:7fr 6fr 5fr;gap:.6rem}\n.ip-faixas li{font-size:.72rem;line-height:1.35;color:#5e564f;max-width:18ch}\n.ip-faixas .ip-atual{font-weight:800;color:#1b1512}\n.ip-metodo{border-top:1px solid rgba(20,15,12,.16);margin-top:1.1rem;padding-top:.85rem}\n.ip-metodo summary{font-size:.8rem;font-weight:650;cursor:pointer;line-height:1.4;list-style-position:inside}\n.ip-metodo summary:focus-visible{outline:2px solid #8a2b0c;outline-offset:4px}\n.ip-metodo>div>p{font-size:.84rem;line-height:1.6;max-width:65ch}\n.ip-dimensoes{list-style:none;padding:0;margin:1rem 0;display:grid;grid-template-columns:1fr 1fr;column-gap:1.4rem}\n.ip-dimensoes li{display:flex;justify-content:space-between;align-items:center;gap:.8rem;font-size:.82rem;line-height:1.4;border-bottom:1px solid rgba(20,15,12,.16);padding:.65rem 0}\n.ip-dimensoes b{white-space:nowrap;font-variant-numeric:tabular-nums}\n.ip-dimensoes small{font-weight:400;color:#5e564f}\n.ip-origem{font-size:.7rem;line-height:1.5;color:#5e564f;margin:.9rem 0 0;max-width:75ch}\n@media(max-width:560px){.ip-cabecalho{align-items:flex-start;gap:.5rem}.ip-cabecalho h2{font-size:.95rem;max-width:19ch}.ip-cabecalho h2 span{display:block}.ip-edicao{font-size:.62rem}.ip-leitura{grid-template-columns:1fr;gap:.9rem;margin:1.1rem 0 1rem}.ip-valor strong{font-size:5rem}.ip-interpretacao .ip-faixa{font-size:1.25rem;max-width:none;margin-bottom:.4rem}.ip-interpretacao p:not(.ip-faixa){font-size:.85rem;max-width:none}.ip-faixas li{font-size:.66rem}.ip-dimensoes{grid-template-columns:1fr}.ip-origem{font-size:.67rem}.prumo-assinatura .v2-abertura .v2-tese{margin-top:1.6rem}}\n"
+
+CSS_MAPA_EDITORIAL = '/* Mapa: contas com naturezas diferentes permanecem em colunas distintas. */\n.m2-duas-contas{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin:1.6rem 0}\n.m2-duas-contas article{padding:1.3rem;border-top:3px solid #e0490f;background:rgba(20,15,12,.035)}\n.m2-duas-contas h3{font-size:2rem;line-height:1.15;margin:.8rem 0;letter-spacing:-.035em}\n.m2-duas-contas h3 small{display:block;font-size:.85rem;font-weight:500;letter-spacing:0;margin-top:.5rem}\n.m2-duas-contas p{font-size:.95rem;line-height:1.6;margin:0}\n.m2-contas .detalhe{margin-top:1rem}\n@media(max-width:560px){.m2-duas-contas{grid-template-columns:1fr;gap:1rem}.m2-duas-contas h3{font-size:1.8rem}}\n'
+"""Apresentação editorial do Raio-X, aprovada pelo Rômulo em 17/10/2026.
+
+A nota continua no método PRUMO. A síntese e a ação são próprias de cada empresa.
+O fallback permite que o Dell use a mesma estrutura com dados parciais.
+"""
+import html
+import re
+
+e = lambda t: html.escape(str(t), quote=True)
+numero = lambda n: str(n).replace('.', ',').removesuffix(',0')
+
+def substituir(doc, padrao, texto):
+    novo, n = re.subn(padrao, lambda _: texto, doc, flags=re.S)
+    if n != 1:
+        raise ValueError(f"Esperava exatamente um bloco para {padrao!r}; encontrei {n}")
+    return novo
+
+
+def aplicar(doc, dados, presenca):
+    editorial = dados.get("editorial") or editorial_basico(dados)
+    a = editorial["abertura"]
+    leitura_nota = (f'Nota {e(numero(presenca["nota"]))}/18 · {e(presenca["faixa"]["rotulo"])}. '
+                    if presenca.get("nota") is not None else 'Nota ainda não calculada: faltam dados confirmados. ')
+    evidencias = "".join(
+        f'<li><strong>{e(x["numero"])}</strong><span>{e(x["rotulo"])}</span><small>{e(x["detalhe"])}</small></li>'
+        for x in a["evidencias"])
+    abertura = (
+        '<section class="ato veredito v2-abertura" id="veredito" aria-labelledby="t-veredito">'
+        f'<p class="kicker">Raio-X · {e(dados["cidade"])}</p><h1 id="t-veredito">{e(dados["nome"])}</h1>'
+        f'<h2 class="v2-tese">{e(a["titulo"])}</h2><p class="lede">{e(a["leitura"])}</p>'
+        f'<ul class="v2-evidencias" aria-label="O que encontramos">{evidencias}</ul>'
+        '<div class="v2-prioridade"><span class="miudo">Nossa primeira recomendação</span>'
+        f'<p>{e(a["prioridade"])}</p><a class="link-escuro" href="#primeira-acao">Ver o que precisa ficar pronto ↓</a></div>'
+        '<div class="v2-medicao"><p><strong>Uma referência de presença, não uma previsão de vendas.</strong> '
+        f'{leitura_nota}'
+        f'Leitura de {e(dados["lido_em"])}. '
+        '<a class="link-escuro" href="#a-nota" onclick="document.getElementById(\'a-nota\').open=true">Como conferimos</a></p>'
+        f'<p><b>Conferido:</b> {e(a["confirmado"])}</p><p><b>Limites:</b> {e(a["limites"])}</p>'
+        # Regra de conselho de classe (advocacia: Provimento 205/2021 da OAB) dita na primeira tela, não escondida:
+        # quem recebe precisa ver que a página não promete resultado nem fala de preço. Só com o dado.
+        + (f'<p>{e(dados["conformidade"])}</p>' if dados.get("conformidade") else '')
+        + '</div></section>'
+    )
+    doc = substituir(doc, r'<section class="ato veredito".*?</section>', abertura)
+    pontos = "".join(
+        f'<li><span class="marcador">{i:02d}</span><div><h3>{e(x["titulo"])}</h3><p>{e(x["porque"])}</p></div></li>'
+        for i, x in enumerate(editorial["pontos"], 1))
+    doc = substituir(doc, r'<div class="pontos">.*?</ul></div>',
+        '<div class="pontos"><h2>O que pode dificultar a contratação</h2><ul class="lista">' + pontos + '</ul></div>')
+    comp = re.search(r'<div class="comparacao">.*?</div>', doc, re.S).group()
+    doc = doc.replace(comp, '<details class="detalhe v2-comparacao"><summary>Comparar com os 3 primeiros da busca</summary>'
+        '<div class="corpo">' + comp + '</div></details>', 1)
+    # A metodologia permanece acessível; a régua passa a apoiar a análise, sem dominar a abertura.
+    doc = doc.replace('<summary>A nota e de onde vem cada dado</summary>', '<summary>Como conferimos · nota, fontes e limites</summary>')
+    doc = doc.replace('A ordem muda um pouco de pessoa para pessoa, porque o Google leva em conta onde cada um está.',
+        'Posições observadas nesta consulta do Maps. A ordem pode mudar por localização e personalização.')
+    doc = doc.replace('>sem site</span>', '>sem link de site no perfil</span>')
+    # Não extrapolar de uma busca sem link para afirmar inexistência de site do concorrente.
+    fontes = '<h3 class="sub">Confira nas fontes públicas</h3><ul class="metodo">' + ''.join(
+        f'<li><a class="link-escuro" href="{e(x["url"])}" target="_blank" rel="noopener">{e(x["nome"])}</a></li>'
+        for x in editorial["fontes"]) + '</ul>'
+    doc = substituir(doc, r'(<details class="detalhe" id="a-nota">.*?)(</div></details>)',
+        re.search(r'<details class="detalhe" id="a-nota">.*?(?=</div></details>)', doc, re.S).group() + fontes + '</div></details>')
+    acao = editorial["acao"]
+    sequencia = ''.join(f'<li><h3>{e(x["titulo"])}</h3><p>{e(x["texto"])}</p></li>' for x in acao["sequencia"])
+    m = editorial["mapa"]
+    fechamento = (
+        '<section class="ato o-que-fazer fazer v2-fazer" id="o-que-fazer" aria-labelledby="t-o-que-fazer">'
+        '<p class="kicker" id="t-o-que-fazer">O que fazer primeiro</p>'
+        f'<article class="v2-acao" id="primeira-acao"><span class="miudo">Prioridade 01</span>'
+        f'<h2>{e(acao["titulo"])}</h2><p class="intro">{e(acao["motivo"])}</p>'
+        '<h3>O que precisa ficar pronto</h3><ul class="v2-checklist">'
+        + ''.join(f'<li>{e(x)}</li>' for x in acao["itens"]) + '</ul>'
+        f'<div class="v2-execucao"><h3>O primeiro passo de vocês</h3><p>{e(acao["preparar"])}</p>'
+        f'<h3>Quem faz</h3><p>{e(acao["quem"])}</p></div>'
+        f'<div class="v2-pronto"><span class="miudo">Como saber que ficou pronto</span><p>{e(acao["pronto"])}</p></div></article>'
+        f'<ul class="v2-sequencia">{sequencia}</ul>'
+        '<div class="mapa-convite"><span class="miudo">O próximo passo · grátis</span>'
+        f'<h2>{e(m["titulo"])}</h2><p><strong>{e(m["ponte"])}</strong></p><p>{e(m["texto"])}</p>'
+        '<p class="fatos"><span>16 perguntas</span><span>~10 minutos</span><span>sem extrato nem senha</span>'
+        '<span>conversa de 45 min</span></p>'
+        f'<a class="botao-zap" href="{e(dados["mapa_link"])}" target="_blank" rel="noopener">Começar o Mapa grátis</a>'
+        f'<a class="link-escuro" href="{e(dados["mapa_exemplo_url"])}">Ver um Mapa de exemplo</a></div>'
+        # O fecho pessoal (29/10/2026): o Raio-X chega pelo WhatsApp, e quem lê até aqui precisa saber que a
+        # resposta é na mesma conversa e quem está do outro lado. Vem depois do convite do Mapa, sem tirá-lo.
+        # Sem classe nova: o esqueleto do exemplo (que não tem fecho) continua valendo para todo lead.
+        + (f'<p><strong>{e(editorial["fecho"]["texto"])}</strong><br>{e(editorial["fecho"]["assinatura"])}</p>'
+           if editorial.get("fecho") else '')
+        + '</section>'
+    )
+    doc = substituir(doc, r'<section class="ato o-que-fazer fazer".*?</section>', fechamento)
+    doc = doc.replace('Responder as 16 perguntas do Mapa', 'Começar o Mapa grátis')
+    return acrescentar_presenca(doc, dados, presenca)
+
+
+FECHO = {'texto': 'Para conversar, é só responder na mesma conversa do WhatsApp.',
+         'assinatura': 'Rômulo Sutil Corrêa · PRUMO'}
+
+
+def primeira_frase(t):
+    """A primeira frase de um porquê: a abertura cita o fato, e o ponto 01 traz o resto (sem repetir o parágrafo)."""
+    return re.split(r'(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÂÊÔÃÕÇ“"])', t.strip(), maxsplit=1)[0]
+
+
+def minuscula_inicial(t):
+    # "Nota 5,0 no Google" vira "nota 5,0 no Google" depois de dois-pontos; sigla ou número fica como está.
+    return t[:1].lower() + t[1:] if len(t) > 1 and t[1].islower() else t
+
+
+def editorial_basico(d):
+    """Estrutura comum para o automático; não transforma dados não lidos em fatos.
+
+    29/10/2026 (comparação com um Raio-X feito à mão que vende melhor): a abertura é o fato mais forte,
+    que é o ponto 01 (quem monta os pontos os entrega na ordem da força do fato verificável), e a leitura
+    cita só a primeira frase dele, mais o que já ajuda; a primeira ação usa o motivo, os entregáveis, o
+    primeiro passo e o critério de pronto que vierem nela (`motivo`, `itens`, `preparar`, `pronto`), em vez
+    de repetir o mesmo texto três vezes; e a página termina no fecho pessoal, depois do convite do Mapa."""
+    g=d.get('google'); ac=d['o_que_fazer']; primeiro=ac[0]; forte=d['pontos'][0]
+    # Sem ficha no Google (dados["google"] é None, como no gerar.py), não há nota nem avaliação para citar.
+    if g and g.get('nota') is not None:
+        no_google={'numero': numero(g['nota']), 'rotulo':'nota no Google', 'detalhe':str(g['avaliacoes'])+' avaliações'}
+    else:
+        no_google={'numero':'0', 'rotulo':'avaliações no Google', 'detalhe':'sem ficha no Google Maps'}
+    return {
+        'abertura': {
+            'titulo': forte['titulo'],
+            'leitura': primeira_frase(forte['porque'])
+                       + (f" O que já ajuda: {minuscula_inicial(d['bons'][0]['titulo'])}." if d.get('bons') else ''),
+            'prioridade': primeiro['texto'],
+            'evidencias': [
+                no_google,
+                {'numero':str(len(d['buscas'])), 'rotulo':'buscas consultadas', 'detalhe':'Posições e concorrentes em detalhe abaixo'},
+                {'numero':'01', 'rotulo':'primeira melhoria recomendada', 'detalhe':primeiro['titulo']}],
+            'confirmado':'Os dados disponíveis do perfil e das buscas, descritos nas fontes abaixo.',
+            'limites':'A ordem das buscas varia por pessoa. O que não foi conferido está identificado nos detalhes.'},
+        'pontos':d['pontos'],
+        'acao':{'titulo':primeiro['titulo'],'motivo':primeiro.get('motivo') or forte['porque'],
+            'itens':primeiro.get('itens') or [primeiro['texto']], 'preparar':primeiro.get('preparar') or primeiro['texto'],
+            'quem':primeiro['quem'],
+            'pronto':primeiro.get('pronto')
+                     or 'Conferir no celular se a mudança descrita acima ficou acessível para quem procura a empresa.',
+            'sequencia':[{'titulo':x['titulo'],'texto':x['texto']} for x in ac[1:]]},
+        'mapa':{'titulo':'Do primeiro contato ao serviço fechado',
+            'ponte':'Agora vale entender o que acontece entre o primeiro contato e o serviço fechado.',
+            'texto':'O Mapa usa as respostas de vocês e uma conversa para entender como os pedidos chegam, quem acompanha os orçamentos e onde o atendimento pode melhorar. A recomendação vem dessa análise. O documento fica com vocês, contratem ou não.'},
+        'fontes':[{'nome':'Como o Google escolhe a ordem','url':'https://support.google.com/business/answer/7091?hl=pt-BR'}],
+        'fecho':dict(FECHO)}
+
+CSS_EDITORIAL = "\n/* Proposta de apresentação. Mantém Archivo, cores e medidas do PRUMO. */\n.v2-abertura h1{font-size:clamp(1.15rem,3vw,1.6rem);line-height:1.2;letter-spacing:-.025em;margin-bottom:1.4rem}\n.v2-abertura .v2-tese{font-size:clamp(2.15rem,5.8vw,4.15rem);line-height:1.03;letter-spacing:-.045em;max-width:19ch;margin:0 0 1.5rem;font-weight:800}\n.v2-abertura .lede{max-width:62ch;font-size:clamp(1.05rem,2vw,1.22rem);line-height:1.6}\n.v2-evidencias{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.2rem;list-style:none;padding:0;margin:2.2rem 0}\n.v2-evidencias li{border-top:1px solid var(--linha,rgba(20,15,12,.2));padding-top:1rem;display:flex;flex-direction:column;gap:.4rem}\n.v2-evidencias strong{font-size:clamp(2rem,4vw,3rem);font-weight:800;line-height:1;letter-spacing:-.05em}\n.v2-evidencias span{font-weight:650;font-size:.95rem;line-height:1.35}\n.v2-evidencias small{font-size:.8rem;line-height:1.5;opacity:.7}\n.v2-prioridade{border-left:4px solid #e0490f;padding:1rem 1.4rem;background:rgba(224,73,15,.055);margin-top:1.5rem}\n.v2-prioridade p{font-size:1.15rem;line-height:1.45;font-weight:650;margin:.6rem 0 1rem;max-width:55ch}\n.v2-medicao{margin:1.6rem 0 0;padding-top:1.2rem;border-top:1px solid rgba(20,15,12,.16);max-width:70ch}\n.v2-medicao p{font-size:.8rem;line-height:1.6;margin:.5rem 0;opacity:.85}\n.v2-comparacao{margin-bottom:1rem}\n.v2-comparacao .comparacao{border:0;padding:0;margin:0}\n.v2-acao{scroll-margin-top:1.5rem;border-top:4px solid #e0490f;padding-top:1.5rem}\n.v2-acao h2{max-width:24ch;margin:.8rem 0 1rem}\n.v2-acao h3{font-size:1.03rem;margin:1.7rem 0 .6rem}\n.v2-checklist{list-style:none;padding:0;margin:1rem 0 1.7rem}\n.v2-checklist li{padding:.85rem 0 .85rem 1.7rem;position:relative;border-bottom:1px solid rgba(20,15,12,.12);line-height:1.6}\n.v2-checklist li:before{content:'✓';position:absolute;left:0;color:#c43b09;font-weight:700}\n.v2-execucao p,.v2-pronto p,.v2-sequencia p{line-height:1.65;max-width:65ch}\n.v2-pronto{padding:1.3rem 1.5rem;margin:1.8rem 0;background:rgba(20,15,12,.045)}\n.v2-pronto p{margin:.6rem 0 0}\n.v2-sequencia{list-style:none;padding:0;margin:2rem 0 3rem;display:grid;grid-template-columns:1fr 1fr;gap:1.8rem}\n.v2-sequencia li{border-top:1px solid rgba(20,15,12,.2);padding-top:1rem}\n.v2-sequencia h3{font-size:1.05rem;line-height:1.4;margin:0 0 .7rem}\n.v2-sequencia p{font-size:.92rem;margin:0}\n.v2-fazer .mapa-convite h2{max-width:24ch}\n@media(max-width:560px){.v2-evidencias{gap:.8rem;margin:1.8rem 0}.v2-evidencias strong{font-size:1.9rem}.v2-evidencias span{font-size:.8rem}.v2-evidencias small{font-size:.72rem}.v2-prioridade{padding:1rem}.v2-prioridade p{font-size:1.05rem}.v2-sequencia{grid-template-columns:1fr;gap:1.5rem}.v2-medicao p{font-size:.78rem}.v2-pronto{padding:1.1rem}}\n"
+
+editorial_raio_x = aplicar
+
+
 e = lambda t: html.escape(str(t), quote=True)  # noqa: E731
 
 
@@ -285,7 +508,7 @@ def pagina(titulo: str, descricao: str, corpo: list[str], barra: tuple[str, str]
         '<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E'
         '%3Crect width=%2216%22 height=%2216%22 fill=%22%231B1512%22/%3E%3Crect x=%227%22 y=%223%22 width=%222%22 height=%2210%22 fill=%22%23E0490F%22/%3E%3C/svg%3E">',
         *([cabeca] if cabeca else []),
-        f"<style>{rx.fonte_css(rx.FONTE)}{css_da_pagina(rx.CSS + cp.CSS_PRESENCA + CSS_COMUM)}</style></head>",
+        f"<style>{rx.fonte_css(rx.FONTE)}{css_da_pagina(rx.CSS + cp.CSS_PRESENCA + CSS_COMUM + CSS_EDITORIAL + CSS_INDICE + CSS_MAPA_EDITORIAL)}</style></head>",
         f'<body{" " + corpo_attr if corpo_attr else ""}><main class="folha">', *[c for c in corpo if c], "</main>",
         f'<div class="barra-fixa"><a class="botao-zap" href="{e(barra[0])}" target="_blank" rel="noopener">{e(barra[1])}</a></div>',
         f"<script>{js_da_pagina(rx, doc)}</script></body></html>\n"])
@@ -609,6 +832,7 @@ def raio_x(dados: dict, rx, cp, precos: dict) -> tuple[str, dict]:
             continue
         doc = doc.replace(velho, novo)
     doc = re.sub(r"\b1 de (\d+) avaliações recentes têm resposta", r"1 de \1 avaliações recentes tem resposta", doc)
+    doc = editorial_raio_x(doc, dados, presenca)
     return doc, presenca
 
 
@@ -674,6 +898,23 @@ def conferir_raio_x(d: dict, precos: dict, automatico: bool = False) -> list[str
                           ("anuncios", 1)):
         _lista(erros, d, campo, minimo)
     _motivos(erros, d, precos, ("site", "trafego") if automatico else ())
+    ed = d.get("editorial") or (editorial_basico(d) if automatico else {})
+    if not ed:
+        erros.append("editorial: falta a síntese e a primeira ação do padrão aprovado em 17/10")
+    else:
+        for campo in ("abertura.titulo", "abertura.leitura", "abertura.prioridade", "abertura.confirmado",
+                      "abertura.limites", "acao.titulo", "acao.motivo", "acao.preparar", "acao.quem",
+                      "acao.pronto", "mapa.titulo", "mapa.ponte", "mapa.texto"):
+            valor = ed
+            for chave in campo.split("."):
+                valor = valor.get(chave, {}) if isinstance(valor, dict) else {}
+            if not isinstance(valor, str) or len(valor.strip()) < 10:
+                erros.append(f"editorial.{campo}: precisa de texto próprio da empresa")
+        _lista(erros, ed, "abertura.evidencias", 3, exato=True)
+        _lista(erros, ed, "pontos", 3, exato=True)
+        _lista(erros, ed, "acao.itens", 1)
+        _lista(erros, ed, "acao.sequencia", 2, exato=True)
+        _lista(erros, ed, "fontes", 1)
     if not d.get("exemplo") and not automatico:
         if not str(d.get("mapa_link") or "").startswith("https://docs.google.com/forms/"):
             erros.append("mapa_link: todo Raio-X termina no convite para o Mapa; o link das 16 perguntas "
@@ -716,7 +957,15 @@ def conferir_pagina(doc: str) -> list[str]:
     """O texto que o dono lê não tem vocabulário interno, a fórmula da nota nem campo do modelo."""
     texto = re.sub(r"<script.*?</script>|<style.*?</style>", " ", doc, flags=re.S)
     texto = html.unescape(re.sub(r"<[^>]+>", " ", texto)).lower()
-    return [f"a página diz “{p}”: vocabulário interno, fórmula da nota ou campo do modelo" for p in PROIBIDAS if p in texto]
+    erros = [f"a página diz “{p}”: vocabulário interno, fórmula da nota ou campo do modelo" for p in PROIBIDAS if p in texto]
+    corpo = re.sub(r"<script.*?</script>|<style.*?</style>", "", doc, flags=re.S)
+    if 'class="ip-instrumento"' in corpo:
+        if corpo.count('class="ip-instrumento"') != 1 or corpo.count('class="ip-dimensoes"') != 1:
+            erros.append("o Índice Prumo e suas dimensões devem aparecer uma vez")
+        ids = re.findall(r'\bid="([^"]+)"', corpo)
+        if len(ids) != len(set(ids)):
+            erros.append("há IDs repetidos na página")
+    return erros
 
 
 # Campos do exemplo que um lead não tem: o aviso de exemplo, os links entre as páginas do exemplo e,
