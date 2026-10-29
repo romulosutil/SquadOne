@@ -48,6 +48,8 @@ import type { MemoriaDaVenda, Resolvida, VendaDoDia } from "./venda-do-dia.ts";
 import { conferirMensagem, resumoDosProblemas, type ResultadoDoGate, type TipoDeMensagem } from "./gate-de-envio.ts";
 import { criarEmSerie } from "./em-serie.ts";
 import { acaoInternaComercial } from "../src/operations/acao-interna-comercial.ts";
+import { AvisoInvalido, textoDoAviso as textoDoAvisoDaFila, validarAviso } from "./avisos.ts";
+import { blocoDevido, montarResumoDeBloco } from "./resumo-de-bloco.ts";
 
 export const ESPERA_DO_AVISO_MS = 30 * 60_000;
 /**
@@ -111,6 +113,11 @@ export interface EstadoDoVendedor {
    * que também guarda o que a Central resolveu: o lead que a Central tocou de manhã e escreve à tarde avisa.
    */
   leadsAvisados: string[];
+  /**
+   * Resumos de bloco já enviados hoje (`AAAA-MM-DD|fechar`, resumo-de-bloco.ts, 29/10/2026). Mora aqui, no
+   * vendedor.json do data dir, para um reinício às 08h58 não repetir o das 08h55.
+   */
+  blocosResumidos: string[];
 }
 
 export const silencioDoVendedor = (ms: number) => { const h = new Date(ms - 3 * 3600_000).getUTCHours(); return h >= 22 || h < 7; };
@@ -118,7 +125,7 @@ export const silencioDoVendedor = (ms: number) => { const h = new Date(ms - 3 * 
 export const diaDeSP = (ms: number) => new Date(ms - 3 * 3600_000).toISOString().slice(0, 10);
 
 export function estadoNovo(agora: number): EstadoDoVendedor {
-  return { dia: diaDeSP(agora), avisados: [], pulados: [], abertos: [], enviadosHoje: 0, avisosHoje: 0, leadsAvisados: [] };
+  return { dia: diaDeSP(agora), avisados: [], pulados: [], abertos: [], enviadosHoje: 0, avisosHoje: 0, leadsAvisados: [], blocosResumidos: [] };
 }
 
 /** O lead de uma chave de ação (`leadId|tipo...`). */
@@ -139,6 +146,7 @@ export function estadoDoDia(lido: unknown, agora: number): EstadoDoVendedor {
     avisosHoje: Number.isFinite(e.avisosHoje) ? Number(e.avisosHoje) : avisados.length,
     // Idem para os leads: no dia da troca, quem já estava em `avisados` conta como avisado.
     leadsAvisados: Array.isArray(e.leadsAvisados) ? e.leadsAvisados.filter((c) => typeof c === "string") : [...new Set(avisados.map(leadDaChave))],
+    blocosResumidos: Array.isArray(e.blocosResumidos) ? e.blocosResumidos.filter((c) => typeof c === "string") : [],
   };
 }
 
@@ -242,7 +250,7 @@ export const RODAPE_DO_EXPIRADO = "⌛ 30 min sem toque: fica para o fim da fila
  * fila, não tira nada do operador.
  */
 export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLido: EstadoDoVendedor, agora: number,
-  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>, doDia?: DoDia | null, doTime?: ReadonlySet<string>, pausaPrimeiros = false): { decisao: Decisao; estado: EstadoDoVendedor; fechados: Fechados } {
+  sugestoes?: ReadonlyMap<string, SugestaoDeVenda>, doDia?: DoDia | null, doTime?: ReadonlySet<string>, pausaPrimeiros = false): { decisao: Decisao; estado: EstadoDoVendedor; fechados: Fechados; fila: AcaoDeVenda[] } {
   const resolvidas = doDia?.resolvidas ?? {};
   const entradas = Object.entries(resolvidas);
   // O que se resolveu hoje conta aqui: enviado ou recusa marcada é como avisado; pulado vai para o fim.
@@ -250,11 +258,12 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
     ...estadoLido,
     abertos: [...estadoLido.abertos],
     leadsAvisados: [...(estadoLido.leadsAvisados ?? [])],
+    blocosResumidos: [...(estadoLido.blocosResumidos ?? [])],
     avisados: [...new Set([...estadoLido.avisados, ...entradas.filter(([, r]) => r.como !== "pulada").map(([c]) => c)])],
     pulados: [...new Set([...estadoLido.pulados, ...entradas.filter(([, r]) => r.como === "pulada").map(([c]) => c)])],
   };
   const nada: Fechados = { fora: [], expirados: [], sairam: [] };
-  if (silencioDoVendedor(agora)) return { decisao: { tipo: "nada", motivo: "fora-do-expediente" }, estado, fechados: nada };
+  if (silencioDoVendedor(agora)) return { decisao: { tipo: "nada", motivo: "fora-do-expediente" }, estado, fechados: nada, fila: [] };
   const toques = somarPrimeiros(doDia?.primeiros);
   const ritmo = ritmoDoEnvio(instantesDePrimeiroContato(visao?.leads ?? [], toques), agora);
   const porId = new Map((visao?.leads ?? []).map((l) => [l.id, l]));
@@ -273,14 +282,14 @@ export function decidir(visao: Pick<CrmVisao, "hoje" | "leads"> | null, estadoLi
   const urgente = avisoUrgente;
   const novas = fila.filter((a) => !avisados.has(a.chave) && vaiAoTelegram(a, porId.get(a.leadId))
     && (urgente(a) || (!noTeto && !leadsAvisados.has(a.leadId))));
-  if (!novas.length) return { decisao: { tipo: "nada", motivo: noTeto ? "teto-do-dia" : "fila-vazia" }, estado, fechados };
+  if (!novas.length) return { decisao: { tipo: "nada", motivo: noTeto ? "teto-do-dia" : "fila-vazia" }, estado, fechados, fila };
   // Um aviso aberto por vez, menos o "quero ver" que acabou de chegar: `quente` vem da fila (proxima-venda.ts)
   // e vale para o interesse E para a licença (pedeMaterial), que até 17/10 era gravada como interesse.
   // Pedido comercial que já exige Rômulo não espera outro aviso nem geração do copiloto.
   const proxima = novas.find(a => a.quente && acaoInternaComercial(a))
     ?? (estado.abertos.length ? novas.find(urgente) : novas[0]);
-  if (!proxima) return { decisao: { tipo: "nada", motivo: "esperando-toque" }, estado, fechados };
-  return { decisao: { tipo: "avisar", acao: proxima, depois: fila.filter((a) => a.chave !== proxima.chave) }, estado, fechados };
+  if (!proxima) return { decisao: { tipo: "nada", motivo: "esperando-toque" }, estado, fechados, fila };
+  return { decisao: { tipo: "avisar", acao: proxima, depois: fila.filter((a) => a.chave !== proxima.chave) }, estado, fechados, fila };
 }
 
 const avisoInternoComercial = (a: Pick<AvisoAberto, 'chave' | 'tipo' | 'conferirHistorico' | 'revisao' | 'interna'>) =>
@@ -536,6 +545,11 @@ export interface DepsDoVendedor {
     prontas(visao: CrmVisao): Promise<ReadonlyMap<string, SugestaoDeVenda>>;
     pedir(leadId: string, visao: CrmVisao): Promise<boolean>;
   };
+  /**
+   * Resumo de bloco às 08h55 e 13h55, seg–sex (resumo-de-bloco.ts, 29/10/2026). Ausente ou false =
+   * desligado; o server.ts liga com `resumoDeBlocoLigado(env)` (`SQUADONE_RESUMO_DE_BLOCO=false` desliga).
+   */
+  resumoDeBloco?: boolean;
 }
 
 export interface Vendedor {
@@ -562,7 +576,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
   // O que já foi ao Telegram mas ainda não está no arquivo. Se a gravação falha depois do envio, a volta
   // seguinte reenviaria o mesmo aviso a cada minuto (o teto não segura: ele também mora no arquivo) e o
   // toque nele não acharia o token. Só em memória; sai quando uma gravação passa.
-  const pendentes: { dia: string; avisados: Set<string>; abertos: AvisoAberto[]; avisos: number; leads: Set<string> } = { dia: "", avisados: new Set(), abertos: [], avisos: 0, leads: new Set() };
+  const pendentes: { dia: string; avisados: Set<string>; abertos: AvisoAberto[]; avisos: number; leads: Set<string>; blocos: Set<string> } = { dia: "", avisados: new Set(), abertos: [], avisos: 0, leads: new Set(), blocos: new Set() };
   let falhasDeGravacao = 0;
 
   /** O estado do arquivo; só o arquivo que ainda não existe é "dia novo". Outro erro sobe: a volta é pulada com log. */
@@ -580,6 +594,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       for (const a of pendentes.abertos) if (!e.abertos.some((x) => x.chave === a.chave)) e.abertos.push(a);
       for (const c of pendentes.avisados) if (!e.avisados.includes(c)) e.avisados.push(c);
       for (const l of pendentes.leads) if (!e.leadsAvisados.includes(l)) e.leadsAvisados.push(l);
+      for (const b of pendentes.blocos) if (!e.blocosResumidos.includes(b)) e.blocosResumidos.push(b);
       e.avisosHoje += pendentes.avisos;
     }
     return e;
@@ -603,6 +618,7 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     pendentes.abertos.length = 0;
     pendentes.avisos = 0;
     pendentes.leads.clear();
+    pendentes.blocos.clear();
   }
   function pararLaco() {
     if (relogio) clearInterval(relogio);
@@ -658,7 +674,9 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     const doTime = deps.primeirosDoTime ? await deps.primeirosDoTime() : undefined;
     let pausaPrimeiros = true;
     try { pausaPrimeiros = deps.pausaPrimeiros ? await deps.pausaPrimeiros() : false; } catch { /* Sem leitura da proteção: primeiros contatos continuam barrados. */ }
-    const { decisao, estado, fechados } = decidir(visao, lido, agora, sugestoes, doDia, doTime, pausaPrimeiros);
+    const decidido = decidir(visao, lido, agora, sugestoes, doDia, doTime, pausaPrimeiros);
+    const { estado, fechados } = decidido;
+    let { decisao } = decidido;
     const historico = fechadosNaVolta(fechados, agora);
     // O que a Central resolveu fecha aqui também; o que expirou vale como pular lá (AC-06).
     for (const { aberto, resolvida } of fechados.fora) await fecharMensagens(aberto, rodapeDeFora(resolvida));
@@ -667,6 +685,12 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
       await deps.vendaDoDia.resolver(aberto.chave, "pulada", "expirou").catch((err) => {
         console.warn(`[vendedor] a Central não soube do aviso expirado: ${err instanceof Error ? err.message : String(err)}`);
       });
+    }
+    // O resumo de bloco sai antes do aviso individual da mesma volta: às 08h55 o plano vem primeiro.
+    if (deps.resumoDeBloco && await resumirBloco(estado, decidido.fila, visao, doDia, agora)
+      && decisao.tipo === "avisar" && !avisoUrgente(decisao.acao) && estado.avisosHoje >= MAX_AVISOS_POR_DIA) {
+      // O resumo levou o último lugar do teto: o aviso de rotina desta volta fica para a Central.
+      decisao = { tipo: "nada", motivo: "teto-do-dia" };
     }
     // O copiloto só gera quando a última mensagem da conversa guardada é do lead (conversaDaVez, copiloto.ts):
     // nos outros passos (depois do link, follow-up, proposta) ele nunca responde, e segurar o aviso por 4 min
@@ -734,6 +758,51 @@ export function criarVendedor(deps: DepsDoVendedor): Vendedor {
     await gravarEstado(estado);
     await anotarNoHistorico(deps.arquivoDeHistorico, historico, agora);
     return decisao;
+  }
+
+  /**
+   * O resumo de bloco devido agora, se houver (resumo-de-bloco.ts). Conta 1 no teto do dia (`avisosHoje`):
+   * a Rotina fala de "8 avisos/dia" no Telegram, e o resumo é um deles. Não é barrado pelo teto: sai no
+   * máximo 2 vezes por dia, em hora marcada, e é o que substitui os avisos um a um; calá-lo justamente no
+   * dia cheio esconderia o plano do bloco. Devolve true quando saiu.
+   * Falha do Telegram não marca: tenta de novo na volta seguinte, até 20 min depois do horário. O aviso
+   * barrado pela trava de R$ marca (repetir não muda o texto) e só loga.
+   */
+  async function resumirBloco(estado: EstadoDoVendedor, fila: readonly AcaoDeVenda[], visao: CrmVisao, doDia: VendaDoDia, agora: number): Promise<boolean> {
+    const devido = blocoDevido(agora, estado.blocosResumidos);
+    if (!devido) return false;
+    const porId = new Map(visao.leads.map((l) => [l.id, l]));
+    // O que a Central ou o Telegram já fizeram hoje sai do resumo; o pulado continua pendente (vai para o fim da fila).
+    const pendente = fila.filter((a) => { const r = doDia.resolvidas[a.chave]; return !r || r.como === "pulada"; });
+    const aviso = montarResumoDeBloco(devido.bloco, devido.chave, pendente, porId, agora, {
+      roboOuRecepcao: (a) => respostaDeRoboOuRecepcao(a, porId.get(a.leadId)),
+      ...(deps.origemCentral ? { origemCentral: deps.origemCentral } : {}),
+    });
+    const marcar = () => {
+      pendentes.dia = estado.dia;
+      pendentes.blocos.add(devido.chave);
+      estado.blocosResumidos.push(devido.chave);
+    };
+    try {
+      validarAviso(aviso);
+    } catch (err) {
+      if (!(err instanceof AvisoInvalido)) throw err;
+      console.error(`[vendedor] resumo de bloco barrado (${devido.chave}): ${err.message}`);
+      marcar();
+      return false;
+    }
+    try {
+      // Texto puro e sem botões (sem parse_mode, como todo o bot); o link da Central fecha o texto.
+      await deps.enviar(textoDoAvisoDaFila(aviso), []);
+    } catch (err) {
+      console.warn(`[vendedor] resumo de bloco não saiu (${devido.chave}), tento de novo no próximo minuto: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
+    marcar();
+    // Lembrado antes de gravar, como o aviso: gravação que falha não reenvia o resumo nem esquece o teto.
+    pendentes.avisos++;
+    estado.avisosHoje++;
+    return true;
   }
 
   async function tocarSemFila(token: string, acao: "enviei" | "pular"): Promise<{ curto: string; texto?: string }> {

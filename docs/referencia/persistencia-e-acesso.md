@@ -126,6 +126,7 @@ Perdeu o acesso porque o IP residencial mudou: esvaziar `IPS_PERMITIDOS` no Easy
 | `SQUADONE_ORIGEM_CENTRAL` | servidor | só `operations`: origem da Central na tailnet para os botões "Ver a ficha" e "Conferir histórico e decidir" do aviso do vendedor; ausente = sem esses botões |
 | `SQUADONE_LEAD_QUENTE_SOMBRA` / `_TETO_DIA` / `_CALAR_HORAS` | servidor | só `operations` com bot e copiloto: `true` liga o lead quente em sombra; teto de decisões avisadas por dia ausente = 30; horas sem o agente depois que o Rômulo escreveu à mão ausente = 6 |
 | `SQUADONE_RESUMO_MATINAL` | servidor | só `operations` com a agenda: nasce ligado; `false` desliga o resumo das 7h30–11h |
+| `SQUADONE_RESUMO_DE_BLOCO` | servidor | só `operations` com o vendedor (`SQUADONE_VENDEDOR=true` e o bot): nasce ligado; `false` desliga o resumo de bloco das 08h55 e 13h55, seg–sex (`server/resumo-de-bloco.ts`) |
 
 `VITE_*` é embutida no bundle no `vite build`, **não lida em runtime**. Mudar o client ID exige rebuild. Uma string qualquer passa por `if (!CLIENT_ID)` e o Google recusa sem erro legível — por isso há validação de formato.
 

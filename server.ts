@@ -71,6 +71,7 @@ import { lerStatusDoDell } from "./server/dell-status.ts";
 import { ANTECEDENCIA_LEMBRETE_MIN } from "./server/lembretes.ts";
 import { criarVigia, type Vigia } from "./server/vigia.ts";
 import { resumoMatinalLigado } from "./server/resumo-matinal.ts";
+import { resumoDeBlocoLigado } from "./server/resumo-de-bloco.ts";
 import { criarVendedor, type Vendedor } from "./server/vendedor.ts";
 import { lerPrimeirosDoTime } from "./server/frente-comercial.ts";
 import { lerPausaAutomatica } from "./server/protecao-prospeccao.ts";
@@ -643,6 +644,8 @@ async function startServer() {
           arquivoDeHistorico: path.join(operationsDataDir, "vendedor-historico.jsonl"),
           vendaDoDia: memoriaDaVenda,
           origemCentral: (process.env.SQUADONE_ORIGEM_CENTRAL ?? "").trim() || undefined,
+          // Resumo de bloco às 08h55 e 13h55, seg–sex (29/10/2026); nasce ligado, SQUADONE_RESUMO_DE_BLOCO=false desliga.
+          resumoDeBloco: resumoDeBlocoLigado(process.env),
           agora: () => Date.now(),
         });
         console.log("[vendedor] ligado: um aviso por vez no Telegram, seg–sex 08:00–17:30; nunca envia ao lead.");
