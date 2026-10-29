@@ -85,3 +85,17 @@ primeira proposta qualificada.
 As travas não mudaram: o teto é compartilhado e o código não tem cota por linha. A reserva de 6 pendentes para o Site e o
 repasse das 14h são regras de operação que o Rômulo aplica na revisão da rodada; virar código exige nova decisão, porque
 mexe na trava.
+
+## 01 · Caçador pausado (29/10/2026)
+
+O 01 · Caçador (Site) falhava desde 26/10 em "Reservar aquisição exclusiva": a proteção SSRF do n8n recusava o IP do
+`aquisicao-guarda`. A causa foi corrigida em 29/10 (e2c0f4a), mas o fluxo foi **desativado no n8n** no mesmo dia, por decisão
+do Rômulo: havia 107 leads de Site esperando o primeiro contato contra as 9 vagas diárias do Site no mix acima (uns 12
+dias úteis), o gargalo
+é a conversa (10 primeiros contatos em 28/10: 5 silêncios, 3 robôs, 1 recusa, 1 pendente), e a base já tem 723 leads em
+revisão por "falta necessidade, impacto ou decisor". É a mesma regra dos caçadores de Iris e Estamparia (AC-11).
+
+**Religar** quando os leads de Site esperando o primeiro contato caírem abaixo de 90 (duas semanas de envio com as 9 vagas do Site;
+o número está em `pend:site-enviar` no retrato do Dell), ou quando a cota do Site no mix mudar. Ao religar: ativar o
+workflow `oow8TkxrAf4fVvTj` e conferir a primeira rodada das 06:00, que é a prova de que a correção do SSRF funcionou
+(até 29/10 ela só foi confirmada pela configuração e pelo código do n8n, não por uma rodada).
