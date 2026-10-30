@@ -4,7 +4,7 @@ import express, { type Router } from 'express';
 import type { CrmVisao, CrmLead } from '../src/operations/types.ts';
 import { ehProduto } from './ofertas.ts';
 import { frenteDosArquivos, primeirosDoTime, mensagemDoPrimeiroContato, reservaDoTime, type FrenteDoPrimeiro, type ReservaDoTime } from '../src/operations/primeiro-contato.ts';
-import { tetoDoDia, REGRAS_DO_RITMO } from '../src/operations/trava-de-ritmo.ts';
+import { tetoDoDia, limitesDeAgora } from '../src/operations/trava-de-ritmo.ts';
 import { respostasDoDia } from './respostas-do-dia.ts';
 import { criarProtecaoProspeccao, lerPausaAutomatica, RetomadaRecusada, type SinalDaConta } from './protecao-prospeccao.ts';
 import { noExpedienteDeVenda } from '../src/operations/trava-de-horario.ts';
@@ -62,7 +62,7 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
   const respostasHoje = visao?.estado === 'ok' ? respostasDoDia(visao.leads, agora) : null;
   // Desde quando e por quê (29/10/2026): a pausa de 28/10 às 19:41 ficou sem autor nem motivo na tela.
   const pausa = pausaDoTime(config, pausaAutomatica);
-  const metricas = { respostasHoje, pausaAutomatica, pausa, intervaloMinutos: REGRAS_DO_RITMO.intervaloMs / 60_000, porHora: REGRAS_DO_RITMO.porHora };
+  const metricas = { respostasHoje, pausaAutomatica, pausa, intervaloMinutos: limitesDeAgora(agora).intervaloMs / 60_000, porHora: limitesDeAgora(agora).porHora };
   const ativo = config.ativo === true && !pausaAutomatica;
   // A última rodada: a hora gravada pelo script (`atualizadoEm`); sem ela legível, o mtime do arquivo de estado.
   const gravada = bruto ? Date.parse(bruto.atualizadoEm) : NaN;

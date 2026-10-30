@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  REGRAS_DO_RITMO, gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, tetoDoDia, textoDoRitmo, somarPrimeiros,
+  REGRAS_DO_RITMO, limitesDeAgora, gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, tetoDoDia, textoDoRitmo, somarPrimeiros,
   type RegrasDoRitmo,
 } from './operations/trava-de-ritmo.ts'
 import type { CrmLead } from './operations/types.ts'
@@ -69,9 +69,25 @@ describe('trava de ritmo dos primeiros contatos', () => {
 
   it('o teto revisado é 15 em todas as semanas, sem aumento pela idade do número', () => {
     assert.equal(REGRAS_DO_RITMO.inicioDoNumero, '2026-10-16')
-    for (const dia of ['18', '19', '23', '30']) assert.equal(tetoDoDia(sp(dia, '08:00')), 15)
+    for (const dia of ['18', '19', '23', '31']) assert.equal(tetoDoDia(sp(dia, '08:00')), 15)
     assert.equal(tetoDoDia(Date.parse('2027-03-01T12:00:00-03:00')), 15)
     assert.equal(REGRAS_DO_RITMO.pausadoAte, null)
+  })
+
+  it('a exceção de 30/10 vale só naquele dia de São Paulo e o ritmo-base volta à meia-noite', () => {
+    const e = REGRAS_DO_RITMO.excecaoDoDia!
+    assert.equal(e.dia, '2026-10-30')
+    assert.equal(tetoDoDia(sp('30', '00:00')), e.teto)
+    assert.equal(tetoDoDia(sp('30', '23:59')), e.teto)
+    assert.equal(tetoDoDia(sp('29', '23:59')), 15)
+    assert.equal(tetoDoDia(sp('31', '00:00')), 15)
+    assert.deepEqual(limitesDeAgora(sp('30', '15:00')), { intervaloMs: e.intervaloMs, porHora: e.porHora })
+    assert.deepEqual(limitesDeAgora(sp('31', '15:00')), { intervaloMs: REGRAS_DO_RITMO.intervaloMs, porHora: REGRAS_DO_RITMO.porHora })
+    const ultimo = sp('30', '15:20')
+    assert.equal(ritmoDoEnvio([ultimo], ultimo + 5 * MIN).motivo, 'intervalo')
+    assert.equal(ritmoDoEnvio([ultimo], ultimo + e.intervaloMs).motivo, null, '10 min depois já pode')
+    assert.equal(ritmoDoEnvio([ultimo], sp('31', '15:20') ).motivo, null)
+    assert.equal(ritmoDoEnvio(Array(25).fill(sp('30', '09:00')), sp('30', '16:00')).motivo, 'dia')
   })
 
   it('permite 15 contatos distribuídos no expediente e barra o 16º até o dia seguinte', () => {

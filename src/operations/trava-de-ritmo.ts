@@ -43,6 +43,8 @@ export interface RegrasDoRitmo {
   inicioDoNumero: string
   /** ISO: nenhum primeiro contato até este instante; null sem pausa. */
   pausadoAte: string | null
+  /** Exceção de UM dia de São Paulo, decidida pelo Rômulo; expira sozinha à meia-noite e não toca o ritmo-base. */
+  excecaoDoDia?: { dia: string; intervaloMs: number; porHora: number; teto: number }
 }
 
 export const REGRAS_DO_RITMO: RegrasDoRitmo = {
@@ -53,6 +55,9 @@ export const REGRAS_DO_RITMO: RegrasDoRitmo = {
   // Data histórica preservada; o teto único não cresce com a idade do número.
   inicioDoNumero: '2026-10-16',
   pausadoAte: null,
+  // 30/10/2026, 14h50: sem resposta humana desde o meio-dia e a meta longe; o Rômulo aceitou o risco de softban
+  // ("o bloqueio a gente resolve no fim de semana"). Vale só neste dia; o ritmo-base (15/dia, 2/h, 30 min) volta sozinho.
+  excecaoDoDia: { dia: '2026-10-30', intervaloMs: 10 * 60_000, porHora: 6, teto: 25 },
 }
 
 export const AVISO_DO_RITMO = 'Teto interno; não garante ausência de bloqueio. Inicie contato só com autorização do destinatário.'
@@ -67,8 +72,22 @@ export const indiceDoDiaSP = diaSP
 /** Meia-noite de São Paulo do dia seguinte ao de `ms`. */
 const amanhaSP = (ms: number) => (diaSP(ms) + 1) * DIA + 3 * HORA
 
+/** A exceção do dia de São Paulo de `agora`, se houver uma para ele. */
+function excecaoDe(agora: number, regras: RegrasDoRitmo) {
+  const e = regras.excecaoDoDia
+  return e && diaSP(agora) === diaSP(Date.parse(`${e.dia}T12:00:00-03:00`)) ? e : null
+}
+
+/** O intervalo e o teto por hora vigentes em `agora` (a exceção do dia, se houver, senão o ritmo-base). */
+export function limitesDeAgora(agora: number, regras: RegrasDoRitmo = REGRAS_DO_RITMO): { intervaloMs: number; porHora: number } {
+  const e = excecaoDe(agora, regras)
+  return e ? { intervaloMs: e.intervaloMs, porHora: e.porHora } : { intervaloMs: regras.intervaloMs, porHora: regras.porHora }
+}
+
 /** O teto do dia de `agora`: pela semana desde o início do número (antes dele, o da 1ª semana). */
 export function tetoDoDia(agora: number, regras: RegrasDoRitmo = REGRAS_DO_RITMO): number {
+  const e = excecaoDe(agora, regras)
+  if (e) return e.teto
   const inicio = Date.parse(`${regras.inicioDoNumero}T00:00:00-03:00`)
   const tetos = regras.tetosPorSemana
   if (!Number.isFinite(inicio) || !tetos.length) return tetos[0] ?? 0
@@ -97,16 +116,17 @@ export function ritmoDoEnvio(instantes: readonly number[], agora: number, regras
   const enviadosHoje = passados.filter(t => diaSP(t) === hoje).length
   const teto = tetoDoDia(agora, regras)
   const base = { enviadosHoje, teto }
+  const { intervaloMs, porHora } = limitesDeAgora(agora, regras)
   const pausa = regras.pausadoAte ? Date.parse(regras.pausadoAte) : NaN
   if (Number.isFinite(pausa) && agora < pausa) return { ...base, motivo: 'pausa', ate: pausa }
   if (enviadosHoje >= teto) return { ...base, motivo: 'dia', ate: amanhaSP(agora) }
   const naHora = passados.filter(t => agora - t < HORA)
-  if (naHora.length >= regras.porHora) {
+  if (naHora.length >= porHora) {
     // Libera quando o mais antigo que ainda faz a conta passar do teto sai da janela.
-    return { ...base, motivo: 'hora', ate: naHora[naHora.length - regras.porHora] + HORA }
+    return { ...base, motivo: 'hora', ate: naHora[naHora.length - porHora] + HORA }
   }
   const ultimo = passados[passados.length - 1]
-  if (ultimo !== undefined && agora - ultimo < regras.intervaloMs) return { ...base, motivo: 'intervalo', ate: ultimo + regras.intervaloMs }
+  if (ultimo !== undefined && agora - ultimo < intervaloMs) return { ...base, motivo: 'intervalo', ate: ultimo + intervaloMs }
   return { ...base, motivo: null, ate: null }
 }
 
@@ -129,14 +149,15 @@ export function motivoCurtoDoRitmo(ritmo: Pick<EstadoDoRitmo, 'motivo' | 'ate' |
 /** O que a tela diz quando segura o envio (e uma linha curta de quanto falta quando não segura). */
 export function textoDoRitmo(estado: EstadoDoRitmo, regras: RegrasDoRitmo = REGRAS_DO_RITMO): string {
   const quando = estado.ate === null ? '' : hora(new Date(estado.ate).toISOString())
-  const minutos = Math.round(regras.intervaloMs / MIN)
+  const { intervaloMs, porHora } = limitesDeAgora(Date.now(), regras)
+  const minutos = Math.round(intervaloMs / MIN)
   switch (estado.motivo) {
     case 'pausa':
       return estado.ate === null ? 'Primeiros contatos pausados pela proteção. Confira o motivo no painel e revise antes de reativar. Respostas e conversas seguem disponíveis.' : `Primeiros contatos pausados até ${quando} depois de um aviso do WhatsApp. Respostas e conversas seguem normais.`
     case 'dia':
       return `Teto de hoje atingido: ${estado.enviadosHoje} de ${estado.teto} primeiros contatos. Amanhã a fila volta.`
     case 'hora':
-      return `${regras.porHora} primeiros contatos na última hora, o máximo. O próximo sai às ${quando}.`
+      return `${porHora} primeiros contatos na última hora, o máximo. O próximo sai às ${quando}.`
     case 'intervalo':
       return `O próximo primeiro contato sai às ${quando} (intervalo interno de ${minutos} min entre contatos).`
     default:
