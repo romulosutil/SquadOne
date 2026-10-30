@@ -641,3 +641,18 @@ Entregue e instalado na Mel em 19/10 (relato fase a fase em `docs/PRUMO-IMPLEMEN
   `src/operations/pontuacao-da-triagem.ts`: dor 50, decisor 20, nicho 20, porte 10); P0 e as 5 origens de falha ficam numa outbox exclusiva do
   Telegram (lista única nas três pontas, com teste de paridade; o prefixo `n8n:` ainda tem reserva no WhatsApp, decisão em aberto).
   O fluxo 01 sanitizado (`ops/n8n/workflows/01-Cacador.sanitizado.json`) é só auditoria: inativo, sem importação automática.
+
+## Pilotos dos produtos novos (30/10/2026, decisão do Rômulo)
+
+O Rômulo levantou o congelamento do PM de 28/10 só para **descoberta e piloto declarado como teste** de quatro produtos em
+incubação: PDV (5 lojas de balcão, 14 dias grátis como versão de teste, pergunta de preço no D+10), SGP (colégios com Fund. II
+e Médio, duas sessões de 40 min), Fiscal/TaxShield (escritório contábil que atende atacadistas, sessão de 20 min com 6 casos,
+nunca XML real) e Dieta (só a hipótese H1, ~20 mensagens no Instagram em 48 h, sem código). Plano, abordagens, critérios de
+encerramento e a tabela de acompanhamento em `docs/referencia/pilotos-novos-produtos.md`; alvos com fonte pública em
+`docs/referencia/pilotos-alvos.md`; o registro da decisão em `prumo/00-contexto/decisoes.md`. Revisão em 06/11/2026.
+
+- **Nada disto passa pelo sistema.** Sem linha nova no funil de Vendas, sem caçador, sem tela, sem proposta nem preço público.
+  O 1º pagamento até 08/11 continua vindo só do Site, e o trabalho dos pilotos cabe no bloco 3 (15h30–17h00).
+- **O WhatsApp do PRUMO fica fora da prospecção dos pilotos.** O primeiro contato de piloto vai por visita, ligação, e-mail,
+  LinkedIn, Instagram ou indicação, e as travas não mudam: 15 por dia, 2 por hora, 30 min entre primeiros contatos e dez
+  pendentes por rodada (`REGRAS_DO_RITMO`).
