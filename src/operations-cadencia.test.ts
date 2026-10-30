@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { INICIO_DA_CADENCIA_DO_CICLO, TOQUES_DA_PROPOSTA, VALIDADE_DA_PROPOSTA_DIAS, cadenciaDoLead, degrauDaProposta, diaDaCadencia, diaDoToqueDaValidade, diasUteisDaCadencia, lerRegistroCadencia, textoDaCadenciaConfirmada, textoDoRegistroCadencia, validadeDaProposta } from './operations/cadencia.ts'
 import { textoEventoCiclo, type EventoCiclo } from './operations/ciclo-comercial.ts'
+import { opcoesDeterministicasDeReceita, textoDoRegistroReceita } from './operations/aarr.ts'
 import { notaDoAprendizado } from './operations/aprendizado-comercial.ts'
 import { acaoDoLead, filaDeVenda } from './operations/proxima-venda.ts'
 import { qualificacaoComercialVazia, type QualificacaoComercial } from './operations/qualificacao-comercial.ts'
@@ -128,6 +129,26 @@ describe('cadência de conversa: só um toque e revisão no sétimo dia', () => 
     assert.equal(fila[0]!.anota, 'recusou')
     if (tipo === 'exclusao') assert.equal(fila[0]!.link, undefined)
     else assert.match(fila[0]!.rascunho!, /^Obrigado pelo retorno/)
+  })
+})
+
+describe('pagamento confirmado pela Receita da Ficha encerra a cadência (29/10/2026)', () => {
+  const receita = (tipo: 'valor_proposta' | 'pagamento_confirmado', referencia: string, data: string) => ({ tipo, origem: 'manual' as const, em: iso(data), rotulo: '', fonte: '',
+    texto: textoDoRegistroReceita(tipo, opcoesDeterministicasDeReceita({ produto: 'site' })[0]!, referencia, data) })
+  it('sem pagamento a proposta segue os toques e vence; com pagamento, nenhum toque nem vencimento', () => {
+    assert.equal(cadenciaDoLead(proposta({ eventos: [receita('valor_proposta', 'P-TESTE', '2026-10-15')] }), sp('2026-10-16'))!.estado, 'tocar')
+    const pago = proposta({ eventos: [receita('valor_proposta', 'P-TESTE', '2026-10-15'), receita('pagamento_confirmado', 'PIX-TESTE-001', '2026-10-16')] })
+    for (const dia of ['2026-10-16', '2026-10-21', '2026-10-25']) assert.equal(cadenciaDoLead(pago, sp(dia)), null, dia)
+    assert.deepEqual(filaDeVenda({ leads: [pago], hoje: [] }, { primeiroLiberado: false, agora: sp('2026-10-16') }).filter(a => a.chave?.includes('|cadencia|')), [])
+  })
+  it('o pagamento só conta depois de registrado: antes dele a cadência é a de sempre', () => {
+    const pago = proposta({ eventos: [receita('pagamento_confirmado', 'PIX-TESTE-001', '2026-10-21')] })
+    assert.equal(cadenciaDoLead(pago, sp('2026-10-16'))!.registro!.degrau, 'dia-1')
+    assert.equal(cadenciaDoLead(pago, sp('2026-10-21')), null)
+  })
+  it('lead sem produto (leitura parcial) não quebra e mantém a cadência', () => {
+    const { produto: _, ...semProduto } = proposta()
+    assert.equal(cadenciaDoLead(semProduto as CrmLead, sp('2026-10-16'))!.estado, 'tocar')
   })
 })
 

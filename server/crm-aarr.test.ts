@@ -35,6 +35,25 @@ it('CRM lê confirmações válidas na fonte e mostra resumo legível, preserva9
   assert.equal(leituraAarr([l], AGORA.getTime()).receita.valorCentavos, 69000)
 })
 
+it('pagamento confirmado pela Receita encerra a cadência da proposta: quem pagou não vira Perdido no D+10 (29/10/2026)', () => {
+  // Proposta registrada em 19/10 (o "Proposta enviada" da Ficha) e, no dia seguinte, a implantação paga.
+  const proposta = { ...entrada(), tipo: 'proposta', texto: '', data: '2026-10-19', em: '2026-10-19T14:00:00Z' }
+  const pago = { ...entrada(textoDoRegistroReceita('pagamento_confirmado', condicao, 'PIX-TESTE-001', '2026-10-20')), em: '2026-10-20T14:00:00Z' }
+  const depois = new Date('2026-10-29T15:00:00Z')
+  const semPagamento = montarCrm(validarRetrato(retrato([proposta])), { agora: depois }).leads[0]!
+  assert.equal(semPagamento.etapa, 'perdido', 'controle: a proposta sem retorno vence no D+10')
+  assert.equal(semPagamento.motivoPerda, 'proposta-sem-retorno')
+  const comPagamento = montarCrm(validarRetrato(retrato([proposta, pago])), { agora: depois }).leads[0]!
+  assert.equal(comPagamento.etapa, 'proposta')
+  assert.equal(comPagamento.motivoPerda, undefined)
+  assert.equal(leituraAarr([comPagamento], depois.getTime()).perdas.perdidos, 0)
+  assert.equal(leituraAarr([comPagamento], depois.getTime()).receita.valorCentavos, 69000)
+  // Desfeito o pagamento, a proposta volta a vencer como qualquer outra.
+  const desfeito = { ...entrada(textoDoRegistroAarr('receita_desfeita', { tipo: 'pagamento_confirmado', referencia: chaveDoPagamento(JSON.parse(pago.texto)), data: '2026-10-21' })),
+    tipo: 'receita_desfeita', em: '2026-10-21T14:00:00Z' }
+  assert.equal(montarCrm(validarRetrato(retrato([proposta, pago, desfeito])), { agora: depois }).leads[0]!.etapa, 'perdido')
+})
+
 it('fronteira exige catálogo, oferta correta, datas reais/passadas e não truncaJSON', () => {
   const ok = entrada()
   assert.equal(validarRegistro(ok, AGORA).data, '2026-10-19')

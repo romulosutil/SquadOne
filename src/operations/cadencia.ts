@@ -12,6 +12,7 @@
  *
  * Conversa: um toque no 2º dia útil depois da nossa resposta e revisão humana no 7º dia corrido.
  */
+import { aarrDoLead } from './aarr'
 import { contatoPausado } from './aprendizado-comercial'
 import { cicloDoLead, ultimoEnvioDaProposta } from './ciclo-comercial'
 import type { CrmLead } from './types'
@@ -155,6 +156,19 @@ export interface CadenciaDoLead {
   chave?: string
 }
 type LeadDaCadencia = Pick<CrmLead, 'id' | 'etapa' | 'proposta' | 'eventos' | 'conversa' | 'resposta' | 'marcos' | 'proximoPasso' | 'perdaManual'>
+  & Partial<Pick<CrmLead, 'produto' | 'plus'>>
+
+/**
+ * Pagamento confirmado pelo registro anterior ao ciclo (Ficha › Receita, `pagamento_confirmado`), ainda
+ * ativo (29/10/2026). É o caminho mais curto para o primeiro recebimento e o ciclo comercial não o vê:
+ * sem isto o lead que pagou seguia na cadência da proposta ("Conseguiu olhar a proposta?") e, no D+10,
+ * ia para Perdido como "sumiu", contado nas perdas com o pagamento contado na receita. Como o
+ * `recebido` do ciclo, qualquer recebimento encerra a cadência: a negociação decidiu.
+ */
+function pagamentoConfirmado(lead: LeadDaCadencia, agora: number): boolean {
+  if (!lead.produto) return false
+  return aarrDoLead({ ...lead, produto: lead.produto }, agora).pagamentos.length > 0
+}
 
 /**
  * A proposta que a cadência acompanha. Com o ciclo comercial (proposta versionada) é a última versão
@@ -185,7 +199,7 @@ export function cadenciaDoLead(lead: LeadDaCadencia, agora: number): CadenciaDoL
   if (lead.perdaManual || ['negativa', 'exclusao'].includes(lead.resposta?.tipo ?? '')
     || !['contato', 'proposta'].includes(lead.etapa)) return null
   const doCiclo = propostaDoCiclo(lead, agora)
-  if (doCiclo === null) return null
+  if (doCiclo === null || pagamentoConfirmado(lead, agora)) return null
   const proposta = doCiclo ?? lead.proposta
   const humana = Math.max(instante(lead.conversa?.ultimaEntrada) || 0,
     lead.resposta?.tipo !== 'bot' ? instante(lead.resposta?.em) || 0 : 0, instante(lead.marcos.respondeu) || 0)
