@@ -189,7 +189,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Fonte',
     etapa: 'arrumar',
     tipo: 'projeto',
-    entrega: 'A construção, em cerca de 2 semanas depois da conversa sobre as regras. Na primeira, conferimos o Mapa com o time; depois, as regras da casa (como a empresa vende, compra, entrega e cobra, e quem faz o quê) saem da cabeça do dono para um Notion ou um agente com IA que o time consulta.',
+    entrega: 'A construção, em cerca de 2 semanas depois da conversa sobre as regras. Na primeira, conferimos o Mapa com o time; depois, as regras da casa (como a empresa vende, compra, entrega e cobra, e quem faz o quê) saem da cabeça do dono para uma pasta no Google Drive, manual no Notion, caderno no Gemini, robô no WhatsApp ou chat próprio, conforme o escopo. Até 6 assuntos e 15 pessoas. O uso de IA e a assinatura da plataforma, quando aplicáveis, ficam à parte; a liberação do número do WhatsApp depende da Meta e pode levar até 20 dias.',
     preco: 'R$ 1.500',
     condicao: 'a partir de, 50/50, só depois do Mapa',
     sobProposta: true,
@@ -197,7 +197,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
   },
   {
     id: 'fonte-em-dia',
-    nome: 'Fonte em dia',
+    nome: 'Manutenção da Fonte',
     etapa: 'manter',
     tipo: 'mensalidade',
     entrega: 'Incluir, mudar ou tirar regras e dados da Fonte: até 10 mudanças por mês, pedidas pelo WhatsApp e feitas em até 2 dias úteis. Começa depois dos 30 dias de ajustes; cancela quando quiser.',
@@ -491,7 +491,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'proposta-fonte',
         titulo: 'Fonte (depois do Mapa)',
         texto:
-          'Como vimos no Mapa: hoje [o que só anda com você]. A proposta: na primeira semana conferimos o Mapa com o time; depois escrevemos junto como a {NOME} vende, compra, entrega e cobra, e quem faz o quê, num Notion ou num agente com IA que o time consulta. Assim o orçamento sai no mesmo dia sem você aprovar cada preço. O projeto parte de R$ 1.500 (Drive, Notion ou caderno no Gemini; R$ 2.400 se for robô no WhatsApp ou chat próprio), metade para começar e metade na entrega. Se fizer sentido, começo [dia].',
+          'Como vimos no Mapa: hoje [o que só anda com você]. A proposta: na primeira semana conferimos o Mapa com o time; depois escrevemos junto como a {NOME} vende, compra, entrega e cobra, e quem faz o quê, num Notion ou num agente com IA que o time consulta. O objetivo é que o time encontre a regra combinada sem depender de você para cada consulta. O projeto parte de R$ 1.500 (Drive, Notion ou caderno no Gemini; R$ 2.400 se for robô no WhatsApp ou chat próprio), metade para começar e metade na entrega. Se fizer sentido, começo [dia].',
         dica: 'Só depois do Mapa. Meta interna de preparação: até 24 h da devolutiva, com escopo e dependências conferidos; combinar prazo individual antes de prometer. A manutenção da Fonte (R$ 190/mês, opcional, até 10 mudanças por mês) entra no fim como opção, nunca como condição.',
         produtos: PRUMO,
       },

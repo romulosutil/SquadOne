@@ -8,6 +8,17 @@
 acontecem, quem faz cada passo e o que oferecer a quem. Em Vendas (`/crm`), a Ficha de cada lead mostra o passo em que ele está,
 o próximo passo e o que oferecer, com estas mesmas regras.
 
+## Conceito institucional do Prumo
+
+- O Prumo é consultoria digital e produtos digitais. Arruma o caminho do cliente até o caixa: a consultoria arruma o caminho e o produto mantém funcionando.
+- A experiência em produto, engenharia e design, com passagens por Caixa, Pay4Fun e Qintess, é de Rômulo Sutil Corrêa. Essas organizações não são clientes atribuídos ao Prumo.
+- O SquadOne sustenta a operação interna. A Fonte da própria Prumo é piloto em homologação, com conclusão do aceite pendente. Vale Norte é uma demonstração fictícia. Nenhuma dessas provas comprova ganho de vendas ou economia.
+- Íris: Em uso, diário de sessão e dossiê para clínicas de terapia, com revisão do terapeuta. A IA não pontua protocolos nem toma decisões clínicas. CRM de estamparia: Em implantação, conversas, clientes e pedidos; WhatsApp sujeito à homologação. Esses estados não são liberação de qualidade.
+- Produtos por assinatura têm conversa própria, sem exigir Raio-X ou Mapa. Site/Encontrado mantém a prioridade entre candidatos aprovados. CRM de estamparia exige necessidade, impacto e decisor confirmados antes de ampliar a venda.
+- Permissão para material, resposta e demonstração não são venda. Acompanhar qualificação, proposta, aceite e recebimento; avaliar ciclo e margem com custos e horas quando houver dados. Nenhum conceito altera autorização de envio, preço ou cadência.
+
+Fonte canônica: `prumo/00-contexto/organizacao.md`, `negocio.md` e `produtos.md`. Apresentação e provas: `prumo/04-venda/apresentacao/README.md`.
+
 ## O desenho
 
 ```
@@ -66,13 +77,13 @@ Iris e estamparias andam num caminho curto: Achado → Primeira mensagem (convit
 | **Respondido e Acompanhado** | arrumar | produto | WhatsApp que responde na hora, faz as primeiras perguntas e marca horário; retorno automático de orçamento parado; painel simples de quem chamou e de quem fechou. Antes e depois medidos: contamos o WhatsApp antes de ligar e mostramos a diferença em 30 dias. | R$ 2.400 + R$ 290/mês (só depois de uma conversa, nunca no WhatsApp frio) · *sob proposta para o cliente* | Quem já tem site e perde cliente no WhatsApp: demora para responder, ninguém responde fora do horário, orçamento pedido que some. |
 | **Anúncios** | arrumar | produto | Criamos e cuidamos dos anúncios no Google ou no Instagram, e todo mês mostramos quantas pessoas chamaram por causa deles. A verba do anúncio vai direto para a plataforma, sem passar pelo Prumo. | R$ 590/mês (Google ou Instagram; R$ 390 a mais pelos dois; mínimo de 3 meses) | Quem já tem site e perfil do Google em dia e precisa de mais gente chamando: o Raio-X mostra poucas buscas ou pouca gente chegando. Depois do Raio-X, nunca no WhatsApp frio. |
 | **Redes sociais** | arrumar | produto | Instagram e Facebook em dia: 8 posts por mês e stories toda semana, feitos com as fotos e os serviços da empresa e publicados depois da aprovação do dono. | R$ 790/mês (mínimo de 3 meses; depois, cancela quando quiser) | Quem tem perfil parado ou sem padrão e perde confiança de quem confere antes de chamar. Depois do Raio-X, quando ele mostra rede social abandonada. |
-| **Fonte** | arrumar | projeto | A construção, em cerca de 2 semanas depois da conversa sobre as regras. Na primeira, conferimos o Mapa com o time; depois, as regras da casa (como a empresa vende, compra, entrega e cobra, e quem faz o quê) saem da cabeça do dono para um Notion ou um agente com IA que o time consulta. | R$ 1.500 (a partir de, 50/50, só depois do Mapa) · *sob proposta para o cliente* | Empresa com equipe que fez o Mapa e onde tudo depende do dono. Chega pelo Mapa (e a CDL leva até ele), nunca pelo frio. |
-| **Fonte em dia** | manter | mensalidade | Incluir, mudar ou tirar regras e dados da Fonte: até 10 mudanças por mês, pedidas pelo WhatsApp e feitas em até 2 dias úteis. Começa depois dos 30 dias de ajustes; cancela quando quiser. | R$ 190/mês (opcional, até 10 mudanças por mês, depois dos 30 dias de ajustes) · *sob proposta para o cliente* | Quem construiu a Fonte e quer mantê-la em dia. Opcional: nunca condição para fechar a Fonte. |
+| **Fonte** | arrumar | projeto | A construção, em cerca de 2 semanas depois da conversa sobre as regras. Na primeira, conferimos o Mapa com o time; depois, as regras da casa (como a empresa vende, compra, entrega e cobra, e quem faz o quê) saem da cabeça do dono para uma pasta no Google Drive, manual no Notion, caderno no Gemini, robô no WhatsApp ou chat próprio, conforme o escopo. Até 6 assuntos e 15 pessoas. O uso de IA e a assinatura da plataforma, quando aplicáveis, ficam à parte; a liberação do número do WhatsApp depende da Meta e pode levar até 20 dias. | R$ 1.500 (a partir de, 50/50, só depois do Mapa) · *sob proposta para o cliente* | Empresa com equipe que fez o Mapa e onde tudo depende do dono. Chega pelo Mapa (e a CDL leva até ele), nunca pelo frio. |
+| **Manutenção da Fonte** | manter | mensalidade | Incluir, mudar ou tirar regras e dados da Fonte: até 10 mudanças por mês, pedidas pelo WhatsApp e feitas em até 2 dias úteis. Começa depois dos 30 dias de ajustes; cancela quando quiser. | R$ 190/mês (opcional, até 10 mudanças por mês, depois dos 30 dias de ajustes) · *sob proposta para o cliente* | Quem construiu a Fonte e quer mantê-la em dia. Opcional: nunca condição para fechar a Fonte. |
 
 Fora do cardápio, ofertas próprias:
 
-- **Iris**: Sistema para clínicas de terapia (agenda, fichas e prontuário), já em produção; cadastro grátis e 7 dias de teste. Psicologia e terapias (aba Clínicas). A conversa segue à mão: não há 2ª mensagem aprovada.
-- **CRM de estamparia**: O CRM da Silmer adaptado para outra estamparia, produto pronto (decisão de 19/10/2026). Escopo e condições comerciais próprios, sem preço no cardápio do Site/PRUMO. Estamparias e confecções (aba Estamparias). Confirmar escopo e condições próprias, sem inventar prazo ou preço.
+- **Iris**: Íris — Em uso. Diário de sessão e dossiê para clínicas de terapia e saúde mental. A IA organiza evidências rastreáveis, o terapeuta revisa e aprova; a IA não pontua protocolos nem toma decisões clínicas. Inclui relatório da família em PDF. O estado de uso não substitui a avaliação de qualidade da versão. Clínicas de terapia e saúde mental (aba Clínicas). Conversa própria sobre a rotina, sem exigir Raio-X ou Mapa; condições da assinatura na ficha vigente da Íris.
+- **CRM de estamparia**: CRM de estamparia — Em implantação. Conversas, clientes e pedidos reunidos para quem vende camisetas e uniformes por conversa. O assistente no WhatsApp depende de liberação e homologação; o estado de implantação não substitui a avaliação de qualidade da versão. Estamparias e confecções (aba Estamparias). Confirmar necessidade, impacto, decisor, escopo, titularidade e condições próprias antes de ampliar a venda; sem inventar prazo ou preço e sem exigir Raio-X ou Mapa.
 
 ## Onde ver e onde mudar
 

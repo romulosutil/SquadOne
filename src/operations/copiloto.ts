@@ -18,7 +18,7 @@ import {
   type IdDoServico,
 } from './colinha'
 import {
-  OFERTAS_PROPRIAS, REGRAS_DA_OFERTA, funilDoLead, nomeDaOferta, ofertaDoLead, passoAtual, passoDaJornada, proximoDaJornada,
+  CONCEITO_PRUMO, OFERTAS_PROPRIAS, REGRAS_DA_OFERTA, funilDoLead, nomeDaOferta, ofertaDoLead, passoAtual, passoDaJornada, proximoDaJornada,
   type Funil, type IdDaOferta, type IdDoPasso, type LeadDaJornada, type ProximoDaJornada,
 } from './jornada'
 import type { AchadoDoRaioX, CrmLead, CrmTipoDeResposta } from './types'
@@ -392,6 +392,9 @@ export function promptDoCopiloto(dossie: DossieDoLead): string {
     'Os agentes podem interpretar e preparar rascunhos; nunca confirmar fatos, notas, aceite, envio ou recebimento.',
     'Ciclo presente ou qualificação inválida, negativa ou inadequada exige conferência humana, sem nova oferta.',
     'O identificador revisaoContexto serve só ao cache: não comprova autoria, qualificação nem pagamento.',
+    '',
+    'Conceito institucional e limites das provas:',
+    ...CONCEITO_PRUMO.map((regra) => `- ${regra}`),
     '',
     'Tom de voz:',
     ...TOM_DE_VOZ.map((t) => `- ${t}`),

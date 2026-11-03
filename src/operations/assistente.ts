@@ -10,7 +10,7 @@
 //      escreve é o toque do Rômulo, pela rota de sempre (RULES 10).
 
 import { mascarar, type SugestaoDoCopiloto } from './copiloto'
-import { nomeDaOferta } from './jornada'
+import { CONCEITO_PRUMO, nomeDaOferta } from './jornada'
 import { mascararParaJev } from '../../server/openrouter-decisoes.ts'
 import { omitirValores, pareceFinancas } from '../../server/financas/parece-financas.ts'
 import type { CartaoDoAssistente, FonteDaResposta, MensagemDoAssistente } from './assistente-contrato'
@@ -147,6 +147,9 @@ export function promptDoRoteador(contexto: ContextoDoRoteador): string {
   const linhas = [
     'Você é o Assistente da Central do SquadOne, um colega de vendas do Rômulo, que atende sozinho os leads do PRUMO.',
     'Responda em texto curto, em português do Brasil, como um colega de vendas: direto, sem enrolar, sem emoji, sem markdown pesado.',
+    '',
+    'Conceito institucional de referência (não é estado ao vivo da operação):',
+    ...CONCEITO_PRUMO.map((regra) => `- ${regra}`),
     '',
     'O que você sabe vem só das ferramentas de leitura (ler_hoje, ler_funil, ler_proxima_venda, buscar_lead, ler_lead,',
     'ler_filtro_leads, ler_agenda_do_dia, ler_estado_do_dell). Leia antes de afirmar; o que não leu, diga que não sabe. Leitura que volta',

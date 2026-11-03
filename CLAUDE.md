@@ -1,5 +1,9 @@
 # SquadOne
 
+## Conceito institucional do Prumo (30/10/2026)
+
+Antes de escrever sobre o Prumo, consulte `../prumo/00-contexto/organizacao.md` (Conceito institucional de referência), `negocio.md` e `produtos.md`. A consultoria arruma o caminho e o produto mantém funcionando. Experiência do fundador, operação interna, piloto em homologação e demo fictícia têm origens distintas. O espelho `CONCEITO_PRUMO` em `src/operations/jornada.ts` orienta o guia gerado, o Assistente e o copiloto. Ao atualizar esse contexto, regenere o guia. A distribuição aos workflows usa o sincronizador existente; não muda preços, qualidade, cadência ou autorização de contato.
+
 ## Qualidade da Prumo (21/10/2026)
 
 A Prumo é a fonte dos critérios, nomes e aceite; o SquadOne executa. Leia `docs/referencia/organizacao-prumo.md` e `../prumo/00-contexto/organizacao.md` antes de criar ou alterar ofertas e fluxos. Site e Raio-X passam por `deploy/dell/lib/qualidade_prumo.py` antes de publicar. Homologação é identificada; Profissional exige todos os obrigatórios, IQS completo, referência e manifesto exatos. O gerador não publica diretamente nem assina aceite; avaliações aprovadas ficam na área privada, fora da pasta do lead. O Mapa continua como rascunho, sem envio automático.

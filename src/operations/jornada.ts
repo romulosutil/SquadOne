@@ -223,14 +223,14 @@ export const OFERTAS_PROPRIAS: OfertaPropria[] = [
   {
     id: 'iris',
     nome: 'Iris',
-    entrega: 'Sistema para clínicas de terapia (agenda, fichas e prontuário), já em produção; cadastro grátis e 7 dias de teste.',
-    paraQuem: 'Psicologia e terapias (aba Clínicas). A conversa segue à mão: não há 2ª mensagem aprovada.',
+    entrega: 'Íris — Em uso. Diário de sessão e dossiê para clínicas de terapia e saúde mental. A IA organiza evidências rastreáveis, o terapeuta revisa e aprova; a IA não pontua protocolos nem toma decisões clínicas. Inclui relatório da família em PDF. O estado de uso não substitui a avaliação de qualidade da versão.',
+    paraQuem: 'Clínicas de terapia e saúde mental (aba Clínicas). Conversa própria sobre a rotina, sem exigir Raio-X ou Mapa; condições da assinatura na ficha vigente da Íris.',
   },
   {
     id: 'crm-estamparia',
     nome: 'CRM de estamparia',
-    entrega: 'O CRM da Silmer adaptado para outra estamparia, produto pronto (decisão de 19/10/2026). Escopo e condições comerciais próprios, sem preço no cardápio do Site/PRUMO.',
-    paraQuem: 'Estamparias e confecções (aba Estamparias). Confirmar escopo e condições próprias, sem inventar prazo ou preço.',
+    entrega: 'CRM de estamparia — Em implantação. Conversas, clientes e pedidos reunidos para quem vende camisetas e uniformes por conversa. O assistente no WhatsApp depende de liberação e homologação; o estado de implantação não substitui a avaliação de qualidade da versão.',
+    paraQuem: 'Estamparias e confecções (aba Estamparias). Confirmar necessidade, impacto, decisor, escopo, titularidade e condições próprias antes de ampliar a venda; sem inventar prazo ou preço e sem exigir Raio-X ou Mapa.',
   },
 ]
 
@@ -239,8 +239,8 @@ export const OFERTAS_PROPRIAS: OfertaPropria[] = [
  * conteúdo de cada oferta, por isso fica aqui; o Record faz o vue-tsc cobrar a oferta nova.
  */
 const OFERTA_PROPRIA_NA_JORNADA: Record<OfertaDoJson, { id: IdDaOfertaPropria; porque: string }> = {
-  iris: { id: 'iris', porque: 'Clínica de terapia: o Iris, com o teste de 7 dias.' },
-  estampa: { id: 'crm-estamparia', porque: 'Estamparia: CRM de estamparia pronto; confirmar a necessidade e as condições próprias antes da proposta.' },
+  iris: { id: 'iris', porque: 'Clínica de terapia: a Íris, diário de sessão e dossiê; confirmar aderência e condições vigentes.' },
+  estampa: { id: 'crm-estamparia', porque: 'Estamparia: CRM de estamparia em implantação; confirmar necessidade, impacto, decisor e condições próprias antes da proposta.' },
 }
 
 export type IdDaOferta = IdDoServico | IdDaOfertaPropria
@@ -452,6 +452,16 @@ export interface OfertaDoLead {
  * Regras da oferta, na ordem em que são aplicadas. São estas frases que o guia dos agentes
  * mostra; ofertaDoLead é a mesma regra em código (o teste fixa os casos).
  */
+// Conceito institucional: espelho para os prompts e o guia. Fonte: prumo/00-contexto/organizacao.md.
+export const CONCEITO_PRUMO: readonly string[] = [
+  'O Prumo é consultoria digital e produtos digitais. Arruma o caminho do cliente até o caixa: a consultoria arruma o caminho e o produto mantém funcionando.',
+  'A experiência em produto, engenharia e design, com passagens por Caixa, Pay4Fun e Qintess, é de Rômulo Sutil Corrêa. Essas organizações não são clientes atribuídos ao Prumo.',
+  'O SquadOne sustenta a operação interna. A Fonte da própria Prumo é piloto em homologação, com conclusão do aceite pendente. Vale Norte é uma demonstração fictícia. Nenhuma dessas provas comprova ganho de vendas ou economia.',
+  'Íris: Em uso, diário de sessão e dossiê para clínicas de terapia, com revisão do terapeuta. A IA não pontua protocolos nem toma decisões clínicas. CRM de estamparia: Em implantação, conversas, clientes e pedidos; WhatsApp sujeito à homologação. Esses estados não são liberação de qualidade.',
+  'Produtos por assinatura têm conversa própria, sem exigir Raio-X ou Mapa. Site/Encontrado mantém a prioridade entre candidatos aprovados. CRM de estamparia exige necessidade, impacto e decisor confirmados antes de ampliar a venda.',
+  'Permissão para material, resposta e demonstração não são venda. Acompanhar qualificação, proposta, aceite e recebimento; avaliar ciclo e margem com custos e horas quando houver dados. Nenhum conceito altera autorização de envio, preço ou cadência.',
+]
+
 export const REGRAS_DA_OFERTA: string[] = [
   'O Raio-X (grátis) é a porta de todo lead, com ou sem site. Até ele ver o Raio-X, não se oferece mais nada.',
   'Depois do Raio-X há dois trilhos, e eles se somam: por fora (Encontrado, Respondido e Acompanhado, Anúncios, Redes) e por dentro (Mapa → Fonte → Manutenção). Um lead com equipe pode fazer o Mapa e, ao mesmo tempo, querer o site.',
@@ -687,6 +697,12 @@ export function guiaDaJornada(): string {
   l.push('**Leia isto antes de atender, escrever para, ou montar qualquer coisa para um lead do PRUMO.** Diz em que ordem as coisas')
   l.push('acontecem, quem faz cada passo e o que oferecer a quem. Em Vendas (`/crm`), a Ficha de cada lead mostra o passo em que ele está,')
   l.push('o próximo passo e o que oferecer, com estas mesmas regras.')
+  l.push('')
+  l.push('## Conceito institucional do Prumo')
+  l.push('')
+  CONCEITO_PRUMO.forEach((regra) => l.push(`- ${regra}`))
+  l.push('')
+  l.push('Fonte canônica: `prumo/00-contexto/organizacao.md`, `negocio.md` e `produtos.md`. Apresentação e provas: `prumo/04-venda/apresentacao/README.md`.')
   l.push('')
   l.push('## O desenho')
   l.push('')
