@@ -345,6 +345,14 @@ function telefoneE164(bruto) {
 
 function ehEua(telefone) { return telefone.indexOf('1') === 0 && telefone.length === 11; }
 
+// 03/11/2026: abertura usa so o nome, sem complemento separado do Google.
+// Hifens dentro do nome, cadastro e mensagens ja enviadas sao preservados.
+function preencherPrimeira(molde, nome, url, detalhe) {
+  const completo = String(nome || '').trim();
+  const principal = completo.split(/\s+[-–—|]\s+/)[0].trim() || completo;
+  return preencher(molde, principal, url, detalhe);
+}
+
 function preencher(molde, nome, url, detalhe) {
   return molde
     .split('{ARTIGO}').join(artigoDe(nome))

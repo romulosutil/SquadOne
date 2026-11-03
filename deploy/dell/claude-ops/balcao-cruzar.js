@@ -158,7 +158,7 @@ function montarMensagem(m, alocadas) {
     if (variante) {
       letra = variante.letra;
       elegiveis = variante.elegiveis || '';
-      mensagem = preencher(variante.molde, nome, siteUrl, eua ? '' : detalheDoBriefing(linha.briefing));
+      mensagem = preencherPrimeira(variante.molde, nome, siteUrl, eua ? '' : detalheDoBriefing(linha.briefing));
       waLink = 'https://wa.me/' + telefone + '?text=' + encodeURIComponent(mensagem);
     }
   }
