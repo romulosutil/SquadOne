@@ -57,7 +57,7 @@ isso). 4 821 px = 5,7 telas.
 **Desktop (1440):** hero de 780 px com a foto inteira; equipamentos em grade 3×3 (cabeça + 7 cartões + ajuda);
 como funciona em 3 colunas (cabeça, passos, painel); avaliações com a frase grande e o botão à direita e a grade
 de fotos do shot (picape alta à esquerda; revisão larga em cima; elogios embaixo); perguntas com a cabeça à
-esquerda e o acordeão à direita; fecho no cinza com o recorte de 980 px descendo 150 px sobre a faixa marinha
+esquerda e o acordeão à direita; fecho no cinza com o recorte de 980 px descendo sobre a faixa marinha
 de contato, em 4 colunas.
 
 ## Cores e fontes
@@ -133,9 +133,15 @@ Uberlândia e região", que só esta empresa pode dizer.
 - **Fotos reais** (perfil do Google, do proprietário): f11 no hero e no og.jpg; f7 (andaime) no cartão; f8
   (picape, recortada para tirar o telefone de outra empresa pintado na porta) e f6 (revisão) na prova.
 - **Recorte das escoras:** é a foto real f5 da Locforte com o fundo trocado por cinza liso no Google Flow (Nano
-  Banana), `recorte1.jpg` (o `recorte2` era a alternativa; o 1 tem o fundo uniforme #E5E9EA). O fundo virou
-  transparência (flood fill a partir da borda; a sombra virou escurecimento) para as escoras descerem sobre o
-  marinho no fecho. Entra uma vez, na custom property `--recorte` (WebP 800×360 com alfa, 30 KB).
+  Banana), `recorte1.jpg` (o `recorte2` era a alternativa; o 1 tem o fundo uniforme #E5E9EA). É o quadro 1 do
+  sprite dos cartões.
+- **Escoras do fecho (03/11/2026, revisão do Rômulo):** a imagem para sobreposição que ele mandou, gerada no
+  Flow a partir da mesma foto f5. Ela veio com o xadrez de "transparência" pintado nos pixels (JPEG sem alfa) e
+  uma sombra por cima. No Flow, o Nano Banana trocou só o xadrez por verde chapado #00FF00; daí um chroma key
+  (alfa pela diferença entre o verde e o maior de vermelho e azul, e o reflexo verde tirado) deu a
+  transparência de verdade. A foto termina cortada à direita, e uma máscara de degradê nos últimos 8% esconde o
+  corte. Entra uma vez, na custom property `--recorte` (WebP 860×307 com alfa, 40 KB; o gate mede 54 KB em
+  base64).
 - **Laje, torre, aprumador, barra de ancoragem e elevador:** imagens geradas por IA (Google Flow, Nano Banana)
   como ilustração do tipo de equipamento, no mesmo estilo do recorte (equipamento sobre o mesmo cinza). **Não
   são fotos da Locforte.** O elevador é genérico, sem marca. Cada placa mostra "ilustração" no canto, e o
@@ -182,3 +188,6 @@ recorte), f5 (vira o recorte), f9 e f10 (laje montada e fachada; limite de 5 fot
   4 821 px = 5,7 telas; contraste AA em 11 pares; toque e texto miúdo OK); `seo-do-site --exigir-faq --url
   https://demo-locforte-escoras-e-equipamento.vercel.app --sem-rede` e `--conferir` código 0, rodado no Windows com o
   Chrome no PATH (`QA_CHROME=chrome`) e o mesmo `content.md` mínimo.
+- Gate (escoras do fecho trocadas, 03/11/2026): `qa-numerico` código 0 (375,4 KB; Ato I 132,8 KB; recorte do
+  fecho 54 KB em base64; 4 788 px = 5,7 telas), com `QA_CHROME` apontando o `chrome.exe` pelo caminho
+  completo. O `seo-do-site` não precisou rodar de novo: o recorte não muda texto, metas nem JSON-LD.
