@@ -114,11 +114,36 @@ export interface PastaDoLead {
   raioXEm?: string;
   /** `raio_x_achados` do recibo (15/10/2026): os pontos da página em dado. Raio-X mais antigo não tem. */
   raioXAchados?: AchadoDoRaioX[];
+  pesquisaSiteAchados?: AchadoDoRaioX[];
   /** Demo sob pedido: o botão "Gerar demo" gravou PEDIDO-DEMO.json e o gerador ainda não terminou. */
   demoPedidoEm?: string;
   artefatos: ArtefatosDaPasta;
   falhaMensagem?: string;
   alteradaEm: string;
+}
+
+export function achadosDaPesquisaSite(valor: unknown, placeId: string | undefined, agora = Date.now()): AchadoDoRaioX[] | undefined {
+  if (!valor || typeof valor !== 'object' || !placeId) return undefined;
+  const v = valor as Record<string, unknown>;
+  const revisado = Date.parse(String(v.revisadoEm ?? ''));
+  const validoAte = Date.parse(String(v.validoAte ?? ''));
+  if (v.versao !== 1 || v.place_id !== placeId || !Number.isFinite(revisado) || !Number.isFinite(validoAte)
+      || revisado > agora + 60_000 || agora - revisado > 7 * 86400_000 || validoAte <= agora || validoAte > revisado + 7 * 86400_000
+      || !Array.isArray(v.fontes) || !v.fontes.length) return undefined;
+  for (const fonte of v.fontes) {
+    if (!fonte || typeof fonte !== 'object') return undefined;
+    const f = fonte as Record<string, unknown>;
+    const em = Date.parse(String(f.em ?? ''));
+    try {
+      const url = new URL(String(f.url ?? ''));
+      if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password
+          || !Number.isFinite(em) || em > agora + 60_000 || agora - em > 30 * 86400_000
+          || validoAte > em + 30 * 86400_000) return undefined;
+    } catch { return undefined; }
+  }
+  const achados = achadosDoRecibo(v.achados);
+  const permitidos = ['sem-site', 'site-e-rede-social', 'site-sem-celular-ou-whatsapp', 'site-fora-do-ar'];
+  return achados?.length && achados.every(a => permitidos.includes(a.id)) ? achados : undefined;
 }
 
 export type EstadoDoGerador = "processando" | "ocioso" | "atencao" | "desconhecido";
@@ -209,6 +234,12 @@ async function lerPasta(raiz: string, lugar: LugarDaPasta, slug: string): Promis
     placeId = (await lerTextoOuNada(path.join(diretorio, "content.md"), 16 * 1024))?.match(PLACE_ID_NO_CONTEUDO)?.[1];
   }
   const publicado = recibo !== undefined;
+  let pesquisaSiteAchados: AchadoDoRaioX[] | undefined;
+  try {
+    const pesquisa = await lerTextoOuNada(path.join(diretorio, 'raio-x-pesquisa-gratuita.json'), 32 * 1024);
+    if (pesquisa) pesquisaSiteAchados = achadosDaPesquisaSite(JSON.parse(pesquisa), placeId);
+  } catch { /* Pesquisa inválida não autoriza contato; preserva o recibo original. */ }
+
   // Fotos e capa só importam enquanto o site não existe (lead na fila do gerador).
   const [fotos, capa] = publicado
     ? [{ total: 0, alguma: false }, { total: 0, alguma: false }]
@@ -243,6 +274,7 @@ async function lerPasta(raiz: string, lugar: LugarDaPasta, slug: string): Promis
     ...(urlHttp(dados.raio_x_url) ? { raioXUrl: urlHttp(dados.raio_x_url) } : {}),
     ...(dataIso(dados.raio_x_em) ? { raioXEm: dataIso(dados.raio_x_em) } : {}),
     ...(achadosDoRecibo(dados.raio_x_achados) ? { raioXAchados: achadosDoRecibo(dados.raio_x_achados) } : {}),
+    ...(pesquisaSiteAchados ? { pesquisaSiteAchados } : {}),
     ...(demoPedidoEm && !urlHttp(dados.site_url) ? { demoPedidoEm } : {}),
     artefatos: {
       conteudo: temConteudo,

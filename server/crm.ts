@@ -1406,7 +1406,7 @@ function leadDoSite(linha: Linha, contexto: {
     ...(proposta ? { proposta: { em: new Date(proposta.em).toISOString(), data: proposta.data } } : {}),
     ...(t.apagadoEm !== undefined ? { demoApagadoEm: iso(t.apagadoEm) } : {}),
     ...(demoPedido ? { demoPedidoEm: demoPedido } : {}),
-    ...(pasta?.raioXAchados ? { achados: pasta.raioXAchados } : {}),
+    ...(pasta?.raioXAchados || pasta?.pesquisaSiteAchados ? { achados: pasta.raioXAchados ?? pasta.pesquisaSiteAchados } : {}),
     notas,
     ...(resposta ? { resposta } : {}),
     ...(Object.keys(abordagem).length ? { abordagem } : {}),

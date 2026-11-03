@@ -72,7 +72,8 @@ def analisar(crm, registros, conversas, dia, agora):
         novo = no_dia((lead.get('marcos') or {}).get('enviado'), dia)
         classificacao = lead.get('classificacaoResposta') or {}
         evidencia = classificacao.get('evidencia') or {}
-        permissao = instante(evidencia.get('em')) if classificacao.get('classe') == 'permissao' else None
+        # Uma classe antiga não cria uma nova solicitação de material no dia analisado.
+        permissao = instante(evidencia.get('em')) if classificacao.get('classe') == 'permissao' and no_dia(evidencia.get('em'), dia) else None
         entrega = next((m for m in msgs if permissao and instante(m.get('em')) and
                         instante(m['em']) > permissao and m.get('direcao') == 'saida' and
                         'https://' in m.get('texto', '')), None)
@@ -104,13 +105,14 @@ def analisar(crm, registros, conversas, dia, agora):
     if novos and max(nichos.values())/len(novos) >= .7:
         melhorias.append({'responsavel': 'Diego', 'acao': 'Conferir diversidade entre candidatos já aprovados e a evidência específica de cada empresa; manter três notas mínimas de 65.',
                            'evidencia': f'O maior nicho reúne {max(nichos.values())}/{len(novos)} primeiros contatos. Isso não prova qualidade inferior do nicho.'})
-    resumo = {'versao': 1, 'diaAnalisado': dia, 'geradoEm': agora.isoformat(), 'fonteGeradaEm': crm['geradoEm'],
+    resumo = {'versao': 2, 'diaAnalisado': dia, 'geradoEm': agora.isoformat(), 'fonteGeradaEm': crm['geradoEm'],
               'estado': 'ok', 'conversasRevisadas': len(casos), 'primeirosContatos': len(novos),
               'resultadosPrimeiros': dict(Counter(c['classeAtual'] for c in novos)),
               'tentativas': dict(Counter(r['estado'] for r in tentativas)),
               'enviosComRecibo': sum(bool(r.get('recibo')) and r.get('estado') == 'enviado' for r in tentativas),
               'nichosPrimeiros': dict(nichos), 'entregasAcimaDe30Min': len(lentos),
               'permissoesSemLink': len(pendentes), 'melhorias': melhorias,
+              'coorteDasEntregas': 'Permissões recebidas no dia analisado, com entregas observadas até a geração; classes antigas não viram pendência nova.',
               'limites': 'Observação descritiva até agora, não resultado final de D+1. Permissão não confirma compra. Nenhuma rodada, recusa, preço, nota mínima ou envio é alterado por este relatório.'}
     return resumo, casos
 

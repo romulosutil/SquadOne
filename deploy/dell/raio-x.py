@@ -1059,8 +1059,9 @@ def eh_advocacia(diag: dict) -> bool:
 
 # Dito na primeira tela de todo Raio-X de advocacia (versão 6). Só vale enquanto for verdade: a página do advogado
 # não tem preço nem promessa de resultado (o teste confere).
-CONFORMIDADE_OAB = ("Feito dentro das regras da OAB (Provimento 205/2021): conteúdo informativo, sem promessa de "
-                    "resultado e sem preço.")
+CONFORMIDADE_OAB = ("Publicidade na advocacia: referência ao Provimento 205/2021 da OAB. Material informativo com "
+                    "dados públicos; a divulgação deve ser revisada pelo responsável antes de qualquer campanha. "
+                    "Este diagnóstico não certifica conformidade jurídica.")
 
 
 def texto_visivel(doc: str) -> str:
@@ -1647,6 +1648,8 @@ def conferir_no_ar(url: str, esperado: bytes) -> tuple[bool, int | str]:
 def chave_places(arquivo: Path | None = None) -> str | None:
     """A chave do Places: PLACES_API_KEY no ambiente ou no arquivo (PLACES_API_KEY= ou
     GOOGLE_MAPS_API_KEY=). None = sem chave: o Raio-X sai sem concorrência e sem avaliações."""
+    # CUSTO_ZERO_PESQUISA_20261101: nem credencial explícita autoriza pesquisa paga.
+    return None
     if os.environ.get("PLACES_API_KEY", "").strip():
         return os.environ["PLACES_API_KEY"].strip()
     try:
@@ -1662,6 +1665,8 @@ def chave_places(arquivo: Path | None = None) -> str | None:
 
 def pedir_places(caminho: str, campos: str, chave: str, corpo: dict | None = None) -> tuple[int | str, dict | None]:
     """Uma chamada ao Places (New). A chave vai só no header; erros devolvem o código, nunca a chave."""
+    # CUSTO_ZERO_PESQUISA_20261101: nem credencial explícita autoriza pesquisa paga.
+    return "custo-zero", None
     try:
         pedido = urllib.request.Request(
             f"{PLACES_URL}/{caminho}", method="POST" if corpo is not None else "GET",
@@ -3183,7 +3188,10 @@ def testar() -> int:
                 arq.write_text("# comentário\nOUTRA=1\nGOOGLE_MAPS_API_KEY=\n", encoding="utf-8")
                 self.assertIsNone(chave_places(arq))
                 arq.write_text("export PLACES_API_KEY='abc123'\n", encoding="utf-8")
-                self.assertEqual(chave_places(arq), "abc123")
+                self.assertIsNone(chave_places(arq))
+                from unittest.mock import patch
+                with patch("urllib.request.urlopen", side_effect=AssertionError("pesquisa paga proibida")):
+                    self.assertEqual(pedir_places("places/teste", "websiteUri", "abc123"), ("custo-zero", None))
             finally:
                 if antes is not None:
                     os.environ["PLACES_API_KEY"] = antes

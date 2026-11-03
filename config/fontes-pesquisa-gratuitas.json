@@ -1,0 +1,16 @@
+{
+  "politica": "Custo zero para novas consultas. Não usar cartão, crédito promocional, franquia com excedente cobrado ou API comercial.",
+  "catalogoConsultado": "https://github.com/public-apis/public-apis",
+  "fontesAtivas": [
+    {"nome": "Minha Receita", "papel": "Consulta pontual de CNPJ publicado pela própria empresa", "documentacao": "https://docs.minhareceita.org/", "autenticacao": "nenhuma", "cobranca": "nenhuma"},
+    {"nome": "BrasilAPI", "papel": "Alternativa de transporte para consulta pontual de CNPJ; usa a mesma origem da Minha Receita", "documentacao": "https://brasilapi.com.br/", "autenticacao": "nenhuma", "cobranca": "nenhuma", "limiteDeUso": "Sem varredura integral; respeitar as restrições do serviço"},
+    {"nome": "IBGE Localidades", "papel": "Conferência de município por código IBGE informado no cadastro", "documentacao": "https://servicodados.ibge.gov.br/api/docs/localidades", "autenticacao": "nenhuma", "cobranca": "nenhuma"},
+    {"nome": "Sites institucionais", "papel": "Informações e canais empresariais publicados; URLs do LinkedIn somente como referências públicas", "autenticacao": "nenhuma", "cobranca": "nenhuma"}
+  ],
+  "bloqueadas": ["Google Places", "Apify", "Proxycurl", "Enrich Layer", "APIs comerciais de busca, enriquecimento ou modelos"],
+  "complementosAvaliados": [
+    {"nome": "ViaCEP", "documentacao": "https://viacep.com.br/", "estado": "Encontrado no catálogo; não integrado porque CEP não resolve a necessidade atual de seleção"},
+    {"nome": "LinkedIn oficial", "estado": "A presença no catálogo não concede acesso genérico a perfis; manter somente links e canais públicos já identificados"},
+    {"nome": "Google Trends", "estado": "Comparações manuais gratuitas preparadas; nenhum coletor pago ou número presumido"}
+  ]
+}

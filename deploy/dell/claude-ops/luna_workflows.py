@@ -266,7 +266,7 @@ class Servidor(BaseHTTPRequestHandler):
         rede = ipaddress.ip_network(os.environ.get('LUNA_REDE_N8N', '172.23.0.0/16'))
         if not (ip.is_loopback or ip in rede) or not hmac.compare_digest(self.headers.get('Authorization', ''), 'Bearer ' + segredo):
             return self.responder(403, {'erro': 'Acesso negado'})
-        if self.path not in ['/inferir', '/fonte']:
+        if self.path not in ['/inferir', '/fonte', '/pesquisa-leads']:
             return self.responder(404, {'erro': 'Rota inexistente'})
         try:
             tamanho = int(self.headers.get('Content-Length', '0'))
@@ -278,7 +278,13 @@ class Servidor(BaseHTTPRequestHandler):
         except (ValueError, OSError):
             return self.responder(400, {'erro': 'Pedido inválido'})
         try:
-            if self.path == '/fonte':
+            if self.path == '/pesquisa-leads':
+                # Contrato fechado: sem URL, comando, modelo ou dados de leads do cliente.
+                if not isinstance(dado, dict) or set(dado) != {'limite'} or type(dado['limite']) is not int or not 0 <= dado['limite'] <= 10:
+                    return self.responder(400, {'erro': 'Pedido inválido'})
+                from pesquisa_leads import executar
+                resposta = executar(dado['limite'])
+            elif self.path == '/fonte':
                 from fonte_luna import responder
                 resposta = responder(dado)
             else:

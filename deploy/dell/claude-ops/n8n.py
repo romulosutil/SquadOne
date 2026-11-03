@@ -26,6 +26,7 @@ SETTINGS_OK = {
 # depois de trocar os nós: sem esta trava, ajustar o convite religaria o Lead Scout calado.
 # Religar = tirar daqui (PR) e ativar no n8n. O rodar-agora.py também recusa estes ids sem --forcar.
 DESLIGADOS = {
+    "yNLwUy5bdEmC4Qss": "PRUMO · Fonte com IA: pausada pela política de custo zero",
     # 08/10/2026, decisão do Rômulo: 57 convites frios a distribuidoras, 21 respostas de robô,
     # nenhum dono interessado. O Organizado agora chega só pela CDL. O fluxo fica no n8n, inativo.
     "e02c6f43-17ce-430b-9238-0b997a7656ce": "PRUMO — Lead Scout (convite frio a distribuidoras)",
@@ -157,6 +158,8 @@ def api(method, path, body=None):
         from serializacao_aquisicao import desembrulhar as desembrulhar_aquisicao, protegido as aquisicao_protegida, preparar_se_configurado as preparar_aquisicao
         guarda_aquisicao_obrigatoria = aquisicao_protegida(body)
         body = desembrulhar_aquisicao(body)
+        from pesquisa_fluxos import preparar as preparar_pesquisa
+        body = preparar_pesquisa(body)
         from workflow_confiabilidade import preparar
         body = garantir_erro_salvo(preparar(body))
         config_contexto = configuracao_contexto()
@@ -172,6 +175,8 @@ def api(method, path, body=None):
         body = preparar_lote_se_configurado(body, config_contexto)
         body = preparar_publicacao_crm_se_configurado(body)
         body = preparar_aquisicao(body, obrigatoria=guarda_aquisicao_obrigatoria)
+        from custo_zero_n8n import preparar as preparar_custo_zero
+        body = preparar_custo_zero(body)
     if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}

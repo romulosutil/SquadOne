@@ -1,0 +1,239 @@
+{
+  "versao": 5,
+  "inicio": "2026-11-02",
+  "fim": "2026-11-06",
+  "preparadoEm": "2026-11-01",
+  "politicaCusto": "Custo zero exclusivamente em pesquisa e enriquecimento de leads: Minha Receita/BrasilAPI, IBGE e sites institucionais. Silmer, IA de atendimento e transcrição estão fora desta restrição.",
+  "catalogoDeFontes": "https://github.com/public-apis/public-apis",
+  "objetivo": "Realizar 60 primeiros contatos únicos de Site/Encontrado com envio confirmado de 3 a 6/11 e buscar ao menos três fechamentos (5%) nessa coorte. A meta não é previsão validada; fechamentos da carteira anterior têm indicador separado.",
+  "limites": "15 primeiros contatos/dia no conjunto das superfícies, 2/h, intervalo de 30 minutos e dez pendências por rodada. As nove anteriores foram revisadas: cinco silêncios e quatro respostas automáticas ou padronizadas, com histórico preservado. Novas rodadas exigem conferência concreta e registro do motivo, conforme autorização do Rômulo de 1/11.",
+  "dias": [
+    {
+      "data": "2026-11-02",
+      "responsaveis": [
+        "Marina",
+        "Diego",
+        "Rômulo"
+      ],
+      "acao": "Trabalho interno no feriado: conferir os 60 principais e as cinco reservas ja preparadas no domingo, validade das fontes, mensagens, conta e disponibilidade da oferta Site/Encontrado. Sem primeiros contatos.",
+      "entrega": "Fila de 60 principais e cinco reservas conferida para terca, com substituicao condicionada aos mesmos criterios. Nao ha pesquisa de cinco reservas pendente para segunda."
+    },
+    {
+      "data": "2026-11-03",
+      "responsaveis": [
+        "Diego",
+        "Carla",
+        "Rômulo"
+      ],
+      "acao": "Disparar até 15 primeiros contatos de Site/Encontrado entre os aprovados; conferir todos os envios reais; atender respostas e próximos passos aceitos; identificar refinamentos para amanhã, leads de qualidade, perdas confirmadas e pendências. Revisar a rodada antes de liberar novas vagas, preservando os limites e o histórico.",
+      "entrega": "Meta acumulada de 15/60 contatos confirmados. Revisão do lote com próximos passos e responsáveis; propostas e fechamentos separados da carteira anterior.",
+      "metaContatos": 15,
+      "metaAcumulada": 15
+    },
+    {
+      "data": "2026-11-04",
+      "responsaveis": [
+        "Rômulo",
+        "Carla",
+        "Marina"
+      ],
+      "acao": "Disparar até 15 primeiros contatos de Site/Encontrado entre os aprovados; conferir todos os envios reais; atender respostas e próximos passos aceitos; identificar refinamentos para amanhã, leads de qualidade, perdas confirmadas e pendências. Revisar a rodada antes de liberar novas vagas, preservando os limites e o histórico.",
+      "entrega": "Meta acumulada de 30/60 contatos confirmados. Revisão do lote com próximos passos e responsáveis; propostas e fechamentos separados da carteira anterior.",
+      "metaContatos": 15,
+      "metaAcumulada": 30
+    },
+    {
+      "data": "2026-11-05",
+      "responsaveis": [
+        "Rômulo",
+        "Elisa",
+        "Carla"
+      ],
+      "acao": "Disparar até 15 primeiros contatos de Site/Encontrado entre os aprovados; conferir todos os envios reais; atender respostas e próximos passos aceitos; identificar refinamentos para amanhã, leads de qualidade, perdas confirmadas e pendências. Revisar a rodada antes de liberar novas vagas, preservando os limites e o histórico.",
+      "entrega": "Meta acumulada de 45/60 contatos confirmados. Revisão do lote com próximos passos e responsáveis; propostas e fechamentos separados da carteira anterior.",
+      "metaContatos": 15,
+      "metaAcumulada": 45
+    },
+    {
+      "data": "2026-11-06",
+      "responsaveis": [
+        "Rômulo",
+        "Marina",
+        "Diego"
+      ],
+      "acao": "Disparar até 15 primeiros contatos de Site/Encontrado entre os aprovados; conferir todos os envios reais; atender respostas e próximos passos aceitos; identificar refinamentos para amanhã, leads de qualidade, perdas confirmadas e pendências. Revisar a rodada antes de liberar novas vagas, preservando os limites e o histórico.",
+      "entrega": "Fechamento da semana: confirmados/60, fechamentos dessa coorte/3, conversão, propostas, perdas com motivo e pendências. Consolidar refinamentos da próxima semana; acompanhar conversão tardia sem confundi-la com o resultado até sexta.",
+      "metaContatos": 15,
+      "metaAcumulada": 60
+    }
+  ],
+  "mercado": [
+    {
+      "produto": "site",
+      "termos": [
+        "criação de sites",
+        "site para empresa"
+      ],
+      "consulta": "https://trends.google.com/trends/explore?date=today%2012-m&geo=BR&q=cria%C3%A7%C3%A3o%20de%20sites,site%20para%20empresa"
+    },
+    {
+      "produto": "iris",
+      "termos": [
+        "software para clínica",
+        "prontuário eletrônico"
+      ],
+      "consulta": "https://trends.google.com/trends/explore?date=today%2012-m&geo=BR&q=software%20para%20cl%C3%ADnica,prontu%C3%A1rio%20eletr%C3%B4nico"
+    },
+    {
+      "produto": "sgp",
+      "termos": [
+        "diário de classe",
+        "gestão pedagógica"
+      ],
+      "consulta": "https://trends.google.com/trends/explore?date=today%2012-m&geo=BR&q=di%C3%A1rio%20de%20classe,gest%C3%A3o%20pedag%C3%B3gica"
+    },
+    {
+      "produto": "prisma",
+      "termos": [
+        "PDV no celular",
+        "controle de vendas"
+      ],
+      "consulta": "https://trends.google.com/trends/explore?date=today%2012-m&geo=BR&q=PDV%20no%20celular,controle%20de%20vendas"
+    },
+    {
+      "produto": "fiscal",
+      "termos": [
+        "rejeição nota fiscal",
+        "reforma tributária"
+      ],
+      "consulta": "https://trends.google.com/trends/explore?date=today%2012-m&geo=BR&q=rejei%C3%A7%C3%A3o%20nota%20fiscal,reforma%20tribut%C3%A1ria"
+    }
+  ],
+  "trends": "Consultas preparadas; sem dados numéricos coletados e sem acesso ao alpha oficial. Interesse agregado não veta lead nem confirma intenção de compra. Comparações da interface devem manter janela, região e termos comuns.",
+  "metas": {
+    "contatosUnicosComEnvioConfirmado": 60,
+    "contatosPorDia": 15,
+    "fechamentosNaCoorte": 3,
+    "conversaoAlvo": 0.05,
+    "prazoOperacional": "2026-11-06",
+    "janelaConversao": "Medir até 6/11 e acompanhar a mesma coorte também por 30 dias; resultado tardio não reescreve o fechamento da semana.",
+    "fechado": "Aceite comercial formal e pagamento/sinal exigido pela oferta registrados com evidência; proposta enviada ou interesse não contam.",
+    "contato": "Primeiro contato único por empresa/número, com destinatário e recibo do transporte confirmados. Falha, envio incerto, repetição e follow-up não contam; entrega/leitura são métricas separadas."
+  },
+  "foco": "Novos contatos exclusivamente de Site/Encontrado, com lista nominal de 60 aprovados. Substitutos exigem pesquisa gratuita, achado estruturado, destino único, histórico limpo e três pareceres de no mínimo 65 antes do envio.",
+  "cicloDiario": [
+    {
+      "etapa": 1,
+      "acao": "Disparar",
+      "como": "Até 15 primeiros contatos únicos elegíveis durante o expediente, com as proteções vigentes; atender em paralelo as respostas e os próximos passos já aceitos."
+    },
+    {
+      "etapa": 2,
+      "acao": "Conferir o que saiu",
+      "como": "Reconciliar destinatário, texto/versão, horário e recibo. Separar tentativa, envio confirmado, entrega, leitura e resposta humana; não repetir envio incerto."
+    },
+    {
+      "etapa": 3,
+      "acao": "Refinar o próximo dia",
+      "como": "Revisar conversas e motivos por oferta/nicho; registrar uma mudança principal de seleção ou abordagem com hipótese e evidência, sem declarar significância com amostra pequena."
+    },
+    {
+      "etapa": 4,
+      "acao": "Identificar qualidade, perdas e pendências",
+      "como": "Qualidade exige sinal comercial humano e próximo passo; perda exige recusa explícita ou incompatibilidade confirmada. Silêncio, robô, recepção e dado ausente ficam como pendência ou problema de canal."
+    }
+  ],
+  "revisoesAgendadas": {
+    "fuso": "America/Sao_Paulo",
+    "horarios": [
+      "07:40",
+      "12:40",
+      "18:40"
+    ],
+    "automacao": "revisar-mensagens-e-qualidade-dos-leads",
+    "execucaoEnvios": "Executor existente na Mel, a partir de 03/11 às 08:00 e até 06/11; transporte condicionado às proteções e confirmações."
+  },
+  "autorizacaoExecucao": "Rômulo aprovou em 1/11 revisar nove pendências, completar 23 leads gratuitamente e executar a semana com foco em Site/Encontrado, meta de 60 contatos e três fechamentos.",
+  "preparacaoConcluida": {
+    "verificadoEm": "2026-11-01T19:33:24.34485-03:00",
+    "aprovados": 65,
+    "principaisAprovados": 60,
+    "adiados": 6,
+    "reservasAprovadas": 5,
+    "pendentesAnterioresRevisadas": 9,
+    "complementosConcluidos": true,
+    "novasConsultasAPIPaga": 0
+  },
+  "ultimaConferencia": {
+    "verificadoEm": "2026-11-01T21:42:15.131396+00:00",
+    "principaisConferidos": 60,
+    "destinosValidos": 60,
+    "destinosUnicos": 60,
+    "historicoAnteriorEmQualquerOferta": 0,
+    "tresPareceres65": 60,
+    "enviadosConfirmadosCampanha": 0,
+    "reservasAprovadas": 0,
+    "adiados": 11,
+    "incertos": 0,
+    "pendenciasRegistroCRM": 0,
+    "crmGeradoEm": "2026-11-01T21:40:46.563Z",
+    "conexao": "open",
+    "manifestoSha256": "90689132d9c1bf7c5b75e2520dfcfaff97871e56be97d2dd749210e6457feef8",
+    "evidenciaPrivadaMel": "~/.cache/mel-work/semana-site-20261102/conferencias/20261101T214203Z.json",
+    "proximaAcao": "02/11: preparar pelo menos cinco reservas por pesquisa gratuita, identidade e destino verificados, evidência estruturada e três pareceres reais. Sem envios no feriado."
+  },
+  "reservas": {
+    "preparadasEm": "2026-11-01",
+    "quantidade": 5,
+    "criterio": "Mesmo dos principais: pesquisa gratuita, identidade e destino verificados, historico limpo e tres pareceres reais >=65.",
+    "uso": "Depois dos principais disponiveis; o guard de envio restringe aos principais e reservas do manifesto. Cinco substitutos nao ampliam a meta de 60 contatos.",
+    "pesquisaPendenteParaSegunda": false
+  },
+  "automacao": {
+    "pesquisaN8n": {
+      "ativo": true,
+      "nome": "PRUMO · Pesquisa e higiene de leads",
+      "gatilhos": [
+        {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "10 7,12,18 * * 1-5"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "timers": {
+      "frente-comercial.timer": {
+        "habilitado": "enabled",
+        "estado": "active"
+      },
+      "revisao-comercial-diaria.timer": {
+        "habilitado": "enabled",
+        "estado": "active"
+      },
+      "curadoria-leads.timer": {
+        "habilitado": "enabled",
+        "estado": "active"
+      }
+    },
+    "revisaoPorAgente": {
+      "ativo": true,
+      "horarios": [
+        "07:40",
+        "12:40",
+        "18:40"
+      ],
+      "fuso": "America/Sao_Paulo"
+    },
+    "substituicao": "Principais antes das reservas; guard de envio restringe ao manifesto; mesmo teto de 60 contatos.",
+    "etapasHumanas": [
+      "Respostas dos clientes",
+      "Propostas e negociacao",
+      "Aceite comercial e pagamento real"
+    ]
+  }
+}

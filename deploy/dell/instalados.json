@@ -103,6 +103,17 @@
     {"repo": "deploy/hermes/scripts/identidade_captura.mjs", "instalado": "~/.hermes/hermes-agent/scripts/whatsapp-bridge/identidade_captura.mjs", "via": "aplicar-hermes", "reiniciar": "hermes-gateway.service"},
     {"repo": "deploy/hermes/scripts/squadone_history.mjs", "instalado": "~/.hermes/hermes-agent/scripts/whatsapp-bridge/squadone_history.mjs", "via": "aplicar-hermes", "reiniciar": "hermes-gateway.service"},
     {"repo": "deploy/hermes/scripts/asmr_coleta_gate.py", "instalado": "~/.hermes/scripts/", "via": "aplicar-hermes"},
-    {"repo": "deploy/hermes/scripts/sites_e_pendencias.py", "instalado": "~/.local/bin/sites-e-pendencias"}
+    {"repo": "deploy/hermes/scripts/sites_e_pendencias.py", "instalado": "~/.local/bin/sites-e-pendencias"},
+    {"repo": "config/feriados-nacionais.json", "instalado": "~/.local/bin/feriados-nacionais.json"},
+    {"repo": "deploy/dell/calendario_comercial.py", "instalado": "~/.local/bin/calendario_comercial.py"},
+    {"repo": "deploy/dell/campanha_site.py", "instalado": "~/.local/bin/campanha_site.py"},
+    {"repo": "deploy/dell/campanha_site.py", "instalado": "~/.local/share/claude-ops/campanha_site.py"},
+    {"repo": "deploy/dell/pesquisa_leads.py", "instalado": "~/.local/bin/pesquisa_leads.py"},
+    {"repo": "deploy/dell/pesquisa_leads.py", "instalado": "~/.local/share/claude-ops/pesquisa_leads.py"},
+    {"repo": "deploy/dell/claude-ops/classificador-gratuito-adaptador.js", "instalado": "~/.local/share/claude-ops/classificador-gratuito-adaptador.js"},
+    {"repo": "deploy/dell/claude-ops/classificador-gratuito.bundle.js", "instalado": "~/.local/share/claude-ops/classificador-gratuito.bundle.js"},
+    {"repo": "deploy/dell/claude-ops/custo_zero_n8n.py", "instalado": "~/.local/share/claude-ops/custo_zero_n8n.py"},
+    {"repo": "deploy/dell/claude-ops/custo_zero_silmer.py", "instalado": "~/.local/share/claude-ops/custo_zero_silmer.py"},
+    {"repo": "deploy/dell/claude-ops/pesquisa_fluxos.py", "instalado": "~/.local/share/claude-ops/pesquisa_fluxos.py"}
   ]
 }

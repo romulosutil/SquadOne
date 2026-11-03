@@ -108,12 +108,41 @@ def resultado(l, now):
     return 'revisar'
 
 
+_PESQUISA_CACHE = None
+
+
+def gate_pesquisa_leads(l):
+    """Sem rede e sem escrita; revalida identidade, assinatura e validade por lead."""
+    global _PESQUISA_CACHE
+    arquivo = Path.home()/'.local/share/pesquisa-leads/gate.json'
+    if not arquivo.exists(): return []
+    try:
+        from pesquisa_leads import assinatura, bloqueios_pesquisa, VERSAO as VP
+        stat = arquivo.stat()
+        chave = (str(arquivo), stat.st_mtime_ns, stat.st_size)
+        if _PESQUISA_CACHE is None or _PESQUISA_CACHE[0] != chave:
+            _PESQUISA_CACHE = (chave, json.loads(arquivo.read_text()))
+        gate = _PESQUISA_CACHE[1]
+        if gate.get('versao') != VP: return ['pesquisa-versao-divergente']
+        row = gate.get('leads', {}).get(l['id'])
+        if not row: return []
+        if row.get('assinatura') != assinatura(l): return ['pesquisa-contexto-alterado']
+        em = instante(gate.get('geradoEm'))
+        if em is None or not -60 <= dt.datetime.now(dt.timezone.utc).timestamp()-em <= 30*3600:
+            return ['higiene-desatualizada']
+        motivos = [m for m in row.get('motivos', []) if m in ('destino-com-historico-em-outra-ficha', 'destino-duplicado')]
+        motivos += bloqueios_pesquisa(l, row.get('pesquisa'))
+        return motivos
+    except Exception:
+        return ['pesquisa-indisponivel']
+
+
 def avaliar(l, modelo=None, texto=''):
     """Só adia a fila automática; nunca descarta, escreve no CRM ou manda mensagem."""
     c = l.get('conversa') or {}
     restricao = (c.get('sinaisComerciais') or {}).get('restricao') or {}
     produto = l.get('produto')
-    motivos = []
+    motivos = gate_pesquisa_leads(l)
     if restricao.get('tipo') in ('recusa', 'exclusao') or (l.get('resposta') or {}).get('tipo') in ('negativa', 'exclusao') or (l.get('classificacaoResposta') or {}).get('classe') in ('recusa', 'exclusao'):
         motivos.append('recusa-ou-exclusao')
     # Uma indisponibilidade confirmada do destino em qualquer oferta vale para o número.

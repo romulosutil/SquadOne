@@ -105,14 +105,9 @@ def instante(value):
 def dia(now): return now.astimezone(SP).date().isoformat()
 
 def proximo_expediente(now):
-    # Mesma janela da Central (EXPEDIENTE_DE_VENDA em trava-de-horario.ts): seg–sex, 8h00 às 17h30.
-    local = now.astimezone(SP)
-    minutos = local.hour * 60 + local.minute
-    if local.weekday() < 5 and EXPEDIENTE_INICIO <= minutos < EXPEDIENTE_FIM: return local
-    alvo = local.replace(hour=8, minute=0, second=0, microsecond=0)
-    if minutos >= EXPEDIENTE_FIM: alvo += dt.timedelta(days=1)
-    while alvo.weekday() >= 5: alvo += dt.timedelta(days=1)
-    return alvo
+    from calendario_comercial import proximo_expediente as calcular
+    return calcular(now)
+
 
 def numero(lead):
     u = urllib.parse.urlparse(lead.get('links', {}).get('whatsapp', ''))
@@ -252,7 +247,7 @@ def prompt_da_avaliacao(agente,especialidade,lote,funil=None,taxas=None):
         'Direção comercial: Site/Encontrado é a frente principal entre candidatos aprovados. CRM de estamparia é venda dirigida, somente com necessidade, impacto e decisor confirmados no CRM. '
         'Site é prospecção para descoberta: um achado verificável de site e uma atividade identificável permitem perguntar ao responsável se a solução é útil. Não exija SPICED, dor, impacto, decisor, orçamento ou intenção de compra confirmados antes desse primeiro contato de Site. Ausência dessas confirmações é lacuna a investigar, não motivo isolado de veto. '
         'Não priorize por tamanho da carteira ou resposta humana; isso não mede pagamento, margem nem probabilidade de venda. Sem site é sinal para validar utilidade, não necessidade de compra confirmada. '
-        'Retorne APENAS array JSON, um objeto por id: {"id":"id fornecido","nota":0..100,"decisao":"contatar" ou "adiar","motivo":"8 a 260 caracteres"}. '
+        'Retorne APENAS array JSON, um objeto por id: {"id":"id fornecido","nota":0..100,"decisao":"contatar" ou "adiar","motivo":"uma frase de 8 a 180 caracteres"}. '
         'No motivo cite evidência pública específica e a principal lacuna da sua responsabilidade. '
         'Sem evidência relevante para sua responsabilidade, adie; categoria genérica, presença no Google e pontuação da fonte não justificam nota alta. '
         '65 é o mínimo por responsabilidade para contatar, não uma cota; a menor nota governa a prioridade. '
@@ -356,6 +351,8 @@ def metricas_dos_setores(candidatos, fila, crm, registro, now):
     return sorted(linhas.values(),key=lambda l:(-l['enviados'],-l['selecionados'],-l['avaliados'],l['setor']))
 
 def elegivel(lead):
+    from campanha_site import permite as permite_campanha
+    if not permite_campanha(lead, agora()): return False
     if parecer_curadoria(lead)['decisao'] != 'apto': return False
     if (lead.get('responsavelConversa') or {}).get('responsavel') == 'romulo': return False
     if not justificativa_comercial(lead)['elegivel']:return False
@@ -370,6 +367,8 @@ def elegivel(lead):
 
 def fingerprint(l):
     dados = {k: l.get(k) for k in ['id', 'empresa', 'produto', 'etapa', 'sinal', 'marcos', 'conversa', 'proximoPasso', 'resposta', 'triagem', 'achados', 'nicho', 'cidade', 'equipe', 'plus', 'spiced', 'responsavelConversa']}
+    from campanha_site import evidencia_site
+    dados['fontePublicaSite']=evidencia_site(l, agora=agora())
     dados['mensagemAvaliada']=texto_do_lead(l)
     dados['curadoria']=parecer_curadoria(l)
     # Só os links que mudam o que o time diz ou para quem fala. convite/acoes/maps são apresentação da Central:
@@ -383,7 +382,8 @@ def hash_avaliacao(l):
 def pacote(l,taxas=None):
     # Nenhum número, URL, histórico pessoal ou conteúdo recebido entra na inferência.
     clean = lambda s: re.sub(r'\d{8,}', '[omitido]', str(s or ''))[:180]
-    return {'id': hashlib.sha256(l['id'].encode()).hexdigest()[:16], 'empresa': clean(l['empresa']),
+    from campanha_site import evidencia_site
+    return {'evidenciaPublicaSite':evidencia_site(l, agora=agora()), 'achadosEstruturados':[{k:publico_seguro(v,180) if isinstance(v,str) else v for k,v in a.items() if k in {'id','consulta','posicao','lidos','nota','avaliacoes','medianaDaBusca','topoComSite','topoLidos','dominio','rede','celular','whatsapp'}} for a in (l.get('achados') or [])[:10]], 'id': hashlib.sha256(l['id'].encode()).hexdigest()[:16], 'empresa': clean(l['empresa']),
             'oferta': l['produto'], 'nicho': clean(l.get('nicho')), 'cidade': clean(l.get('cidade')),
             'prioridadeDaFonte': l.get('triagem', {}).get('prioridade'), 'perfil':perfil_do_lead(l),
             'qualificacaoComercialConfirmada':qualificacao_comercial(l),
@@ -642,6 +642,8 @@ def revalidar_antes_do_envio(l, text):
     The model's selection and the daily reservation never authorize a stale send.
     No retry: a failed read stops this round before calling Evolution.
     """
+    from campanha_site import permite as permite_campanha
+    if not permite_campanha(l, agora(), envio=True): return False
     if not ler_config().get('ativo'): return False
     pausa = instante(ler_config().get('pausadoAte'))
     if pausa and pausa > agora().timestamp(): return False
@@ -934,8 +936,8 @@ def _rodada(estado, now, alvo, dia_):
                 estado['selecionados']=len(estado['fila'])
         except (OSError,ValueError):pass
         lotes_novos=0;varridos=0;sem_orcamento=False
-        for inicio in range(0,len(candidatos),20):
-            lote=candidatos[inicio:inicio+20];anteriores={};lote_incompleto=False
+        for inicio in range(0,len(candidatos),5):
+            lote=candidatos[inicio:inicio+5];anteriores={};lote_incompleto=False
             if any(not registro.avaliar(dia_,l,a) for l in lote for a,_ in ROLES):lotes_novos+=1
             if lotes_novos>2:break
             varridos+=len(lote)
@@ -984,6 +986,8 @@ def _rodada(estado, now, alvo, dia_):
                 anteriores_validos.append(c)
         estado['fila']=intercalar_ofertas(anteriores_validos+nova,lambda l:l['nota']+parecer_curadoria(atuais_do_plano[l['id']])['ajuste'] if l['id'] in atuais_do_plano else l['nota'])[:100]
         estado['selecionados']=len(estado['fila'])
+        from campanha_site import priorizar_fila, ler as ler_campanha
+        estado['fila']=priorizar_fila(estado['fila'],ler_campanha())
         estado['setores']=metricas_dos_setores(candidatos,estado['fila'],crm,registro,now)
         pendentes_incertos=registro.incertos()
         if pendentes_incertos:

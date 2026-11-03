@@ -25,6 +25,9 @@
  * a conversa não travam: são resposta a quem já recebeu algo, não um frio fora de hora.
  */
 import type { CrmLead } from './types'
+import calendario from '../../config/feriados-nacionais.json'
+const FERIADOS_NACIONAIS = new Set(calendario.datas)
+
 
 /**
  * Seg a sex, 08:00 às 17:30 de São Paulo (pedido de 16/10/2026). O aviso do Telegram só sai
@@ -44,7 +47,7 @@ function relogioSP(agora: number): { dia: number; minutos: number } {
 export function noExpedienteDeVenda(agora: number): boolean {
   if (!Number.isFinite(agora)) return false
   const { dia, minutos } = relogioSP(agora)
-  return (EXPEDIENTE_DE_VENDA.dias as readonly number[]).includes(dia) && minutos >= EXPEDIENTE_DE_VENDA.inicioMin && minutos < EXPEDIENTE_DE_VENDA.fimMin
+  return !FERIADOS_NACIONAIS.has(new Date(agora - 3 * 3600_000).toISOString().slice(0, 10)) && (EXPEDIENTE_DE_VENDA.dias as readonly number[]).includes(dia) && minutos >= EXPEDIENTE_DE_VENDA.inicioMin && minutos < EXPEDIENTE_DE_VENDA.fimMin
 }
 
 /**

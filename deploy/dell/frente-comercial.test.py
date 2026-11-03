@@ -62,6 +62,10 @@ class Frente(unittest.TestCase):
         self.r=f.Registro(Path(self.tmp.name)/'r.sqlite');self.addCleanup(self.r.db.close)
         self.now=dt.datetime(2026,10,19,14,tzinfo=dt.timezone.utc)
         self.data=Path(self.tmp.name)/'data';self.data.mkdir()
+        # A campanha de verdade do Dell (~/.local/share/squadone-operations) não entra no teste: sem o arquivo,
+        # o campanha_site preserva a operação de antes. Com ele, os leads de teste não estavam autorizados.
+        import campanha_site
+        duble=patch.object(campanha_site,'ARQUIVO',Path(self.tmp.name)/'sem-campanha.json');duble.start();self.addCleanup(duble.stop)
         # Avisos e observador dublados: o teste nunca toca a fila, o systemd nem o Telegram.
         self.avisos=[]
         def aviso(titulo,texto,chave_,prioridade=2):self.avisos.append({'titulo':titulo,'texto':texto,'chave':chave_,'prioridade':prioridade});return True
@@ -430,14 +434,19 @@ class Frente(unittest.TestCase):
         leads=[lead(f'site:{i}',f'5511998{i:06}')|{'nicho':'advocacia' if i%2 else 'dedetizadora'} for i in range(61)]
         x=self.rodar({'estado':'ok','leads':leads},lambda l:{'reservado':False,'motivo':'intervalo'})
         final=x.estados[-1]
-        self.assertEqual(final['avaliados'],40)
-        self.assertEqual(sum(s['avaliados'] for s in final['setores']),40)
+        self.assertEqual(final['avaliados'],10)
+        self.assertEqual(sum(s['avaliados'] for s in final['setores']),10)
         primeiro=final['fila'][0]
         primeiro.update(estado='enviado')
         (self.data/'frente-comercial.json').write_text(json.dumps(final,ensure_ascii=False))
         atual=[l|{'etapa':'contato','marcos':{'enviado':f.iso(self.now)}} if l['id']==primeiro['id'] else l for l in leads]
-        y=self.rodar({'estado':'ok','leads':atual},lambda l:{'reservado':False,'motivo':'intervalo'})
-        seguinte=y.estados[-1]
+        # Dois lotes novos de cinco por rodada: completar a carteira em rodadas sucessivas,
+        # preservando o recibo anterior e sem contar candidatos ainda nao avaliados.
+        for _ in range(7):
+            y=self.rodar({'estado':'ok','leads':atual},lambda l:{'reservado':False,'motivo':'intervalo'})
+            seguinte=y.estados[-1]
+            (self.data/'frente-comercial.json').write_text(json.dumps(seguinte,ensure_ascii=False))
+            if seguinte['avaliados']==61: break
         self.assertEqual(seguinte['avaliados'],61)
         self.assertEqual(sum(s['avaliados'] for s in seguinte['setores']),61)
         self.assertIn(primeiro['id'],[c['id'] for c in seguinte['fila'] if c['estado']=='enviado'])
