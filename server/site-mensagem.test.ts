@@ -81,7 +81,7 @@ describe("site-mensagem: espelho do JS do n8n", () => {
     const br = segundaDe(CASOS[0][1]).texto;
     assert.equal(br, "Aqui está a demonstração de site da Dedetizadora Alfa:\nhttps://demo-alfa.vercel.app\n\n" +
       "Fiz com as fotos e as avaliações que vocês já têm no Google.\n\n" +
-      "Se gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes " +
+      "Se gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e um ajuste por mês " +
       "incluídos. Vocês só pagam depois de ver o site funcionando.\n\nSe não for o momento, é só dizer que eu apago.\n\nO que acharam?");
     // O wa.me leva o texto codificado: o "$" vira %24 no link, e o WhatsApp o decodifica.
     assert.ok(segundaDe(CASOS[0][1]).link.includes("R%24%20690"));

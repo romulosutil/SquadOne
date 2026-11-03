@@ -144,7 +144,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     nome: 'Encontrado',
     etapa: 'arrumar',
     tipo: 'produto',
-    entrega: 'Site no ar com o endereço da empresa, perfil do Google revisado e botão de WhatsApp. A mensalidade cobre domínio, hospedagem e ajustes.',
+    entrega: 'Site no ar com o endereço da empresa, perfil do Google revisado e botão de WhatsApp. A mensalidade cobre domínio, hospedagem e um ajuste por mês.',
     preco: 'R$ 690',
     mensal: 'R$ 39/mês',
     condicao: 'paga só depois de ver no ar',
@@ -333,7 +333,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'segunda-preco',
         titulo: 'Preço do Encontrado (para juntar à segunda)',
         texto:
-          'Se gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando.',
+          'Se gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e um ajuste por mês incluídos. Vocês só pagam depois de ver o site funcionando.',
         dica: 'A 2ª mensagem já leva este preço; use quando escrever a sua à mão. O preço logo de cara separa curiosos de compradores e evita o "quanto custa?" que trava a conversa.',
         produtos: SITE,
       },
@@ -475,7 +475,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'proposta-encontrado',
         titulo: 'Encontrado (depois do "gostei")',
         texto:
-          'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando. Posso começar?',
+          'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e um ajuste por mês incluídos. Vocês só pagam depois de ver o site funcionando. Posso começar?',
         dica: 'Confira a qualificação e a condição individual antes da versão final. Meta interna de preparação: até 24 h após abertura confirmada; conferir informações e compromisso antes de prometer prazo. Pediram mudança no demo? Faça antes de cobrar.',
         produtos: SITE,
       },
@@ -568,7 +568,7 @@ export const OBJECOES: Objecao[] = [
       id: 'objecao-quanto-custa',
       titulo: '"Quanto custa?"',
       texto:
-        'Para colocar o site no ar com o endereço de vocês: R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e ajustes incluídos. Vocês só pagam depois de ver o site funcionando. Quer que eu coloque?',
+        'Para colocar o site no ar com o endereço de vocês: R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e um ajuste por mês incluídos. Vocês só pagam depois de ver o site funcionando. Quer que eu coloque?',
       dica: 'Diga o preço na hora, sem rodeio. Lead do PRUMO: o Raio-X e o Mapa são grátis; Respondido e Fonte são sob proposta, com o valor por escrito e o prazo combinado após conferir o escopo. Se a pergunta é sobre o Mapa, use o "isso é pago?".',
       produtos: TODOS,
     },
@@ -606,7 +606,7 @@ export const OBJECOES: Objecao[] = [
       id: 'objecao-ta-caro',
       titulo: '"Tá caro"',
       texto:
-        'Entendo. O valor cobre o site no ar com o endereço de vocês, o perfil do Google revisado e o botão do WhatsApp, com domínio, hospedagem e ajustes incluídos. E vocês só pagam depois de ver tudo funcionando. Se agora não for o momento, dá para começar por uma parte menor ou retomar mais para frente. O que faz mais sentido para vocês?',
+        'Entendo. O valor cobre o site no ar com o endereço de vocês, o perfil do Google revisado e o botão do WhatsApp, com domínio, hospedagem e um ajuste por mês incluídos. E vocês só pagam depois de ver tudo funcionando. Se agora não for o momento, dá para começar por uma parte menor ou retomar mais para frente. O que faz mais sentido para vocês?',
       dica: 'O preço não muda: nada de desconto em troca de depoimento ou de favor, o PRUMO é consultoria e não pede ajuda. No Respondido ou na Fonte, troque a primeira frase pelo que entra no projeto e ofereça um trecho menor (só o Encontrado; na Fonte, começar pelo bloco do Mapa que mais trava). Se escolherem mais tarde, combine a data e anote na Ficha. Nada de prazo inventado para pressionar.',
       produtos: TODOS,
     },
