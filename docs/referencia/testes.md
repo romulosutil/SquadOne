@@ -121,7 +121,7 @@ duplica, 400 para frase que não é gasto — com um SQLite num diretório tempo
 e `sync` e `organizar`, estes dois com um SQLite num diretório temporário),
 `server/telegram-gasto.test.ts`,
 `src/ajuste-do-usuario.test.ts`,
-`src/operations-agenda-window.test.ts`, `src/operations-alertas.test.ts` (além de `separarAlertas`, links e filas, desde 17/10/2026,
+`src/operations-alertas.test.ts` (além de `separarAlertas`, links e filas, desde 17/10/2026,
 AC-17, `resumoDoDell` em tabela: sem retrato, sem horário, retrato com mais de 5 min, tudo ok, só falhas, só filas, só "resolvem sozinhas",
 a mistura de 43 de 49 e um aviso, conferindo `total − ok = precisam + sozinhas`; e `semFraseCortada`),
 `src/operations-resultados.test.ts` (o placar do CRM: só enviados no período, robô não é resposta, recusa só entre enviados;

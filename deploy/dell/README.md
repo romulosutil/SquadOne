@@ -1,5 +1,19 @@
 # Central de Operações no Dell
 
+## Limpeza e pausas conferidas em 03/11/2026
+
+O inventário atual, os motivos registrados nos commits e a limpeza restrita estão
+em [limpeza e histórico das pausas](../../docs/referencia/limpeza-e-pausas-2026-11-03.md).
+As agendas descritas neste runbook são capacidades; não comprovam ativação atual.
+Caçadores, Acompanhamento, Funil semanal, Fonte com IA e Radar PNCP continuam
+inativos. O Syncthing continua desabilitado. A pesquisa gratuita, o CRM e a
+Medição de eventos seguem ativos.
+
+`auto-production.json` da antiga Produção Auto foi retirado do diretório operacional,
+com cópia privada de reversão; não confundir com o módulo ativo `server/auto-production.ts`.
+O gancho final `workflow_limpeza.py` remove apenas o ramo Jev desabilitado e isolado
+do classificador, preservando o classificador e o experimento Jev da agenda.
+
 ## Retomada de 22/10/2026 e sessão independente do Grok
 
 Autorizada a retomada com 50% do esforço anterior: 5 primeiros contatos/dia,

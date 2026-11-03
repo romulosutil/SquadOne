@@ -181,7 +181,7 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           Desconectar o Google está em Mais › Manutenção, AC-25), rota.ts (pushState sem roteador),
                           overview.ts (retrato do Dell), ditado.ts (microfone do Pedir), pilhaDeFolhas.ts;
                           BarraInferior, BarraLateral, CascaTopo, PedirFolha, Paleta, DellAlerta, FinancasAlerta,
-                          PrecisaDeVoce (os até 3 cartões, Hoje e Central), EscritorioVivo (o mapa da Central, sem editar o roster)
+                          PrecisaDeVoce (os até 3 cartões, Hoje e Central); CentralRota monta GameMap e SalaComando
   src/rotas/              CentralRota (/ no operations), HojeRota (/ no app), AgendaRota (/agenda), EscritorioRota (/squadone),
                           MaisRota (/mais; Manutenção no operations). As rotas fora dos menus seguem por endereço
   src/agentes/estado.ts   estado e ações dos agentes (era o <script> do App.vue): roster, squad ativa, Mochila,
@@ -193,7 +193,7 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
     alertas.ts            PURO: separa falha / fila / vale olhar / resolve sozinho; links só do Dell; contagem das filas;
                           resumoDoDell (17/10/2026, AC-17) é o número único do topo, da Hoje e do Mais ("precisam de você" e
                           "resolvem sozinhas"); a Hoje mostra só os títulos, o técnico fica em Mais › Manutenção
-    AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; agenda-window.ts: a agenda do dia na Hoje sem os agentes
+    AccessPanel.vue, DellConferePanel.vue (tudo que o Dell confere, fechado): em Mais; a agenda operacional usa os leitores atuais da rota
     Crm*.vue, crm-formato.ts  Vendas (/crm): Conversas para você (id afazer), Primeiros contatos (id triagem: o painel do time e a Triagem), Funil (Quadro | Lista, filtros Buscar, Nicho, Cidade e Passo;
                           ?ver=jornada cai no Funil com ?passo=) e Diagnóstico (id numeros), mais a Ficha (folha cheia); os nomes da tela são NOME_DAS_ABAS (vendas-abas.ts); o Roteiro mora em Mais › Entender
                           (/mais?abrir=roteiro), e ?ver=roteiro/colinha vão para lá; no celular as abas rolam de lado e as ofertas ficam num

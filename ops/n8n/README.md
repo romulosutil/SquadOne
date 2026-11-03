@@ -1,5 +1,21 @@
 # n8n da Mel
 
+## Estado conferido em 03/11/2026
+
+O n8n do Dell lista 22 workflows: 15 ativos e 7 inativos, incluindo o Radar PNCP
+arquivado. Caçadores de Site, Íris e Estamparia, Acompanhamento, Funil semanal,
+Fonte com IA e Radar permanecem pausados. Os motivos e os commits estão em
+[limpeza e histórico das pausas](../../docs/referencia/limpeza-e-pausas-2026-11-03.md).
+
+O Lead Scout e Preparar planilha abaixo são artefatos históricos; não aparecem
+na instância atual. A captura do Caçador de 19/10 registra o estado daquela data:
+o Caçador de Site foi pausado posteriormente, em 29/10. Não importar nem ativar
+esses arquivos como parte da limpeza.
+
+`workflow_limpeza.py`, último gancho do publicador, retira somente os quatro nós
+Jev quando todos estão desabilitados, isolados e sem referências externas. Não
+remove workflows, tabelas ou amostras da sombra, nem altera os estados de pausa.
+
 Esta pasta **não é a fonte** dos fluxos. Cada fluxo é montado e publicado por um gerador em
 `deploy/dell/claude-ops/`, pela API local do n8n da Mel; editar no editor do n8n sem mudar o gerador
 se perde na próxima regeneração.
@@ -15,7 +31,7 @@ se perde na próxima regeneração.
 
 ## Arquivo do 01 · Caçador da Mel — somente auditoria
 
-[`workflows/01-Cacador.sanitizado.json`](workflows/01-Cacador.sanitizado.json) foi obtido por GET da API local da Mel em **19/10/2026, 21:24:16 SP**. Fonte: workflow `oow8TkxrAf4fVvTj`, nome `01 · Caçador`. **A fonte real estava ativa; permanece nesse estado.** O arquivo e seu subfluxo embutido estão com `active: false` para importação segura. Isso não afirma que o Caçador de Site foi pausado. Os caçadores de Iris/Estamparia continuam com seus estados reais preservados.
+[`workflows/01-Cacador.sanitizado.json`](workflows/01-Cacador.sanitizado.json) foi obtido por GET da API local da Mel em **19/10/2026, 21:24:16 SP**. Fonte: workflow `oow8TkxrAf4fVvTj`, nome `01 · Caçador`. **A fonte estava ativa na captura; em 03/11/2026 está pausada.** O arquivo e seu subfluxo embutido estão com `active: false` para importação segura. A captura não registra a pausa posterior do Caçador de Site. Os estados atuais estão na seção acima.
 
 A sanitização ocorreu **na própria Mel, antes de qualquer cópia**; o export bruto ficou somente em memória. Foram preservados o grafo principal de 7 nós e o `workflowJson` embutido de 32 nós, inclusive a leitura de leads existentes e o dedupe por `place_id`. Foram retirados estado de execução, `pinData`, `staticData`, compartilhamentos, metadados de versão e IDs de webhook. As nove referências de credencial e cinco referências de planilha foram substituídas por placeholders; nenhum dado de lead, paciente ou execução foi incluído. O código fonte próprio permanece auditável.
 
