@@ -712,7 +712,7 @@ class QaComFolhaNasInstrucoes(unittest.TestCase):
         r = self.rascunho
         for trecho in (f"python3 {dr} buscar --saida {r}/dribbble/busca --consulta",
                        f"python3 {dr} shot <link> --saida {r}/dribbble/shot",
-                       f"--refs {r}/dribbble/shot/quadro-01.jpg", "Desktop de verdade", "UM shot"):
+                       f"--refs <imagens do shot: {r}/dribbble/shot/shot-NN.*", "Desktop de verdade", "UM shot"):
             self.assertIn(trecho, com)
 
     def test_com_as_copias_uma_imagem_por_rodada_e_gate(self):
@@ -741,6 +741,91 @@ class QaComFolhaNasInstrucoes(unittest.TestCase):
                     f"python3 {self.auto}/.sem-folha --saida /tmp/gerador-x/qa/folha-1.jpg --pasta /tmp/gerador-x/qa"):
             self.assertTrue(any(fnmatch.fnmatchcase(cmd, r) for r in regras(p["allow"])), cmd)
             self.assertFalse(any(fnmatch.fnmatchcase(cmd, r) for r in regras(p["deny"])), cmd)
+
+
+class PranchaAntesDoIndex(unittest.TestCase):
+    """03/11/2026: a direção nasce desenhada. Na geração real desse dia o CONCEITO.md ficou pronto antes de
+    qualquer skill abrir e o index.html saiu num único Write. Agora o passo 2 do CLAUDE.md pede duas pranchas
+    a 1440 px, vistas numa folha com as referências, e uma escolhida no CONCEITO.md antes do index.html. A
+    `/design` não está instalada no Dell (disable-model-invocation): no lugar dela, a `frontend-design`."""
+
+    def setUp(self):
+        self.auto = Path(tempfile.mkdtemp(prefix="gerador-teste-"))
+        self.addCleanup(shutil.rmtree, self.auto)
+        self.m = carregar(self.auto)
+        (self.auto / "b-bom").mkdir()
+        self.rascunho = Path("/tmp/gerador-x")
+
+    def instalar(self):
+        for nome in (".sem-folha", ".sem-qa", ".sem-dribbble"):
+            (self.auto / nome).write_text("# cópia instalada\n")
+
+    def textos(self):
+        """(prompt, instruções) da fila comum e do personalizado, com e sem as ferramentas instaladas."""
+        saida = []
+        for instalado in (False, True):
+            if instalado:
+                self.instalar()
+            for pers in (False, True):
+                cmd = self.m.comando_do_claude("b-bom", self.rascunho, pers)
+                saida.append((cmd[2], cmd[cmd.index("--append-system-prompt") + 1]))
+        return saida
+
+    def test_duas_pranchas_antes_do_index_e_frontend_design(self):
+        p = "/tmp/gerador-x/prancha"
+        for prompt, sistema in self.textos():
+            self.assertLess(prompt.index("duas pranchas"), prompt.index("antes de qualquer linha do index.html"))
+            for trecho in (f"{p}/a.html", f"{p}/b.html", "--window-size=1440,900", "`frontend-design`",
+                           "ANTES de escrever o index.html", "\"Escala\"", "Ajuste de altura",
+                           "nunca o título abaixo da \"Escala\""):
+                self.assertIn(trecho, sistema)
+            # a prancha vem antes do que escreve e confere o index.html
+            self.assertLess(sistema.index("Prancha de direção"), sistema.index("Gate antes do deploy")
+                            if "Gate antes do deploy" in sistema else sistema.index("Antes do deploy, duas conferências"))
+            self.assertLess(sistema.index("prancha (2:"), sistema.index("só então o index.html (4)"))
+            # /design só aparece para dizer que não roda; nada de "cinco skills" nem "antes do /design"
+            self.assertEqual(sistema.count("`/design`"), sistema.count("A `/design` não está instalada aqui"))
+            for velho in ("cinco skills", "antes do `/design`", "ANTES do `/design`", "rode `/design`"):
+                self.assertNotIn(velho, sistema)
+                self.assertNotIn(velho, prompt)
+            self.assertNotIn("/design`", prompt)
+
+    def test_folha_das_pranchas_so_com_as_ferramentas(self):
+        p = "/tmp/gerador-x/prancha"
+        sem = self.m.instrucoes_da_execucao("b-bom", self.rascunho)
+        # Só o parágrafo da prancha: a linha do Land-book cita a folha por conta própria.
+        prancha = next(l for l in sem.splitlines() if l.startswith("- Prancha de direção"))
+        self.assertNotIn("folha-de-contato", prancha)
+        self.assertNotIn(".sem-folha", prancha)
+        self.instalar()
+        com = self.m.instrucoes_da_execucao("b-bom", self.rascunho)
+        for trecho in (f"python3 {self.auto}/.sem-folha --saida {p}/folha.jpg --pasta {p} --refs ",
+                       "/tmp/gerador-x/dribbble/shot/", "/tmp/gerador-x/landbook/pagina/",
+                       f"python3 {self.auto}/.sem-qa --celular \"file://{p}/a.html\" {p}/m-a.png"):
+            self.assertIn(trecho, com)
+
+    def test_personalizado_encaixa_as_etapas_na_prancha(self):
+        pers = self.m.instrucoes_personalizado("b-bom")
+        self.assertIn("A a D antes da prancha do passo 2", pers)
+        self.assertIn("E no index.html, escrito a partir da prancha escolhida", pers)
+        self.assertNotIn("/design", pers.replace("/design-taste-frontend", ""))
+
+    def test_permissoes_deixam_desenhar_capturar_e_chamar_a_skill(self):
+        """As pranchas moram no rascunho, a captura é o google-chrome headless e a skill passa pelo Skill."""
+        import fnmatch
+        p = self.m.permissoes_do_claude("b-bom", self.rascunho)["permissions"]
+        caminho = lambda lista, f: [r[len(f) + 1:-1] for r in lista if r.startswith(f + "(")]
+        for ferramenta in ("Write", "Edit"):
+            alvo = "//tmp/gerador-x/prancha/a.html"
+            self.assertTrue(any(fnmatch.fnmatchcase(alvo, r.replace("**", "*")) for r in caminho(p["allow"], ferramenta)))
+            self.assertFalse(any(fnmatch.fnmatchcase(alvo, r.replace("**", "*")) for r in caminho(p["deny"], ferramenta)))
+        cmd = ("google-chrome --headless --screenshot=/tmp/gerador-x/prancha/d-a-1.png --window-size=1440,900 "
+               "\"file:///tmp/gerador-x/prancha/a.html#chegada\"")
+        for c in (cmd, "rtk " + cmd):
+            self.assertTrue(any(fnmatch.fnmatchcase(c, r) for r in caminho(p["allow"], "Bash")), c)
+            self.assertFalse(any(fnmatch.fnmatchcase(c, r) for r in caminho(p["deny"], "Bash")), c)
+        self.assertIn("Skill", p["allow"])
+        self.assertFalse(any(r.startswith("Skill") for r in p["deny"]))
 
 
 class FolhaDeContato(unittest.TestCase):

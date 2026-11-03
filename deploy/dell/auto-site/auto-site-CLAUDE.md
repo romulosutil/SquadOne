@@ -189,8 +189,8 @@ um detalhe de movimento); título, menu, texto e estrutura são diretos.
 
 Pedido do Rômulo, quando o n8n começou a trazer leads de Miami: o escopo deixou
 de ser "negócio brasileiro" e virou **PME de qualquer país, adaptada à
-regionalidade dela**. Brasil: português, WhatsApp. Fora do Brasil: antes do
-`/design`, pesquise como aquele mercado contrata aquele tipo de negócio (canal
+regionalidade dela**. Brasil: português, WhatsApp. Fora do Brasil: antes da
+prancha do passo 2, pesquise como aquele mercado contrata aquele tipo de negócio (canal
 de contato que o cliente local usa de fato, idioma ou idiomas do bairro,
 convenções de preço/seguro/agendamento, o que a concorrência local mostra) e
 replique isso. Idioma da página, `lang`, `alt`, formato de telefone e endereço,
@@ -525,11 +525,24 @@ repete aqui.
 
 ## Como trabalhar cada lead
 
-A ordem importa. São cinco skills, e as cinco rodam: `/design` cria a
-direção; `/design-taste-frontend`, `/ui-ux-pro-max` e `/impeccable` refinam
-**antes** do código (são as que mais mudam o frontend — depois do HTML
-escrito, virariam retrabalho); `/emil-design-eng` e o `audit`/`polish` do
-`/impeccable` fecham **no código**, sem trocar a direção.
+A ordem importa, e **a direção nasce desenhada, não escrita (03/11/2026)**.
+No passo 2, a `frontend-design` e os dials da `/design-taste-frontend` geram
+**duas pranchas** de wireframe a 1440 px, uma pelo shot e outra pela página
+real, e você escolhe uma olhando as duas ao lado das referências. No passo 3,
+a `/ui-ux-pro-max` e o `/impeccable` transformam a prancha escolhida em
+sistema. Só então vem o `index.html` (passo 4), escrito seção por seção a
+partir da prancha. `/emil-design-eng` e o `audit`/`polish` do `/impeccable`
+fecham **no código** (passo 4.5), sem trocar a direção.
+
+*Por que mudou:* nas gerações de 29/10 e 03/11/2026 o `CONCEITO.md` ficava
+pronto antes de qualquer skill abrir, as skills só carregavam regra, e o
+`index.html` saía num único Write, depois só corrigido. Nenhuma imagem do
+site existia antes do código para comparar com o shot. O título ficava com
+metade da escala do shot e cada seção virava título, texto e lista.
+
+**A `/design` não roda na execução automática:** ela não está instalada no
+Dell e não pode ser chamada pelo agente (`disable-model-invocation`, visto em
+29/10 e 03/11/2026). Onde a esteira dizia `/design`, use a `frontend-design`.
 
 **Nenhuma skill passa por cima deste arquivo.** Onde uma skill manda outra
 coisa, vale o `CLAUDE.md`: arquivo único sem CDN/framework (ignora a stack
@@ -544,7 +557,7 @@ Saia daí com uma frase sobre o que este negócio é e o que ele quer parecer.
 **1.5. Marca real, se existir.** `Fotos/` e `Logotipo/` são Google Places — não
 são a marca do negócio, são só o espaço fotografado por terceiros. Se o
 `content.md` trouxer um Instagram (informado pelo Google ou confirmado à mão),
-abra o perfil antes do `/design` e puxe: foto de perfil (o logo real, se tiver
+abra o perfil antes da prancha do passo 2 e puxe: foto de perfil (o logo real, se tiver
 marca própria), 4-5 posts recentes para paleta de cor real, e a bio para
 posicionamento (nicho, tom, o que o negócio quer ser visto como). Isso é
 insumo de marca, separado das fotos do espaço. Sem Instagram informado, siga
@@ -626,10 +639,12 @@ Grave `<slug>/CONCEITO.md` (nunca sobe para a Vercel), curto: o título e por
 quê; o fato que distingue este negócio, com a fonte; o shot e a página real do
 passo 1.6 (título, URL) e o que você tirou de cada um para o desktop e para o
 celular; o par de fontes e a linha do `FONTES.md`; e cada efeito de
-movimento com o que ele significa. Efeito sem linha não entra.
+movimento com o que ele significa. Efeito sem linha não entra. O
+`CONCEITO.md` começa aqui e **fecha no passo 2**, com a escala medida do
+shot, o mapa da composição e a prancha escolhida.
 
 **1.6. Duas referências: um shot do Dribbble e uma página real do nicho
-(14/10 e 03/11/2026).** Antes do `/design`, **a cada lead e a cada pedido de
+(14/10 e 03/11/2026).** Antes da prancha do passo 2, **a cada lead e a cada pedido de
 melhorar um site**. O shot do Dribbble manda na composição e no tom; a página
 real do Land-book (logo abaixo) mostra o que o shot não mostra: a página
 inteira, a quantidade de texto de verdade e o celular. Substitui a biblioteca
@@ -727,42 +742,98 @@ pares gratuitos do Google Fonts, por clima e por nicho. Escolha uma linha do
 nicho que não esteja nos últimos 5; o shot continua decidindo a escala e o
 peso. Fonte fora da tabela só com motivo escrito no `CONCEITO.md`.
 
-Antes do `/design`, diga em uma frase: o título, o shot (título e URL) e o que
+Antes do passo 2, diga em uma frase: o título, o shot (título e URL) e o que
 ele decide no desktop, e a página real (título e URL) e o que ela decide no
 texto e no celular. No passo 7, registre também
 `Dribbble: <título> — <URL>; aplicado: <o que veio dele>` e
 `Land-book: <título> — <URL>; aplicado: <o que veio dela>`.
 
-**2. `/design`** — é aqui que a ideia do site nasce, a partir da marca real,
-do shot e da página real do passo 1.6, dentro das cinco perguntas do passo 1.5.1. Direção visual, estrutura, hierarquia, o que vai em
-cada seção e por quê. Isto roda **antes de qualquer linha de HTML** — não é
-uma consulta opcional, é o passo que impede o site de sair genérico. Se você
-chegou ao código sem ter rodado isto, parou e voltou.
+**2. Prancha de direção: duas, antes de qualquer linha do `index.html`
+(03/11/2026).** É aqui que a ideia do site nasce, a partir da marca real, do
+shot e da página real do passo 1.6, dentro das cinco perguntas do passo
+1.5.1. Não é uma consulta opcional: é o passo que impede o site de sair
+simples. Se você chegou ao código sem as duas pranchas e a folha delas,
+parou e voltou. Conte até ~8 minutos para ele; é o passo que mais muda o
+resultado.
 
-**3. Refinar a direção — antes de qualquer linha de HTML.** Três skills, nesta
-ordem. Nenhuma troca a estrutura do 1.5.1 nem a direção do passo 2 —
-aprofundam. Nenhuma traz de volta o que a seção "Cara de IA" proíbe.
+- **2.1 Abra as duas skills de direção.** A `frontend-design` com o brief
+  (o que o negócio é, a marca real, o shot, a página real, as cinco
+  perguntas), e a `/design-taste-frontend` para a "Design Read" de uma linha
+  (tipo de página, público, linguagem) e os três dials (variância,
+  movimento, densidade). Elas decidem a prancha, não escrevem a página: a
+  stack delas não vale (ver "Nenhuma skill passa por cima deste arquivo").
+- **2.2 Meça o shot.** Na folha do shot, a 1440 px: a altura do título
+  principal em px, a razão entre título, subtítulo e corpo, o número de
+  colunas, a largura do painel de texto, o espaço entre seções, o raio e o
+  peso da letra. Grave como "Escala" no `CONCEITO.md`. É o número que o
+  título do site precisa alcançar; título com metade da escala do shot é
+  defeito, não sobriedade.
+- **2.3 Mapeie a composição.** No `CONCEITO.md`, uma tabela com uma linha por
+  seção do shot, de cima para baixo: o que o shot faz ali (grade, painel,
+  componente) e o que entra no site. Para tudo o que a "Cara de IA" proíbe,
+  escreva o substituto permitido, para nenhum vão ficar vazio:
+  - faixa de números → faixa de fatos com fonte (nota e número de avaliações
+    do Google, ano do CNPJ, região atendida, horário);
+  - depoimento entre aspas → cartões com o que os clientes elogiam,
+    parafraseado (advocacia e saúde: como funciona o atendimento);
+  - formulário → um botão de WhatsApp por serviço, com a mensagem pronta;
+  - cards numerados 01-02-03 → cards com o problema do cliente no título;
+  - bloco grande na cor de destaque → fundo escuro da marca ou foto tratada
+    (a cor de destaque fica no botão);
+  - foto de estúdio do shot → foto real tratada (recorte, cor, grão) no
+    tamanho que ela aguenta, e o visual grande feito em código (forma,
+    padrão, tipografia);
+  - sobretítulo em caixa alta → nada: o título direto já orienta.
+  Uma seção do shot que não tem substituto sai inteira; nunca fica pela
+  metade. E nenhuma seção do site é só título, parágrafo e lista: cada uma
+  tem o seu componente (painel com foto, faixa de fatos, cartão destacado,
+  grade de prova, lista de passos, fecho com horário). O exemplo aprovado
+  tem um por seção, dentro das mesmas regras.
+- **2.4 Desenhe duas pranchas** em `<rascunho>/prancha/a.html` e `b.html`:
+  HTML com blocos cinza no lugar das fotos (na proporção da foto real que vai
+  ali), o texto real ou do tamanho real, o par do `FONTES.md` na escala
+  medida no 2.2 e as cinco perguntas. **A** segue a composição do shot;
+  **B** segue a ordem e o tamanho das seções da página real. Sem cor final,
+  sem efeito, sem foto embutida: é para decidir composição, não acabamento.
+- **2.5 Ponha as duas na mesma folha das referências.** Capture cada prancha
+  a 1440×900, uma tela por vez pela âncora
+  (`google-chrome --headless=new --screenshot=<rascunho>/prancha/d-a-1.png --window-size=1440,900 "file://<rascunho>/prancha/a.html#<id da seção>"`,
+  `d-a-2.png` na tela seguinte, `d-b-1.png`… para a B), e o celular com `qa-numerico --celular`; junte numa
+  folha só, com as imagens do shot (`shot-NN.*`, ou `quadro-NN.jpg` quando o
+  shot é vídeo) e as telas da página real:
+  `python3 ~/.local/bin/folha-de-contato --saida <rascunho>/prancha/folha.jpg --pasta <rascunho>/prancha --refs <imagens do shot> <rascunho>/landbook/pagina/tela-*.jpg`.
+- **2.6 Escolha pela folha**, nesta ordem: responde às cinco perguntas;
+  mantém a escala e o respiro do shot; cada seção tem componente próprio;
+  cabe em até 6 telas no celular. Pode misturar (o hero de A, os serviços de
+  B) se disser por quê. Grave no `CONCEITO.md` a prancha escolhida e o
+  motivo em duas frases. A prancha escolhida é o contrato do passo 4.
 
-- **3.1 `/design-taste-frontend`** — o filtro anti-genérico. Escreva a
-  "Design Read" de uma linha (tipo de página, público, linguagem), defina os
-  três dials (variância, movimento, densidade) e passe a direção do passo 2
-  contra a lista de AI tells (seção 9) e contra a seção "Cara de IA" deste
-  arquivo. O que for padrão de template sai aqui, antes de virar código.
-- **3.2 `/ui-ux-pro-max`** — transforma a direção já filtrada em sistema:
-  paleta com contraste checado, par tipográfico (do `FONTES.md`, passo 1.6), espaçamento, guidelines de UX
-  do tipo de negócio. É o que leva a ideia a página de produção.
-- **3.3 `/impeccable`** — modo **Persuade** (landing que converte). A direção
-  vem fixada dos passos 1.5.1–3.2: é brief pinado, então **não** rola mundo
+**3. Transformar a prancha em sistema — ainda antes do `index.html`.** Duas
+skills, nesta ordem. Nenhuma troca a prancha escolhida nem a estrutura do
+1.5.1, e nenhuma traz de volta o que a seção "Cara de IA" proíbe.
+
+- **3.1 `/ui-ux-pro-max`** — paleta da marca real com contraste checado, o
+  par tipográfico do `FONTES.md`, a escala do passo 2.2 e o espaçamento.
+  Grave os valores (cores, tamanhos, espaços) no `CONCEITO.md`: eles viram
+  as variáveis CSS do passo 4.
+- **3.2 `/impeccable`** — modo **Persuade** (landing que converte). A direção
+  vem fixada pela prancha e pelo passo 3.1: é brief pinado, então **não** rola mundo
   visual novo (`new-work`), não abre `serve-question`, não roda `init` nem
   `shape` com entrevista — o `content.md` é a verdade de produto. Rode o
   `impeccable context` — ele vai avisar `NO_PRODUCT_MD` e
   `PRODUCT_INIT_REQUIRED`; é esperado, ignore. Não escreva PRODUCT.md nem
-  DESIGN.md: a direção está no `<slug>/CONCEITO.md` e nas referências do
-  passo 1.6. Leia `reference/craft-floor.md` imediatamente antes do passo 4: o
+  DESIGN.md: a direção está no `<slug>/CONCEITO.md`, na prancha escolhida e
+  nas referências do passo 1.6. Leia `reference/craft-floor.md` imediatamente antes do passo 4: o
   piso de qualidade e as proibições (inclusive as fontes padrão de IA) valem
   para o HTML que vai ser escrito.
 
-**4. Escrever** `<slug>/index.html`.
+**4. Escrever** `<slug>/index.html` **a partir da prancha escolhida**, seção
+por seção: a estrutura e a escala vêm dela, o cinza vira foto, cor e texto
+finais, e os valores do passo 3.1 viram as variáveis CSS. Depois da primeira
+versão, capture o desktop e ponha na mesma folha da prancha e do shot
+(`--refs <capturas da prancha escolhida> <imagens do shot>`). Onde a página ficou com
+menos escala, menos respiro ou menos componente do que a prancha, o conserto
+é voltar à prancha, não aceitar a perda.
 
 **4.5. Polir no código.** Uma rodada em lote, não um loop.
 
@@ -784,6 +855,12 @@ aprofundam. Nenhuma traz de volta o que a seção "Cara de IA" proíbe.
   (nome da captura = rótulo: `m-chegada.png`, `d-servicos.png`, `m-chegada-rm.png`),
   e lê-se a folha, não as capturas uma a uma (cada imagem lida fica no
   contexto até o fim do lead e pesa em toda chamada seguinte).
+- **O ajuste de altura não desfaz a direção.** Quando o gate avisa que a
+  página passou de 6 telas, corte uma seção que não responde a pergunta
+  nenhuma ou encurte o texto. Não reduza o título abaixo da escala do passo
+  2.2 nem o espaço entre seções abaixo do que a prancha definiu: em
+  03/11/2026 o ajuste de 7,3 para 6,0 telas tirou o respiro de todas as
+  seções (56 para 40 px) e o bloco de horário e região.
 - Feche com o pre-flight check (seção 14) da `/design-taste-frontend`.
 
 **5. Publicar** na Vercel: time `romulodesigns`, projeto `demo-<slug>`,
@@ -924,6 +1001,12 @@ objeto 3D, letra gigante, polaroide inclinada, brinquedo.
       `CONCEITO.md`)
 - [ ] O shot do Dribbble e a página real do Land-book anotados no
       `CONCEITO.md`, cada um com o que decidiu
+- [ ] Duas pranchas (A pelo shot, B pela página real) na folha com as
+      referências, a escolhida e o motivo no `CONCEITO.md`, com a "Escala"
+      medida do shot e o mapa da composição com o substituto de tudo o que
+      a "Cara de IA" tirou
+- [ ] O título no desktop na escala medida do shot, e cada seção com o seu
+      componente (nenhuma é só título, parágrafo e lista)
 - [ ] As "Leis de UX que o gate não mede": um botão cheio só, a cor de
       destaque só nele, fecho com WhatsApp, endereço e horário, nenhum
       carrossel

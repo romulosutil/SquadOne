@@ -21,7 +21,7 @@ outro lugar: quem enche a fila é o n8n.
 
 Mostre a fila antes de começar.
 
-**Antes de tocar em `/design`:** se o `content.md` do lead trouxer indício
+**Antes de desenhar (passo 2 do `CLAUDE.md`):** se o `content.md` do lead trouxer indício
 forte de presença digital fraca ou nula (falta WhatsApp e e-mail, sem
 Instagram, sem site, sem avaliação recente), pare esse lead aqui — pesquise
 se o negócio ainda funciona (regra em `CLAUDE.md`) e devolva o achado pro
@@ -33,13 +33,17 @@ processando em lote, siga pro próximo lead da fila.
 
 Siga os passos do `CLAUDE.md` — ler `content.md` e as imagens de `Fotos/` e
 `Logotipo/`, marca real (Instagram, se tiver), as cinco perguntas (passo
-1.5.1, grava o `CONCEITO.md`), um shot do Dribbble para seguir (passo 1.6,
-`dribbble buscar` e `dribbble shot`), `/design`, refino da direção
-(`/design-taste-frontend` → `/ui-ux-pro-max` → `/impeccable`), escrever,
-polir no código (`/emil-design-eng` → `/impeccable audit` + `polish`),
-publicar, recibo, registro. As cinco skills rodam sempre, nessa ordem.
-`/design` e as três de refino vêm antes de qualquer linha de código; só a
-`/emil-design-eng` e o `audit`/`polish` rodam sobre o HTML pronto.
+1.5.1, começa o `CONCEITO.md`), um shot do Dribbble e uma página real do
+Land-book (passo 1.6, `dribbble buscar`/`shot` e `landbook buscar`/`pagina`),
+a prancha de direção (passo 2: `frontend-design` e `/design-taste-frontend`,
+escala medida do shot, mapa da composição, **duas pranchas** a 1440 px na
+folha com as referências, uma escolhida), o sistema (passo 3:
+`/ui-ux-pro-max` → `/impeccable`), escrever a partir da prancha, polir no
+código (`/emil-design-eng` → `/impeccable audit` + `polish`), publicar,
+recibo, registro. Tudo até o passo 3 vem antes de qualquer linha do
+`index.html`; só a `/emil-design-eng` e o `audit`/`polish` rodam sobre o HTML
+pronto. A `/design` não roda aqui (não está instalada no Dell): no lugar dela,
+a `frontend-design`.
 
 Releia as restrições do `CLAUDE.md` antes de escrever o HTML. As que mais
 escapam (auditoria dos 54 demos no ar em 13/10/2026):
@@ -50,7 +54,11 @@ escapam (auditoria dos 54 demos no ar em 13/10/2026):
 - menu e seções com nome comum (Serviços, Como funciona, Avaliações, Onde
   fica, Contato); nunca I, II, III, nunca o nome da metáfora. A metáfora, se
   houver, fica só no visual
-- até 6 telas de celular; seção que não responde a uma das cinco perguntas sai
+- até 6 telas de celular; seção que não responde a uma das cinco perguntas sai.
+  O ajuste de altura corta seção ou texto, nunca a escala do título nem o
+  respiro que a prancha definiu
+- o título no desktop na escala medida do shot (passo 2.2), e cada seção com
+  o seu componente: nenhuma é só título, parágrafo e lista
 - nenhum campo de texto, quiz, teste ou brinquedo: um botão de WhatsApp por
   serviço, com a mensagem pronta, é toda a interação
 - nada da seção "Cara de IA" do `CLAUDE.md`: polaroide inclinada, bilhete
@@ -69,14 +77,14 @@ escapam (auditoria dos 54 demos no ar em 13/10/2026):
 - abra as fotos de `Fotos/` e `Logotipo/` (passo 1) antes de decidir estilo —
   não decida só pelo texto do `content.md`
 - se o `content.md` trouxer Instagram, puxe logo/paleta/bio de lá **antes** do
-  `/design` (passo 1.5) — sem isso o site perde a marca real (aconteceu com a
+  passo 2 (passo 1.5) — sem isso o site perde a marca real (aconteceu com a
   Academia Korpus)
 - sem Instagram, procure a marca **dentro** das fotos antes de desistir dela:
   placa, letreiro, fachada, jaleco, impresso. Na CLIN ODONTO CSCN o logo e o
   posicionamento inteiros estavam na placa da recepção, e o `content.md` não
   dizia nada
-- escolha o shot do Dribbble do passo 1.6 e leia os quadros dele antes do
-  `/design` — não pule direto pra skill sem essa decisão tomada; o desktop
+- escolha o shot do Dribbble do passo 1.6 e leia os quadros dele antes da
+  prancha — não pule direto pra skill sem essa decisão tomada; o desktop
   segue a composição do shot, não é a coluna do celular esticada
 - `Logotipo/` não vazia não quer dizer logo aproveitável de cara — mas antes de
   descartar, tente extrair: recorte o logo isolado da foto (fundo, placa,
@@ -97,7 +105,7 @@ escapam (auditoria dos 54 demos no ar em 13/10/2026):
 - nenhuma skill passa por cima do `CLAUDE.md`: a stack React/Tailwind/Motion da
   `/design-taste-frontend` não vale (arquivo único, sem CDN), e o `/impeccable`
   não entrevista, não abre página de escolha nem rola direção nova — a direção
-  já está fixada nos passos 1.5.1 e 1.6 e no `/design`
+  já está fixada nos passos 1.5.1 e 1.6 e na prancha escolhida do passo 2
 
 ## 3. Ao terminar
 
