@@ -130,7 +130,8 @@ TETO_MIN = 4 * 60 - 20
 # no lugar da biblioteca fixa de 13/10 (REFERENCIAS.md, primeiras telas de celular): os demos estavam
 # "focados demais em mobile". O shot escolhido dá a composição do desktop; o celular continua em 6 telas.
 PASSO_DRIBBBLE = ("cumpra o passo 1.6: busque no Dribbble, escolha UM shot e siga a composição dele no desktop "
-                  "(1440 px) e no celular, e registre o shot")
+                  "(1440 px); ao lado dele, UMA página real do mesmo ramo no Land-book (o texto e o celular vêm dela) "
+                  "e o par de fontes do FONTES.md; registre o shot e a página no CONCEITO.md")
 PROMPT = (
     "/lead-novo {slug} nas cinco perguntas do passo 1.5.1 do CLAUDE.md (título de uma frase com o ofício e o "
     "bairro ou a cidade, menu e seções com nome comum, até 6 telas de celular, nada da seção \"Cara de IA\"), "
@@ -172,6 +173,7 @@ FOLHA_DE_CONTATO = Path(os.environ.get("FOLHA_DE_CONTATO_BIN", str(Path.home() /
 QA_NUMERICO = Path(os.environ.get("QA_NUMERICO_BIN", str(Path.home() / ".local/bin/qa-numerico")))
 # A referência do Dribbble (14/10/2026): busca e quadros do shot pelo Chrome headless, sem login.
 DRIBBBLE = Path(os.environ.get("DRIBBBLE_BIN", str(Path.home() / ".local/bin/dribbble")))
+LANDBOOK = Path(os.environ.get("LANDBOOK_BIN", str(Path.home() / ".local/bin/landbook")))
 # Demo sob pedido (14/10/2026; ver a docstring). O marcador liga o modo; o pedido mora na pasta do lead.
 SOB_PEDIDO = AUTO / ".demo-sob-pedido"
 PEDIDO_DEMO = "PEDIDO-DEMO.json"
@@ -308,6 +310,11 @@ def instrucoes_da_execucao(slug: str, rascunho: Path) -> str:
                       f"siga a composição do exemplo aprovado em {AUTO}/_exemplos/ e diga no resumo final.\n"
                       "- Desktop de verdade: capture cada seção também a 1440x900. Uma coluna estreita de celular "
                       "centralizada no desktop é defeito que bloqueia o deploy.")
+    if LANDBOOK.is_file():
+        # 03/11/2026 (AV. Serviços): sem a página real, o demo seguiu só um shot de tema pronto e saiu padrão.
+        referencia += f"""
+- Página real do Land-book (passo 1.6 do CLAUDE.md, 03/11/2026), junto com o shot: `python3 {LANDBOOK} buscar --saida {rascunho}/landbook/busca --consulta "<ramo em inglês>" --consulta "<outro nome do ramo>" --max 24`, depois `python3 {FOLHA_DE_CONTATO} --saida {rascunho}/landbook/busca/folha.jpg --pasta {rascunho}/landbook/busca` e leia a folha; escolha UMA e rode `python3 {LANDBOOK} pagina <link> --saida {rascunho}/landbook/pagina`, junte as telas numa folha e leia. Na composição do desktop vale o shot; no texto e no celular, a página real. Prefira shot e página de negócio de verdade a template de tema: o shot que serviria a qualquer encanador do mundo é o começo de um site padrão.
+- O par de fontes sai de {AUTO}/FONTES.md, fora dos últimos 5 do mesmo nicho no registro.md."""
     if SEO_DO_SITE.is_file():
         seo = f"""
 - Perguntas e SEO técnico (seção "Perguntas frequentes e SEO técnico" do CLAUDE.md): a página tem `<section id="perguntas">` com 3 a 5 `<details data-fonte="...">`, cada um com `<summary>` (a pergunta, terminada em "?", tirada de um tema das avaliações ou do briefing) e um `<p>` (a resposta direta, só com fato). data-fonte diz de onde veio a resposta: google, avaliacoes, instagram, facebook, cnpj ou dossie (advocacia e saúde: nunca avaliacoes). Não escreva JSON-LD, robots.txt, sitemap.xml nem llms.txt à mão: depois do {IMAGEM_DA_PREVIA} e antes do passo 5, rode `python3 {SEO_DO_SITE} {lead} --url https://demo-{slug}.vercel.app --exigir-faq`. Ele põe no <head> o JSON-LD (LocalBusiness no subtipo do ofício e FAQPage) só com o que tem fonte (content.md, Google Places, o texto da página) e grava os três arquivos na pasta. Código 1 = cada FALHA diz o que corrigir na seção de perguntas; corrija e rode de novo até sair 0. Se a linha "Aliased:" der outra URL, rode de novo com ela antes de publicar de novo."""
@@ -374,7 +381,7 @@ def instrucoes_pedido(slug: str) -> str:
 - A pasta é {lead}/{" (em _em-conversa/ porque o lead respondeu; é a pasta certa, não a mova)" if lead.parent != AUTO else ""}. Escreva só nela, como num lead da fila.
 - Não grave {SINAL_DESCARTE} e não pare na triagem (site no ar, rede, duplicado, linha no registro.md, presença digital fraca): o lead já conversa e pediu; faça o site. Se ele já tiver um site, faça a demonstração do jeito que o site dele deveria ser e diga isso no resumo final.
 - Não há publicado.json na pasta durante o seu trabalho (o runner guardou o do Raio-X à parte e o devolve mesclado): grave o seu no passo 5 normalmente.
-- Seja rápido sem baixar a barra: o Rômulo está com a conversa aberta esperando o link."""
+- Sem pressa (03/11/2026): o Rômulo manda o link quando o demo estiver pronto. Use o tempo do modo personalizado na pesquisa, na escolha do shot e da página real e na revisão: um demo padrão entregue rápido é pior que um demo deste negócio entregue depois."""
 
 
 def comando_do_claude(slug: str, rascunho: Path, personalizado: bool = False) -> list[str]:

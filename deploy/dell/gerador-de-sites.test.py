@@ -1376,6 +1376,10 @@ class DemoSobPedido(unittest.TestCase):
         self.assertEqual((slug, personalizado, via_recibo), ("c-respondeu", True, False))
         self.assertIn("/lead-novo _em-conversa/c-respondeu ", cmd[2])
         self.assertIn("DEMO PEDIDO", cmd[cmd.index("--append-system-prompt") + 1])
+        # 03/11/2026 (AV. Serviços): a pressa fez um demo padrão; o shot vem com a página real do Land-book.
+        self.assertIn("Sem pressa", cmd[cmd.index("--append-system-prompt") + 1])
+        self.assertNotIn("Seja rápido", cmd[cmd.index("--append-system-prompt") + 1])
+        self.assertIn("Land-book", cmd[2])
         recibo = json.loads((self.pedido / "publicado.json").read_text())
         self.assertEqual((recibo["site_url"], recibo["raio_x_url"], recibo["raio_x_pontos"], recibo["place_id"]),
                          ("https://demo-x.vercel.app", self.RAIO_X["raio_x_url"], 3, "pid-c-respondeu"))
