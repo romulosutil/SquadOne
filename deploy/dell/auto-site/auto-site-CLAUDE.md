@@ -490,6 +490,39 @@ que o visitante pode conferir, nunca com adjetivo:
   digitação; rodapé com dados reais, favicon e prévia do link. Amador é o que
   mais derruba a confiança.
 
+### Leis de UX que o gate não mede (03/11/2026)
+
+Tiradas uma vez do Laws of UX e do Component Gallery; não precisam ser abertos
+a cada lead. O que já está neste arquivo (as cinco perguntas, o toque de 40 px,
+os bytes, o contraste, as perguntas em `<details>`, um WhatsApp só) não se
+repete aqui.
+
+- **Uma ação principal.** O botão do WhatsApp é o único botão cheio da página,
+  com o mesmo texto em toda parte. Telefone, Instagram e Maps são links de
+  texto. Em urgência, "Ligar" pode ser o segundo botão, de contorno, nunca do
+  mesmo peso. Duas ações iguais fazem o visitante parar para escolher.
+- **A cor de destaque é do botão.** A cor que chama o olho fica no WhatsApp;
+  nenhum bloco grande usa a mesma cor de fundo, senão o botão some nele.
+- **Começo e fim.** O que fica na memória é a primeira tela e o fecho. A
+  primeira tela responde à pergunta 1 com o botão; antes do rodapé vem um
+  fecho que repete o WhatsApp, o endereço e o horário, não uma seção que só
+  acaba.
+- **Convenção.** Nome ou logo no topo à esquerda, até 5 âncoras no menu com os
+  nomes de sempre, endereço com o link do Maps, telefone em `tel:`, contato no
+  rodapé. Menu de três linhas só no celular.
+- **Grupos pequenos.** Serviços em grupos de 3 a 6 itens, cada um com título de
+  até 5 palavras e uma frase; passando de 6, agrupe pelo problema do cliente.
+  Sem número nos cards ("Cara de IA").
+- **Perto quer dizer junto.** O espaço entre seções é pelo menos o dobro do
+  espaço dentro delas; título, texto e botão de um bloco ficam juntos; cada
+  seção se separa da outra por fundo ou fio.
+- **Leitura.** Corpo de 16 px ou mais, entrelinha perto de 1,5 e linha de até
+  ~75 caracteres no desktop: o texto vai num painel ao lado da foto, nunca de
+  ponta a ponta em 1440 px.
+- **Nada de carrossel** nem slider automático: fotos e avaliações em grade ou
+  lista que rola com a página. O primeiro link da página é "Pular para o
+  conteúdo", visível quando recebe o foco.
+
 ## Como trabalhar cada lead
 
 A ordem importa. São cinco skills, e as cinco rodam: `/design` cria a
@@ -590,12 +623,16 @@ título, o menu, o nome das seções nem a estrutura. Metáfora que precisa de
 explicação sai.
 
 Grave `<slug>/CONCEITO.md` (nunca sobe para a Vercel), curto: o título e por
-quê; o fato que distingue este negócio, com a fonte; o shot do passo 1.6 (título,
-URL) e o que você tirou dele para o desktop e para o celular; e cada efeito de
+quê; o fato que distingue este negócio, com a fonte; o shot e a página real do
+passo 1.6 (título, URL) e o que você tirou de cada um para o desktop e para o
+celular; o par de fontes e a linha do `FONTES.md`; e cada efeito de
 movimento com o que ele significa. Efeito sem linha não entra.
 
-**1.6. Um design do Dribbble para seguir (14/10/2026).** Antes do `/design`,
-**a cada lead e a cada pedido de melhorar um site**. Substitui a biblioteca
+**1.6. Duas referências: um shot do Dribbble e uma página real do nicho
+(14/10 e 03/11/2026).** Antes do `/design`, **a cada lead e a cada pedido de
+melhorar um site**. O shot do Dribbble manda na composição e no tom; a página
+real do Land-book (logo abaixo) mostra o que o shot não mostra: a página
+inteira, a quantidade de texto de verdade e o celular. Substitui a biblioteca
 fixa de 13/10 (`REFERENCIAS.md`, só primeiras telas de celular de sites de
 bairro) e o Refero (acervo de SaaS). Motivo, nas palavras do Rômulo: os sites
 estavam "focados demais em mobile". O Dribbble mostra composição de desktop de
@@ -640,20 +677,64 @@ https://demo-jessica-barbosa-advocacia-advo.vercel.app). O shot foi o "Alden &
 Vale" (https://dribbble.com/shots/27806443), e o Rômulo aprovou em 14/10/2026:
 "acertou no design!". É o piso de qualidade, não um molde: o próximo lead
 segue o shot dele. Dribbble fora do ar ou sem resultado depois de trocar a
-consulta não para o lead: siga a composição do exemplo e diga no resumo final.
+consulta não para o lead: a página real do Land-book passa a mandar também na
+composição; sem as duas, siga a composição do exemplo e diga no resumo final.
+
+**A página real do nicho (Land-book, 03/11/2026).** O shot é um conceito: quase
+nunca traz a página inteira, nunca traz o celular e o texto dele é de enfeite.
+Depois de escolher o shot, ache **uma** página publicada do mesmo ramo no
+Land-book (sites no ar e templates construídos, com captura da página inteira
+no desktop e o link do site):
+
+```
+python3 ~/.local/bin/landbook buscar --saida <rascunho>/landbook/busca --consulta "<ramo em inglês>" --consulta "<outro nome do ramo>" --max 24
+python3 ~/.local/bin/folha-de-contato --saida <rascunho>/landbook/busca/folha.jpg --pasta <rascunho>/landbook/busca
+python3 ~/.local/bin/landbook pagina <link escolhido> --saida <rascunho>/landbook/pagina
+python3 ~/.local/bin/qa-numerico --celular "<site do site.txt>" <rascunho>/landbook/pagina/celular.png
+python3 ~/.local/bin/folha-de-contato --saida <rascunho>/landbook/pagina/folha.jpg <rascunho>/landbook/pagina/tela-*.jpg <rascunho>/landbook/pagina/celular.png
+```
+
+A folha da página junta as telas (`tela-NN.jpg`), nunca a `pagina.*` inteira:
+alta como é, ela derruba a escala da folha a ponto de não dar para ler. A
+busca acha por semelhança e sempre devolve alguma coisa, e mistura escritório
+de verdade com software do ramo (Legora e Spellbook em "law firm") e com
+template à venda; o tipo vai entre colchetes no `indice.txt`. Software sai;
+template construído serve; se nada da folha servir, troque a consulta. Escolha
+pela mesma régua do shot. Dela vêm **a ordem e o tamanho das seções, a
+quantidade de texto de cada uma e como o desktop vira celular** (a captura do
+site no ar; se ela sair em branco, o site recusa moldura: siga sem ela). Nunca
+o texto, a foto nem a marca. Se ela e o shot discordarem na composição do
+desktop, vale o shot; na quantidade de texto e no celular, vale a página real.
+Land-book sem resultado útil não para o lead: siga só com o shot e diga no
+resumo final.
+
+Fora da esteira (avaliados em 03/11/2026, ver `decisoes.md` do PRUMO):
+Awwwards (o `robots.txt` proíbe a busca automática; o "site do dia" é
+experimental e pesado demais), Lapa Ninja, Landingfolio, SaaS Landing Page,
+Saaspo e Refero (acervo de SaaS), Mobbin, Page Flows, ScreensDesign e Refcat
+(telas de aplicativo, atrás de login), Pinterest (proíbe robô e não diz de
+onde vem a imagem), Godly/recent.design (portfólio animado), Webframe e UX
+Archive (fora do ar). Laws of UX e Component Gallery já estão destilados em
+"Leis de UX que o gate não mede"; o Typewolf, no `FONTES.md`. Nenhum deles se
+abre a cada lead.
 
 **O estilo sai da marca real (passo 1.5) e do shot**, não de um catálogo de
 estilos. Antes de decidir, olhe as últimas 5 linhas do `registro.md` e não
 repita a cor dominante nem o par de fontes de nenhum dos últimos 5 do mesmo
 nicho (11 demos de advocacia seguidos saíram em serif com itálico sobre creme
-ou azul-marinho).
+ou azul-marinho). **O par de fontes sai do `~/auto-site/FONTES.md`** (03/11/2026):
+pares gratuitos do Google Fonts, por clima e por nicho. Escolha uma linha do
+nicho que não esteja nos últimos 5; o shot continua decidindo a escala e o
+peso. Fonte fora da tabela só com motivo escrito no `CONCEITO.md`.
 
 Antes do `/design`, diga em uma frase: o título, o shot (título e URL) e o que
-ele decide no desktop. No passo 7, registre também
-`Dribbble: <título> — <URL>; aplicado: <o que veio dele>`.
+ele decide no desktop, e a página real (título e URL) e o que ela decide no
+texto e no celular. No passo 7, registre também
+`Dribbble: <título> — <URL>; aplicado: <o que veio dele>` e
+`Land-book: <título> — <URL>; aplicado: <o que veio dela>`.
 
-**2. `/design`** — é aqui que a ideia do site nasce, a partir da marca real e
-do shot do passo 1.6, dentro das cinco perguntas do passo 1.5.1. Direção visual, estrutura, hierarquia, o que vai em
+**2. `/design`** — é aqui que a ideia do site nasce, a partir da marca real,
+do shot e da página real do passo 1.6, dentro das cinco perguntas do passo 1.5.1. Direção visual, estrutura, hierarquia, o que vai em
 cada seção e por quê. Isto roda **antes de qualquer linha de HTML** — não é
 uma consulta opcional, é o passo que impede o site de sair genérico. Se você
 chegou ao código sem ter rodado isto, parou e voltou.
@@ -668,7 +749,7 @@ aprofundam. Nenhuma traz de volta o que a seção "Cara de IA" proíbe.
   contra a lista de AI tells (seção 9) e contra a seção "Cara de IA" deste
   arquivo. O que for padrão de template sai aqui, antes de virar código.
 - **3.2 `/ui-ux-pro-max`** — transforma a direção já filtrada em sistema:
-  paleta com contraste checado, par tipográfico, espaçamento, guidelines de UX
+  paleta com contraste checado, par tipográfico (do `FONTES.md`, passo 1.6), espaçamento, guidelines de UX
   do tipo de negócio. É o que leva a ideia a página de produção.
 - **3.3 `/impeccable`** — modo **Persuade** (landing que converte). A direção
   vem fixada dos passos 1.5.1–3.2: é brief pinado, então **não** rola mundo
@@ -839,7 +920,13 @@ objeto 3D, letra gigante, polaroide inclinada, brinquedo.
 ### 4. Checklist de saída do passo 4.5
 
 - [ ] Cor dominante e par de fontes diferentes dos últimos 5 do mesmo nicho
-      no `registro.md`
+      no `registro.md`; o par saiu do `FONTES.md` (ou o motivo está no
+      `CONCEITO.md`)
+- [ ] O shot do Dribbble e a página real do Land-book anotados no
+      `CONCEITO.md`, cada um com o que decidiu
+- [ ] As "Leis de UX que o gate não mede": um botão cheio só, a cor de
+      destaque só nele, fecho com WhatsApp, endereço e horário, nenhum
+      carrossel
 - [ ] Título de uma frase com o ofício e o bairro ou a cidade; no celular, em
       3 s na primeira tela: o que é, onde é e como chamar
 - [ ] As cinco perguntas do passo 1.5.1, com nomes comuns no menu e nas
@@ -857,7 +944,7 @@ objeto 3D, letra gigante, polaroide inclinada, brinquedo.
 - [ ] Capturas de celular feitas com `qa-numerico --celular` (e uma com
       `--rm`): página completa e legível
 - [ ] Capturas de desktop a 1440×900 de cada seção, na mesma folha que os
-      quadros do shot do Dribbble (`folha-de-contato --refs`): a composição
+      quadros do shot do Dribbble e às telas da página real (`folha-de-contato --refs`): a composição
       segue o shot, e nenhuma seção é uma coluna de celular no meio da tela
 - [ ] O `qa-numerico` saindo 0: bytes, imagens, contraste, título, menu,
       frases, campos, código de teste, WhatsApp, altura, toque e texto miúdo
