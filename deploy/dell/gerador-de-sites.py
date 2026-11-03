@@ -136,7 +136,8 @@ PROMPT = (
     "bairro ou a cidade, menu e seções com nome comum, até 6 telas de celular, nada da seção \"Cara de IA\"), "
     "usando as fotos e recursos extras; " + PASSO_DRIBBBLE
 )
-LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|\b429\b)")
+# "You've hit your session limit · resets 1:10pm" (03/11/2026) é o texto de agora; os outros, os de antes.
+LIMITE_DE_USO = re.compile(r"(?i)(rate limit|usage limit|session limit|weekly limit|hit your limit|\b429\b)")
 # Modo personalizado: o site anterior do lead fica aqui dentro (nunca sobe para a
 # Vercel: só index.html e og.jpg sobem) até o novo ser publicado e validado.
 # v1 = dossiê, conceito, redação e revisão (07/10/2026 à tarde); v2 = soma a etapa de
@@ -279,6 +280,11 @@ def permissoes_do_claude(slug: str, rascunho: Path) -> dict:
         deny += [f"Edit(/{alvo})", f"Write(/{alvo})"]
     deny += [f"Read(/{home}/{p})" for p in SEGREDOS]
     deny.append("mcp__*")
+    # O gancho do rtk no ~/.claude/settings.json do Dell reescreve o Bash antes da permissão (`curl` vira
+    # `rtk curl`), e a lista não casava: em 03/11 o Claude ficou sem fonte e sem foto. Cada regra vale também
+    # com o prefixo, as de negar inclusive (`rtk curl -d`, `rtk git` seguem negados).
+    allow += [f"Bash(rtk {r[5:]}" for r in allow if r.startswith("Bash(")]
+    deny += [f"Bash(rtk {r[5:]}" for r in deny if r.startswith("Bash(")]
     return {"permissions": {"allow": allow, "deny": deny, "additionalDirectories": [str(rascunho)]}}
 
 
@@ -1097,6 +1103,12 @@ def processar(pasta: Path, timeout_min: int, personalizado: bool = False) -> tup
         if indice.exists() and not html_completo(indice):
             indice.replace(pasta / "index.truncado.html")
             log("index.html ficou truncado (sem </html>): guardado como index.truncado.html, não publicado.", "ERRO", log_lead)
+        if resultado["limite"] and indice.exists():
+            # 03/11/2026 (av-servicos): o limite cortou o Claude depois do HTML e antes da revisão, do QA e do
+            # og.jpg, e o runner publicou a página pela metade. Fica à parte: o checkpoint não a publica depois.
+            indice.replace(pasta / "index.limite.html")
+            log("Limite de uso no meio do trabalho: index.html guardado como index.limite.html, não publicado.",
+                "ERRO", log_lead)
     if html_completo(indice) and (not (pasta / "publicado.json").exists() or not validar(pasta, log_lead)):
         publicar_na_vercel(pasta, log_lead)
     if validar(pasta, log_lead):

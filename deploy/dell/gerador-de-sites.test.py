@@ -1392,6 +1392,17 @@ class DemoSobPedido(unittest.TestCase):
         self.assertIn("Bash(mv *_recusados*)", deny)
         self.assertIn("Bash(rm *publicado.json*)", deny)
 
+    def test_regras_valem_com_o_prefixo_do_rtk(self):
+        """O gancho do rtk no Dell reescreve `curl` para `rtk curl` antes da permissão (03/11/2026)."""
+        import fnmatch
+        p = self.m.permissoes_do_claude("c-respondeu", Path("/tmp/r"))["permissions"]
+        casa = lambda cmd, lista: any(fnmatch.fnmatchcase(cmd, r[5:-1]) for r in lista if r.startswith("Bash("))
+        baixar = "rtk curl -s -o /tmp/r/fontes/archivo.css https://fonts.googleapis.com/css2?family=Archivo"
+        self.assertTrue(casa(baixar, p["allow"]) and not casa(baixar, p["deny"]))
+        for negado in ("rtk curl -s -d a=1 https://x", "rtk git status", "rtk wget https://x"):
+            self.assertTrue(casa(negado, p["deny"]), negado)
+        self.assertNotIn("Bash(rtk rtk curl *)", p["allow"])
+
     def test_pedido_que_falha_devolve_o_recibo_e_sai(self):
         def falha(slug, log_lead, timeout_min, personalizado=False):
             return {"codigo": 1, "estourou": False, "limite": False, "minutos": 0}
@@ -1401,6 +1412,26 @@ class DemoSobPedido(unittest.TestCase):
         self.assertFalse((self.pedido / "PEDIDO-DEMO.json").exists())  # uma tentativa por toque
         self.assertFalse((self.pedido / "falha.log").exists())
         self.assertIn("Gerar demo", self.avisos[0])
+
+    def test_limite_no_meio_nao_publica_a_pagina_pela_metade(self):
+        """03/11/2026 (av-servicos): o limite cortou o Claude com o HTML pronto e sem revisão nem og.jpg."""
+        publicados = []
+        self.m.publicar_na_vercel = lambda pasta, log_lead: publicados.append(pasta.name)
+        def cortado(slug, log_lead, timeout_min, personalizado=False):
+            (self.m.pasta_do_lead(slug) / "index.html").write_text("<html></html>")
+            return {"codigo": 1, "estourou": False, "limite": True, "minutos": 10}
+        codigo, r = self.rodar(cortado, "--pedidos")
+        self.assertEqual(publicados, [])
+        self.assertEqual(r["falhas"], ["c-respondeu: limite de uso do Claude atingido"])
+        self.assertFalse((self.pedido / "index.html").exists())  # o checkpoint não a publica na próxima
+        self.assertTrue((self.pedido / "index.limite.html").is_file())
+        self.assertEqual(json.loads((self.pedido / "publicado.json").read_text()), self.RAIO_X)
+
+    def test_limite_de_sessao_e_reconhecido(self):
+        for texto in ("You've hit your session limit · resets 1:10pm (America/Sao_Paulo)",
+                      "Claude AI usage limit reached|1760000000", "API Error: 429"):
+            self.assertTrue(self.m.LIMITE_DE_USO.search(texto), texto)
+        self.assertFalse(self.m.LIMITE_DE_USO.search("limite de 8 telas no celular"))
 
     def test_descartar_do_claude_e_ignorado_no_pedido(self):
         def quer_descartar(slug, log_lead, timeout_min, personalizado=False):
