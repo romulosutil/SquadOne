@@ -1,0 +1,36 @@
+{
+  "url": "https://demo-locforte-escoras-e-equipamento.vercel.app/",
+  "em": "2026-11-03",
+  "navegador": "Chrome (chrome-devtools-mcp), teclas reais (Tab, Enter)",
+  "teclado": {
+    "focaveis_visiveis": 38,
+    "focaveis_sem_nome_acessivel": 0,
+    "idioma": "pt-BR",
+    "link_pular_conteudo": true,
+    "ordem_dos_14_primeiros_tabs": [
+      "Pular para os equipamentos", "Equipamentos", "Como funciona", "Avaliações", "Perguntas", "Contato",
+      "Ligar (tel)", "Pedir orçamento (wa.me)", "5,0 no Google · 48 avaliações (Maps)",
+      "Pedir orçamento no WhatsApp (wa.me)", "Ligar (tel)", "Aba Escoras", "Aba Escoramento de laje", "Aba Torre de escoramento"
+    ],
+    "foco_visivel": "todos com :focus-visible e contorno sólido de 3 px #F0802F",
+    "enter_na_aba_torre": "endereço vira #eq-torre; a aba fica com aria-current=true e fundo laranja; o cartão ganha borda laranja e fica na tela (topo a 639 px)",
+    "enter_na_primeira_pergunta": "o <details> abre e mostra a resposta"
+  },
+  "aviso_de_homologacao": {
+    "falha_encontrada": "o aviso posto pela trava ficava atrás do menu (o menu é absoluto no topo); ilegível no celular e cortado no desktop",
+    "falha_criada_e_corrigida": "um comentário CSS com a palavra <body> fez a trava injetar o aviso dentro do <style>; comentário reescrito",
+    "correcao": "CSS: com o aviso presente, o menu desce a altura da faixa (47, 68 ou 89 px conforme a largura)",
+    "medido_depois": [
+      {"largura": 320, "aviso_px": 89, "texto_cortado": false, "folga_ate_o_menu_px": 0, "rolagem_lateral": false},
+      {"largura": 360, "aviso_px": 68, "texto_cortado": false, "folga_ate_o_menu_px": 0},
+      {"largura": 390, "aviso_px": 68, "texto_cortado": false, "folga_ate_o_menu_px": 0},
+      {"largura": 641, "aviso_px": 47, "texto_cortado": false, "folga_ate_o_menu_px": 0},
+      {"largura": 1440, "aviso_px": 47, "texto_cortado": false, "folga_ate_o_menu_px": 0}
+    ],
+    "capturas": ["celular-390-aviso.jpg", "computador-1440-aviso.jpg"]
+  },
+  "largura_320": {
+    "falha_encontrada": "a 320 px a página media 332 px (o botão Pedir orçamento do menu não cabia ao lado da marca)",
+    "correcao": "abaixo de 360 px o botão do menu perde o ícone e 4 px de cada lado; depois, 320 de 320"
+  }
+}

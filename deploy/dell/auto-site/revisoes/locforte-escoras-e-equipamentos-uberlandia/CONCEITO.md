@@ -191,3 +191,8 @@ recorte), f5 (vira o recorte), f9 e f10 (laje montada e fachada; limite de 5 fot
 - Gate (escoras do fecho trocadas, 03/11/2026): `qa-numerico` código 0 (375,4 KB; Ato I 132,8 KB; recorte do
   fecho 54 KB em base64; 4 788 px = 5,7 telas), com `QA_CHROME` apontando o `chrome.exe` pelo caminho
   completo. O `seo-do-site` não precisou rodar de novo: o recorte não muda texto, metas nem JSON-LD.
+- Homologação (03/11/2026, `homologacao/registro.md`): o aviso de prévia que a trava põe no começo do corpo
+  ficava atrás do menu (absoluto); agora o menu desce a altura da faixa (47, 68 ou 89 px). A 320 px o botão do
+  menu perde o ícone (a página media 332 px). Rota inexistente passou a cair numa `404.html` própria, com
+  início, WhatsApp e Ligar, publicada pela trava como sexto arquivo (a esteira do Dell ainda só publica cinco).
+  `qa-numerico` código 0 (376,3 KB; 5,7 telas); 30 casos no ar, 30 passaram.

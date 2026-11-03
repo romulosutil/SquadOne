@@ -1,0 +1,159 @@
+{
+  "url": "https://demo-locforte-escoras-e-equipamento.vercel.app",
+  "em": "2026-11-03T10:49:24-03:00",
+  "casos": [
+    {
+      "caso": "rota /",
+      "ok": true,
+      "detalhe": "HTTP 200 (esperado 200); text/html; charset=utf-8"
+    },
+    {
+      "caso": "rota /og.jpg",
+      "ok": true,
+      "detalhe": "HTTP 200 (esperado 200); image/jpeg"
+    },
+    {
+      "caso": "rota /robots.txt",
+      "ok": true,
+      "detalhe": "HTTP 200 (esperado 200); text/plain; charset=utf-8"
+    },
+    {
+      "caso": "rota /sitemap.xml",
+      "ok": true,
+      "detalhe": "HTTP 200 (esperado 200); application/xml"
+    },
+    {
+      "caso": "rota /llms.txt",
+      "ok": true,
+      "detalhe": "HTTP 200 (esperado 200); text/plain; charset=utf-8"
+    },
+    {
+      "caso": "rota /content.md",
+      "ok": true,
+      "detalhe": "HTTP 404 (esperado 404); text/html; charset=utf-8"
+    },
+    {
+      "caso": "rota /.vercel/project.json",
+      "ok": true,
+      "detalhe": "HTTP 404 (esperado 404); text/html; charset=utf-8"
+    },
+    {
+      "caso": "rota /rota-que-nao-existe",
+      "ok": true,
+      "detalhe": "HTTP 404 (esperado 404); text/html; charset=utf-8"
+    },
+    {
+      "caso": "erro 404 com saída: início, WhatsApp e Ligar",
+      "ok": true,
+      "detalhe": "HTTP 404; página própria: True"
+    },
+    {
+      "caso": "HTTP redireciona para HTTPS",
+      "ok": true,
+      "detalhe": "HTTP 308"
+    },
+    {
+      "caso": "certificado TLS válido para o domínio",
+      "ok": true,
+      "detalhe": "válido até Jan 29 11:46:09 2027 GMT"
+    },
+    {
+      "caso": "title",
+      "ok": true,
+      "detalhe": "Aluguel de escoras e andaimes em Uberlândia | Locforte"
+    },
+    {
+      "caso": "meta description",
+      "ok": true,
+      "detalhe": "Locforte: aluguel de escoras metálicas revisadas, escoramento de laje e de torre, andaime tubular, aprumador de pilar, kit de ancoragem e elevador de carga em Uberlândia e região, com entrega na obra. 5,0 no Google, 48 avaliações."
+    },
+    {
+      "caso": "og:image no domínio",
+      "ok": true,
+      "detalhe": "https://demo-locforte-escoras-e-equipamento.vercel.app/og.jpg"
+    },
+    {
+      "caso": "canonical",
+      "ok": true,
+      "detalhe": "https://demo-locforte-escoras-e-equipamento.vercel.app/"
+    },
+    {
+      "caso": "JSON-LD presente",
+      "ok": true,
+      "detalhe": ""
+    },
+    {
+      "caso": "robots noindex (demo antes da venda)",
+      "ok": true,
+      "detalhe": "noindex"
+    },
+    {
+      "caso": "h1 com ofício e cidade",
+      "ok": true,
+      "detalhe": ""
+    },
+    {
+      "caso": "nota e avaliações",
+      "ok": true,
+      "detalhe": ""
+    },
+    {
+      "caso": "aviso de homologação presente",
+      "ok": true,
+      "detalhe": "a versão no ar é prévia"
+    },
+    {
+      "caso": "sem script ou recurso de terceiros carregado",
+      "ok": true,
+      "detalhe": "domínios só em links: https://demo-locforte-escoras-e-equipamento.vercel.app, https://maps.google.com, https://wa.me, https://www.instagram.com"
+    },
+    {
+      "caso": "sem formulário nem campo de texto",
+      "ok": true,
+      "detalhe": ""
+    },
+    {
+      "caso": "WhatsApp: um número só",
+      "ok": true,
+      "detalhe": "9 links distintos; números ['5534991026371']"
+    },
+    {
+      "caso": "WhatsApp: toda mensagem pronta preenchida",
+      "ok": true,
+      "detalhe": "Olá! Preciso de ajuda para saber o que alugar para a minha o | Olá! Quero orçamento de andaime tubular.\nQuantidade de peças | Olá! Quero orçamento de aprumador de pilar.\nQuantidade:\nBair | Olá! Quero orçamento de escoramento de laje.\nTamanho da laje | Olá! Quero orçamento de escoras metálicas.\nQuantidade de esc | Olá! Quero orçamento de torre de escoramento.\nQuantidade de  | Olá! Quero orçamento do elevador de carga Locsolo.\nPor quant | Olá! Quero orçamento do kit barra de ancoragem 5/8\" (barra,  | Olá! Vi o site da Locforte e quero um orçamento.\nEquipamento"
+    },
+    {
+      "caso": "wa.me responde e leva ao WhatsApp",
+      "ok": true,
+      "detalhe": "HTTP 302 -> https://api.whatsapp.com/send/?phone=5534991026371&text=Ol%C3%A1%21+Preciso+de+ajuda+para+"
+    },
+    {
+      "caso": "Ligar: um número só, o mesmo",
+      "ok": true,
+      "detalhe": "tel:+5534991026371"
+    },
+    {
+      "caso": "Maps: link responde",
+      "ok": true,
+      "detalhe": "https://maps.google.com/?cid=11582266785461040123 -> HTTP 302"
+    },
+    {
+      "caso": "Instagram: link responde",
+      "ok": true,
+      "detalhe": "https://www.instagram.com/locforteuberlandia/ -> HTTP 200"
+    },
+    {
+      "caso": "Ver no Google (avaliações): link responde",
+      "ok": true,
+      "detalhe": "https://maps.google.com/?cid=11582266785461040123 -> HTTP 302"
+    },
+    {
+      "caso": "âncoras internas apontam para seções existentes",
+      "ok": true,
+      "detalhe": "['avaliacoes', 'como-funciona', 'contato', 'eq-ancoragem', 'eq-andaime', 'eq-aprumador', 'eq-elevador', 'eq-escoras', 'eq-laje', 'eq-torre', 'equipamentos', 'inicio', 'perguntas']; sem destino: []"
+    }
+  ],
+  "index_sha1": "6c762c8275e76fe565d139edf2f0379d30ec2d0b",
+  "passaram": 30,
+  "total": 30
+}

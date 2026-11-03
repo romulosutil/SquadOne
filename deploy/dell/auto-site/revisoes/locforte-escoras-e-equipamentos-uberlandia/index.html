@@ -97,6 +97,18 @@ p { margin: 0; }
 
 /* ---------- Cabeçalho: barra escura sobre a foto ---------- */
 .topo { position: absolute; top: 0; left: 0; right: 0; z-index: 10; padding-top: 12px; }
+/* o aviso de prévia, que a trava de qualidade põe no começo do corpo da página, fica no fluxo; o menu, que é
+   absoluto, desce a altura da faixa (uma, duas ou três linhas de 21 px + 26 px de respiro e borda) */
+aside[data-prumo-homologacao] { position: relative; z-index: 11; box-sizing: border-box; height: 47px; overflow: hidden; }
+body:has(> aside[data-prumo-homologacao]) .topo { top: 47px; }
+@media (max-width: 640px) {
+  aside[data-prumo-homologacao] { height: 68px; }
+  body:has(> aside[data-prumo-homologacao]) .topo { top: 68px; }
+}
+@media (max-width: 359px) {
+  aside[data-prumo-homologacao] { height: 89px; }
+  body:has(> aside[data-prumo-homologacao]) .topo { top: 89px; }
+}
 .barra {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   min-height: 56px; padding: 0 8px 0 16px; border-radius: var(--raio);
@@ -110,6 +122,8 @@ p { margin: 0; }
 .menu { display: none; }
 .barra-acoes { display: flex; gap: 8px; }
 .barra-acoes .btn { min-height: 44px; padding: 0 14px; font-size: 15px; }
+/* abaixo de 360 px, a marca e o botão não cabem lado a lado: sai o ícone do botão do menu */
+@media (max-width: 359px) { .barra-acoes .btn { padding: 0 10px; } .barra-acoes .btn svg { display: none; } }
 .so-desktop, .txt-desktop { display: none; }
 .nowrap { white-space: nowrap; }
 
