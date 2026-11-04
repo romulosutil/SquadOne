@@ -177,6 +177,8 @@ def api(method, path, body=None):
         body = preparar_aquisicao(body, obrigatoria=guarda_aquisicao_obrigatoria)
         from custo_zero_n8n import preparar as preparar_custo_zero
         body = preparar_custo_zero(body)
+        from workflow_limpeza import preparar as preparar_limpeza
+        body = preparar_limpeza(body)
     if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}
