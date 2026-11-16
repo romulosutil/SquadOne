@@ -57,6 +57,13 @@ class Updater(unittest.TestCase):
         with patch.object(u,'guardas'),patch.object(u,'git',side_effect=git),patch('sys.argv',['updater']):
             with self.assertRaises(u.Bloqueado):u.main()
         self.assertEqual([x[0] for x in calls],['status'])
+    def test_ocupacao_transitoria_aguarda_false_sem_forcar_ou_aceitar_ambiguidade(self):
+        with patch.object(u,'ler_api',side_effect=[{'ocupado':True},{'ocupado':False}]) as api,patch.object(u.time,'sleep') as dormir:
+            u.ocioso(45)
+        self.assertEqual(api.call_count,2);dormir.assert_called_once_with(1)
+        with patch.object(u,'ler_api',return_value={}),patch.object(u.time,'sleep') as dormir:
+            with self.assertRaises(u.Bloqueado):u.ocioso(45)
+            dormir.assert_not_called()
     def test_noop_com_commit_instalado_nao_builda_nem_reinicia(self):
         (self.state/'construido').write_text('abc\n',encoding='ascii')
         def git(*a):return 'abc' if a[0]=='rev-parse' else ''

@@ -67,9 +67,14 @@ def guardas():
     if 'proximoEnvioEm' not in frente or frente['proximoEnvioEm'] is not None:
         raise Bloqueado('Próximo envio automático não está comprovadamente suspenso')
 
-def ocioso():
-    if ler_api('/api/runtime').get('ocupado') is not False:
-        raise Bloqueado('Central ocupada ou estado de ocupação não comprovado')
+def ocioso(espera_s=0):
+    limite=time.monotonic()+espera_s
+    while True:
+        ocupado=ler_api('/api/runtime').get('ocupado')
+        if ocupado is False:return
+        if ocupado is not True or time.monotonic()>=limite:
+            raise Bloqueado('Central ocupada ou estado de ocupação não comprovado')
+        time.sleep(1)
 
 def git(*args):
     return cmd('git', *args, cwd=ROOT)
@@ -149,7 +154,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='squadone-updater-') as temp:
         stage=Path(temp)
         construir(stage,alvo,dependencias,somente_docs)
-        guardas(); ocioso()
+        guardas(); ocioso(45)
         if git('status','--porcelain','--untracked-files=no') or git('rev-parse','HEAD') != atual or git('rev-parse','origin/main') != alvo:
             raise Bloqueado('Checkout ou alvo mudou durante a validação')
         if somente_docs:
@@ -170,9 +175,9 @@ def main():
             preparado=Path(temp_dist)/'dist'; shutil.copytree(stage/'dist',preparado,symlinks=True)
             deps_preparadas=Path(temp_dist)/'node_modules'
             if dependencias: shutil.copytree(stage/'node_modules',deps_preparadas,symlinks=True)
-            guardas(); ocioso()
+            guardas(); ocioso(45)
             if atual != alvo: git('merge','--ff-only',alvo)
-            guardas(); ocioso()
+            guardas(); ocioso(45)
             cmd('systemctl','--user','stop','squadone-operations.service')
             dist_trocado=False; deps_trocadas=False
             try:
