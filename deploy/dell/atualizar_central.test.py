@@ -235,7 +235,7 @@ class Updater(unittest.TestCase):
             r=next(guardas)
             if r:raise r
         ocupado=iter([None,None,None,u.Bloqueado('ocupado')])
-        def idle():
+        def idle(*_args):
             r=next(ocupado)
             if r:raise r
         def command(*a,**kw):return 'active' if 'show' in a else ''
