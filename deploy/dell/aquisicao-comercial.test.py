@@ -26,10 +26,15 @@ class Aquisicao(unittest.TestCase):
                 if valor is not None:
                     arquivo.write_text(valor, encoding='utf-8')
                 self.assertTrue(politica.bloqueio_aquisicao(arquivo)['bloqueado'])
-        self.assertEqual(politica.bloqueio_aquisicao()['motivo'], politica._MOTIVO)
+        self.assertEqual(politica.bloqueio_aquisicao(), {'bloqueado': True, 'motivo': 'operacao-preparada-aguardando-retomada'})
+        with tempfile.TemporaryDirectory() as temp:
+            arquivo = Path(temp) / 'politica.json'
+            for respostas in (True, None, 'false'):
+                arquivo.write_text(json.dumps({'versao': 2, 'estado': 'primeiro-contato', 'respostasAutomaticas': respostas}), encoding='utf-8')
+                self.assertTrue(politica.bloqueio_aquisicao(arquivo)['bloqueado'])
 
     def test_barreira_final_impede_transporte_apos_reserva(self):
-        with patch.object(frente, 'http') as http:
+        with patch.object(frente, 'bloqueio_aquisicao', return_value={'bloqueado': True}), patch.object(frente, 'http') as http:
             self.assertFalse(frente.revalidar_antes_do_envio({}, 'texto'))
             with self.assertRaisesRegex(RuntimeError, 'Aquisição comercial bloqueada'):
                 frente.enviar({}, 'texto', {})

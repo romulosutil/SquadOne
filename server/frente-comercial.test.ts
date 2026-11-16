@@ -13,6 +13,7 @@ import type { CrmLead, CrmVisao } from '../src/operations/types.ts';
 // O time comercial na Central (19/10/2026). Diretório temporário, retrato inventado: nada toca
 // data/, o CRM, o n8n ou o WhatsApp.
 
+const POLITICA_BLOQUEADA = path.resolve('src/testes/aquisicao-bloqueada.json');
 const AGORA = Date.parse('2026-10-19T14:00:00Z'); // segunda, 11:00 em São Paulo
 const MSG = 'Olá! Vi que a empresa ainda não tem site. Fiz uma prévia, posso mandar?';
 
@@ -31,7 +32,7 @@ async function montar(leads: CrmLead[], fila: Array<{ id: string; estado: string
   const memoriaDaVenda = criarMemoriaDaVenda(path.join(dir, 'venda-do-dia.json'), () => relogio.agora);
   const visao = { estado: 'ok', leads, hoje: [] } as unknown as CrmVisao;
   const app = express(); const router = express.Router();
-  montarFrenteComercial(router, { dataDir: dir, memoriaDaVenda, visao: async () => visao, agora: () => relogio.agora }); app.use(router);
+  montarFrenteComercial(router, { dataDir: dir, politicaAquisicao: POLITICA_BLOQUEADA, memoriaDaVenda, visao: async () => visao, agora: () => relogio.agora }); app.use(router);
   const server = app.listen(0, '127.0.0.1'); await new Promise<void>(resolve => server.once('listening', resolve));
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   const reservar = async (leadId: string, origin: string | null = base) => {
@@ -118,17 +119,17 @@ test('aquisição bloqueada mesmo com histórico das cinco linhas e superfícies
 test('sem retrato não inventa avaliações nem envios; snapshot não expõe campos de integração', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'frente-'));
   try {
-    const vazio = await lerFrente(dir, AGORA); assert.equal(vazio.atualizadoEm, null); assert.equal(vazio.estado, 'bloqueado');
+    const vazio = await lerFrente(dir, AGORA, undefined, POLITICA_BLOQUEADA); assert.equal(vazio.atualizadoEm, null); assert.equal(vazio.estado, 'bloqueado');
     await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA).toISOString(), estado: 'pronto', setores: [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1, segredo: 'nao-sai' }], funil: [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167, numero: 'segredo' }], fila: [{ id: 'site:1', setor: 'Advocacia', numero: 'segredo', recibo: 'privado', nota: 80 }], apikey: 'nao-sai' }));
-    const v = await lerFrente(dir, AGORA); assert.equal(v.estado, 'bloqueado');
+    const v = await lerFrente(dir, AGORA, undefined, POLITICA_BLOQUEADA); assert.equal(v.estado, 'bloqueado');
     // O teto mostrado é o da trava de ritmo da Central, não uma cota do time.
     assert.equal(v.limite, 20);
     assert.deepEqual(v.setores, [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1 }]);
     assert.deepEqual(v.funil, [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167 }]);
     assert.doesNotMatch(JSON.stringify(v), /segredo|privado|nao-sai/);
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: '2020-01-01T00:00:00Z', estado: 'pronto' }));
-    assert.equal((await lerFrente(dir, AGORA)).estado, 'bloqueado');
+    assert.equal((await lerFrente(dir, AGORA, undefined, POLITICA_BLOQUEADA)).estado, 'bloqueado');
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
@@ -147,25 +148,28 @@ test('painel calcula a coorte atual do CRM, ignora contador antigo e mantém pau
 
 test('ativo com o ciclo parado: sem rodada há mais de 5 min no expediente, o estado diz cicloParado', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'frente-'));
+  const politica = path.join(dir, 'politica.json');
+  const ler = (agora: number) => lerFrente(dir, agora, undefined, politica);
   try {
+    await fs.writeFile(politica, JSON.stringify({versao:2,estado:'primeiro-contato',respostasAutomaticas:false}));
     await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
     // Nunca rodou (nenhum arquivo de estado), dentro do expediente: parado.
-    const nunca = await lerFrente(dir, AGORA);
+    const nunca = await ler(AGORA);
     assert.equal(nunca.cicloParado, true); assert.equal(nunca.ultimaRodadaEm, null);
     // Rodou há 2 min: andando. Há 6 min: parado, e a hora da última rodada vai junto.
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA - 2 * 60_000).toISOString(), estado: 'pronto', fila: [] }));
-    assert.equal((await lerFrente(dir, AGORA)).cicloParado, false);
-    const parado = await lerFrente(dir, AGORA + 4 * 60_000);
+    assert.equal((await ler(AGORA)).cicloParado, false);
+    const parado = await ler(AGORA + 4 * 60_000);
     assert.equal(parado.cicloParado, true); assert.equal(parado.ultimaRodadaEm, new Date(AGORA - 2 * 60_000).toISOString());
     // Fora do expediente (sábado) o timer não é cobrado; pausado (ativo: false) também não.
-    assert.equal((await lerFrente(dir, Date.parse('2026-10-24T14:00:00Z'))).cicloParado, false);
+    assert.equal((await ler(Date.parse('2026-10-24T14:00:00Z'))).cicloParado, false);
     await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: false }));
-    assert.equal((await lerFrente(dir, AGORA + 4 * 60_000)).cicloParado, false);
+    assert.equal((await ler(AGORA + 4 * 60_000)).cicloParado, false);
     // Sem atualizadoEm legível, vale o mtime do arquivo de estado.
     await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ estado: 'pronto', fila: [] }));
     const agoraReal = Date.now();
-    assert.equal((await lerFrente(dir, agoraReal)).ultimaRodadaEm !== null, true);
+    assert.equal((await ler(agoraReal)).ultimaRodadaEm !== null, true);
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 

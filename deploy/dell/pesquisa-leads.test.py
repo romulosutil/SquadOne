@@ -20,6 +20,7 @@ def lead(id_='a',produto='site',number='5511999998888'):
 
 
 class Pesquisa(unittest.TestCase):
+    @patch('campanha_site.LIMITES_OPERACIONAIS', True)
     def test_campanha_pesquisa_so_site_autorizado_sem_reciclar_historico(self):
         a=lead('a');b=lead('b');i=lead('c','iris');historico=lead('d')|{'etapa':'contato'}
         c={'versao':1,'ativo':True,'produto':'site','inicioPreparacao':'2026-11-01',
@@ -145,6 +146,7 @@ class Pesquisa(unittest.TestCase):
                 p.linkedin_apify({'fiscal:1':{'produto':'fiscal','pagina':{'linkedin':[url]}}})
             fetch.assert_not_called()
 
+    @patch.object(cal, 'LIMITES_OPERACIONAIS', True)
     def test_calendario_finados_e_pesquisa_independente(self):
         sunday=dt.datetime.fromisoformat('2026-11-01T12:00:00-03:00')
         self.assertEqual(cal.proximo_expediente(sunday).isoformat(),'2026-11-03T08:00:00-03:00')

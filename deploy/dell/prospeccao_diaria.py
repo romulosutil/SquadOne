@@ -60,7 +60,7 @@ def resultados(dom):
     return list(saida.items())
 
 
-def extrair(dom, ident, url):
+def extrair(dom, ident, url, aceitar_site_proprio=False):
     """Somente perfil completo do Place ID esperado; ausência de telefone/site inconclusiva adia."""
     if ident not in dom or ident not in url: return None
     parser = Perfil(); parser.feed(dom)
@@ -77,11 +77,13 @@ def extrair(dom, ident, url):
     if len(set(telefones)) != 1 or not any(i['data-item-id'] == 'address' for i in parser.itens) or not parser.horario: return None
     site = next((i.get('href', '') for i in parser.itens if i['data-item-id'] == 'authority'), '')
     host = (urllib.parse.urlsplit(site).hostname or '').lower()
-    if site and host not in ('wa.me', 'api.whatsapp.com', 'instagram.com', 'www.instagram.com', 'facebook.com', 'www.facebook.com'): return None
-    tipo = 'sem-link-de-site-no-perfil' if not site else 'link-WhatsApp-no-campo-site' if host in ('wa.me', 'api.whatsapp.com') else 'rede-social-no-campo-site'
+    proprio = bool(site and host not in ('wa.me', 'api.whatsapp.com', 'instagram.com', 'www.instagram.com', 'facebook.com', 'www.facebook.com'))
+    if proprio and not aceitar_site_proprio: return None
+    if proprio and (urllib.parse.urlsplit(site).scheme not in ('http', 'https') or not host): return None
+    tipo = 'site-proprio-no-perfil' if proprio else 'sem-link-de-site-no-perfil' if not site else 'link-WhatsApp-no-campo-site' if host in ('wa.me', 'api.whatsapp.com') else 'rede-social-no-campo-site'
     return {'place_id': ident, 'nome': nome, 'telefone': telefones[0], 'maps': url,
             'tipoSite': tipo, 'dominio': host, 'categoria': ' '.join(''.join(parser.categoria).split())[:120],
-            'achados': [{'id': 'sem-site' if not site else 'site-e-rede-social'}]}
+            'achados': [{'id': 'site-proprio-publicado' if proprio else 'sem-site' if not site else 'site-e-rede-social'}]}
 
 
 def ler_dom(url):
@@ -97,10 +99,8 @@ def ler_dom(url):
 
 
 def mensagem(tipo):
-    fato = ('No perfil da empresa que consultei, não encontrei um link para site próprio.' if tipo == 'sem-link-de-site-no-perfil'
-            else 'No perfil da empresa que consultei, o campo de site levava ao WhatsApp.' if tipo == 'link-WhatsApp-no-campo-site'
-            else 'Na análise do perfil, encontrei um canal de contato no lugar de um site próprio.')
-    return 'Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. ' + fato + '\n\nVocês já têm um site para apresentar os serviços e receber pedidos?'
+    from mensagem_inicial import mensagem as abertura
+    return abertura()
 
 
 def materializar(perfil, consulta, cidade, now):
@@ -193,10 +193,10 @@ def sincronizar_crm(ids, timeout=75, atualizar_observador=False):
         time.sleep(3)
 
 
-def executar():
+def executar(somente_pesquisa=False):
     from pesquisa_leads import salvar
     try:
-        resultado = _executar()
+        resultado = _executar(somente_pesquisa=somente_pesquisa)
     except (Exception, SystemExit) as erro:
         # Nunca publicar corpo de API, credencial, conversa ou telefone no journal.
         resultado = {'estado': 'bloqueado', 'falha': type(erro).__name__}
@@ -206,13 +206,17 @@ def executar():
     return resultado
 
 
-def _executar(now=None):
+def _executar(now=None, somente_pesquisa=False):
     import fcntl
     from campanha_site import ler, autorizar
     from calendario_comercial import proximo_expediente
     from pesquisa_leads import json_http, salvar, protegido, destino, numero, SP, CENTRAL
     now = now or dt.datetime.now(dt.timezone.utc); config = ler()
-    if (not config or config.get('modo') != 'continuo-dias-uteis' or config.get('ativo') is not True
+    if somente_pesquisa:
+        from mensagem_inicial import pesquisa
+        config = pesquisa()
+        if config['ativo'] is not True: return {'estado': 'pesquisa-pausada', 'mensagensEnviadas': 0}
+    if not somente_pesquisa and (not config or config.get('modo') != 'continuo-dias-uteis' or config.get('ativo') is not True
             or (LIMITES_OPERACIONAIS and not autorizar({'id': 'site:estoque', 'produto': 'site', 'etapa': 'novo'}, config, now))):
         return {'estado': 'sem-campanha-continua'}
     if proximo_expediente(now) > now: return {'estado': 'fora-do-horario'}
@@ -230,7 +234,7 @@ def _executar(now=None):
         if crm.get('estado') != 'ok' or not crm.get('leads'): raise ValueError('CRM indisponível')
         frente = json_http(CENTRAL+'/api/operations/crm/frente', timeout=90, max_bytes=2_000_000)
         controle = ler_controle(now)
-        necessidade = demanda(crm, frente, *controle, config=config)
+        necessidade = demanda(crm, ({**frente, 'ativo': True} if somente_pesquisa else frente), *controle, config=config)
         if not necessidade['buscar']: return necessidade
         # Todos os estados e ofertas entram no dedupe, inclusive recusas e exclusões.
         ids = {l['id'].partition(':')[2] for l in crm['leads'] if l.get('produto') == 'site'}
@@ -254,7 +258,7 @@ def _executar(now=None):
             if uso['consultas'] >= MAX_LEITURAS_DIA: break
             uso['consultas'] += 1; salvar(arquivo, uso)
             try:
-                perfil_dom = ler_dom(url); perfil = extrair(perfil_dom, ident, url)
+                perfil_dom = ler_dom(url); perfil = extrair(perfil_dom, ident, url, aceitar_site_proprio=bool(somente_pesquisa and config.get('aceitarSiteProprio')))
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 descartes['falhaDeLeitura'] += 1; continue
             if not perfil:

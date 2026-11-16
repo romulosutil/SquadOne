@@ -139,6 +139,12 @@ def preparar_publicacao_crm_se_configurado(body):
 
 def api(method, path, body=None):
     method = method.upper()
+    minimo = Path.home() / '.config/claude-ops/workflow-minimo.json'
+    contrato_minimo = False
+    if method in ('POST', 'PUT', 'PATCH', 'DELETE') and minimo.exists():
+        from workflow_minimo import conferir_mutacao, MARCA
+        conferir_mutacao(method, path, body, json.loads(minimo.read_text(encoding='utf-8')))
+        contrato_minimo = isinstance(body, dict) and any(n.get('id') == MARCA for n in body.get('nodes', []))
     # A política opt-in é relida antes de hooks e rede: configuração inválida
     # nunca permite uma mutação parcial. GET continua disponível para diagnóstico.
     if method in ('POST', 'PUT', 'PATCH', 'DELETE'):
@@ -154,7 +160,7 @@ def api(method, path, body=None):
                 print('Ativação pausada pela política operacional:', bloqueio['motivo'])
                 return bloqueio
     partes = path.strip("/").split("/")
-    if method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
+    if not contrato_minimo and method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
         from serializacao_aquisicao import desembrulhar as desembrulhar_aquisicao, protegido as aquisicao_protegida, preparar_se_configurado as preparar_aquisicao
         guarda_aquisicao_obrigatoria = aquisicao_protegida(body)
         body = desembrulhar_aquisicao(body)

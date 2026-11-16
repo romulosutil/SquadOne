@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Atualização conservadora: valida um commit em staging antes de fast-forward.
 
-Nunca força reinício ocupado, nem produz avisos. Falha fecha a aquisição.
+Nunca força reinício ocupado, nem produz avisos ou mensagens comerciais.
 """
 import json
 import os
@@ -49,6 +49,14 @@ def arquivo_desligado(name):
         return False
 
 def guardas():
+    frente = ler_api('/api/operations/crm/frente')
+    aquisicao = frente.get('aquisicao')
+    if (isinstance(aquisicao, dict) and aquisicao.get('estado') == 'primeiro-contato'
+            and aquisicao.get('primeirosContatosAutomaticos') is True
+            and aquisicao.get('respostasAutomaticas') is False):
+        # O envio inicial continua sob reserva, dedupe, pausa e saúde do provedor.
+        # O atualizador não liga nem desliga campanhas ou executores comerciais.
+        return
     for timer in TIMERS:
         if cmd('systemctl','--user','show',timer,'-p','UnitFileState','--value') != 'disabled':
             raise Bloqueado('Timer não está desabilitado: ' + timer)
@@ -139,7 +147,7 @@ def main():
     try: instalado=(STATE/'construido').read_text(encoding='ascii').strip()
     except OSError: instalado=''
     if atual == alvo and instalado == alvo:
-        print('Sem atualização; aquisição continua bloqueada.')
+        print('Sem atualização; política comercial preservada.')
         return
     git('merge-base','--is-ancestor',atual,alvo)
     alterados=['sem-base']

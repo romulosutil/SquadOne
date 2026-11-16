@@ -55,9 +55,11 @@ export async function lerPrimeirosDoTime(dataDir: string): Promise<Set<string>> 
 }
 
 /** Estado derivado do serviço de domínio. Nenhum segredo ou comando chega ao navegador. */
-export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pick<CrmVisao, 'estado' | 'leads'> | null) {
-  const bloqueio = await bloqueioAquisicao();
-  const aquisicao = { estado: 'bloqueada' as const, motivo: bloqueio.motivo, detalhe: 'Primeiros contatos automáticos suspensos após a restrição do WhatsApp. A retomada exige revisão da política de aquisição.', primeirosContatosAutomaticos: false as const };
+export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pick<CrmVisao, 'estado' | 'leads'> | null, politicaAquisicao?: string) {
+  const bloqueio = await bloqueioAquisicao(politicaAquisicao);
+  const aquisicao = { estado: bloqueio.bloqueado ? 'bloqueada' : 'primeiro-contato', motivo: bloqueio.motivo,
+    detalhe: bloqueio.bloqueado ? 'Primeiros contatos pausados. Confira a política de envio.' : 'O agente envia a primeira mensagem atual. Quando o cliente responder, Rômulo assume.',
+    primeirosContatosAutomaticos: !bloqueio.bloqueado, respostasAutomaticas: false };
   const config = (await lerJson(path.join(dataDir, CONFIG))) ?? { ativo: false };
   const bruto = await lerJson(path.join(dataDir, ESTADO));
   const pausaAutomatica = await lerPausaAutomatica(dataDir);
@@ -67,16 +69,18 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
   // Desde quando e por quê (29/10/2026): a pausa de 28/10 às 19:41 ficou sem autor nem motivo na tela.
   const pausa = pausaDoTime(config, pausaAutomatica);
   const metricas = { respostasHoje, pausaAutomatica, pausa, limitesAtivos: politica.limitesOperacionais, aprovacoesComerciais: politica.aprovacoesComerciais, intervaloMinutos: politica.limitesOperacionais ? limitesDeAgora(agora).intervaloMs / 60_000 : 0, porHora: politica.limitesOperacionais ? limitesDeAgora(agora).porHora : null };
-  const ativo = config.ativo === true && !pausaAutomatica;
+  const ativo = !bloqueio.bloqueado && config.ativo === true && !pausaAutomatica;
   // A última rodada: a hora gravada pelo script (`atualizadoEm`); sem ela legível, o mtime do arquivo de estado.
   const gravada = bruto ? Date.parse(bruto.atualizadoEm) : NaN;
   const ultimaRodada = Number.isFinite(gravada) ? gravada : bruto ? await fs.stat(path.join(dataDir, ESTADO)).then((st) => st.mtimeMs).catch(() => null) : null;
   const ultimaRodadaEm = ultimaRodada === null ? null : new Date(ultimaRodada).toISOString();
   const cicloParado = ativo && noExpedienteDeVenda(agora) && (ultimaRodada === null || agora - ultimaRodada > CICLO_PARADO_APOS_MS);
-  if (!bruto) return { ...metricas, aquisicao, ativo, estado: 'bloqueado', proximoEnvioEm: null, detalhe: pausaAutomatica?.detalhe ?? '', limite, fila: [], setores: [], funil: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
+  const estado = bloqueio.bloqueado ? 'bloqueado' : !ativo ? 'pausado' : cicloParado ? 'parado' : bruto?.estado ?? 'aguardando-executor';
+  const proximoEnvioEm = ativo && !cicloParado && typeof bruto?.proximoEnvioEm === 'string' ? bruto.proximoEnvioEm : null;
+  if (!bruto) return { ...metricas, aquisicao, ativo, estado, proximoEnvioEm: null, detalhe: pausaAutomatica?.detalhe ?? '', limite, fila: [], setores: [], funil: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
   return {
     ...metricas, aquisicao,
-    ativo, estado: 'bloqueado',
+    ativo, estado,
     cicloParado, ultimaRodadaEm,
     limite, dia: bruto.dia, atualizadoEm: bruto.atualizadoEm,
     avaliados: bruto.avaliados ?? 0, selecionados: bruto.selecionados ?? 0,
@@ -92,7 +96,7 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
       selecionados: typeof s.selecionados === 'number' ? s.selecionados : 0,
       enviados: typeof s.enviados === 'number' ? s.enviados : 0,
     })),
-    proximoEnvioEm: null,
+    proximoEnvioEm,
     detalhe: pausaAutomatica?.detalhe ?? (typeof bruto.detalhe === 'string' ? bruto.detalhe.slice(0, 400) : ''),
     fila: (Array.isArray(bruto.fila) ? bruto.fila : []).slice(0, 100).map((l: Record<string, unknown>) => ({
       id: l.id, empresa: l.empresa, produto: l.produto, setor: l.setor, nota: l.nota, estado: l.estado, motivo: l.motivo,
@@ -104,6 +108,7 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
 
 export interface DepsDaFrente {
   dataDir: string;
+  politicaAquisicao?: string;
   memoriaDaVenda: MemoriaDaVenda;
   /** O retrato do CRM. Ausente (CRM não configurado): o time não reserva nada. */
   visao?: () => Promise<Pick<CrmVisao, 'estado' | 'leads'>>;
@@ -138,7 +143,7 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
       const visao = deps.visao ? await deps.visao().catch(() => null) : null;
       await protecao.verificar(visao);
       const rodada = deps.rodada && visao?.estado === 'ok' ? await deps.rodada.status(visao.leads) : null;
-      res.set('Cache-Control', 'no-store').json({ ...await lerFrente(dataDir, agora(), visao), ...(deps.rodada ? { rodada, rodadaIndisponivel: !rodada } : {}) });
+      res.set('Cache-Control', 'no-store').json({ ...await lerFrente(dataDir, agora(), visao, deps.politicaAquisicao), ...(deps.rodada ? { rodada, rodadaIndisponivel: !rodada } : {}) });
     } catch (e) { next(e); }
   });
   router.post('/crm/frente/rodada/revisar', express.json({ limit:'4kb' }), async (req,res) => {
@@ -156,7 +161,7 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
     try {
       if (!mesmaOrigem(req)) return res.status(403).json({ error: 'Confirme a configuração na própria Central.' });
       if (Object.keys(req.body ?? {}).length !== 1 || typeof req.body.ativo !== 'boolean') return res.status(400).json({ error: 'Informe se o time deve iniciar primeiros contatos.' });
-      if (req.body.ativo && (await bloqueioAquisicao()).bloqueado) return res.status(409).json({ ativo: false, motivo: 'aquisicao-bloqueada', error: 'Primeiros contatos automáticos bloqueados pela política de aquisição.' });
+      if (req.body.ativo && (await bloqueioAquisicao(deps.politicaAquisicao)).bloqueado) return res.status(409).json({ ativo: false, motivo: 'aquisicao-bloqueada', error: 'Primeiros contatos pausados pela política de envio.' });
       return res.json(await protecao.configurar(req.body.ativo));
     } catch (e) {
       if (e instanceof RetomadaRecusada) return res.status(409).json({ error: e.message });
@@ -178,7 +183,7 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
     }
     if (!mesmaOrigem(req)) return void res.status(403).json({ reservado: false, error: 'Só da mesma origem.' });
     try {
-      const bloqueio = await bloqueioAquisicao();
+      const bloqueio = await bloqueioAquisicao(deps.politicaAquisicao);
       if (bloqueio.bloqueado) return void res.json({ reservado: false, motivo: 'aquisicao-bloqueada', detalhe: bloqueio.motivo, ate: null });
       const visao = deps.visao ? await deps.visao() : null;
       if (!visao || visao.estado !== 'ok') return void res.status(503).json({ reservado: false, motivo: 'sem-retrato', ate: null });

@@ -12,10 +12,10 @@ test('bloqueio não publica previsão de envio conservada no estado legado', asy
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aquisicao-previsao-'));
   try {
     await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
-    const semEstado = await lerFrente(dir);
+    const semEstado = await lerFrente(dir, Date.now(), undefined, path.resolve('src/testes/aquisicao-bloqueada.json'));
     assert.equal(semEstado.proximoEnvioEm, null);
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ estado: 'pronto', atualizadoEm: new Date().toISOString(), proximoEnvioEm: '2099-01-01T12:00:00Z' }));
-    const frente = await lerFrente(dir);
+    const frente = await lerFrente(dir, Date.now(), undefined, path.resolve('src/testes/aquisicao-bloqueada.json'));
     assert.equal(frente.estado, 'bloqueado');
     assert.equal(frente.proximoEnvioEm, null);
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
@@ -29,7 +29,13 @@ test('política permanece bloqueada com configuração ausente, inválida ou sup
       if (valor !== null) await fs.writeFile(arquivo, valor);
       assert.equal((await bloqueioAquisicao(arquivo)).bloqueado, true);
     }
-    assert.equal((await bloqueioAquisicao()).motivo, 'restricao-apos-envios-em-massa-2026-11-13');
+    assert.deepEqual(await bloqueioAquisicao(), { bloqueado: true, motivo: 'operacao-preparada-aguardando-retomada' });
+    await fs.writeFile(arquivo, JSON.stringify({ versao: 2, estado: 'primeiro-contato', respostasAutomaticas: false }));
+    assert.deepEqual(await bloqueioAquisicao(arquivo), { bloqueado: false, motivo: 'primeiro-contato-depois-romulo' });
+    for (const respostasAutomaticas of [true, null, 'false']) {
+      await fs.writeFile(arquivo, JSON.stringify({ versao: 2, estado: 'primeiro-contato', respostasAutomaticas }));
+      assert.equal((await bloqueioAquisicao(arquivo)).bloqueado, true);
+    }
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
@@ -43,7 +49,7 @@ test('rota real não reserva nem consulta CRM mesmo após ativação e reinício
       await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
       const app = express();
       const router = express.Router();
-      montarFrenteComercial(router, { dataDir: dir, memoriaDaVenda: memoria, visao: async () => { consultas++; return { estado: 'ok', leads: [] }; } });
+      montarFrenteComercial(router, { dataDir: dir, politicaAquisicao: path.resolve('src/testes/aquisicao-bloqueada.json'), memoriaDaVenda: memoria, visao: async () => { consultas++; return { estado: 'ok', leads: [] }; } });
       app.use(router);
       const server = app.listen(0, '127.0.0.1');
       try {

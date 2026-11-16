@@ -1,5 +1,17 @@
 # SquadOne
 
+> Simplificação autorizada e publicada em 16/11: quatro funções centrais no n8n,
+> geração de material sob pedido e conversa conduzida por Rômulo. A abertura
+> canônica está em `config/mensagem-inicial.json`; a política v2 permanece em
+> `preparado-pausado`. Não retomar disparos. Mapa operacional em `ops/n8n/README.md`.
+
+> Operação vigente, decisão posterior de 16/11: o agente envia somente a primeira
+> mensagem atual; Rômulo assume a resposta. Política v2 em
+> `config/aquisicao-comercial.json`. Atendimento, qualificação e proposta
+> automáticos foram retirados do servidor. Regras detalhadas em `RULES.md`.
+> As notas de bloqueio absoluto e atendimento automático abaixo são históricas.
+
+
 > Referência técnica, sem liberação de aquisição: `REGRAS_DO_RITMO` conserva parâmetros legados de 20 por dia, 6 por hora e intervalo de 10 min. `limitesOperacionais=false` desabilita essa camada; a trava de aquisição de 16/11 continua bloqueando primeiros contatos automáticos independentemente desses valores. As cadências numéricas anteriores abaixo são histórico.
 
 

@@ -1,5 +1,6 @@
 import { validarPublicacaoCrm, falhaMaisRecenteQueRetrato, type CrmPublicacao, type CrmUltimaFalha } from './publicacao-crm.ts';
 import { comGuardaConversa } from './guarda-conversa.ts';
+import { aberturaPrumo } from '../src/operations/mensagem-inicial.ts';
 import { resumirSinaisComerciais } from '../src/operations/sinais-comerciais.ts';
 import { PREFIXO_RESPONSAVEL, lerResponsavelConversa, textoResponsavelConversa, projetarResponsavelConversa, validarSucessaoResponsavel, identidadeDaConversa } from '../src/operations/responsavel-conversa.ts';
 import { timingSafeEqual } from 'node:crypto';
@@ -1306,7 +1307,9 @@ function leadDoSite(linha: Linha, contexto: {
   const webhook = contexto.links.webhook;
   const whatsapp = numeroDoWhatsapp(c("waMe"));
   const waLink = urlHttps(c("waLink"));
-  const mensagemPronta = status === "pronto" && waLink ? textoDoWaMe(c("waMe")) : undefined;
+  const mensagemPronta = status === "pronto" && waLink
+    ? aberturaPrumo(t.criado, calculada.etapa !== 'novo' || Boolean(conv.resumo || resposta || semContato || proximo || proposta || registros.length || t.enviado || t.ultimaEntrada || t.ultimaSaida)) ?? textoDoWaMe(c("waMe"))
+    : undefined;
   const planilha = contexto.links.planilhaSite && c("linha") ? `${contexto.links.planilhaSite}&range=A${encodeURIComponent(c("linha"))}` : contexto.links.planilhaSite;
   // Demo apagado pelo site-demos-limpeza: o link dá 404 na Vercel. Sem ele, nem "Ver o demo" nem a
   // segunda mensagem (o link do site) são oferecidos; a ficha diz o que aconteceu e como trazer de volta.

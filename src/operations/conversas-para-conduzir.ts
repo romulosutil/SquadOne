@@ -53,6 +53,16 @@ export function conversasParaConduzir(leads: readonly CrmLead[], agora = Date.no
     if (lead.etapa === 'ganho' || lead.etapa === 'perdido' || lead.resposta?.tipo === 'negativa' || lead.resposta?.tipo === 'exclusao') return []
     const em = entradaDeGenteDaVez(lead) ?? NaN
     const resposta = Number.isFinite(em) && em <= agora && agora - em <= JANELA_DA_RESPOSTA_MS
+    // A captura pode chegar antes da classificação humana na planilha.
+    // Mostrar para conferência, sem chamar isso de interesse ou responder automaticamente.
+    const captura = lead.atendimentoComercial
+    const capturadaEm = Date.parse(captura?.ocorridoEm ?? '')
+    const ultimaSaida = Math.max(Date.parse(lead.conversa?.ultimaSaida ?? '') || 0,
+      lead.conversa?.ultima.direcao === 'saida' ? Date.parse(lead.conversa.ultima.em) || 0 : 0)
+    if (!resposta && captura?.tipo === 'handoff' && captura.alvo === 'operador' && Number.isFinite(capturadaEm)
+      && capturadaEm <= agora && capturadaEm >= ultimaSaida) {
+      return [{ lead, prioridade: PRIORIDADE_DA_FILA.responder, em: capturadaEm, rotulo: lead.resposta?.tipo === 'bot' ? 'Recepção automática — conferir' : 'Conferir resposta recebida', resposta: false }]
+    }
     const p = lead.proximoPasso
     const dataValida = !!p && /^\d{4}-\d{2}-\d{2}$/.test(p.data) && Number.isFinite(Date.parse(`${p.data}T12:00:00Z`)) && new Date(`${p.data}T12:00:00Z`).toISOString().slice(0, 10) === p.data
     const combinado = !!p?.texto.trim() && dataValida && p!.data <= hoje

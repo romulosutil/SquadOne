@@ -30,6 +30,7 @@ spec = importlib.util.spec_from_file_location("dell_status", AQUI / "dell-status
 ds = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ds)
 ds.OPERATIONS_ENV = Path(tempfile.gettempdir()) / "dell-status-teste" / "sem-operations.env"
+ds.OPERACAO_MINIMA = Path(tempfile.gettempdir()) / 'dell-status-teste' / 'sem-workflow-minimo.json'
 for _v in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_IDS", "SQUADONE_LEMBRETES_PELO_TELEGRAM"):
     os.environ.pop(_v, None)
 

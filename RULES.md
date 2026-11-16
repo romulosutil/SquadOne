@@ -1,5 +1,47 @@
 # Regras do repositório
 
+## Operação preparada e pausada — simplificação de 16/11/2026
+
+Rômulo autorizou aplicar a simplificação no Dell e a abertura padrão do Prumo,
+sem retomar disparos. A política v2 fica em `preparado-pausado`: reserva e transporte
+continuam bloqueados mesmo se uma flag ou timer antigo for ligado. A retomada
+depende de instrução posterior. Não reconectar WhatsApp nem drenar carteira antiga.
+
+Pesquisa, CRM, entrada WhatsApp e falhas formam o núcleo. Captura e recibos
+permanecem; Rômulo assume qualquer retorno. Site, Raio-X e Mapa só por pedido
+humano. A abertura canônica está em `config/mensagem-inicial.json`; o corte de
+pesquisa nova preserva a carteira e as mensagens históricas. Os workflows
+aposentados ficam arquivados, com fontes privadas e backup para reversão.
+Geradores antigos não podem substituir o núcleo nem reativar os aposentados.
+
+## Operação mínima vigente — 16/11/2026, decisão posterior
+
+Rômulo pediu: o agente envia a primeira mensagem atual e ele assume quando o
+cliente responder. Retirar o que não serve a esse fluxo. Esta decisão substitui
+o bloqueio absoluto da reconstrução anterior e os atendimentos automáticos de
+Site/Encontrado e Estamparia. Não exige descoberta, consenso de três modelos,
+Raio-X, Mapa, demonstração ou proposta automática para iniciar o contato.
+
+A abertura mantém texto e destinatário da fonte atual, somente para cadastro
+novo sem contato anterior. A política v2 em `config/aquisicao-comercial.json`
+permite apenas primeiro contato, com `respostasAutomaticas: false`. Recusas,
+exclusões, identidade, reserva atômica, resultado incerto, pausa manual e
+restrições reais do provedor continuam obrigatórios. Não trocar conta ou
+reconectar para contornar restrição; não reenviar um resultado incerto.
+
+A tela de Vendas tem respostas para Rômulo, primeiros contatos e carteira.
+Qualificação, negociação, material e proposta passam a ser trabalho humano.
+Os executores de resposta automática e seus scripts de reativação foram
+retirados. Histórico comercial, documentos, contratos e dados existentes são
+preservados. Análises antigas continuam consultáveis por seus endereços.
+
+Código local e testes não comprovam publicação ou envio. A implantação no Dell
+precisa conferir serviço, campanha, timer, conta e recibo; a política não liga
+sozinha um executor que foi desativado. Não drenar automaticamente fila antiga.
+
+## Histórico das decisões substituídas
+
+
 ## Reconstrução comercial vigente (16/11/2026)
 
 Rômulo confirmou softban do WhatsApp por spam após os disparos de 13/11 e

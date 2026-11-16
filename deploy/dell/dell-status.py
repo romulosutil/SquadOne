@@ -73,6 +73,7 @@ LEMBRETE_FALHA_H = 12  # falha que continua é relembrada, não repetida a cada 
 CENTRAL = "https://romulo-sutil-corr-a-latitude-7420.tail20cfb0.ts.net:8443/"
 N8N_CONTAINER = "licitacoes-automation-n8n-1"
 CENTRAL_RUNTIME = "http://127.0.0.1:9120/api/runtime"
+OPERACAO_MINIMA = HOME / '.config/claude-ops/workflow-minimo.json'
 
 
 def agora() -> datetime:
@@ -81,6 +82,15 @@ def agora() -> datetime:
 
 def iso(d: datetime) -> str:
     return d.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def operacao_minima() -> bool:
+    """Pausa declarada não é pane nem pedido de religamento de um legado."""
+    try:
+        c = json.loads(OPERACAO_MINIMA.read_text())
+        return c.get('versao') == 1 and c.get('estado') == 'preparado-pausado'
+    except (OSError, ValueError):
+        return False
 
 
 def check(id_: str, grupo: str, nome: str, estado: str, detalhe: str, link: str | None = None,
@@ -1104,6 +1114,8 @@ def avaliar_funil_aprendizado(st: dict | None, resultado: str, saiu: datetime | 
 
 
 def funil_aprendizado() -> list[dict]:
+    if operacao_minima():
+        return [check('funil-aprendizado', 'dados', 'Revisão comercial', 'ok', 'Lições e curadoria legadas aposentadas; revisão diária descritiva, sem alterar mensagens ou liberar envios.')]
     if not FUNIL_APRENDIZADO_TIMER.exists():
         return []  # ainda não instalado: nada a vigiar
     try:
@@ -1186,6 +1198,8 @@ def prumo_mapa() -> list[dict]:
         resultado, saiu = _unit_resultado("prumo-mapa.service")
     except (OSError, ValueError, subprocess.TimeoutExpired):
         resultado, saiu = "", None
+    if operacao_minima() and resultado in ('', 'success') and not unit_ativa('prumo-mapa.service'):
+        return [check('prumo-mapa', 'dados', 'Mapa sob pedido', 'ok', 'Geração automática desativada; pacotes e entregas preservados para solicitação humana.')]
     return [avaliar_prumo_mapa(unit_ativa("prumo-mapa.path"), instantes(MAPA_FILA), instantes(MAPA_ERRO),
                                entregas, resultado, saiu, agora())]
 
@@ -1235,7 +1249,10 @@ def pendencias() -> list[dict]:
     out = []
     fila = [d for d in AUTO.iterdir() if d.is_dir() and not d.name.startswith(("_", "."))
             and (d / "content.md").is_file() and not (d / "publicado.json").is_file()] if AUTO.is_dir() else []
-    if (AUTO / ".demo-sob-pedido").exists():
+    if operacao_minima():
+        out.append(_fila('sites-fila', 'Material sob pedido', 0,
+                         'Cadastros pesquisados não exigem site ou Raio-X. Gerar somente por solicitação humana.'))
+    elif (AUTO / ".demo-sob-pedido").exists():
         # Demo sob pedido (14/10/2026): sem recibo = esperando o Raio-X (raio-x.timer, 11:15 e 17:15); quem ficou abaixo
         # do padrão do modelo (raio-x-sem-padrao.json) não é abordado e sai da conta.
         fila = [d for d in fila if not (d / "raio-x-sem-padrao.json").is_file()]

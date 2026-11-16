@@ -178,6 +178,9 @@ def criterio_descoberta_site(l):
         return {'apto': False, 'prioridade': 0, 'motivo': 'Falta fonte válida vinculada à identidade e ao destino.'}
     if ui.get('avisoFechamentoPermanente') is True:
         return {'apto': False, 'prioridade': 0, 'motivo': 'Perfil registra fechamento permanente; conferir.'}
+    from mensagem_inicial import mensagem as abertura_atual
+    if texto_do_lead(l) == abertura_atual():
+        return {'apto':True,'prioridade':0,'categoria':'necessidade-a-confirmar','motivo':'Identidade e destino conferidos; necessidade será discutida por Rômulo.'}
     ids = {a.get('id') for a in l.get('achados') or [] if isinstance(a,dict)}
     tecnica = ev.get('conferenciaTecnicaDoSite') or {}
     http = tecnica.get('http')
@@ -996,51 +999,15 @@ def _rodada(estado, now, alvo, dia_):
                 estado['fila']=anterior['fila'];estado['setores']=anterior.get('setores',[])
                 estado['selecionados']=len(estado['fila'])
         except (OSError,ValueError):pass
-        lotes_novos=0;varridos=0;sem_orcamento=False
-        for inicio in range(0,len(candidatos),5):
-            lote=candidatos[inicio:inicio+5];anteriores={};lote_incompleto=False
-            if not APROVACOES_COMERCIAIS:
-                for l in lote:
-                    nova.append({'id': l['id'], 'empresa': l['empresa'], 'produto': l['produto'],
-                                 'setor': setor(l), 'nota': None, 'estado': 'pronto',
-                                 'motivo': 'Empresa nova da pesquisa atual; sem exigência de parecer comercial.',
-                                 'justificativaComercial': None, 'avaliacoes': [],
-                                 'mensagem': texto_do_lead(l), 'hash': fingerprint(l),
-                                 'avaliacaoVersao': 'sem-pareceres-20261113'})
-                varridos += len(lote)
-                continue
-            if any(not registro.avaliar(dia_,l,a) for l in lote for a,_ in ROLES):lotes_novos+=1
-            if lotes_novos>2:break
-            varridos+=len(lote)
-            for agente,especialidade in ROLES:
-                faltam=[l for l in lote if not registro.avaliar(dia_,l,agente)]
-                if faltam:
-                    if not ler_config().get('ativo'):estado.update(estado='pausado');gravar(estado);return
-                    chamadas=registro.db.execute('SELECT chamadas FROM uso WHERE dia=?',(dia(now),)).fetchone()
-                    if chamadas and chamadas[0]>=MAX_IA:sem_orcamento=True;break
-                    registro.consumir_ia(dia(now))
-                    try:resultado=inferir(agente,especialidade,faltam,{},estado['funil'],taxas)
-                    except ValueError:
-                        # Um parecer fora do contrato não aprova o lote nem derruba os já aprovados.
-                        estado['lotesEmRevisao']=estado.get('lotesEmRevisao',0)+1
-                        lote_incompleto=True;break
-                    for l in faltam:registro.guardar(dia_,l,agente,resultado[pacote(l)['id']])
-                anteriores[agente]=[registro.avaliar(dia_,l,agente) for l in lote]
-            if sem_orcamento:break
-            if lote_incompleto:continue
-            for l in lote:
-                avaliacoes=[dict(agente=a,**registro.avaliar(dia_,l,a)) for a,_ in ROLES]
-                nota=nota_da_selecao(avaliacoes)
-                if nota is not None:
-                    contato=registro.contato(chave(numero(l)))
-                    # O plano do dia guarda o lead; descartado por falta de WhatsApp, ele não volta à fila (a tela leria "em preparação").
-                    if contato and contato['estado'] in NAO_CANDIDATOS:continue
-                    if nota>=65:nova.append({'id':l['id'],'empresa':l['empresa'],'produto':l['produto'],'setor':setor(l),'nota':nota,'estado':contato['estado'] if contato else 'pronto',
-                        'motivo':motivo_comercial(l),'justificativaComercial':justificativa_comercial(l),'avaliacoes':[{k:a[k] for k in ['agente','nota','motivo']} for a in avaliacoes],
-                        'mensagem':texto_do_lead(atuais_do_plano[l['id']]),'hash':fingerprint(l),'avaliacaoVersao':VERSAO_AVALIACAO})
-            estado['avaliados']=len(registro.ids_avaliados(dia_))
-            estado['detalhe']='O time está comparando aderência, entrega e abordagem dos próximos contatos.';gravar(estado)
-            if len(nova)>=100:break
+        # Apenas seleção determinística: abertura atual da fonte, sem três pareceres.
+        for l in candidatos[:100]:
+            nova.append({'id': l['id'], 'empresa': l['empresa'], 'produto': l['produto'],
+                         'setor': setor(l), 'nota': None, 'estado': 'pronto',
+                         'motivo': 'Primeiro contato; Rômulo assume a resposta.',
+                         'justificativaComercial': None, 'avaliacoes': [],
+                         'mensagem': texto_do_lead(l), 'hash': fingerprint(l),
+                         'avaliacaoVersao': 'primeiro-contato-20261116'})
+        estado['avaliados'] = len(nova)
         # Dois lotes novos não substituem os aprovados de rodadas anteriores ainda não varridos.
         # Revalidamos os prontos contra o retrato atual; recibos permanecem como histórico.
         ids_novos={c['id'] for c in nova}

@@ -8,22 +8,18 @@ import CrmFunil from './CrmFunil.vue'
 import CarteiraComercial from './CarteiraComercial.vue'
 import FrenteComercial from './FrenteComercial.vue'
 import '../estilos/operacao.css'
-import CrmHoje from './CrmHoje.vue'
 import CrmResultados from './CrmResultados.vue'
-import FilaAcaoBi from './FilaAcaoBi.vue'
 import CrmBi from './CrmBi.vue'
-import { planoDoLead } from './bi-operacao'
-import { conversasParaVoce } from './conversas-para-conduzir'
+import { conversasParaConduzir } from './conversas-para-conduzir'
 import { coberturaDoHistorico } from './historico-comercial'
 import { ABAS_DAS_OFERTAS_PROPRIAS, ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import { lerFiltroDePasso, type FiltroDePasso } from './funil-lista'
-import type { Resolvidas } from './proxima-venda'
 import { avisoDeHorario } from './resultados'
 import { absorverDia, liberadosDoDia, liberarLead } from './liberados'
 import {
   gravarPrimeiros, instantesDePrimeiroContato, lerPrimeiros, marcarPrimeiro, ritmoDoEnvio, somarPrimeiros, type EstadoDoRitmo, type PrimeirosContatos,
 } from './trava-de-ritmo'
-import type { CrmEtapa, CrmGrupoHoje, CrmLead, CrmProduto, CrmVisao } from './types'
+import type { CrmEtapa, CrmLead, CrmProduto, CrmVisao } from './types'
 import {
   ABAS_DE_VENDAS, ENDERECO_DO_ROTEIRO, SECOES_DE_ENTENDER, abaDaVista, enderecoDeVendas, lerEnderecoDeVendas, vistaDaAba,
   type AbaDeVendas, type VistaDeVendas, type DetalheDoCliente,
@@ -82,7 +78,6 @@ const primeiros = ref<PrimeirosContatos>({})
 const primeirosDoServidor = ref<Record<string, { em: number }>>({})
 const pausaPrimeiros = ref<{ detalhe: string } | null>({ detalhe: 'Aguardando a conferência dos primeiros contatos.' })
 /** O "Enviei"/"Pular" do dia (o mesmo arquivo do Telegram): tira da lista "Conversas para você" o que já foi resolvido. */
-const resolvidas = ref<Resolvidas>({})
 /**
  * O dia do servidor (GET /crm/venda) só é lido onde alguém o usa: a lista de conversas (resolvidas), a
  * Primeiros contatos (ritmo e "Liberar") e a Ficha aberta (ritmo e "Liberar"). Funil, Diagnóstico e
@@ -93,10 +88,9 @@ async function lerDoDia() {
   try {
     const r = await fetch('/api/operations/crm/venda', { cache: 'no-store' })
     if (!r.ok) throw new Error('Proteção indisponível')
-    const corpo = await r.json() as { primeiros?: Record<string, { em: number }>; resolvidas?: Resolvidas; pausaPrimeiros?: { detalhe: string } | null }
+    const corpo = await r.json() as { primeiros?: Record<string, { em: number }>; pausaPrimeiros?: { detalhe: string } | null }
     pausaPrimeiros.value = corpo.pausaPrimeiros ?? null
     if (corpo?.primeiros && typeof corpo.primeiros === 'object') primeirosDoServidor.value = corpo.primeiros
-    resolvidas.value = corpo?.resolvidas && typeof corpo.resolvidas === 'object' ? corpo.resolvidas : {}
     absorverDia(corpo)
   } catch { pausaPrimeiros.value = { detalhe: 'Não foi possível conferir a proteção. Aguarde a atualização antes de iniciar contato.' } }
 }
@@ -212,18 +206,6 @@ async function liberar(id: string) {
   if (!(await liberarLead(id))) anuncio.value = `${empresa}: envio liberado só nesta aba (o servidor não guardou).`
 }
 
-/**
- * O "Liberar" do recado da Triagem: o mesmo de sempre, lead a lead (liberados.ts), para os do lote que
- * só o horário segura, de uma vez. Em série, para não empilhar POSTs; um anúncio só no fim.
- */
-async function liberarVarios(ids: string[]) {
-  if (!ids.length) return
-  anuncio.value = `${ids.length} prospect${ids.length === 1 ? '' : 's'}: convite liberado fora do expediente hoje.`
-  let guardados = 0
-  for (const id of ids) if (await liberarLead(id)) guardados++
-  if (guardados < ids.length) anuncio.value = `${ids.length - guardados} liberado${ids.length - guardados === 1 ? '' : 's'} só nesta aba (o servidor não guardou).`
-}
-
 // O n8n refaz o retrato logo depois de gravar o registro (uns 5 s).
 function depoisDoRegistro() {
   emit('registrado')
@@ -262,26 +244,10 @@ onBeforeUnmount(() => {
 
 const leads = computed(() => (visao.value?.leads ?? []).filter(l => produto.value === 'todos' || l.produto === produto.value))
 const porId = computed(() => new Map((visao.value?.leads ?? []).map(l => [l.id, l] as [string, CrmLead])))
-const hoje = computed<CrmGrupoHoje[]>(() => (visao.value?.hoje ?? []).map(g => ({
-  ...g,
-  itens: g.itens.filter(i => produto.value === 'todos' || porId.value.get(i.leadId)?.produto === produto.value),
-})))
-// O número da aba "Conversas para você" é o tamanho da própria lista (conversasParaVoce): a mesma conta
-// do "Sua vez" da Central, sem os primeiros contatos (que são da aba Primeiros contatos, AC-02).
-const totalAFazer = computed(() => (visao.value?.leads ?? []).filter(l => (l.marcos.enviado || l.proximoPasso || l.conversa) && planoDoLead(l,agora.value).tipo === 'agir').length)
-// Triagem (OT-05, AC-10): só os prospects para revisar, em lotes de 10 (triagem.ts), longe da fila de venda.
-const triagem = computed(() => hoje.value.find(g => g.id === 'revisar') ?? null)
-// Com a aba aberta, o número é o que ela conta (sem os dispensados e convidados desta tela que o
-// retrato ainda não confirmou); fora dela, o tamanho do grupo do servidor.
-const restantesDaTriagem = ref<number | null>(null)
-watch(vista, (v) => { if (v !== 'triagem') restantesDaTriagem.value = null })
+const conversasPendentes = computed(() => visao.value?.estado === 'ok' ? conversasParaConduzir(leads.value, agora.value) : [])
+const totalAFazer = computed(() => conversasPendentes.value.length)
 // Voltou a uma aba que usa o dia do servidor: relê já, em vez de esperar o próximo ciclo de 30 s.
 watch(precisaDoDia, (usa) => { if (usa) void lerDoDia() })
-// O mínimo: a última conta da aba não pode passar do grupo (ela não conta de novo ao desmontar).
-const totalTriagem = computed(() => {
-  const doServidor = triagem.value?.itens.length ?? 0
-  return restantesDaTriagem.value === null ? doServidor : Math.min(doServidor, restantesDaTriagem.value)
-})
 // Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
 const avisoDaFila = computed(() => avisoDeHorario((visao.value?.leads ?? []).filter(l => l.produto === 'site'), agora.value))
 // Todas as ofertas: o teto é do número de WhatsApp, não do filtro da tela.
@@ -374,11 +340,6 @@ function abrirFicha(id: string) {
   leadId.value = id
   escreverEndereco()
 }
-function conduzirCliente(id: string) {
-  detalheDoCliente.value = 'orientacao'
-  leadId.value = id
-  escreverEndereco()
-}
 function mudarDetalheDoCliente(detalhe: DetalheDoCliente) {
   detalheDoCliente.value = detalhe
   escreverEndereco(true)
@@ -447,7 +408,7 @@ function abrirColinha() {
           {{ a.id === 'afazer' ? 'Conversas' : a.rotulo }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span>
         </a>
       </nav>
-      <nav v-if="aba === 'entender'" class="crm-entender" aria-label="Análises de Vendas"><a v-for="s in SECOES_DE_ENTENDER" :key="s.id" class="botao botao--leve" :href="`/crm?ver=${s.id}`" :title="s.dica" :aria-current="vista === s.id ? 'page' : undefined" @click.prevent="trocarVista(s.id)">{{ s.id === 'numeros' ? 'Diagnóstico' : s.rotulo }}</a></nav>
+      <nav v-if="aba === 'entender' && SECOES_DE_ENTENDER.length > 1" class="crm-entender" aria-label="Análises de Vendas"><a v-for="s in SECOES_DE_ENTENDER" :key="s.id" class="botao botao--leve" :href="`/crm?ver=${s.id}`" :title="s.dica" :aria-current="vista === s.id ? 'page' : undefined" @click.prevent="trocarVista(s.id)">{{ s.id === 'numeros' ? 'Diagnóstico' : s.rotulo }}</a></nav>
       <!-- Entender: as três seções num segmentado (BP-SEGMENTADO) e o Roteiro de venda, que mora no Mais. -->
 
       <!-- As ofertas num "Filtros" fechado, com a escolhida no resumo: filtrar é ajuste, não a decisão. -->
@@ -460,18 +421,24 @@ function abrirColinha() {
     </div>
 
     <template v-if="visao">
-      <FilaAcaoBi v-if="vista === 'afazer'" :leads="leads" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" @abrir="conduzirCliente" />
+      <section v-if="vista === 'afazer'" class="painel-venda" aria-label="Respostas para você">
+        <h2>Respostas para você</h2>
+        <p>O agente fez a abertura. A partir daqui, você conduz.</p>
+        <p v-if="erro || velho" class="recado recado--atencao" role="status">Atualize a leitura antes de atender.</p>
+        <ol v-if="conversasPendentes.length" class="crm-conversas">
+          <li v-for="item in conversasPendentes" :key="item.lead.id">
+            <strong>{{ item.lead.empresa }}</strong> · {{ item.rotulo }}
+            <button class="botao botao--primario" type="button" @click="abrirFicha(item.lead.id)">Abrir conversa e ficha</button>
+          </li>
+        </ol>
+        <p v-else-if="visao.estado === 'ok' && !erro && !velho">Nenhuma resposta ou combinado pendente nesta leitura.</p>
+        <p v-else role="status">Não foi possível confirmar as respostas pendentes.</p>
+      </section>
       <CrmBi v-else-if="vista === 'bi'" :visao="visao" :leads="leads" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" @abrir="abrirFicha" />
       <!-- O time só pega o Site em `pronto`; a Triagem (`revisar`) e o Convidar seguem do Rômulo (19/10/2026). -->
       <template v-else-if="vista === 'triagem'">
-        <FrenteComercial />
-        <CrmHoje
-          v-if="triagem?.itens.length" :grupo="triagem" :leads="porId" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo" :agora="agora"
-          :registro="visao.registro" :confirmavel="visao.estado === 'ok'"
-          @abrir="abrirFicha" @conduzir="conduzirCliente" @liberar-lote="liberarVarios" @primeiro="marcarPrimeiroContato" @registrado="depoisDoRegistro" @restantes="restantesDaTriagem = $event"
-          @sinais-lidos="carregar()"
-        />
-        <p v-else class="crm-vazio"><strong>Nada para triar.</strong> Quando os caçadores acharem prospects novos, eles aparecem aqui.</p>
+        <FrenteComercial configurar />
+
       </template>
       <template v-else-if="vista === 'numeros'">
         <!-- No Funil cada coluna (ou aba, no celular) já traz o número: o resumo só repetiria. -->
