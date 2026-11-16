@@ -1,20 +1,156 @@
 # Regras do repositório
 
-## Conferência das 19 conversas de Estamparia (26/10/2026)
+## Reconstrução comercial vigente (16/11/2026)
 
-A conferência operacional foi concluída por solicitação do Rômulo neste chat.
-Quinze das 19 entradas foram comprovadas pela sessão existente; quatro legados
-já respondidos só podem aguardar novo retorno, sem fabricar prova nem liberar
-transporte pelo histórico. A nova entrada precisa de comprovação normal. Duas
-divergências comprovadas de um segundo foram conciliadas com backup e auditoria,
-preservando IDs, conteúdo e recibos. Recusas recuperadas suspendem contato.
-Saudação automática não equivale a pessoa nem gera qualificação ou encaminhamento.
-Uma resposta indevida à saudação da Ultra Placas foi conservada com seu recibo;
-o tratamento do bot foi corrigido, sem apagar ou repetir o envio.
+Rômulo confirmou softban do WhatsApp por spam após os disparos de 13/11 e
+autorizou reconstruir a operação da Prumo e o CRM que a atende. Esta direção
+substitui as regras anteriores que liberavam primeiros contatos sem limites ou
+tratavam diagnóstico e demonstração como passagem obrigatória de toda venda.
+O histórico abaixo permanece como registro das decisões anteriores.
 
-O escritório exibe cada responsável e próximo passo. A projeção da tela compartilha
-uma leitura; o executor continua conferindo fontes atuais antes de qualquer envio.
+Primeiros contatos automáticos ficam bloqueados independentemente de conexão,
+horário, quotas ou configuração ativa. Não drenar a fila antiga ao reconectar,
+não usar número público como permissão e não trocar conta para contornar a
+restrição. A eventual retomada requer um fluxo próprio de elegibilidade por
+destinatário e regras do provedor; alterar uma flag não basta. Conversas e
+compromissos existentes permanecem preservados, com suas autorizações próprias.
 
+A aquisição começa pela necessidade concreta. Site e implantação de um fluxo
+comercial são hipóteses iniciais; outros produtos têm avaliação dirigida de
+prontidão, comprador e economia. Raio-X e Mapa são instrumentos opcionais.
+Preços, contratos e critérios de qualidade permanecem nas fontes da Prumo.
+
+A Carteira separa cadastro, conta, conversa, oportunidade, proposta, contratação
+e recebimento. Telefone compartilhado não prova identidade de empresa. Silêncio
+ou expiração legada exige revisão e não comprova recusa; resposta, material e
+ganho marcado não comprovam pagamento. Uma próxima ação com responsável e
+evidência deve orientar o trabalho, sem consenso obrigatório de três LLMs.
+
+Plano, critérios de validação e responsabilidades:
+`docs/PRUMO-RECONSTRUCAO-COMERCIAL-2026-11-16.md`. Pesquisa e contrapontos:
+`docs/PRUMO-PESQUISA-CRM-2026-11-16.md`. Documentação ou código local não
+comprovam publicação nem cobertura de emissores externos.
+
+## Envios e renovação dos leads (13/11/2026)
+
+Rômulo pediu retirar as travas de envio e confirmou remover também aprovações dos
+três agentes e filtros comerciais. Cotas diária/horária, intervalo obrigatório,
+expediente/feriados, limite de dez pendências e metas/datas de campanha deixam de
+interromper os primeiros contatos. A política compartilhada está em
+`config/politica-envios.json`; substitui as restrições operacionais anteriores.
+
+A direção é buscar empresas novas, com dados públicos atuais, em outros serviços
+e cidades. O manifesto registra `pesquisaNovaDesde` para retirar a carteira antiga
+da fila atual sem apagá-la ou reenviá-la. Notas antigas e modelo de curadoria não
+são condições de envio e nenhuma nota substituta é fabricada. A pesquisa continua
+gratuita, com orçamento de leitura separado dos envios.
+
+Preservar recusas/exclusões, validade do destinatário e da mensagem, histórico,
+reservas atômicas, ausência de reenvio de resultado incerto e parada manual. A
+retirada de cotas internas não contorna desconexão ou restrição real do provedor.
+
+## Reposição conforme o consumo (12/11/2026, correção)
+
+A cadência de dez minutos exige reposição contínua. O timer verifica a fila a
+cada dois minutos após cada rodada de pesquisa, dentro do calendário comercial.
+O estoque alvo é de seis contatos aprovados ou cadastros próprios ainda nos três
+pareceres; reprovados, contatos anteriores, recusas, exclusões e destinos sem
+WhatsApp não contam como estoque. A meta permanece em vinte envios por dia.
+
+A pesquisa continua gratuita e limitada a 480 leituras públicas por dia, sem
+zerar o uso acumulado nem ampliar o teto de mensagens ou de avaliações do modelo.
+Novos cadastros solicitam o retrato pelo webhook autenticado de leitura existente
+e aguardam sua presença no CRM. Falha conserva uma pendência privada para nova
+tentativa. Uma fila consumida aparece em reposição; somente a meta cumprida ou
+uma campanha finita concluída representa encerramento do lote.
+
+A leitura reconhece tanto `data-item-id=oh` quanto o componente atual
+`pane.openhours` do Google Maps. Categoria pública conferida segue com origem e
+data para os pareceres, sem confirmar atividade atual, necessidade ou decisor.
+Horários isolados não dispensam nome, Place ID, endereço e telefone inequívoco.
+
+
+Rômulo pediu mudar o espaço entre disparos para dez minutos e acompanhar o próximo
+envio, corrigindo bloqueios sem nova cobrança. O ritmo compartilhado passa a dez
+minutos e seis primeiros contatos por hora móvel, mantendo vinte por dia, expediente,
+feriados, pausas, dez pendências por rodada e as três aprovações. Substitui os 30
+minutos e dois/hora da autorização anterior. Não é uma exceção que expira hoje.
+
+## Cadência de dez minutos (12/11/2026, atualização)
+
+Rômulo pediu mudar o espaço entre disparos para dez minutos e acompanhar o próximo
+envio, corrigindo bloqueios sem nova cobrança. O ritmo compartilhado passa a dez
+minutos e seis primeiros contatos por hora móvel, mantendo vinte por dia, expediente,
+feriados, pausas, dez pendências por rodada e as três aprovações. Substitui os 30
+minutos e dois/hora da autorização anterior. Não é uma exceção que expira hoje.
+
+## Prospecção contínua autorizada (12/11/2026)
+
+Rômulo solicitou corrigir a interrupção dos disparos, criar regressões e manter
+campanhas nos dias úteis com aprovação dos três agentes, buscando leads diariamente
+até fechar. O manifesto opt-in `continuo-dias-uteis`, restrito a novos contatos de
+Site, substitui o lote datado de 10/11. Mantém 20/dia, 2/h, 30 minutos, expediente,
+feriados, dez pendências por rodada e três notas mínimas de 65. Não amplia retomadas
+nem apaga restrições, recusas ou histórico. A fonte deve ser atual e verificável;
+nenhuma cota autoriza inventar qualificação, demo ou envio.
+
+`prospeccao-diaria` repõe candidatos por perfis públicos sem API paga. Cadastro
+exige Place ID, nome, telefone, endereço e horários, sem site próprio observado ou
+com canal social no campo Site. A ausência de link continua sendo hipótese. Dedupe
+consulta todas as ofertas e estados, preservando recusas e exclusões. A inclusão
+na planilha não aprova nem envia: o executor mantém sua avaliação, reserva e gates.
+
+Pausas de proteção e fim de campanhas têm motivo explícito e aviso durável. A
+retomada desta correção usa a rota normal, com conta conectada e CRM atual; as quatro
+pendências anteriores continuam na rodada. A pesquisa lê o manifesto vigente,
+sem o corte obsoleto de 6/11. Falha de pesquisa/aviso permanece observável e pode ser
+tentada novamente; falha ambígua de envio nunca é repetida.
+
+
+
+## Conciliação dirigida de captura (03/11/2026)
+
+Rômulo autorizou corrigir as divergências de AV. Serviços e Atual Serviços e retomar a campanha com os mesmos limites. Conciliações de relógio usam registro privado separado, vinculado ao conjunto exato de provas revisadas, mesmo ID, conteúdo, direção e conta. Os JSONL originais não são alterados; o limite de dois segundos só vale para o registro nominal autorizado. Prova nova ou divergência de conteúdo/conta continua bloqueando. A conciliação invalida o contexto derivado e não envia, libera rodada ou inventa resposta humana.
+
+
+## Curadoria diária e autonomia dos agentes (26/10/2026)
+
+Rômulo pediu revisar todos os contatos do dia, ajustar a fila e criar um agente
+que aprenda diariamente quais leads merecem abordagem. Marina foi contratada
+em Prospecção para essa curadoria transversal. Neste chat, Rômulo também
+autorizou alinhar Diego, Elisa e Prospecção e criar, ajustar ou arquivar agentes
+conforme a utilidade dos papéis. Usar o ciclo de vida existente e preservar o
+histórico; essa autonomia de equipe não altera preços, limites ou autorizações
+de mensagens.
+
+O serviço `curadoria-leads` revisa a fonte às 07h20 e 18h40 de São Paulo.
+`filtro_leads.py` adia casos sem aderência, com recusa/exclusão, destino
+confirmadamente sem WhatsApp ou mensagem afirmando demo pronta sem evidência.
+Não exige produzir demo antes da descoberta: oferta sob demanda continua válida.
+Dados incompletos adiam a fila automática, sem apagar o lead ou mudar seu funil.
+
+O aprendizado deriva do CRM e dos recibos existentes, com memória privada de
+atributos públicos e histórico diário. Robô, silêncio, acesso e permissão não
+rotulam fracasso. Qualificação confirmada, proposta, pagamento e recusa são
+resultados distintos; agradecimento não apaga restrição ou encaminhamento.
+Comparar a mesma oferta, deduplicar destinos, excluir atribuição ambígua entre
+ofertas, observar 48h e janela de 90 dias. Ajuste de prioridade até 5 só com dez
+casos rotulados no grupo e na comparação e intervalos de 95% separados; nunca
+veta um setor nem substitui as três notas mínimas de 65. Dados insuficientes
+mantêm ajuste zero. Isso não estima probabilidade de venda ou causalidade.
+
+Modelo ausente, inválido ou com mais de 30h interrompe novos contatos. Mudança
+efetiva da régua invalida avaliações; recibos ficam preservados. A consulta
+`ler_filtro_leads` expõe somente agregados ao agente; conversas, telefones e
+valores não entram nessa memória de inferência. O executor tolera até 90s para
+ler o CRM completo, conservando a verificação de atualidade e as revalidações
+anteriores ao envio. A curadoria não tem ferramenta de envio.
+
+Parecer de seleção fora do contrato adia seu lote, preservando os já aprovados.
+Não se trunca nem completa uma resposta do modelo para presumir aprovação; o
+orçamento de inferência permanece compartilhado e a pendência exige nova leitura.
+
+Relatório e validação em `docs/PRUMO-CURADORIA-LEADS-2026-10-26.md`.
 
 ## Atendimento automático de Estamparia (26/10/2026)
 
@@ -35,47 +171,89 @@ pedem encaminhamento ao Rômulo; não há preço aprovado de Estamparia nem envi
 Raio-X/Mapa como se pertencessem a essa oferta. Pausa, recusa, desfecho, compromisso,
 responsabilidade humana e resultado de envio incerto continuam protegidos.
 
-## Automação do Encontrado (25/10/2026)
+## Prioridade comercial por oferta (26/10/2026)
 
-**Terceiro lote autorizado:** proposta padrão versionada e aceite pela Autentique,
-com automação das etapas repetíveis e somente decisões reais para Rômulo. A Prumo
-prestará o serviço como pessoa jurídica; ainda não há conta Autentique. Preparar o
-cadastro privado, modelo concreto e integração antes da ativação. Aprovação única
-do padrão vincula os bytes e condições exatos; não presumir aprovados os campos
-marcados como sugestão no modelo visual antigo. Dados faltantes do cliente devem
-ser solicitados ao próprio cliente, sem fabricar qualificação humana. Convite e
-documento criado não comprovam assinatura. Aceite exige consulta autenticada da
-versão e dos signatários exatos; nunca assinar pelo cliente ou por Rômulo. Cobrança
-continua separada e exige o cliente ver o site funcionando. Preservar condições
-individuais, pausas e tomada humana. Não usar clientes reais para testar.
+Rômulo aprovou ajustar a prospecção para vender melhor: Site/Encontrado é a
+frente principal entre candidatos aprovados; CRM de estamparia é venda dirigida,
+com necessidade, impacto e decisor confirmados no SPICED do CRM. Sinais públicos,
+categoria e sugestões do modelo não substituem essa confirmação. O ajuste não
+interrompe conversas existentes nem autoriza primeiros contatos a quem já foi
+contatado. Falta de confirmação adia a prospecção automática; não descarta o lead.
 
-**Segundo lote autorizado:** qualificação automática e preparação dos materiais
-solicitados, com intervenção humana somente para decisões reais. O sistema pode
-perguntar a lacuna seguinte, interpretar respostas com citações verificadas e
-preparar Raio-X/demo especificamente pedidos, reutilizando os geradores e a régua
-de qualidade existentes. Leituras automáticas são derivadas da conversa, com
-origem e referência; nunca usam `humano:true` nem substituem notas humanas.
-Material solicitado tem prioridade sobre completar questionário. Preparar não
-comprova envio; material pronto só sai após nova conferência do contexto e do
-pacote exato. Preservar pausas, condições individuais, tomada humana e o corte
-próprio da nova capacidade. Não criar contato ou geração real para testar.
+Cada Site exige achado estruturado do Raio-X referente a site/perfil; ausência
+de link não comprova ausência de site. A seleção mantém as três aprovações com
+mínimo 65 e diversidade de setores dentro da oferta. Sites aprovados vêm antes
+das demais ofertas, sem cota de envios e sem relaxar os critérios para preencher
+fila. A alternância automática de ofertas e o bônus por taxa de resposta da
+regra de 23/10 ficam substituídos por esta direção. Respostas permanecem no BI.
 
-Rômulo autorizou implementar em ordem a operação automática, começando pelo
-Encontrado, com intervenção humana somente nas exceções. Para essa oferta,
-respostas padronizadas a novas entradas verificadas podem ser executadas pela
-política versionada, sem aprovação por mensagem. Essa autorização substitui o
-limite de somente rascunho exclusivamente nas ações homologadas desse caminho.
-Preservar condições individuais, recusas, esperas e tomada humana da conversa.
-Prospecção continua pausada; eventos anteriores à ativação não autorizam retomada.
-Preço e escopo vêm da fonte canônica, nunca de texto livre do modelo. Proposta,
-contratação e recebimento exigem suas evidências e integrações próprias; FAQ de
-preço não cria nenhum desses fatos. Rômulo autorizou escolher os provedores:
-Asaas para cobrança e Autentique para assinatura, inicialmente sem efeitos reais.
-Não alterar o escritório para implantar essa automação.
+Cada escolha apresenta por que a empresa poderia comprar (evidência ou hipótese),
+por que aquela oferta, por que abordar agora e a viabilidade comercial. Custos,
+margem, urgência e prazo de fechamento desconhecidos são explicitados, nunca
+inventados. A qualificação privada não entra no prompt de seleção: somente os
+indicadores booleanos de confirmação. Mudanças na qualificação, responsável ou
+política invalidam avaliações antigas, preservando recibos e registros.
+
+O objetivo é comparar qualificação, proposta, recebimento, ciclo e margem quando
+houver dados; resposta humana e nota não equivalem a venda ou probabilidade.
+Condições e preços continuam nas fontes oficiais da Prumo. Limites, pausas,
+proteções da conta e regras do atendimento permanecem vigentes.
+
+## Reorganização comercial e preservação do escritório (23/10/2026)
+
+Rômulo autorizou executar o plano de reorganização por fases neste chat, com
+subagentes de escopo delimitado. Preservar o escritório isométrico, cenário,
+personagens/sprites, mesas, quadros, câmera e navegação. Melhorias comerciais
+devem usar os quadros, indicadores e painéis existentes; as filas “Precisa de
+você”, “Time em execução” e “Aguardando cliente” são agrupamentos operacionais,
+sem exigir nova home ou substituir o escritório por um dashboard.
+
+“Minhas decisões” continua sendo o acesso às pendências humanas, e “Decisões dos
+agentes” ao trabalho do time, com evidências, responsável, próxima ação e condição
+de espera. Validar os cliques, os painéis e o retorno ao escritório no desktop e
+celular. Redesenho integral está fora deste plano. Preservar alterações anteriores
+e publicar por lotes verificáveis; nenhuma fase reativa caçadores pausados.
+
+O prompt de transição do VENDAS/Grok já foi comunicado por Rômulo. Isso não
+comprova a pausa das tarefas na VM e não cria sincronização com a aba CRM.
+
+## Qualidade da seleção comercial (23/10/2026)
+
+Rômulo autorizou ajustar as avaliações dos agentes e manteve a abordagem atual
+da demo de Site sob demanda, preparada em cerca de dez minutos. Não exigir demo
+prévia como condição de seleção. A falta de resposta não comprova lead ruim.
+
+Diego verifica perfil e destino; Elisa verifica evidência e pertinência da entrega;
+Carla verifica abordagem e próximo passo. Os primeiros pareceres não recebem as
+opiniões dos colegas. Cada papel precisa aprovar com pelo menos 65; a menor nota
+governa a prioridade, sem compensação por média. Mudanças na ficha, texto ou régua
+invalidam o cache da avaliação, preservando o histórico e os recibos de envio.
+
+Os sinais públicos da triagem chegam às três leituras. Na seleção automática,
+Iris exige evidência de público infantil/TEA; Estamparia exige roupa e personalização,
+conforme o perfil já definido na Prumo. Ficha insuficiente aguarda conferência sem
+ser descartada do CRM. Sinal público não confirma dor, decisor ou intenção de compra.
+O sinal histórico por setor usa contatos com pelo menos 48 h e dez casos, separando
+robô e recusa de indicação humana. Limites, textos e operação das conversas ficam
+nas regras existentes; esta revisão não reabre pausas nem muda a rodada comercial.
 
 ## BI e rodada comercial (23/10/2026)
 
-Por decisão do Rômulo: BI investigável de público, mensagem, sequência e escolhas dos agentes; ação por cliente com evidência, responsável e resultado esperado. Até 15 primeiros contatos/dia, 2/h e 30 min. Até dez sem resposta humana desde o início da rodada; sem expiração automática. Resposta humana posterior libera vaga; revisão humana com motivo inicia outra rodada e conserva auditoria. Substitui a pausa proporcional por silêncio; preserva restrições, desconexão, pausas e gates. Reservas persistidas antes de liberar executor; falha fecha a rodada. Vendas e as conversas existentes continuam fontes comerciais.
+Pedido do Rômulo: ações com evidência, responsável e resultado esperado; BI de
+público, mensagens, sequências e escolhas dos agentes. O BI deriva das fontes
+existentes, distingue classe atual de marco histórico e não muda o negócio
+automaticamente. Comparações descritivas usam contatos maduros (48 h), mostram
+denominador e cobertura e não declaram causalidade ou vencedor de A/B.
+
+Decisão confirmada pelo Rômulo: até 15 novos contatos/dia, 2 por hora e 30 minutos
+entre contatos; até 10 aguardando resposta humana desde o início da rodada.
+O controle não zera à meia-noite nem após reinício. Robô, recibo, passagem do tempo,
+perda por prazo e erro ambíguo não liberam vaga. Resposta humana posterior observada
+libera a vaga; revisão humana explícita com motivo inicia outra rodada e guarda
+a contagem anterior. O limite de 10 substitui a pausa por proporção de silêncio,
+preservando bloqueio, restrição, desconexão, pausas e demais gates. Não há número
+seguro publicado pela Meta nem ampliação da autorização de respostas automáticas.
+O controle de reservas é operacional, privado; a aba CRM continua fonte comercial.
 
 ## Classificação contextual das respostas (22/10/2026)
 
@@ -593,3 +771,160 @@ não agenda ações e não reescreve estratégia, preço ou prompt automaticamen
     rodaram, regra 14), e a saída do modelo é texto interpolado, nunca HTML (regra
     23). Tetos por dia: 60 mensagens e 20 consultas ao Hermes. O catálogo de
     trabalhadores fica fora do prompt (regra 26). As duas flags nascem desligadas.
+
+
+## Conciliação dirigida de Protect Pragas, Vicente Quesado e Detone (04/11/2026)
+
+Rômulo autorizou neste chat corrigir as três capturas, revisar nove pendências e abrir nova rodada para quinta com os mesmos limites. Protect/Vicente usam vínculos nominais de reentrega às provas Evolution anteriores. Detone exige opt-in `capturaCanonicaTardia: true`: a tuple canônica preservada é a prova Hermes tardia e a âncora Evolution comprova a mesma mensagem antes do horário tardio. Ambas as provas exatas, mesmo ID, direção, conteúdo e conta são obrigatórias. Originais e horários não são alterados, prova nova invalida a revisão e não há aumento de tolerância global. A correção não envia nem confirma autoria humana; respostas continuam com Rômulo.
+
+
+## Conciliação dirigida de Ninja e Renan (06/11/2026)
+
+Rômulo autorizou neste chat corrigir Ninja e Renan, revisar a pausa da conta e nove pendências, abrir nova rodada e retomar com os mesmos limites. Ninja usa conciliação nominal de um segundo; Renan vincula a reentrega Hermes sete segundos tardia à prova Evolution anterior pelos hashes exatos. Mesmo ID, direção, conteúdo e conta e o conjunto integral das provas revisadas são obrigatórios. Capturas, horários e provas originais permanecem intactos; prova nova invalida a revisão, sem aumentar tolerância global. A revisão da conta foi feita com conexão direta confirmada e CRM atual; liberação pela rota normal. Respostas continuam com Rômulo.
+
+
+## Avisos automáticos na revisão comercial (06/11/2026)
+
+Rômulo pediu corrigir Vicente, Celião e Oswaldo e impedir que avisos de recepção, ausência e expediente sejam tratados como respostas humanas. O classificador compartilhado, versionado como respostas-2026-11-06-avisos, reconhece moldes completos; saudação ou horário com conteúdo comercial humano adicional não são consumidos por esses moldes. Na revisão, usar a classificação atual: classe robo e houveRespostaHumana false não criam interesse, permissão ou tarefa de responder ao cliente. Estado humano de um handoff interno indica o responsável pela tarefa técnica, não a autoria do cliente. Identidade conflitante, recusa, exclusão e contexto insuficiente continuam protegidos. Nova entrada deve ser classificada pelo novo contexto; não perpetuar uma revisão nominal por nome. Originais e evidências anteriores ficam preservados.
+
+
+## Próxima campanha preparada sem envio (06/11/2026)
+
+Rômulo autorizou corrigir Serviço Fácil, aplicar melhorias de mensagens e seleção e preparar a próxima campanha, sem iniciar novos envios. Serviço Fácil tem recusa contextual com revisar=true por negação truncada; a leitura retira o interesse e preserva mensagem, fonte e incerteza, sem marcar fechamento ou apagar histórico. A regra é contextual, não uma lista nominal permanente.
+
+A abertura E (descoberta-site-v1-20261106) usa fato estruturado e uma pergunta sobre a rotina; não oferece demo na abertura, não afirma perda de clientes nem ausência de site na internet. Ficha sem fato adequado fica adiada. A série E fica fora dos pares A/B/C/D históricos. O Balcão existente foi atualizado apenas no código da abordagem, preservando seu estado ativo e os contatos anteriores; 19 fichas não contatadas receberam a versão E.
+
+O executor exige fonte válida vinculada ao nome e destino, conferência específica do fato e mensagem E. Prioriza falha técnica observada sobre hipótese do perfil, preservando diversidade e três pareceres mínimos de 65; essa ordem é comercial, não probabilidade nem aprendizado estatístico. Mudanças invalidam avaliações anteriores. Fontes reaproveitadas mantêm a data original; a revalidação na data da liberação continua obrigatória.
+
+Preparação: 17 candidatos avaliados, 12 aprovados por três pareceres reais cada, cinco adiados pelos pareceres e um outro confirmado sem WhatsApp. Piloto proposto de dez principais e duas reservas, sem somar reservas à meta. Configuração em config/campanha-site-2026-11-09.preparacao.json; manifesto privado é rascunho separado, não foi instalado como autorização ativa. Nenhuma liberação de nova semana foi presumida.
+
+O executor foi pausado pela rota normal (ativo=false). Rodada atual e cinco pendências preservadas; nenhuma rodada, reserva ou mensagem nova. Mantidos 15/dia compartilhados, dois/hora, 30 minutos, dez pendências, três notas >=65, maturação de 48h e mínimos estatísticos. Antes de liberar: autorização explícita, revisão das pendências e recibos/conversas com inicioAnterior, dados e pareceres frescos, fonte válida, canal e unicidade em todas as ofertas, conta/observador/CRM e gate. Não reativar caçadores; não alterar Silmer.
+
+Validação: 238 testes TypeScript na Mel, dez testes Python de seleção, dois testes de publicação restrita do Balcão, 86 testes TypeScript locais, typecheck e build. Recibos e manifesto da campanha encerrada intactos. Evidência privada: /home/romulo-sutil-corr-a/.cache/mel-work/proxima-campanha-20261109/20261106T220135Z.
+
+
+## Liberação do piloto de Site para 09/11 às 08h (08/11/2026)
+
+Rômulo pediu neste chat: “prossiga até liberar”. O manifesto campanha-site-ativa.json em ~/.local/share/squadone-operations está ativo exclusivamente para 09/11, sem envio antes das 08h de São Paulo. Onze perfis públicos foram reconferidos; 33 pareceres reais atuais aprovaram nove. BS Construção e Reforma (62) e Sergio Pavão (58) foram adiados por Elisa; José Coelho foi promovido da reserva. Teto do piloto: nove; sem reservas restantes. Não ampliar a coorte para completar cota.
+
+Cinco recibos e seis mensagens foram revisados: quatro silêncios e um encaminhamento sem autoria humana confirmada. Garcia foi conciliado nominalmente pelos hashes exatos das provas, mesma conta/ID/conteúdo/direção e diferença de dois segundos. Originais preservados, sem tolerância global nova. Rodada revisada pela rota normal com inicioAnterior, histórico preservado, e pausa de proteção liberada pela configuração normal após conta conectada.
+
+Higiene e curadoria atualizadas; quatro pesquisas vencidas receberam evidências das consultas públicas reais desta liberação, com backup e sem API paga. Mantidos 15/dia compartilhados, 2/h, 30 min e dez pendências. Reavaliação real da data de execução e hash atual continuam obrigatórios; cache de domingo não vale como parecer de segunda. A revisão das 08h30 só gera relatório. Caçadores e Silmer preservados.
+
+Conferência final: executor e timer ativos, nove na fila com três notas >=65, próximo envio 2026-11-09T08:00:00-03:00; 41 testes aprovados. Nenhuma nova reserva ou mensagem na liberação, recibos e manifesto anterior intactos. Evidência privada: /home/romulo-sutil-corr-a/.cache/mel-work/liberacao-site-20261109/20261109T021731Z.
+
+
+## Nomes legítimos e aviso de validação comercial (09/11/2026)
+
+Rômulo autorizou corrigir a validação dos nomes, o aviso no painel e retomar os quatro contatos restantes com os limites atuais. O gate aceita o separador de título | e preserva conectivos na sequência de palavras; Franco e Franco não é uma repetição adjacente. Markup, controles, URLs, placeholders, duplicação real e destinatário divergente continuam bloqueados. O nome e a fonte do cadastro não são reescritos.
+
+A API de reserva devolve o motivo legível do gate. Quando as recusas de validação impedem todos os envios tentados, o executor publica estado bloqueado, contagem, motivo e orientação para conferir a mensagem/cadastro; não chama essa rodada de concluída nem inventa previsão de envio. A recusa de um lead ainda permite tentar outro, e a correção é revalidada no ciclo seguinte.
+
+Publicados gate, API e executor após 191 testes na Mel, typecheck e builds; 23 testes locais passaram. Os testes do executor usam autorização, fonte e relógio fictícios, sem ler o manifesto operacional do host. Retomada pela rota normal, sem nova rodada nem ampliação de campanha: 15/dia compartilhados, 2/h, 30 min, dez pendências e nove no piloto. Isolda teve recibo e texto observado em 09/11 às 14h55; os outros três seguem o mesmo ritmo. Originais, recibos anteriores, campanha e início da rodada preservados. Auditoria: /home/romulo-sutil-corr-a/.cache/mel-work/correcao-nomes-20261109/20261109T174650Z.
+
+
+## Limite diário de primeiros contatos (10/11/2026)
+
+Rômulo autorizou neste chat aumentar de 15 para 20 mensagens por dia. O teto compartilhado de primeiros contatos passa a 20; permanecem dois por hora, intervalo mínimo de 30 minutos, dez pendências por rodada e expediente existente. Não abre nova rodada nem amplia campanhas, recontatos ou critérios. Com fechamento antes das 17h30, cabem no máximo 19 contatos a cada 30 minutos desde as 08h. Publicado após 58 testes, typecheck e build, com confirmação pela API limite=20, intervaloMinutos=30 e porHora=2. Auditoria privada: ~/.cache/mel-work/limite-diario-20-20261110.
+
+
+## Expediente comercial até 18h (10/11/2026)
+
+Rômulo autorizou neste chat estender o expediente de primeiros contatos para 08h até antes das 18h de São Paulo, de segunda a sexta exceto feriados. Mantidos 20/dia compartilhados, dois/hora, intervalo mínimo de 30 minutos e dez pendências por rodada. Vinte contatos cabem de 08h a 17h30, condicionados à fila, campanhas e proteções existentes. Regra aplicada na Central, textos e calendário do executor. Validação: 98 testes TypeScript e 85 Python, typecheck e build; API confirmou 20/dia, dois/hora e 30 minutos. Fronteiras instaladas verificadas: 17h30 e 17h59 dentro, 18h fora. Auditoria: ~/.cache/mel-work/expediente-18h-20261110.
+
+
+## Campanha de Site liberada para 10/11/2026
+
+Rômulo autorizou neste chat revisar as oito pendências, preparar e liberar hoje até 20 leads aprovados, mantendo qualidade e 30 minutos. Oito recibos e dez mensagens foram conferidos: seis silêncios e duas entradas sem autoria humana confirmada. A conciliação nominal de Silva & Santos vincula a reentrega Hermes 150 segundos posterior à âncora Evolution anterior; Sandra Regina tem diferença de dois segundos. Mesmos IDs, conteúdo, direção, conta e conjunto exato de provas. Originais e tolerância global preservados; não presume resposta humana nem autoriza responder ou recontatar.
+
+A rodada foi revista pela rota normal com inicioAnterior e histórico preservado. Dos 41 cadastros novos de Site, 29 destinos sem contato anterior tiveram o perfil público reconferido sem API paga; cinco tinham fonte compatível. Quinze pareceres reais atuais aprovaram quatro: Gilson Ienke, BS Construção e Reforma, SL Advogados Associados e Detec Prag. Sergio Pavão foi adiado por Elisa (56); mínima 65 para cada um dos três papéis. Demais casos permanecem adiados/protegidos, sem completar cota com fatos ou identidades divergentes. WhatsApp e gate de texto dos quatro confirmados.
+
+campanha-site-ativa.json está limitado a 10/11/2026, sem envio antes das 08h de São Paulo, com quatro principais, nenhuma reserva e metaContatos=4. O teto compartilhado permanece 20/dia, dois/hora, 30 minutos, expediente até antes das 18h e dez pendências por rodada. A autorização de até 20 não amplia esta lista automaticamente. Executor e timer ativos. Às 07h50, quatro prontos na fila, zero pendências na nova rodada e próximo envio a partir das 08h. Recibos anteriores intactos; nenhum envio/reserva novo na preparação. Trinta e seis testes aprovados. O teste antigo de validade recebeu relógio iso simulado para não depender da data real; regra de produção inalterada.
+
+Auditoria privada: ~/.cache/mel-work/campanha-20261110/20261110T103904Z. Relatório: config/campanha-site-2026-11-10.liberacao.json.
+
+O webhook da Evolution deve incluir `SEND_MESSAGE` além de `MESSAGES_UPSERT`,
+`MESSAGES_UPDATE` e `CONNECTION_UPDATE`. O adaptador já suporta esse evento nativo,
+com dedupe por recibo e filtro de leads. A captura não pode depender do upsert de
+saída. Alterações preservam endereço, header secreto e opções do webhook.
+
+
+
+## Foco e captura em 13/11/2026
+
+A orientação atual do Rômulo é oferecer Site/Encontrado e implantação sob medida de fluxos com IA. Integrações, manutenção e Fonte são complementos condicionados à necessidade. Íris é candidato de nicho, sem prospecção geral nesta etapa; estamparia, PDV, escolar, fiscal, anúncios e redes sociais não entram na campanha geral. Detalhamento: docs/referencia/foco-comercial-2026-11-13.md e config/foco-comercial.json. O recorte de descoberta usa empresas de projetos sob orçamento e não presume necessidade ou compra. Continuam retiradas cotas, intervalo, expediente, limite de pendências e pareceres comerciais; destinatário válido, captura técnica pronta, recusas, exclusões, dedupe e recibos permanecem obrigatórios.
+
+As duas capturas ausentes de 13/11 foram recuperadas por originais retornados da sessão autenticada, sem reenvio. Às 16h58, 28/28 envios tinham histórico, prova exata e marco no CRM, inclusive quatro do novo perfil. Gate de 40 testes aprovado no Dell. Há pendência distinta de 22 lotes históricos de classificação: o primeiro conflita em conteúdo com o mesmo ID já concluído; não modificar IDs/hashes para forçar baixa. Ver docs/referencia/captura-envios-2026-11-13.md.
+
+
+## Conciliação da fila de respostas — 13/11/2026, 18h11
+
+Resolvidos os 22 lotes históricos e quatro entradas posteriores: 26 execuções principais bem-sucedidas, fila de lotes/eventos zerada e 307 registros anteriores da inbox intactos. A divergência vinha de duas transcrições de áudio: conciliar apenas o hash do marcador original já existente na inbox e atestado pela captura da conta, preservando texto derivado para classificar, IDs e horários. Replays antigos não sobrescrevem resposta mais recente. Quatro respostas recentes conferidas na fonte e na Central: três robôs sem resposta humana e uma recusa em Perdido. Nenhum novo envio aos destinos dos lotes durante a conciliação. Gate ampliado: 54 testes aprovados no Dell. Detalhes: docs/referencia/lotes-respostas-2026-11-13.md. Esta atualização encerra a pendência de 22 lotes descrita acima.
+
+
+## Registros complementares preservados do Dell
+
+As decisões datadas abaixo preservam o histórico. Autorizações de aquisição e cadência conflitantes estão substituídas pela direção de 16/11/2026; contratos, suporte e proteções de captura permanecem nos respectivos escopos.
+
+## Reentrega dirigida de Vs Obras (04/11/2026)
+
+Rômulo autorizou corrigir Vs Obras, revisar as dez pendências, abrir nova rodada e retomar com os limites atuais. O registro nominal de reentrega vincula por hashes exatos a prova Hermes tardia à prova Evolution da mesma mensagem já capturada antes do horário tardio. Mantém IDs, direção, conteúdo, conta e provas originais; não aumenta a tolerância global de dois segundos. Prova nova invalida a revisão. As duas entradas automáticas no mesmo segundo continuam simultâneas: não se fabrica uma ordem nem se envia resposta por esta correção.
+
+
+## Conferência das 19 conversas de Estamparia (26/10/2026)
+
+A conferência operacional foi concluída por solicitação do Rômulo neste chat.
+Quinze das 19 entradas foram comprovadas pela sessão existente; quatro legados
+já respondidos só podem aguardar novo retorno, sem fabricar prova nem liberar
+transporte pelo histórico. A nova entrada precisa de comprovação normal. Duas
+divergências comprovadas de um segundo foram conciliadas com backup e auditoria,
+preservando IDs, conteúdo e recibos. Recusas recuperadas suspendem contato.
+Saudação automática não equivale a pessoa nem gera qualificação ou encaminhamento.
+Uma resposta indevida à saudação da Ultra Placas foi conservada com seu recibo;
+o tratamento do bot foi corrigido, sem apagar ou repetir o envio.
+
+O escritório exibe cada responsável e próximo passo. A projeção da tela compartilha
+uma leitura; o executor continua conferindo fontes atuais antes de qualquer envio.
+
+
+## Automação do Encontrado (25/10/2026)
+
+**Terceiro lote autorizado:** proposta padrão versionada e aceite pela Autentique,
+com automação das etapas repetíveis e somente decisões reais para Rômulo. A Prumo
+prestará o serviço como pessoa jurídica; ainda não há conta Autentique. Preparar o
+cadastro privado, modelo concreto e integração antes da ativação. Aprovação única
+do padrão vincula os bytes e condições exatos; não presumir aprovados os campos
+marcados como sugestão no modelo visual antigo. Dados faltantes do cliente devem
+ser solicitados ao próprio cliente, sem fabricar qualificação humana. Convite e
+documento criado não comprovam assinatura. Aceite exige consulta autenticada da
+versão e dos signatários exatos; nunca assinar pelo cliente ou por Rômulo. Cobrança
+continua separada e exige o cliente ver o site funcionando. Preservar condições
+individuais, pausas e tomada humana. Não usar clientes reais para testar.
+
+**Segundo lote autorizado:** qualificação automática e preparação dos materiais
+solicitados, com intervenção humana somente para decisões reais. O sistema pode
+perguntar a lacuna seguinte, interpretar respostas com citações verificadas e
+preparar Raio-X/demo especificamente pedidos, reutilizando os geradores e a régua
+de qualidade existentes. Leituras automáticas são derivadas da conversa, com
+origem e referência; nunca usam `humano:true` nem substituem notas humanas.
+Material solicitado tem prioridade sobre completar questionário. Preparar não
+comprova envio; material pronto só sai após nova conferência do contexto e do
+pacote exato. Preservar pausas, condições individuais, tomada humana e o corte
+próprio da nova capacidade. Não criar contato ou geração real para testar.
+
+Rômulo autorizou implementar em ordem a operação automática, começando pelo
+Encontrado, com intervenção humana somente nas exceções. Para essa oferta,
+respostas padronizadas a novas entradas verificadas podem ser executadas pela
+política versionada, sem aprovação por mensagem. Essa autorização substitui o
+limite de somente rascunho exclusivamente nas ações homologadas desse caminho.
+Preservar condições individuais, recusas, esperas e tomada humana da conversa.
+Prospecção continua pausada; eventos anteriores à ativação não autorizam retomada.
+Preço e escopo vêm da fonte canônica, nunca de texto livre do modelo. Proposta,
+contratação e recebimento exigem suas evidências e integrações próprias; FAQ de
+preço não cria nenhum desses fatos. Rômulo autorizou escolher os provedores:
+Asaas para cobrança e Autentique para assinatura, inicialmente sem efeitos reais.
+Não alterar o escritório para implantar essa automação.
+
+## Fila de respostas conciliada — 13/11/2026, 18h11
+
+Os 22 lotes pendentes e quatro entradas posteriores foram concluídos (26 sucessos), com fila vazia. Dois envelopes de áudio foram conciliados somente com o marcador original comprovado e já registrado na inbox. Transcrições, IDs, horários e os 307 registros anteriores da inbox foram preservados. Replays antigos não substituem resposta mais recente. Três robôs e uma recusa recentes conferidos na fonte e na Central, sem divergências. Nenhum novo envio aos destinos desses lotes durante a conciliação. Gate de 54 testes aprovado. Esta atualização encerra a pendência registrada antes; ver docs/referencia/lotes-respostas-2026-11-13.md.

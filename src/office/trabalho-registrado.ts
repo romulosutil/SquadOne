@@ -23,7 +23,7 @@ export function lerTrabalhoRegistrado(texto: unknown, agora = Date.now()): Traba
 }
 export function trabalhosRegistrados(lead: Pick<CrmLead,'eventos'>, agora = Date.now()): TrabalhoRegistrado[] {
   const vistos = new Map<string,TrabalhoRegistrado>(), invalidos = new Set<string>(), corrigidos = new Set<string>()
-  const registros = [...lead.eventos].filter(e=>e.tipo==='nota' && e.origem==='manual' && Number.isFinite(Date.parse(e.em)) && Date.parse(e.em)<=agora).sort((a,b)=>Date.parse(a.em)-Date.parse(b.em))
+  const registros = [...(Array.isArray(lead.eventos) ? lead.eventos : [])].filter(e=>e.tipo==='nota' && e.origem==='manual' && Number.isFinite(Date.parse(e.em)) && Date.parse(e.em)<=agora).sort((a,b)=>Date.parse(a.em)-Date.parse(b.em))
   for (const registro of registros) {
     const texto = registro.registroTexto ?? registro.texto
     const trabalho = lerTrabalhoRegistrado(texto, Date.parse(registro.em))

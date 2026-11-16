@@ -1,3 +1,4 @@
+import './testes/politica-historica.ts'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { proximaAbertura, quandoFalado, recadoDasTravas, rotuloDoLiberar } from './operations/recado-de-travas.ts'
@@ -14,7 +15,7 @@ describe('proximaAbertura e quandoFalado: quando o expediente volta', () => {
     assert.equal(proximaAbertura(t), t)
   })
 
-  it('antes das 8h de um dia útil é hoje às 8h; depois das 17h30 de quinta, amanhã', () => {
+  it('antes das 8h de um dia útil é hoje às 8h; depois das 18h de quinta, amanhã', () => {
     const cedo = em('2026-10-15T06:30:00')
     assert.equal(proximaAbertura(cedo), em('2026-10-15T08:00:00'))
     assert.equal(quandoFalado(proximaAbertura(cedo)!, cedo), 'hoje às 8h')
@@ -23,7 +24,9 @@ describe('proximaAbertura e quandoFalado: quando o expediente volta', () => {
   })
 
   it('sexta à noite e o sábado inteiro pulam para segunda', () => {
-    for (const t of [em('2026-10-16T17:30:00'), em('2026-10-17T11:00:00'), em('2026-10-18T23:59:00')]) {
+    assert.equal(proximaAbertura(em('2026-10-16T17:30:00')), em('2026-10-16T17:30:00'))
+    assert.equal(proximaAbertura(em('2026-10-16T17:59:00')), em('2026-10-16T17:59:00'))
+    for (const t of [em('2026-10-16T18:00:00'), em('2026-10-17T11:00:00'), em('2026-10-18T23:59:00')]) {
       assert.equal(proximaAbertura(t), em('2026-10-19T08:00:00'))
     }
     assert.equal(quandoFalado(em('2026-10-19T08:00:00'), em('2026-10-17T11:00:00')), 'segunda às 8h')

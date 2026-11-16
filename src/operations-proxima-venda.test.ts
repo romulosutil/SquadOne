@@ -1,3 +1,4 @@
+import './testes/politica-historica.ts'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { filaDaTela, type EstadoDaTela } from './operations/proxima-venda.ts'

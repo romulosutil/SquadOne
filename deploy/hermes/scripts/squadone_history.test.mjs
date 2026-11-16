@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto'
 import { createSquadoneHistory } from './squadone_history.mjs'
 const sha=s=>createHash('sha256').update(s).digest('hex'),agora=Date.parse('2026-10-26T22:00:00.000Z')
 const chave='2799991234',pn='5527999991234',dono='5527999990000@s.whatsapp.net',segredo='segredo-ficticio-para-ensaio-0001'
-async function fixture(t) {
+async function fixture(t, extras = {}) {
   const home=fs.mkdtempSync(path.join(os.tmpdir(),'historico-identidade-'))
   t.after(()=>fs.rmSync(home,{recursive:true,force:true}))
   for(const p of ['.local/state/whatsapp-observador','.local/share/squadone-operations','.local/share/whatsapp-identidades','.config/claude-ops','sessao'])fs.mkdirSync(path.join(home,p),{recursive:true})
@@ -18,7 +18,7 @@ async function fixture(t) {
   const pedidos=[]
   let socket={user:{id:dono},fetchMessageHistory:async(...args)=>{pedidos.push(args)}},arquivadas=0
   const h=createSquadoneHistory({home,session:path.join(home,'sessao'),getSocket:()=>socket,getContent:m=>m.message,agora:()=>agora,
-    arquivar:lote=>{arquivadas+=lote.length;return {status:0,stdout:JSON.stringify({gravadas:0})}}})
+    arquivar:lote=>{arquivadas+=lote.length;return {status:0,stdout:JSON.stringify({gravadas:0})}},...extras})
   const consultar=async(body={})=>{const r={codigo:200,dado:null,status(n){this.codigo=n;return this},json(v){this.dado=v;return this}};await h.consultar({headers:{'x-observador':segredo},body:{chave,numero:pn,...body}},r);return r}
   const captura=()=>({socket,identidadeMe:dono,identidadePublica:new Uint8Array(32).fill(1)})
   const mensagem=(extras={})=>({key:{id:'ID-REAL-FICTICIO-123',remoteJid:pn+'@s.whatsapp.net',fromMe:false},messageTimestamp:Math.floor((agora-5*86400_000)/1000),message:{conversation:'Pode falar por aqui sim!'},...extras})
@@ -75,6 +75,55 @@ test('janela recente usa o LID conferido do chat, sem reaproveitar ID antigo com
   assert.equal((await f.consultar()).codigo,202)
   assert.equal(f.pedidos[0][1].remoteJid,'123456789@lid');assert.equal(f.pedidos[0][1].id,undefined)
   assert.equal(f.pedidos[0][2],agora)
+})
+
+test('lead novo sem âncora consulta o LID já comprovado no mapa da sessão',async t=>{
+  const f=await fixture(t)
+  fs.writeFileSync(path.join(f.home,'sessao/lid-mapping-123456789_reverse.json'),JSON.stringify(pn))
+  assert.equal((await f.consultar()).codigo,202)
+  assert.equal(f.pedidos[0][1].remoteJid,'123456789@lid')
+  assert.equal(f.pedidos[0][1].id,undefined)
+})
+
+test('recuperação por recibo usa só o ID confirmado e não altera âncoras ou fabrica prova',async t=>{
+  const f=await fixture(t,{lerRecibosConfirmados:()=>[{id:'RECIBO-REAL-123'}]}),pedidos=[]
+  f.captura().socket.requestPlaceholderResend=async(...args)=>pedidos.push(args)
+  fs.writeFileSync(path.join(f.home,'sessao/lid-mapping-123456789_reverse.json'),JSON.stringify(pn))
+  const arquivo=path.join(f.home,'.local/share/squadone-operations/historico-ancoras.json'),antes=fs.readFileSync(arquivo,'utf8')
+  const r=await f.consultar({recuperarRecibos:true,ids:['ID-INVENTADO']})
+  assert.equal(r.codigo,200);assert.equal(pedidos.length,1)
+  assert.deepEqual(pedidos[0],[{remoteJid:'123456789@lid',id:'RECIBO-REAL-123',fromMe:true}])
+  assert.equal(fs.readFileSync(arquivo,'utf8'),antes);assert.equal(f.provas().length,0);assert.equal(f.arquivadas,0)
+  await f.consultar({recuperarRecibos:true});assert.equal(pedidos.length,1)
+})
+
+test('recuperação por recibo recusa outra conta, número divergente ou ausência de recibo',async t=>{
+  for(const modo of ['outra-conta','numero','sem-recibo']){
+    const f=await fixture(t,{lerRecibosConfirmados:()=>modo==='sem-recibo'?[]:[{id:'RECIBO-REAL'}]}),pedidos=[]
+    f.captura().socket.requestPlaceholderResend=async(...args)=>pedidos.push(args)
+    if(modo==='outra-conta')f.captura().socket.user.id='5527999991111@s.whatsapp.net'
+    const r=await f.consultar({recuperarRecibos:true,...(modo==='numero'?{numero:'5527999991111'}:{})})
+    assert.equal(r.codigo,409);assert.equal(pedidos.length,0);assert.equal(f.provas().length,0)
+  }
+})
+
+test('original retornado ao pedido de recibo recebe prova só do socket real, com data e conteúdo originais',async t=>{
+  const f=await fixture(t,{lerRecibosConfirmados:()=>[{id:'RECIBO-REAL-123'}]})
+  f.captura().socket.requestPlaceholderResend=async()=>{}
+  await f.consultar({recuperarRecibos:true})
+  const mensagem=f.mensagem({key:{id:'RECIBO-REAL-123',remoteJid:pn+'@s.whatsapp.net',fromMe:true}})
+  f.h.receber({messages:[mensagem]},f.captura())
+  assert.equal(f.arquivadas,1)
+  const [p]=f.provas();assert.equal(p.mensagem.idOriginal,'RECIBO-REAL-123')
+  assert.equal(p.mensagem.ocorridoEm,new Date(mensagem.messageTimestamp*1000).toISOString().slice(0,19)+'Z')
+  assert.equal(p.contaHash,sha(dono))
+})
+
+test('dois LIDs para a mesma chave não autorizam escolher uma conversa por aproximação',async t=>{
+  const f=await fixture(t)
+  for(const lid of ['123456789','987654321'])fs.writeFileSync(path.join(f.home,`sessao/lid-mapping-${lid}_reverse.json`),JSON.stringify(pn))
+  assert.equal((await f.consultar()).codigo,202)
+  assert.equal(f.pedidos[0][1].remoteJid,pn+'@s.whatsapp.net')
 })
 test('um LID de outra conversa não é utilizado nem mesmo na janela recente',async t=>{
   const f=await fixture(t)

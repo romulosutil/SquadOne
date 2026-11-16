@@ -1,0 +1,1170 @@
+{
+  "versao": 1,
+  "tipo": "preparacao-sem-autorizacao-de-envio",
+  "produto": "site",
+  "versaoMensagem": "descoberta-site-v1-20261106",
+  "versaoSelecao": "descoberta-site-v1-20261106",
+  "preparadoEm": "2026-11-06T22:23:03.018132+00:00",
+  "inicioSugerido": "2026-11-09",
+  "inicioEnvios": null,
+  "enviosAutorizados": false,
+  "ativo": false,
+  "metaTotalCampanha": null,
+  "loteInicialMaximo": 15,
+  "limites": {
+    "primeirosContatosPorDia": 15,
+    "porHora": 2,
+    "intervaloMinutos": 30,
+    "pendenciasPorRodada": 10
+  },
+  "totalAprovados": 12,
+  "totalPrincipais": 10,
+  "totalReservas": 2,
+  "totalAvaliados": 17,
+  "totalAdiados": 6,
+  "rodadaPreservada": {
+    "inicio": "2026-11-06T18:16:54.407Z",
+    "pendentes": 5,
+    "limite": 10
+  },
+  "condicoesParaLiberacao": [
+    "Liberação explícita de Rômulo: preparação não autoriza contatos.",
+    "Revisão concreta das cinco pendências atuais e recibos/conversas, sem apagar histórico; eventual abertura exige inicioAnterior.",
+    "CRM com menos de 30 minutos, conta e observador ativos e cobertura íntegra.",
+    "Revalidar fonte e fato na data da liberação; conferência de perfil expira em sete dias e cadastro reutilizado em trinta, com datas originais.",
+    "Novos pareceres reais da data de execução com hash atual; nenhuma nota copiada para outro dia.",
+    "Unicidade em todas as ofertas e nenhum histórico/recusa/exclusão; conferir WhatsApp novamente antes de reservar.",
+    "Conferir fonte da mensagem E, gate e consumidores; manter executor desligado até autorização."
+  ],
+  "pesquisaPaga": false,
+  "silmerAlterado": false,
+  "campanhaAnteriorPreservada": true,
+  "manifestoAnteriorNaoSubstituido": true,
+  "nenhumContatoReservadoOuEnviado": true,
+  "evidenciaPrivadaMel": "/home/romulo-sutil-corr-a/.cache/mel-work/proxima-campanha-20261109/20261106T220135Z",
+  "lotePiloto": 10,
+  "metaTotalCampanhaProposta": 10,
+  "reservasNaoSomamContatos": true,
+  "fimSugerido": "2026-11-13",
+  "motivoLotePiloto": "Validar a nova abertura e aderência antes de ampliar volume; dez principais e duas reservas reais, sem reduzir critérios. Limite diário máximo de 15 preservado.",
+  "principais": [
+    {
+      "id": "site:ChIJadQGoxexnZMRUaBNC5atdIg",
+      "empresa": "Karen Oliveira Advocacia e Consultoria Jurídica",
+      "setor": "Advocacia",
+      "menorNota": 74,
+      "hash": "a2c49bf7520bb8acec01c76be2a9b09ea88477e9118b7a8dd23e1cb559cb7ea1",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "f2eb2bd989209c52",
+          "nota": 78,
+          "decisao": "contatar",
+          "motivo": "Perfil público sem link de site e escritório fora dos 20 resultados lidos; necessidade e decisor ainda não confirmados."
+        },
+        {
+          "agente": "Elisa",
+          "id": "f2eb2bd989209c52",
+          "nota": 74,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirma perfil ativo sem link de site e busca por “advogado em Cuiabá”; falta validar utilidade e necessidade com o responsável."
+        },
+        {
+          "agente": "Carla",
+          "id": "f2eb2bd989209c52",
+          "nota": 78,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou perfil de advocacia em Cuiabá sem link de site; falta validar se o responsável vê utilidade em apresentar serviços e receber pedidos."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-01T20:14:37.347Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. No perfil da empresa que consultei, não encontrei um link para site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJtZTJSRHNyJQRnKhbVmIDgY4",
+      "empresa": "BS Construção e Reforma - Serviços de Pinturas e Pedreiro",
+      "setor": "Obras e engenharia",
+      "menorNota": 68,
+      "hash": "a0f624cd6c7d578ed472bbec6e4d0c3b7d75115045c022f8d731146710e606f6",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "fae5dd0839fed727",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Campinas Guia associa a empresa a pintura e reparos; perfil sem link de site, mas utilidade e necessidade seguem hipótese."
+        },
+        {
+          "agente": "Elisa",
+          "id": "fae5dd0839fed727",
+          "nota": 69,
+          "decisao": "contatar",
+          "motivo": "Perfil Google sem link de site e diretório associa a empresa a pintura e reparos; falta confirmar utilidade e necessidade de um site."
+        },
+        {
+          "agente": "Carla",
+          "id": "fae5dd0839fed727",
+          "nota": 72,
+          "decisao": "contatar",
+          "motivo": "O perfil público da BS Construção e Reforma, conferido em 1/11, não tem link de site; perguntar se já possui site valida a hipótese, mas urgência e utilidade ainda faltam confirmar."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-01T19:58:39.383Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. No perfil da empresa que consultei, não encontrei um link para site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJK2UjoyDJyJQRXLKENJYTzhI",
+      "empresa": "Silva & Santos encanador/ reforma/eletricista/pintura",
+      "setor": "encanador",
+      "menorNota": 65,
+      "hash": "fb776446e84da7edaa078238b53e2eb44a735d2021ae98ed147b2b15b89b136f",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "2c6ce1a2e1038f2e",
+          "nota": 74,
+          "decisao": "contatar",
+          "motivo": "O perfil público leva ao WhatsApp, e resenhas citam consertos de vazamento; falta confirmar se a empresa quer apresentar serviços além desse canal."
+        },
+        {
+          "agente": "Elisa",
+          "id": "2c6ce1a2e1038f2e",
+          "nota": 65,
+          "decisao": "contatar",
+          "motivo": "O perfil da Silva & Santos direciona ao WhatsApp e há relatos públicos de consertos hidráulicos; falta confirmar se apresentar serviços e receber pedidos por site seria útil."
+        },
+        {
+          "agente": "Carla",
+          "id": "2c6ce1a2e1038f2e",
+          "nota": 74,
+          "decisao": "contatar",
+          "motivo": "O perfil Google Maps da Silva & Santos aponta para WhatsApp, e resenhas citam conserto de vazamento; pergunte se um site ajudaria a apresentar serviços antes do orçamento."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "link-WhatsApp-no-campo-site",
+        "conferidoEm": "2026-11-01T19:58:37.778Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. Na análise do perfil, encontrei um canal de contato no lugar de um site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJb1qW5EqrswcROMfew30hjCQ",
+      "empresa": "Isolda Dantas | Advogada em Natal",
+      "setor": "Advocacia",
+      "menorNota": 74,
+      "hash": "292ad78020f78746faed857b04e289f9f90c0a87fc7e8e9b6ed80eb0621fc5a6",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "5b4d3fd2f266a1ec",
+          "nota": 78,
+          "decisao": "contatar",
+          "motivo": "Perfil público sem link de site e posição 20/20 na busca local; necessidade e decisor ainda não confirmados."
+        },
+        {
+          "agente": "Elisa",
+          "id": "5b4d3fd2f266a1ec",
+          "nota": 74,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirma perfil ativo sem link de site e busca por “advogado em Natal”; falta validar utilidade e necessidade com o responsável."
+        },
+        {
+          "agente": "Carla",
+          "id": "5b4d3fd2f266a1ec",
+          "nota": 78,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou perfil de advocacia em Natal sem link de site; falta validar se o responsável vê utilidade em apresentar serviços e receber pedidos."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-01T20:14:43.021Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. No perfil da empresa que consultei, não encontrei um link para site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJs8gHw9tD65QRsahEJv1iWbQ",
+      "empresa": "GT Engenharia",
+      "setor": "Obras e engenharia",
+      "menorNota": 66,
+      "hash": "a7630cb3c12b75a1d5e434144287d3c816d09bc120684899df5917f23cdbfd7e",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "9f5fda8b83f0fb6e",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Cadastro público ativo identifica a GT Engenharia como empresa de serviços de engenharia e o perfil não lista site; falta confirmar se já tem outro site e se a solução é útil."
+        },
+        {
+          "agente": "Elisa",
+          "id": "9f5fda8b83f0fb6e",
+          "nota": 66,
+          "decisao": "contatar",
+          "motivo": "O perfil atual da GT Engenharia não traz link de site e o cadastro confirma serviços de engenharia; falta saber se já tem site e se uma apresentação própria seria útil."
+        },
+        {
+          "agente": "Carla",
+          "id": "9f5fda8b83f0fb6e",
+          "nota": 76,
+          "decisao": "contatar",
+          "motivo": "O perfil Google Maps da GT Engenharia, conferido em 1/11, não tem link no campo Site; pergunte se já possui site e se ele é útil para apresentar serviços."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-01T19:58:41.649Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. No perfil da empresa que consultei, não encontrei um link para site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJk-L9y9BJxwcRw8gWvJNL-Wk",
+      "empresa": "Carlos Studart Advogado",
+      "setor": "Advocacia",
+      "menorNota": 74,
+      "hash": "1fef9bff2c52c14e7308e1efe714afa431dac5d52ee8948524246e1c87520c77",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "57aa29cbae3c9296",
+          "nota": 78,
+          "decisao": "contatar",
+          "motivo": "Perfil público sem link de site e posição fora dos 20 resultados lidos; necessidade e decisor ainda não confirmados."
+        },
+        {
+          "agente": "Elisa",
+          "id": "57aa29cbae3c9296",
+          "nota": 74,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirma perfil ativo sem link de site e busca por “advogado em Fortaleza”; falta validar utilidade e necessidade com o responsável."
+        },
+        {
+          "agente": "Carla",
+          "id": "57aa29cbae3c9296",
+          "nota": 78,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou perfil de advocacia em Fortaleza sem link de site; falta validar se o responsável vê utilidade em apresentar serviços e receber pedidos."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-01T20:00:07.250Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. No perfil da empresa que consultei, não encontrei um link para site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJqfEwsDS_uZQRw5K0OPwFU1M",
+      "empresa": "Franco e Franco Sociedade de Advogados",
+      "setor": "Advocacia",
+      "menorNota": 68,
+      "hash": "02fa2e35c5b8a00988a01d739c399ce5e77af1abc11ae5caa6fbc89ad4f868a3",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "33a544e1c86c55f0",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "O perfil público no Google Maps mostra Instagram como site; a lacuna é confirmar com o responsável se um site próprio seria útil."
+        },
+        {
+          "agente": "Elisa",
+          "id": "33a544e1c86c55f0",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Perfil verificado usa Instagram no campo Site e o Raio-X registra rede social; falta validar utilidade da entrega e atividade atual."
+        },
+        {
+          "agente": "Carla",
+          "id": "33a544e1c86c55f0",
+          "nota": 80,
+          "decisao": "contatar",
+          "motivo": "O perfil do Google Maps exibe Instagram no campo Site e a busca registra 3/3 resultados do topo com site; falta confirmar com o responsável se um site próprio seria útil."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "rede-social-no-campo-site",
+        "conferidoEm": "2026-11-01T20:14:56.477Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. Na análise do perfil, encontrei um canal de contato no lugar de um site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJyaSr0_JbzpQRQyuZWRXLG7M",
+      "empresa": "Sergio Pavão Advogado",
+      "setor": "Advocacia",
+      "menorNota": 68,
+      "hash": "f195a5de681c7f1d3484eaa9552bf329c82c5576d0adff155df57ac08dc4ac62",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "1ffb5151b4b87f8e",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "O perfil público no Google Maps direciona ao WhatsApp; a lacuna é confirmar com o responsável se um site próprio seria útil."
+        },
+        {
+          "agente": "Elisa",
+          "id": "1ffb5151b4b87f8e",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Perfil verificado usa wa.me no campo Site e o Raio-X registra WhatsApp; falta validar utilidade da entrega e atividade atual."
+        },
+        {
+          "agente": "Carla",
+          "id": "1ffb5151b4b87f8e",
+          "nota": 80,
+          "decisao": "contatar",
+          "motivo": "O perfil do Google Maps exibe WhatsApp no campo Site e a busca registra 3/3 resultados do topo com site; falta confirmar com o responsável se um site próprio seria útil."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "link-WhatsApp-no-campo-site",
+        "conferidoEm": "2026-11-01T19:58:50.169Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. Na análise do perfil, encontrei um canal de contato no lugar de um site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJHZHhZMGJeigRwfhtk9x8I2c",
+      "empresa": "Advogado do Consumidor | Matheus Vasconcelos Advocacia",
+      "setor": "Advocacia",
+      "menorNota": 67,
+      "hash": "182d3aba60fe67f0a752f531128f972271ad80be2de34f666008a82765f553b4",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "a53a59d567b3d0c8",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Perfil público identifica advocacia do consumidor em Recife e não lista site; utilidade e necessidade ainda são hipóteses."
+        },
+        {
+          "agente": "Elisa",
+          "id": "a53a59d567b3d0c8",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Perfil Google do escritório em Recife sem link de site; falta confirmar se a solução atende uma necessidade real de apresentação ou contato."
+        },
+        {
+          "agente": "Carla",
+          "id": "a53a59d567b3d0c8",
+          "nota": 70,
+          "decisao": "contatar",
+          "motivo": "O perfil público de Matheus Vasconcelos Advocacia, conferido em 1/11, não tem link de site; a pergunta valida se já possui site, mas utilidade e urgência faltam confirmar."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-01T20:00:10.432Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. No perfil da empresa que consultei, não encontrei um link para site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJFYZDfLk1O5MR-ZkB4TGcoSI",
+      "empresa": "𝗝𝘂𝗹𝗶𝗮𝗻𝗮 𝗢𝗹𝗶𝘃𝗲𝗶𝗿𝗮| 𝗔𝗱𝘃𝗼𝗴𝗮𝗱𝗼𝘀",
+      "setor": "Advocacia",
+      "menorNota": 66,
+      "hash": "6ce3a41c80cd5a4e8541ccb5b2db6503cecb5ca76ac5efa4d4a77edf7ae07c9b",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "6625ba1fe9e2f18b",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Perfil público de advogados em Palmas sem link de site; atividade identificável, mas utilidade e necessidade ainda não confirmadas."
+        },
+        {
+          "agente": "Elisa",
+          "id": "6625ba1fe9e2f18b",
+          "nota": 66,
+          "decisao": "contatar",
+          "motivo": "Perfil Google de advogada em Palmas sem link de site; falta confirmar se um site é útil para apresentar serviços e captar contatos."
+        },
+        {
+          "agente": "Carla",
+          "id": "6625ba1fe9e2f18b",
+          "nota": 70,
+          "decisao": "contatar",
+          "motivo": "O perfil público de Juliana Oliveira Advogados, conferido em 1/11, não tem link de site; a pergunta sobre site próprio é pertinente, mas utilidade e urgência faltam confirmar."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-01T20:14:50.829Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. No perfil da empresa que consultei, não encontrei um link para site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    }
+  ],
+  "reservas": [
+    {
+      "id": "site:ChIJUfY8bckbFgcR6gRgS8mxOGo",
+      "empresa": "Dra. Sandra Regina | Advogado em Salvador | Direito do Consumidor - EQUIPE ESPECIALIZADA ATENDEMOS TODAS AS ÁREAS",
+      "setor": "Advocacia",
+      "menorNota": 66,
+      "hash": "9d47af66896fff018ad6a75001193851f65fb7226b8e631a26845b428de4514f",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "798aaf91ec8602e6",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Perfil público identifica advocacia em Salvador e não lista site; utilidade e necessidade de site próprio seguem hipóteses."
+        },
+        {
+          "agente": "Elisa",
+          "id": "798aaf91ec8602e6",
+          "nota": 66,
+          "decisao": "contatar",
+          "motivo": "Perfil Google da advogada em Salvador sem link de site; falta confirmar se um site ajudaria a apresentar serviços e receber contatos."
+        },
+        {
+          "agente": "Carla",
+          "id": "798aaf91ec8602e6",
+          "nota": 70,
+          "decisao": "contatar",
+          "motivo": "O perfil público da Dra. Sandra Regina, conferido em 1/11, não tem link de site; a pergunta sobre site próprio é pertinente, mas utilidade e urgência faltam confirmar."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-01T19:59:51.781Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. No perfil da empresa que consultei, não encontrei um link para site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    },
+    {
+      "id": "site:ChIJUTFoPEkfqwcRmi7V2l64vvQ",
+      "empresa": "José Coelho - Advogado Especialista em Direito de Trânsito (Cassação, Suspensão, Bafômetro/Alcoolemia)",
+      "setor": "Advocacia",
+      "menorNota": 65,
+      "hash": "b57fe57ccd7c5dcafdedd5dc7f9a923c1675b2639e5a88ea16871da8ea22e020",
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "ebef1186e509878f",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Perfil público lista WhatsApp como site para advogado de trânsito em Recife; utilidade de site próprio não foi confirmada."
+        },
+        {
+          "agente": "Elisa",
+          "id": "ebef1186e509878f",
+          "nota": 65,
+          "decisao": "contatar",
+          "motivo": "Perfil Google do advogado em Recife indica WhatsApp no campo Site; falta confirmar se um site próprio seria útil além desse canal."
+        },
+        {
+          "agente": "Carla",
+          "id": "ebef1186e509878f",
+          "nota": 71,
+          "decisao": "contatar",
+          "motivo": "O perfil público de José Coelho exibe WhatsApp no campo de site; perguntar se já tem site próprio corresponde ao achado, mas utilidade e urgência faltam confirmar."
+        }
+      ],
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "link-WhatsApp-no-campo-site",
+        "conferidoEm": "2026-11-01T20:00:08.811Z",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "mensagem": "Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. Na análise do perfil, encontrei um canal de contato no lugar de um site próprio.\n\nVocês já têm um site para apresentar os serviços e receber pedidos?"
+    }
+  ],
+  "adiados": [
+    {
+      "empresa": "DS Advogados | Advogado Especialista em Planos de Saúde",
+      "motivo": "sem-whatsapp-confirmado"
+    },
+    {
+      "empresa": "Luccas Carvalho - Advocacia Especializada",
+      "motivo": "pareceres-insuficientes"
+    },
+    {
+      "empresa": "Detec Prag Controle de Pragas | Dedetizadora em Fortaleza",
+      "motivo": "pareceres-insuficientes"
+    },
+    {
+      "empresa": "Gilson Ienke - Advogado",
+      "motivo": "pareceres-insuficientes"
+    },
+    {
+      "empresa": "Taiana Lúcia Soares - Advogada",
+      "motivo": "pareceres-insuficientes"
+    },
+    {
+      "empresa": "SL Advogados Associados",
+      "motivo": "pareceres-insuficientes"
+    }
+  ],
+  "verificacaoFinal": {
+    "em": "2026-11-06T22:25:26.777506+00:00",
+    "executorAtivo": false,
+    "hashesAtuaisConferidos": 12,
+    "recibosInalterados": true,
+    "manifestoAnteriorInalterado": true,
+    "rodadaAnteriorPreservada": true,
+    "nenhumaNovaReservaOuMensagem": true,
+    "servicoFacil": {
+      "classe": "recusa",
+      "revisar": true,
+      "materialSolicitado": false,
+      "versao": "respostas-2026-11-06-contexto"
+    },
+    "testesProducaoTS": 238,
+    "testesPython": 10,
+    "testesBalcaoRestrito": 2,
+    "testesLocaisTS": 86,
+    "typecheck": "passou",
+    "build": "frontend e servidor passaram",
+    "workflowBalcaoOriginalPreservado": true,
+    "workflowTemporarioRemovido": true
+  },
+  "liberacaoSolicitadaEm06Nov": {
+    "status": "aguardando-conciliacao-nominal-garcia",
+    "principais": 10,
+    "reservas": 1,
+    "aprovados": 11,
+    "fontesRevalidadas": 12,
+    "pareceresNovos": 36,
+    "julianaAdiada": true,
+    "reservaPromovida": "Dra. Sandra Regina",
+    "reservaDisponivel": "José Coelho",
+    "manifestoPublicado": false,
+    "novaRodadaAberta": false,
+    "executorAtivo": false,
+    "dataInicioAutorizada": "2026-11-09T08:00:00-03:00",
+    "evidenciaPrivadaMel": "/home/romulo-sutil-corr-a/.cache/mel-work/liberacao-site-20261109/20261106T225928Z",
+    "bloqueio": "Mesma entrada de Garcia Braga apresenta diferença de dois segundos entre Evolution e Hermes. Correção nominal preparada e validada em memória, ainda sem autorização para publicar.",
+    "testesPython": 23,
+    "conferenciaProgramada": {
+      "dia": "2026-11-09",
+      "hora": "08h30",
+      "acompanharAte": "08h45",
+      "automacao": "revisar-mensagens-e-qualidade-dos-leads"
+    },
+    "verificadoEm": "2026-11-06T23:17:47.915129+00:00"
+  },
+  "fontesRevalidadasEm06Nov": {
+    "verificadoEm": "2026-11-06T23:07:15.586507+00:00",
+    "resultados": [
+      {
+        "id": "site:ChIJadQGoxexnZMRUaBNC5atdIg",
+        "empresa": "Karen Oliveira Advocacia e Consultoria Jurídica",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "sem-link-de-site-no-perfil",
+        "em": "2026-11-06T23:04:35.862763+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJtZTJSRHNyJQRnKhbVmIDgY4",
+        "empresa": "BS Construção e Reforma - Serviços de Pinturas e Pedreiro",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "sem-link-de-site-no-perfil",
+        "em": "2026-11-06T23:04:36.293671+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJK2UjoyDJyJQRXLKENJYTzhI",
+        "empresa": "Silva & Santos encanador/ reforma/eletricista/pintura",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "link-WhatsApp-no-campo-site",
+        "em": "2026-11-06T23:04:51.682231+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJb1qW5EqrswcROMfew30hjCQ",
+        "empresa": "Isolda Dantas | Advogada em Natal",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "sem-link-de-site-no-perfil",
+        "em": "2026-11-06T23:04:42.002011+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJs8gHw9tD65QRsahEJv1iWbQ",
+        "empresa": "GT Engenharia",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "sem-link-de-site-no-perfil",
+        "em": "2026-11-06T23:04:51.303152+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJk-L9y9BJxwcRw8gWvJNL-Wk",
+        "empresa": "Carlos Studart Advogado",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "sem-link-de-site-no-perfil",
+        "em": "2026-11-06T23:04:56.901293+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJqfEwsDS_uZQRw5K0OPwFU1M",
+        "empresa": "Franco e Franco Sociedade de Advogados",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "rede-social-no-campo-site",
+        "em": "2026-11-06T23:05:00.761194+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJyaSr0_JbzpQRQyuZWRXLG7M",
+        "empresa": "Sergio Pavão Advogado",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "link-WhatsApp-no-campo-site",
+        "em": "2026-11-06T23:05:01.572912+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJHZHhZMGJeigRwfhtk9x8I2c",
+        "empresa": "Advogado do Consumidor | Matheus Vasconcelos Advocacia",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "sem-link-de-site-no-perfil",
+        "em": "2026-11-06T23:05:10.511346+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJFYZDfLk1O5MR-ZkB4TGcoSI",
+        "empresa": "𝗝𝘂𝗹𝗶𝗮𝗻𝗮 𝗢𝗹𝗶𝘃𝗲𝗶𝗿𝗮| 𝗔𝗱𝘃𝗼𝗴𝗮𝗱𝗼𝘀",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "sem-link-de-site-no-perfil",
+        "em": "2026-11-06T23:05:09.778329+00:00",
+        "revisaoIdentidadeNominal": true
+      },
+      {
+        "id": "site:ChIJUfY8bckbFgcR6gRgS8mxOGo",
+        "empresa": "Dra. Sandra Regina | Advogado em Salvador | Direito do Consumidor - EQUIPE ESPECIALIZADA ATENDEMOS TODAS AS ÁREAS",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "sem-link-de-site-no-perfil",
+        "em": "2026-11-06T23:05:19.077056+00:00",
+        "revisaoIdentidadeNominal": false
+      },
+      {
+        "id": "site:ChIJUTFoPEkfqwcRmi7V2l64vvQ",
+        "empresa": "José Coelho - Advogado Especialista em Direito de Trânsito (Cassação, Suspensão, Bafômetro/Alcoolemia)",
+        "validado": true,
+        "nomeConfere": true,
+        "destinoConfere": true,
+        "tipoSite": "link-WhatsApp-no-campo-site",
+        "em": "2026-11-06T23:05:22.424927+00:00",
+        "revisaoIdentidadeNominal": false
+      }
+    ],
+    "pesquisaPaga": false,
+    "datasCacheOriginalPreservadas": true,
+    "normalizacaoTelefoneNacionalCorrigida": true
+  },
+  "pareceresRevalidadosEm06Nov": [
+    {
+      "id": "site:ChIJadQGoxexnZMRUaBNC5atdIg",
+      "empresa": "Karen Oliveira Advocacia e Consultoria Jurídica",
+      "hash": "39f9a184e81a38c33236f1d5fb745f77b1c98dd831bd82f78f46163f28a3e8b9",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-06T23:04:35.862763+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "f2eb2bd989209c52",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Perfil público atual de Karen Oliveira Advocacia não lista site; atividade e responsável confirmados, mas utilidade e necessidade ainda são hipótese."
+        },
+        {
+          "agente": "Elisa",
+          "id": "f2eb2bd989209c52",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou o perfil e a ausência de link próprio; a utilidade do site e a necessidade ainda precisam ser validadas."
+        },
+        {
+          "agente": "Carla",
+          "id": "f2eb2bd989209c52",
+          "nota": 72,
+          "decisao": "contatar",
+          "motivo": "O perfil público da Karen Oliveira Advocacia, conferido em 6/11, não lista site; falta confirmar se já tem site e se apresentar serviços online é útil."
+        }
+      ],
+      "menorNota": 68,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:10:29.343225+00:00"
+    },
+    {
+      "id": "site:ChIJtZTJSRHNyJQRnKhbVmIDgY4",
+      "empresa": "BS Construção e Reforma - Serviços de Pinturas e Pedreiro",
+      "hash": "db506a14f33f399205571e2ec46814636973459fc8f5067d203cba4d5cd64a02",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-06T23:04:36.293671+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "fae5dd0839fed727",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Diretório Campinas Guia associa o nome e contato a pintura e reparos; perfil não lista site, mas necessidade e decisor não estão confirmados."
+        },
+        {
+          "agente": "Elisa",
+          "id": "fae5dd0839fed727",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou o perfil sem link de site, e diretório associa serviços de pintura e reparos; falta validar utilidade e necessidade."
+        },
+        {
+          "agente": "Carla",
+          "id": "fae5dd0839fed727",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "O perfil público da BS Construção e Reforma, conferido em 6/11, não lista site; falta confirmar se apresentar serviços online é útil para a rotina."
+        }
+      ],
+      "menorNota": 67,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:10:29.344025+00:00"
+    },
+    {
+      "id": "site:ChIJK2UjoyDJyJQRXLKENJYTzhI",
+      "empresa": "Silva & Santos encanador/ reforma/eletricista/pintura",
+      "hash": "4a6aa96a956508deefa104b8a2a782bf7936ae31210051b2bd958bb4ffaa53d9",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "link-WhatsApp-no-campo-site",
+        "conferidoEm": "2026-11-06T23:04:51.682231+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "2c6ce1a2e1038f2e",
+          "nota": 69,
+          "decisao": "contatar",
+          "motivo": "Resenhas públicas citam consertos hidráulicos e o perfil aponta ao WhatsApp; site próprio e utilidade para apresentar serviços seguem por confirmar."
+        },
+        {
+          "agente": "Elisa",
+          "id": "2c6ce1a2e1038f2e",
+          "nota": 72,
+          "decisao": "contatar",
+          "motivo": "Google Maps mostra WhatsApp no campo de site, e avaliações citam reparos hidráulicos; falta validar se um site agregaria utilidade."
+        },
+        {
+          "agente": "Carla",
+          "id": "2c6ce1a2e1038f2e",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "O perfil público de Silva & Santos, conferido em 6/11, aponta para WhatsApp no campo Site; falta confirmar se um site próprio seria útil."
+        }
+      ],
+      "menorNota": 68,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:10:29.344823+00:00"
+    },
+    {
+      "id": "site:ChIJb1qW5EqrswcROMfew30hjCQ",
+      "empresa": "Isolda Dantas | Advogada em Natal",
+      "hash": "ecf88d462f8b1ccf420add2becbf682a0ab67258bf452bf2ee9cf292faf48174",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-06T23:04:42.002011+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "5b4d3fd2f266a1ec",
+          "nota": 66,
+          "decisao": "contatar",
+          "motivo": "Perfil público atual de Isolda Dantas não lista site e a busca a posiciona na posição 20; atividade e utilidade comercial ainda não confirmadas."
+        },
+        {
+          "agente": "Elisa",
+          "id": "5b4d3fd2f266a1ec",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou o perfil sem link de site; falta validar se apresentar serviços online seria útil e necessário."
+        },
+        {
+          "agente": "Carla",
+          "id": "5b4d3fd2f266a1ec",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "O perfil público de Isolda Dantas, conferido em 6/11, não lista site; falta confirmar se apresentar serviços online é útil para a rotina."
+        }
+      ],
+      "menorNota": 66,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:10:29.345533+00:00"
+    },
+    {
+      "id": "site:ChIJs8gHw9tD65QRsahEJv1iWbQ",
+      "empresa": "GT Engenharia",
+      "hash": "e026d2fb314b278216af9a5dfbab9bb68d4ffe6c628d13a3d746c41813371704",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-06T23:04:51.303152+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "9f5fda8b83f0fb6e",
+          "nota": 70,
+          "decisao": "contatar",
+          "motivo": "Cadastro público associa a GT Engenharia ativa a serviços de engenharia em Londrina; perfil não lista site, mas necessidade e decisor não foram confirmados."
+        },
+        {
+          "agente": "Elisa",
+          "id": "9f5fda8b83f0fb6e",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou perfil ativo sem link de site, e avaliações mencionam obra; falta validar utilidade e necessidade."
+        },
+        {
+          "agente": "Carla",
+          "id": "9f5fda8b83f0fb6e",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "O perfil público da GT Engenharia, conferido em 6/11, não lista site; falta confirmar se apresentar serviços e receber pedidos online é útil."
+        }
+      ],
+      "menorNota": 68,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:10:29.346329+00:00"
+    },
+    {
+      "id": "site:ChIJk-L9y9BJxwcRw8gWvJNL-Wk",
+      "empresa": "Carlos Studart Advogado",
+      "hash": "f40c76abf1cb2690a1943ce7615adf1048413a4264b76700b6a55f05f7637f37",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-06T23:04:56.901293+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "57aa29cbae3c9296",
+          "nota": 74,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou o perfil do advogado em Fortaleza sem link de site; há atividade identificável, mas site próprio e utilidade ainda precisam ser validados."
+        },
+        {
+          "agente": "Elisa",
+          "id": "57aa29cbae3c9296",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11: o perfil não lista site; falta confirmar se isso limita a apresentação dos serviços ou a captação."
+        },
+        {
+          "agente": "Carla",
+          "id": "57aa29cbae3c9296",
+          "nota": 76,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11 sem link de site; a abertura corresponde ao achado e pergunta pela rotina, mas falta confirmar utilidade e urgência."
+        }
+      ],
+      "menorNota": 67,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:11:07.247803+00:00"
+    },
+    {
+      "id": "site:ChIJqfEwsDS_uZQRw5K0OPwFU1M",
+      "empresa": "Franco e Franco Sociedade de Advogados",
+      "hash": "8fbfc64d4595d4eee792066f329e15a02bfdd5b9bb42e0da7bf883cc0e59a739",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "rede-social-no-campo-site",
+        "conferidoEm": "2026-11-06T23:05:00.761194+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "33a544e1c86c55f0",
+          "nota": 72,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou o perfil do escritório em Ribeirão Preto com Instagram no campo de site; a utilidade de um site próprio ainda é desconhecida."
+        },
+        {
+          "agente": "Elisa",
+          "id": "33a544e1c86c55f0",
+          "nota": 70,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11: o perfil usa Instagram no campo de site; falta saber se o escritório precisa de um canal próprio."
+        },
+        {
+          "agente": "Carla",
+          "id": "33a544e1c86c55f0",
+          "nota": 78,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11 aponta Instagram no campo Site; a abertura corresponde e pergunta pela rotina, mas falta confirmar utilidade e urgência."
+        }
+      ],
+      "menorNota": 70,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:11:07.248545+00:00"
+    },
+    {
+      "id": "site:ChIJyaSr0_JbzpQRQyuZWRXLG7M",
+      "empresa": "Sergio Pavão Advogado",
+      "hash": "0d6852ca90d76e3c8ba56d056927ebd1d16f554b03a855ab157a2004f0d42a44",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "link-WhatsApp-no-campo-site",
+        "conferidoEm": "2026-11-06T23:05:01.572912+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "1ffb5151b4b87f8e",
+          "nota": 72,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou o perfil do advogado em São Paulo com WhatsApp no campo de site; falta confirmar se um site próprio seria útil."
+        },
+        {
+          "agente": "Elisa",
+          "id": "1ffb5151b4b87f8e",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11: o campo de site aponta para WhatsApp; falta validar se um site ajudaria a apresentar os serviços."
+        },
+        {
+          "agente": "Carla",
+          "id": "1ffb5151b4b87f8e",
+          "nota": 76,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11 aponta WhatsApp no campo Site; a abertura corresponde e pergunta pela rotina, mas falta confirmar utilidade e urgência."
+        }
+      ],
+      "menorNota": 68,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:11:07.249215+00:00"
+    },
+    {
+      "id": "site:ChIJHZHhZMGJeigRwfhtk9x8I2c",
+      "empresa": "Advogado do Consumidor | Matheus Vasconcelos Advocacia",
+      "hash": "39343aa091f59c1114497951b2f656a118507d56d73ff40bb7111222d3216744",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-06T23:05:10.511346+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "a53a59d567b3d0c8",
+          "nota": 74,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou o perfil da advocacia em Recife sem link de site; atividade identificável, mas existência de site e utilidade precisam ser validadas."
+        },
+        {
+          "agente": "Elisa",
+          "id": "a53a59d567b3d0c8",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11: o perfil não lista site; falta confirmar se a ausência afeta a apresentação ou a captação."
+        },
+        {
+          "agente": "Carla",
+          "id": "a53a59d567b3d0c8",
+          "nota": 76,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11 sem link de site; a abertura corresponde ao achado e pergunta pela rotina, mas falta confirmar utilidade e urgência."
+        }
+      ],
+      "menorNota": 67,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:11:07.249945+00:00"
+    },
+    {
+      "id": "site:ChIJFYZDfLk1O5MR-ZkB4TGcoSI",
+      "empresa": "𝗝𝘂𝗹𝗶𝗮𝗻𝗮 𝗢𝗹𝗶𝘃𝗲𝗶𝗿𝗮| 𝗔𝗱𝘃𝗼𝗴𝗮𝗱𝗼𝘀",
+      "hash": "d8afb5fe2ef67c3203d480d610d46acf0a9c025c1af5ba395ab2f0261fca3a39",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-06T23:05:09.778329+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "6625ba1fe9e2f18b",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Google Maps confirmou o contato do perfil em Palmas sem link de site, mas o nome público é Juliana Oliveira; falta validar a identidade nominal e a utilidade de um site."
+        },
+        {
+          "agente": "Elisa",
+          "id": "6625ba1fe9e2f18b",
+          "nota": 0,
+          "decisao": "adiar",
+          "motivo": "Google Maps não confirmou o nome do perfil, embora registre ausência de site; identidade ainda não está suficientemente demonstrada."
+        },
+        {
+          "agente": "Carla",
+          "id": "6625ba1fe9e2f18b",
+          "nota": 66,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11 sem link de site e identidade contextual revisada; a abertura corresponde, mas falta confirmar utilidade e urgência."
+        }
+      ],
+      "menorNota": null,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:11:07.250660+00:00"
+    },
+    {
+      "id": "site:ChIJUfY8bckbFgcR6gRgS8mxOGo",
+      "empresa": "Dra. Sandra Regina | Advogado em Salvador | Direito do Consumidor - EQUIPE ESPECIALIZADA ATENDEMOS TODAS AS ÁREAS",
+      "hash": "19d2a1b9fbc876e4c13e547145af71efe560fdff340431e30e0274733f29eac8",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "sem-link-de-site-no-perfil",
+        "conferidoEm": "2026-11-06T23:05:19.077056+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "798aaf91ec8602e6",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Perfil público identificado de advocacia em Salvador e sem link de site próprio; falta confirmar se um site seria útil ao responsável."
+        },
+        {
+          "agente": "Elisa",
+          "id": "798aaf91ec8602e6",
+          "nota": 68,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11: perfil sem link de site; site pode ser útil para apresentar serviços e receber pedidos, mas necessidade e impacto ainda são desconhecidos."
+        },
+        {
+          "agente": "Carla",
+          "id": "798aaf91ec8602e6",
+          "nota": 78,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11: perfil da advogada sem link de site; falta confirmar se já tem site e se seria útil para apresentar serviços e receber pedidos."
+        }
+      ],
+      "menorNota": 67,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:11:34.972573+00:00"
+    },
+    {
+      "id": "site:ChIJUTFoPEkfqwcRmi7V2l64vvQ",
+      "empresa": "José Coelho - Advogado Especialista em Direito de Trânsito (Cassação, Suspensão, Bafômetro/Alcoolemia)",
+      "hash": "3b1aea1cf22826dec0ad0c3ea8b3b91f20a08765942da79c3bc53035b13c6fae",
+      "criterioDescoberta": {
+        "apto": true,
+        "prioridade": 1,
+        "categoria": "link-WhatsApp-no-campo-site",
+        "conferidoEm": "2026-11-06T23:05:22.424927+00:00",
+        "motivo": "Campo do perfil verificado; ausência de link não prova inexistência de site. Validar necessidade."
+      },
+      "pareceres": [
+        {
+          "agente": "Diego",
+          "id": "ebef1186e509878f",
+          "nota": 67,
+          "decisao": "contatar",
+          "motivo": "Perfil público identificado de advogado de trânsito em Recife, com WhatsApp no campo de site; falta confirmar se um site próprio seria útil ao responsável."
+        },
+        {
+          "agente": "Elisa",
+          "id": "ebef1186e509878f",
+          "nota": 66,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11: campo Site aponta para wa.me; um site próprio pode apresentar os serviços, mas necessidade e impacto ainda são desconhecidos."
+        },
+        {
+          "agente": "Carla",
+          "id": "ebef1186e509878f",
+          "nota": 74,
+          "decisao": "contatar",
+          "motivo": "Google Maps conferido em 06/11: perfil do advogado indica WhatsApp no campo Site; falta confirmar se há site próprio e se um site seria útil para apresentar serviços e receber pedidos."
+        }
+      ],
+      "menorNota": 66,
+      "versao": "descoberta-site-v1-20261106",
+      "revalidadoEm": "2026-11-06T23:11:34.973375+00:00"
+    }
+  ]
+}

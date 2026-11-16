@@ -148,6 +148,10 @@ _eventos_spec = importlib.util.spec_from_file_location('observador_eventos_comer
 eventos_comerciais = importlib.util.module_from_spec(_eventos_spec)
 _eventos_spec.loader.exec_module(eventos_comerciais)
 
+_audio_spec = importlib.util.spec_from_file_location('observador_envelopes_audio', Path(__file__).with_name('envelopes_audio.py'))
+envelopes_audio = importlib.util.module_from_spec(_audio_spec)
+_audio_spec.loader.exec_module(envelopes_audio)
+
 try:  # no Dell sempre existe; no PC (testes) não: a trava vira no-op
     import fcntl
 except ImportError:  # pragma: no cover — Windows
@@ -1410,6 +1414,13 @@ class Observador:
             return
         while self.conversas_prontas:
             conversa = self.conversas_prontas[0]
+            if self.conversa.origem == 'prumo' and conversa.get('envelopesComerciais'):
+                conciliada, corrigidos = envelopes_audio.conciliar_com_provas(
+                    conversa, self.conversa.linhas_de(conversa['chave']), HOME, self.relogio())
+                if corrigidos:
+                    self.conversas_prontas[0] = conversa = conciliada
+                    self._salvar_entrega()
+                    log('envelope de áudio conciliado com captura original:', corrigidos)
             try:
                 resposta = self.chamar("POST", "whatsapp-resposta", conversa)
                 if self.entrega_duravel and (not isinstance(resposta, dict) or resposta.get('ok') is not True):

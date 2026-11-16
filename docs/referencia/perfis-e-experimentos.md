@@ -1,5 +1,10 @@
 # Perfis app/operations e experimentos desligados
 
+> Referência técnica, sem liberação de aquisição: `REGRAS_DO_RITMO` conserva parâmetros legados de 20 por dia, 6 por hora e intervalo de 10 min. `limitesOperacionais=false` desabilita essa camada; a trava de aquisição de 16/11 continua bloqueando primeiros contatos automáticos independentemente desses valores. As cadências numéricas anteriores abaixo são histórico.
+
+
+> Direção vigente de 16/11/2026: aquisição automática bloqueada. Limites, cadências e autorizações datadas abaixo são histórico dos experimentos; não liberam contatos. Prontidão SaaS depende das fontes e avaliações atuais da Prumo.
+
 > Movido do `CLAUDE.md` em 11/10/2026 para a sessão não carregar isto toda vez.
 > O texto é o original, sem alteração; o `CLAUDE.md` guarda só o resumo das regras.
 
@@ -7,6 +12,7 @@
 
 O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor. Detalhes e regras da Central estão em `ARCHITECTURE.md` e `RULES.md` — leia-os antes de mexer em `server/operations.ts`, `server/auto-production.ts`, `server/dell-status.ts`, `src/operations/` ou `deploy/`.
 
+<!-- ritmo-histórico -->
 - **`app` (padrão, Easypanel):** o SquadOne de sempre, bind `0.0.0.0`. `/api/operations/*` responde 404 JSON (sem isto o fallback da SPA devolveria HTML 200). Ausente = `app`; valor desconhecido derruba o boot — perfil errado não pode abrir a Central calado.
 - **`operations` (só no Dell, `deploy/dell/squadone-operations.service`):** a Central em `/` (`/squadone` abre os agentes aqui com a agenda ligada; sem ela, redireciona ao app do Easypanel, como desde 30/09/2026), rotas `/api/operations/*`, bind **só em `127.0.0.1`** (acesso por túnel/Tailscale). Exige `SQUADONE_OPERATIONS_CONFIG`; a credencial do Google é outra, local ao Dell, independente da de produção. As rotas do app (`rotasDoApp` em `server.ts`: roster, Mochila, turno, ajuste, avisos, avaliação) só são montadas com a agenda ligada (ver "Agenda no Dell"); sem ela o resto de `/api` é 404 JSON, e do Google ficam só `/api/auth/google` e `/callback` (a agenda da Central). `/api/push/*` não existe mais (o ntfy saiu). O `~/SquadOne/data/squad.json` do Dell é um retrato de 14/09/2026 e nunca vira a agenda.
 - **`GET /api/runtime`** devolve `{ mode, avaliacoes, ocupado, agenda, assistente }` (`agenda`: o app mora neste processo; `assistente`: o painel do Assistente está ligado aqui). `ocupado` = turno em andamento (`haTurnoEmAndamento`, contado em `rodarDemanda`), mensagem na fila do bot (`bot.ocupado()`), resposta do Assistente em andamento ou, desde 19/10/2026, uma volta da vigia (`vigia.ocupada()`); o `deploy/dell/atualizar-central.sh` espera `false` (até 10 min) antes de reiniciar.
@@ -21,6 +27,7 @@ O mesmo código roda em dois lugares, escolhido por `SQUADONE_MODE` no servidor.
 - **Número único do Dell (17/10/2026, AC-17):** topo, Hoje e Mais leem `resumoDoDell` (`src/operations/alertas.ts`): "precisam de você" (vermelho, ou amarelo sem `sozinho`) e "resolvem sozinhas" (amarelo com `sozinho`), com `total − ok = precisam + sozinhas` e o mesmo "às HH:MM". Retrato com mais de 5 min ou ausente = "Sem notícia do Dell desde HH:MM" (RULES 19). A Hoje (desde 17/10/2026 a Central de comando, que é também o único lugar do número) mostra só os títulos e "Ver em Manutenção" (`/mais?abrir=manutencao`); containers, comandos e caminhos ficam lá.
 - **A Central é somente leitura para serviços e infraestrutura** (RULES 8, 10, 16): mostra estado e links, nunca para, reinicia ou reconfigura n8n, Hermes, Docker, systemd ou Tailscale. O estado do Dell vem só do `status.json` do monitor. **Escrita de domínio ela faz**, sempre por gesto do usuário ou por regra fixa e sempre no próprio diretório de dados (`SQUADONE_OPERATIONS_DATA_DIR`) ou pelo webhook do n8n: o registro do CRM (`POST /crm/registro` e os de desfecho, decisão e ajuste de passo, que viram nota/linha na aba CRM pelo n8n), o dia da venda (`venda-do-dia.json`: "Enviei", "Pular", os primeiros contatos e os liberados), o estado do vendedor e do lead quente em sombra (`vendedor.json`, `vendedor-historico.jsonl`, `lead-quente-sombra/`), o do copiloto e do Assistente (JSONL), o contador de uso, a conversa importada do WhatsApp (`POST /crm/conversa/importar`, em `whatsapp-conversas/`), o `frente-comercial-config.json` (pausar/ativar o time, `POST /crm/frente/config`) e a reserva do primeiro contato do time (`POST /crm/frente/reservar`), as finanças (`financas.db`), o `avisos-enviados.json` e a fila de avisos. Nada disso toca serviço: o time comercial (`frente-comercial.py`) é quem envia, e roda no systemd, não na Central.
 - **Ferramentas de Mais → Acessos** (bloco `tools` do arquivo de `SQUADONE_OPERATIONS_CONFIG`, lido só no boot): `hermes`, `ide`, `n8n` e `remote` são obrigatórias; faltando uma, a Central não sobe ("Configuração da ferramenta '<id>' está incompleta"). **`syncthing` é opcional desde 12/10/2026**, quando o Syncthing da Mel foi aposentado (nenhum aparelho pareado desde 04/10): ausente, some do `/overview` e do painel (nada de "Sem resposta agora"); presente, vale como antes, com a mesma validação e o health de `healthKind: "syncthing"`, e uma entrada presente mas incompleta continua sendo erro. O `config/operations.example.json` já vem sem ela. Para tirar da Mel, **só depois** do deploy desta versão (na anterior, sem a entrada, a Central não sobe): apagar o bloco `"syncthing"` de `~/.config/squadone/operations.json` (JSON válido, sem vírgula sobrando) e `systemctl --user restart squadone-operations` com nenhum turno em andamento (`/api/runtime` com `ocupado: false`).
+<!-- /ritmo-histórico -->
 
 ## PRUMO como holding: quatro ofertas num funil (14/10/2026)
 
@@ -29,6 +36,7 @@ Decisão do Rômulo: o **PRUMO fica sob o SquadOne** (é a squad `prumo`), e tud
 o **Iris** (clínicas de terapia) e o **CRM de estamparia** (white-label do CRM da Silmer). Plano em
 `docs/superpowers/plans/2026-10-13-prumo-holding.md`.
 
+<!-- ritmo-histórico -->
 - **Roster de produção** (pelo ✎/API, não Git): a squad PRUMO ganhou as salas `prumo--iris` (PO Helena,
   Comercial do Iris) e `prumo--estamparias` (PO Otávio, Comercial do CRM de estamparia); a Prospecção passou a
   cuidar só de Site e Organizar, e o escopo da squad diz que ela é a holding das quatro ofertas.
@@ -74,6 +82,7 @@ o **Iris** (clínicas de terapia) e o **CRM de estamparia** (white-label do CRM 
   sozinha (antes era à mão), robô apaga o "Respondeu em" daquela conversa, negativa ou exclusão vai a "Sem
   interesse". O aviso do interesse pede combinar a demonstração (nunca Raio-X) e leva à ficha
   (`lead=iris:<ID>` / `estampa:<ID>`). O Jev em sombra recebe essas respostas como as do Prospects (mascaradas).
+<!-- /ritmo-histórico -->
 
 ## A/B do vídeo no envio do Site (11/10/2026; medição pronta, nada ligado)
 
@@ -179,6 +188,7 @@ Funil real em 15/10/2026: 221 envios, 5 interesses, 0 propostas. O gargalo é do
 
 ## Próxima venda e o vendedor do Telegram (16/10/2026)
 
+<!-- ritmo-histórico -->
 > **O que mudou em 19/10/2026 (auditoria dos fluxos, `docs/auditoria-de-fluxos-2026-10-19.md`). Onde este texto fala de "Próxima venda", "A fazer" ou
 > "Números", leia com isto por cima.**
 > - **`ProximaVenda.vue` saiu**, e com ele `plano-do-dia.ts`, `fila-de-envio.ts` e `anotacao-de-envio.ts`. A fila de venda
@@ -224,6 +234,7 @@ Funil real em 15/10/2026: 221 envios, 5 interesses, 0 propostas. O gargalo é do
 >   uma coluna que ninguém lia e saiu; a 1ª mensagem é conferida quando a Central ou o vendedor a oferecem e quando o time pede a reserva.
 > - **Preços:** `src/operations-precos.test.ts` falha se o cardápio do Roteiro (`colinha.ts`) divergir de `deploy/dell/prumo-mapa/precos.json`,
 >   a fonte única.
+<!-- /ritmo-histórico -->
 
 > **As outras otimizações do blueprint (16–17/10/2026).** OT-01: "A fazer" é só a Próxima venda (a fila única); a folha "Enviar um
 > por um" saiu (o filtro por nicho e o "Vídeo enviado" vieram para a Próxima venda), o Funil virou consulta, e o "Enviei"/"Pular" mora
@@ -269,11 +280,12 @@ revisar", "a Hoje não está entregando valor" e "automatize o envio da primeira
 às 17h30". Decisão dele no mesmo dia, entre as opções: **semi-automático** (nada sai ao lead sem o toque dele; a
 Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora) e **a rampa 10/20/30 por dia mantida**.
 
+<!-- ritmo-histórico -->
 - **A fila** (`src/operations/proxima-venda.ts`, PURA): uma ação por vez, na ordem responder → mandar a proposta → combinado → "o que
   achou?" (20–72 h depois do link, sem resposta dele) → proposta sem retorno → follow-up → primeiro contato (só com a
   trava de ritmo e o expediente livres, no máximo um na fila). Cada ação traz o porquê (o `detalhe` da Hoje do CRM),
   a tática do momento e a mensagem pronta (o `?text=` do wa.me, ou a primeira mensagem do Balcão).
-- **Na tela (histórico: `ProximaVenda.vue` saiu em 19/10/2026, ver o bloco acima):** `ProximaVenda.vue` era a aba "A fazer" de Vendas (até 17/10/2026 era também o primeiro cartão da Hoje do Dell; a Central de comando mostra só uma faixa com o passo da vez). O toque no link anota
+- **Na tela:** `CrmPanel.vue` e `CentralRota.vue` consomem a fila de `proxima-venda.ts`; o atendimento abre em `AtendimentoCliente.vue` e `CrmFicha.vue`. O toque no link anota
   como no CRM (2ª mensagem, follow-up, Plus) e conta o primeiro contato na trava; "Enviei, próxima" e "Pular" vão ao
   servidor (desde OT-01; o localStorage do dia é a reserva). Desde 17/10/2026 o "Enviei, próxima" vira o primário depois do toque.
 - **No Telegram** (`server/vendedor.ts`): `SQUADONE_VENDEDOR=true` no `operations` com o bot ligado. A cada minuto, das 7h
@@ -392,9 +404,23 @@ Evolution no mesmo chip do Hermes, que levou restrição em 15/10, ficou de fora
   - **Áudio**: na tela, "áudio não ouvido (27s)" ou "(áudio 27s) transcrição"; no dossiê do copiloto e do Assistente,
     "[áudio de 27s que o sistema não ouviu: o conteúdo é DESCONHECIDO, não suponha que seja interesse]". O dossiê leva
     também o `papel` de cada mensagem do lead.
+<!-- /ritmo-histórico -->
 
+## Fase 0 do diagnóstico de vendas
+
+Decidida pelo Rômulo em **19/10/2026**; não reabrir ao implementar as fases seguintes de `docs/PRUMO-DIAGNOSTICO-VENDAS-2026-10-19.md`:
+
+<!-- ritmo-histórico -->
+- **Teto único:** 30 primeiros contatos por dia de São Paulo, somando time comercial, telas e Telegram (`REGRAS_DO_RITMO`). Mantidos intervalo de 5 minutos e 12 por hora móvel. Substitui 100/dia e a rampa histórica.
+- **Cinco linhas na mesma fila:** Serviços PRUMO, Site, Iris, Estamparia e Plus dividem o teto pela ordem da fila de venda, sem cotas por linha. Nenhuma linha congelada; Iris e o CRM de estamparia são produtos prontos. Os caçadores de Iris e estamparias continuam pausados (AC-11); esta fase não religa caçadores.
+- **Plus:** teste de 20 envios como rede quente, feitos pelo Rômulo. O time comercial não reserva nem envia Plus; uma tentativa antiga incerta permanece protegida contra repetição.
+- **Abertura:** um fato verificável do Raio-X pode abrir a primeira mensagem como evento crítico em uma variante nova do A/B. Não trocar a letra de quem já recebeu; os textos novos passam pelo Rômulo antes de ir ao ar. A implementação da variante pertence à Fase 3.
+<!-- /ritmo-histórico -->
+
+## Time comercial: o agente que envia o 1º contato (18–19/10/2026; desligado por padrão)
 ## Time comercial: o agente que envia o 1º contato (18–19/10/2026; ativo no config, timer parado)
 
+<!-- ritmo-histórico -->
 **Estado real em 19/10/2026 (auditoria dos fluxos).** Há dois interruptores e eles estão em desacordo: o `frente-comercial-config.json` diz
 `ativo: true` (o Rômulo autorizou em 18/10) e o `frente-comercial.timer` do systemd está parado na Mel (desabilitado em 19/10 às ~09:25, sem ter
 enviado nada). Sem o timer o script não roda, então **nada é enviado**. Até aqui a tela dizia "ativo" mesmo assim; agora `GET /crm/frente`
@@ -403,16 +429,20 @@ expediente de venda e sem rodada há mais de 5 min, `CICLO_PARADO_APOS_MS`), e a
 lista "Quem envia hoje" (o time comercial, o vendedor do Telegram e o Rômulo, cada um com o que a Central sabe dele). **Ligar o timer, ou pausar pelo config, é decisão do Rômulo**;
 este documento não religa nada. A leitura do time é uma só por aba (`src/casca/frente.ts`, `lerFrente`: as chamadas simultâneas viram uma e a
 última vale por alguns segundos), usada pela Central e pelo painel.
+<!-- /ritmo-histórico -->
 
 `deploy/dell/frente-comercial.py` (timer `frente-comercial.timer`, a cada minuto) com três agentes (Diego, Elisa, Carla) que avaliam os
 leads e um executor sem modelo que manda o **primeiro contato** pelo número do PRUMO (Evolution, `POST /message/sendText/prumo`). É o
 único agente do SquadOne que envia mensagem a lead. Respostas e tudo depois do primeiro contato seguem com o Rômulo.
 
+<!-- ritmo-histórico -->
 **Por que as regras abaixo.** Ligado na Mel em 18/10/2026 sem elas, ele escolheu 35 estamparias em `revisar` (passava por cima da
-Triagem), tinha ritmo próprio (<!-- ritmo-histórico -->100/dia, 12/h, 5 min, até 18h<!-- /ritmo-histórico -->) contra o da Central, um dia depois da restrição de 24 h do WhatsApp por
+Triagem), tinha ritmo próprio (100/dia, 12/h, 5 min, até 18h) contra o da Central, um dia depois da restrição de 24 h do WhatsApp por
 25 envios em 25 min (15/10), e não anotava nada no CRM; a Próxima venda e o Telegram ofereciam os mesmos leads ao Rômulo. Foi parado e
 o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
+<!-- /ritmo-histórico -->
 
+<!-- ritmo-histórico -->
 - **Elegibilidade** (`elegivel` no .py, `elegivelParaOTime` em `src/operations/primeiro-contato.ts`, a Central confere de novo): Novo sem marco, conversa, resposta ou próximo passo, com mensagem e destino da fonte. Site em `pronto` usa o link rastreado e a mensagem do Balcão; PRUMO, Iris e Estamparia exigem o convite e origem do WhatsApp confirmada na Triagem. Plus fica fora do time: os envios são do Rômulo na Fase 0.
 - **Uma regra de ritmo e expediente**: o .py não tem mais ritmo. Cada envio pede `POST /api/operations/crm/frente/reservar { leadId }`;
   a Central decide com `EXPEDIENTE_DE_VENDA` e `REGRAS_DO_RITMO` (`reservaDoTime`), contando o retrato (`marcos.enviado`) e os primeiros do
@@ -421,8 +451,8 @@ o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
   Os números são os de `REGRAS_DO_RITMO` (fonte única; `src/ritmo-nos-documentos.test.ts` falha se este arquivo, o CLAUDE.md ou as
   decisões do PM citarem outros): 30 min entre primeiros contatos, 2 por hora móvel e 15 por dia de São Paulo compartilhados, somando
   time, telas e Telegram, e dez pendentes por rodada (`LIMITE_DA_RODADA`: com dez sem resposta humana, a rodada exige revisão antes de
-  novos contatos). Vale desde a retomada a 50% de 22–23/10/2026 (<!-- ritmo-histórico -->foi 30/dia, 12/h e 5 min de 19 a 22/10, na
-  Fase 0; 100/dia de 18 a 19/10; antes 4 min, 8/h e a rampa 10/20/30<!-- /ritmo-histórico -->). São tetos internos, não um limite
+  novos contatos). Vale desde a retomada a 50% de 22–23/10/2026 (foi 30/dia, 12/h e 5 min de 19 a 22/10, na
+  Fase 0; 100/dia de 18 a 19/10; antes 4 min, 8/h e a rampa 10/20/30). São tetos internos, não um limite
   publicado pelo WhatsApp; `pausadoAte` segue sendo o freio depois de um aviso ou restrição.
 - **O registro é o da Central**: antes de enviar, o time faz o clique no link rastreado do n8n (`http://127.0.0.1:5679/webhook/enviar?place_id=`,
   fluxo "04 · Clique no wa_link"), que grava `clique_em` (abrir nunca marca envio: regra `[abrir-nao-envia]` de 18/10/2026); o
@@ -466,6 +496,7 @@ o timer desabilitado em 19/10 às ~09:25, sem ter enviado nada.
   `dell-status --instalados` (confere a cópia), `curl -s -X POST -H 'Content-Type: application/json' -H 'Origin: http://127.0.0.1:9120'
   -d '{"ativo":true}' http://127.0.0.1:9120/api/operations/crm/frente/config` e `systemctl --user enable --now frente-comercial.timer`.
   Pausar: o mesmo POST com `{"ativo":false}`, ou `systemctl --user disable --now frente-comercial.timer`.
+<!-- /ritmo-histórico -->
 
 ## Agente que mantém o lead quente — fase de SOMBRA (17/10/2026; desligado, nada é enviado)
 
@@ -473,6 +504,7 @@ Decisão do Rômulo em 17/10/2026: ele **continua** fazendo os primeiros contato
 lead quente depois que o link saiu e o lead escreve de novo**. Esta fase é só a decisão: o agente não envia nada. A Evolution na Mel só lê (a exceção, desde 19/10/2026, é o
 primeiro contato do time comercial, desligado por padrão: seção acima), o chip é o mesmo do Hermes e levou restrição de 24 h em 15/10 por rajada de primeiros contatos, então o envio é uma decisão à parte (abaixo).
 
+<!-- ritmo-histórico -->
 - **A decisão (PURA, `server/lead-quente.ts`)**: `decidirLeadQuente({ lead, mensagens, sugestao, agora, jaDecididas, toques })` devolve
   `responder`, `escalar`, `calar` ou `aguardar` (a sugestão do copiloto ainda não saiu; nunca é gravado). Sem fetch, relógio, env nem disco.
   O texto de um `responder` é **sempre o da sugestão do copiloto** (que já conferiu ids do cardápio, R$ e números do dossiê): o agente escolhe, não escreve.
@@ -512,12 +544,14 @@ primeiro contato do time comercial, desligado por padrão: seção acima), o chi
   reiniciar a Central. Não há nada a instalar fora do deploy normal. Desligar: tirar a linha (ou `false`) e reiniciar; o JSONL fica.
 - **Como ler o resultado**: uma semana de sombra com pelo menos ~30 `responder` votados. Taxa de 👎 acima de ~10% nos `responder`, ou qualquer
   `responder` que o Rômulo marque como "não podia ter ido", segura a fase de envio e vira ajuste do gate (`SINAIS`, limites) primeiro.
+<!-- /ritmo-histórico -->
 
 ### Decisão aberta: a fase de ENVIO (não implementar sem o Rômulo)
 
 Mandar a resposta de verdade **exige mudar o invariante "nunca envia ao lead"** (vendedor, copiloto, Assistente, Luna e Jev dizem o mesmo; a
 Evolution na Mel é só leitura) e abrir a escrita na Evolution num chip compartilhado com o Hermes. Antes disso o Rômulo precisa decidir:
 
+<!-- ritmo-histórico -->
 1. **Veto de 3 min no Telegram**: o aviso sai com o texto e um botão "Vetar"; passados 3 min sem veto, o agente envia (e o 👍/👎 vira o feedback). Sem resposta
    do Telegram (caiu, madrugada) o padrão é **não enviar**.
 2. **O agente se identifica como assistente do Rômulo?** ("Sou o assistente do Rômulo…") ou fala como ele. Há o lado ético/de confiança (o lead acha que
@@ -530,6 +564,7 @@ Evolution na Mel é só leitura) e abrir a escrita na Evolution num chip compart
 4. **Como mandar**: Evolution `sendText` com o número do lead vindo da Central, nunca do modelo; o envio fica num módulo à parte, sob flag própria
    (`SQUADONE_LEAD_QUENTE_ENVIO`), nunca na mesma de sombra; `texto` registrado no JSONL; botão geral "Parar agente" no Telegram.
 5. **Finanças** nunca entram: o agente não lê nem cita nada do banco `financas.db`; nenhum valor em dinheiro numa resposta (já é o gate de hoje).
+<!-- /ritmo-histórico -->
 
 ## Plus: os leads do Catálogo de Negócios Maçônicos (15/10/2026)
 
@@ -557,10 +592,11 @@ um dos quatro fluxos e abrem com a saudação da Ordem.
 O diagnóstico e o plano completo estão em `docs/PRUMO-DIAGNOSTICO-VENDAS-2026-10-19.md`. Estas são as decisões que vêm
 antes de qualquer código das Fases 1 a 5:
 
+<!-- ritmo-histórico -->
 1. **Teto de primeiros contatos compartilhado**, somando o time comercial, as telas e o Telegram (`REGRAS_DO_RITMO`).
    O motivo foi o chip único (prospecção, Hermes e alertas) três dias depois da restrição de 24 h. Hoje valem 15 por dia,
    2 por hora, 30 min entre primeiros contatos e dez pendentes por rodada, da retomada a 50% de 22–23/10/2026
-   (<!-- ritmo-histórico -->na Fase 0 eram 30 por dia, com 5 min e 12 por hora<!-- /ritmo-histórico -->).
+   (na Fase 0 eram 30 por dia, com 5 min e 12 por hora).
 2. **Nenhuma linha é congelada.** Iris e o CRM de estamparia são produtos prontos; condicionar a prospecção deles a um
    primeiro pagamento os travaria para sempre, porque ainda não há cliente em nenhuma linha. As cinco linhas dividem o
    teto do dia pela ordem da fila de venda, sem cota por linha. Os caçadores de Iris e estamparias seguem pausados (AC-11)
@@ -570,12 +606,14 @@ antes de qualquer código das Fases 1 a 5:
 4. **Os fatos do Raio-X podem abrir a mensagem como evento crítico** (domínio vencido, site fora do ar, posição no Google),
    com respeito e sem nota. Revoga, para a abertura, a regra "o que está bom vem primeiro". Entra como variante nova do
    A/B da 1ª mensagem (30 por braço antes de qualquer taxa).
+<!-- /ritmo-histórico -->
 
 ## Diagnóstico de vendas: Fases 2 a 5 (19/10/2026)
 
 Entregue e instalado na Mel em 19/10 (relato fase a fase em `docs/PRUMO-IMPLEMENTACAO-VENDAS-2026-10-19.md`, instalação em
 `docs/PRUMO-INSTALACAO-VENDAS-2026-10-19.md`). Meta até 08/11/2026: cinco propostas qualificadas e um pagamento confirmado.
 
+<!-- ritmo-histórico -->
 - **SPICED é a trava da proposta (Fase 2).** `src/operations/spiced.ts`: o registro `spiced` (aba CRM) é só o que o Rômulo
   confirmou na Ficha (`CrmSpiced.vue`, BP-SPICED); a sugestão do copiloto, com citação literal verificável, nunca o preenche.
   `qualificadoParaProposta` exige dor + impacto + decisor confirmado nas cinco linhas: sem isso a fila pede "dez minutos" e mostra
@@ -641,6 +679,7 @@ Entregue e instalado na Mel em 19/10 (relato fase a fase em `docs/PRUMO-IMPLEMEN
   `src/operations/pontuacao-da-triagem.ts`: dor 50, decisor 20, nicho 20, porte 10); P0 e as 5 origens de falha ficam numa outbox exclusiva do
   Telegram (lista única nas três pontas, com teste de paridade; o prefixo `n8n:` ainda tem reserva no WhatsApp, decisão em aberto).
   O fluxo 01 sanitizado (`ops/n8n/workflows/01-Cacador.sanitizado.json`) é só auditoria: inativo, sem importação automática.
+<!-- /ritmo-histórico -->
 
 ## Pilotos dos produtos novos (30/10/2026, decisão do Rômulo)
 
@@ -651,8 +690,11 @@ nunca XML real) e Dieta (só a hipótese H1, ~20 mensagens no Instagram em 48 h,
 encerramento e a tabela de acompanhamento em `docs/referencia/pilotos-novos-produtos.md`; alvos com fonte pública em
 `docs/referencia/pilotos-alvos.md`; o registro da decisão em `prumo/00-contexto/decisoes.md`. Revisão em 06/11/2026.
 
+<!-- ritmo-histórico -->
 - **Nada disto passa pelo sistema.** Sem linha nova no funil de Vendas, sem caçador, sem tela, sem proposta nem preço público.
   O 1º pagamento até 08/11 continua vindo só do Site, e o trabalho dos pilotos cabe no bloco 3 (15h30–17h00).
 - **O WhatsApp do PRUMO fica fora da prospecção dos pilotos.** O primeiro contato de piloto vai por visita, ligação, e-mail,
   LinkedIn, Instagram ou indicação, e as travas não mudam: 15 por dia, 2 por hora, 30 min entre primeiros contatos e dez
   pendentes por rodada (`REGRAS_DO_RITMO`).
+
+<!-- /ritmo-histórico -->

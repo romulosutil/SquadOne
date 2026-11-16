@@ -1,0 +1,19 @@
+{
+  "versao": 1,
+  "revisadoEm": "2026-11-16",
+  "ofertasPrincipais": [
+    {"id": "site", "oferta": "Site para apresentar projetos e receber pedidos de orçamento", "prospeccaoAutomatica": false, "venda": "Confirmar necessidade, interlocutor e escopo; diagnóstico e demo são opcionais. Primeiros contatos automáticos bloqueados."},
+    {"id": "automacao-ia", "oferta": "Implantação sob medida de atendimento, qualificação, CRM e acompanhamento", "prospeccaoAutomatica": false, "venda": "Diagnosticar um processo repetitivo, definir escopo e validar um piloto; não apresentar como SaaS pronto."}
+  ],
+  "complementos": ["Manutenção e melhoria do site", "Integrações entre formulário, WhatsApp e CRM", "Fonte: base de conhecimento da equipe, quando houver informação repetitiva dispersa"],
+  "foraDaProspecaoGeral": ["iris", "estampa", "plus", "pdv", "sgp", "fiscal", "anuncios", "redes-sociais"],
+  "criterio": "Empresa independente de serviços ou projetos sob orçamento, com especialidade verificável e contato próprio. Setor é hipótese de aderência; necessidade, orçamento e decisão de compra continuam não confirmados.",
+  "cidades": ["Vila Velha", "Vitória", "Serra", "Cariacica", "Guarapari", "Cachoeiro de Itapemirim", "Linhares", "Colatina"],
+  "excluir": "automotiv|auto eletric|eletrodomestic|conserto de celular|franquia|franquead|shopping center|loja de departamento",
+  "segmentos": [
+    {"id": "esquadrias", "consulta": "esquadrias de alumínio sob medida", "perfil": "esquadri", "hipotese": "Projetos personalizados exigem referências, medidas e orçamento."},
+    {"id": "planejados", "consulta": "marcenaria móveis planejados", "perfil": "marcenar|moveis planej|planejados|fabricante de moveis", "hipotese": "Portfólio e coleta de ambiente, medidas e projeto participam da venda."},
+    {"id": "climatizacao", "consulta": "empresa instalação climatização comercial", "perfil": "climatiza|instalad.{0,25}ar.condicionado|empreiteir.{0,25}ar.condicionado|ar.condicionado", "hipotese": "Projeto, instalação e manutenção comercial podem exigir qualificação e orçamento."},
+    {"id": "solar", "consulta": "empresa instalação energia solar", "perfil": "energia solar|fotovoltaic|sistema.{0,15}solar", "hipotese": "O projeto e a proposta dependem de informações do imóvel e do consumo."}
+  ]
+}

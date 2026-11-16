@@ -34,7 +34,7 @@ export const ROTULO_DA_ETAPA: Record<EtapaDaOferta, string> = { ver: 'Ver', arru
 /**
  * Cada oferta é de um tipo só: diagnóstico (grátis, o PRUMO faz e entrega um
  * documento), produto (escopo fixo, implantação + mensalidade), projeto (sob
- * medida, o tamanho vem do Mapa) ou mensalidade (mantém uma construção).
+ * medida, o tamanho vem do diagnóstico suficiente) ou mensalidade (mantém uma construção).
  */
 export type TipoDeOferta = 'diagnostico' | 'produto' | 'projeto' | 'mensalidade'
 export const ROTULO_DO_TIPO: Record<TipoDeOferta, string> = { diagnostico: 'diagnóstico', produto: 'produto', projeto: 'projeto', mensalidade: 'mensalidade' }
@@ -56,7 +56,7 @@ export interface ServicoDoCardapio {
   sobProposta?: true
   /** "R$ 39/mês" quando há mensalidade. */
   mensal?: string
-  /** "paga só depois de ver no ar", "só depois do Mapa"… */
+  /** "paga só depois de ver no ar", "escopo confirmado"… */
   condicao?: string
   /** Para quem oferecer (e quando). */
   paraQuem: string
@@ -116,10 +116,9 @@ export interface Objecao {
 // ------------------------------------------------------------------ conteúdo
 
 // Hierarquia de 09/10/2026: ver → arrumar → manter, na ordem do array (a tela
-// mostra nesta ordem e o teste confere). O Raio-X é a porta de todos; o Mapa vem
-// depois dele (ou direto, pela CDL) e só para empresa com equipe; a Fonte só
-// existe depois do Mapa. Encontrado e Respondido andam em paralelo, um, outro ou
-// os dois. Mudou o preço na tabela do PRUMO, muda aqui e em PRECOS_DO_CARDAPIO.
+// mostra nesta ordem e o teste confere). Desde 16/11, diagnósticos são opcionais.
+// Método e condições contratadas permanecem. Mudou o preço canônico, atualizar
+// o cardápio e PRECOS_DO_CARDAPIO juntos.
 export const CARDAPIO: ServicoDoCardapio[] = [
   {
     id: 'raio-x',
@@ -128,7 +127,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     tipo: 'diagnostico',
     entrega: 'Uma página feita pelo Prumo, só com dados públicos: como a empresa aparece no Google, o que já está bom, até 3 coisas que mandam cliente para o concorrente (só as que o dado confirma) e, quando faz sentido, a demonstração do site. O dono não preenche nada.',
     preco: 'grátis',
-    paraQuem: 'Todo lead, antes do primeiro contato: é a porta de entrada de todos. Funciona também com quem já tem site.',
+    paraQuem: 'Quando uma análise da presença pública ajuda a decidir o que fazer. Opcional, inclusive para quem já tem site; não autoriza contato.',
   },
   {
     id: 'mapa',
@@ -137,7 +136,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     tipo: 'diagnostico',
     entrega: 'O Raio-X mostra a empresa por fora; o Mapa, por dentro. O dono responde 16 perguntas (uns 10 minutos, com números aproximados informados pelo dono, sem extratos nem senhas) e recebe um documento: Índice do Prumo X/18, os 6 blocos, o que passa pelo dono, onde a informação mora, as travas estimadas e o que fazer primeiro. Mais uma conversa de 45 minutos sobre o resultado. O documento é do dono, contrate ou não.',
     preco: 'grátis',
-    paraQuem: 'Só empresa com equipe (umas 8 pessoas ou mais, onde a Fonte se paga), depois do Raio-X ou direto pela CDL. Empresa pequena fica no Raio-X e nos produtos.',
+    paraQuem: 'Empresa com equipe e problema de regras ou rotina que justifique investigação. Opcional, com aceite do interessado; porte não garante retorno.',
   },
   {
     id: 'encontrado',
@@ -148,7 +147,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     preco: 'R$ 690',
     mensal: 'R$ 39/mês',
     condicao: 'paga só depois de ver no ar',
-    paraQuem: 'Quem não tem site, ou tem um que ninguém acha no Google. É o que o demo e a 2ª mensagem vendem.',
+    paraQuem: 'Quem confirma necessidade de apresentar serviços, trabalhos e contato em um site. Ausência de URL pública não comprova essa necessidade.',
   },
   {
     id: 'respondido',
@@ -162,7 +161,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     mensal: 'R$ 290/mês',
     condicao: 'só depois de uma conversa, nunca no WhatsApp frio',
     sobProposta: true,
-    paraQuem: 'Quem já tem site e perde cliente no WhatsApp: demora para responder, ninguém responde fora do horário, orçamento pedido que some.',
+    paraQuem: 'Quem demonstra problema no atendimento ou acompanhamento de demandas recebidas. Ter site não é requisito nem prova de necessidade.',
   },
   {
     id: 'anuncios',
@@ -172,7 +171,7 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     entrega: 'Criamos e cuidamos dos anúncios no Google ou no Instagram, e todo mês mostramos quantas pessoas chamaram por causa deles. A verba do anúncio vai direto para a plataforma, sem passar pelo Prumo.',
     preco: 'R$ 590/mês',
     condicao: 'Google ou Instagram; R$ 390 a mais pelos dois; mínimo de 3 meses',
-    paraQuem: 'Quem já tem site e perfil do Google em dia e precisa de mais gente chamando: o Raio-X mostra poucas buscas ou pouca gente chegando. Depois do Raio-X, nunca no WhatsApp frio.',
+    paraQuem: 'Quem confirma necessidade de aquisição, capacidade de atendimento e orçamento de mídia. Fora da aquisição ampla desta rodada; avaliar por demanda específica.',
   },
   {
     id: 'redes',
@@ -182,25 +181,25 @@ export const CARDAPIO: ServicoDoCardapio[] = [
     entrega: 'Instagram e Facebook em dia: 8 posts por mês e stories toda semana, feitos com as fotos e os serviços da empresa e publicados depois da aprovação do dono.',
     preco: 'R$ 790/mês',
     condicao: 'mínimo de 3 meses; depois, cancela quando quiser',
-    paraQuem: 'Quem tem perfil parado ou sem padrão e perde confiança de quem confere antes de chamar. Depois do Raio-X, quando ele mostra rede social abandonada.',
+    paraQuem: 'Quem confirma necessidade de manter conteúdo e dispõe de material e aprovação. Fora da aquisição ampla desta rodada; perfil parado não comprova perda de vendas.',
   },
   {
     id: 'fonte',
     nome: 'Fonte',
     etapa: 'arrumar',
     tipo: 'projeto',
-    entrega: 'A construção, em cerca de 2 semanas depois da conversa sobre as regras. Na primeira, conferimos o Mapa com o time; depois, as regras da casa (como a empresa vende, compra, entrega e cobra, e quem faz o quê) saem da cabeça do dono para uma pasta no Google Drive, manual no Notion, caderno no Gemini, robô no WhatsApp ou chat próprio, conforme o escopo. Até 6 assuntos e 15 pessoas. O uso de IA e a assinatura da plataforma, quando aplicáveis, ficam à parte; a liberação do número do WhatsApp depende da Meta e pode levar até 20 dias.',
+    entrega: 'A construção, em cerca de 2 semanas depois da conversa sobre as regras. Na primeira, conferimos o diagnóstico suficiente com o time, usando o Mapa quando pertinente; depois, as regras da casa (como a empresa vende, compra, entrega e cobra, e quem faz o quê) saem da cabeça do dono para uma pasta no Google Drive, manual no Notion, caderno no Gemini, robô no WhatsApp ou chat próprio, conforme o escopo. Até 6 assuntos e 15 pessoas. O uso de IA e a assinatura da plataforma, quando aplicáveis, ficam à parte; a liberação do número do WhatsApp depende da Meta e pode levar até 20 dias.',
     preco: 'R$ 1.500',
-    condicao: 'a partir de, 50/50, só depois do Mapa',
+    condicao: 'a partir de, 50/50, escopo confirmado',
     sobProposta: true,
-    paraQuem: 'Empresa com equipe que fez o Mapa e onde tudo depende do dono. Chega pelo Mapa (e a CDL leva até ele), nunca pelo frio.',
+    paraQuem: 'Empresa com equipe e necessidade demonstrada de regras consultáveis. Diagnóstico suficiente para definir o escopo; Mapa prévio não é obrigatório.',
   },
   {
     id: 'fonte-em-dia',
     nome: 'Manutenção da Fonte',
     etapa: 'manter',
     tipo: 'mensalidade',
-    entrega: 'Incluir, mudar ou tirar regras e dados da Fonte: até 10 mudanças por mês, pedidas pelo WhatsApp e feitas em até 2 dias úteis. Começa depois dos 30 dias de ajustes; cancela quando quiser.',
+    entrega: 'Incluir, mudar ou tirar regras e dados da Fonte: até 10 mudanças por mês, pedidas pelo WhatsApp e feitas em até 2 dias úteis. Começa depois dos 30 dias de ajustes; cancela quando quiser. Assunto novo inteiro tem condição própria na tabela.',
     preco: 'R$ 190/mês',
     condicao: 'opcional, até 10 mudanças por mês, depois dos 30 dias de ajustes',
     sobProposta: true,
@@ -211,8 +210,8 @@ export const CARDAPIO: ServicoDoCardapio[] = [
 /** O preço de um serviço sob proposta, no cardápio (como o "grátis" do Raio-X). */
 export const SOB_PROPOSTA = 'sob proposta'
 
-/** Prazo ao cliente é combinado; a meta interna de 24 h não vira promessa automática. */
-export const FRASE_SOB_PROPOSTA = 'O valor depende do escopo que confirmarmos para a empresa de vocês e vai por escrito na proposta. Combinamos o prazo de envio depois de conferir as informações necessárias.'
+/** Explicação de escopo variável; perguntas de preço recebem a base vigente da oferta. */
+export const FRASE_SOB_PROPOSTA = 'O valor depende do escopo. Posso informar a base vigente e o que ela inclui; o valor fechado vai por escrito antes de começar, sem exigir Raio-X ou Mapa. Combinamos o prazo de envio depois de conferir as informações e o compromisso possível.'
 
 /** A resposta ao "isso é pago?" sobre o Mapa (09/10/2026): sem número, porque o Mapa não tem preço. */
 export const FRASE_MAPA_E_GRATIS = 'Não cobramos pelo Mapa. Cobramos se vocês quiserem construir a Fonte depois.'
@@ -248,15 +247,15 @@ const TODOS: CrmProduto[] = ['site', 'prumo']
 export const ROTEIRO: PassoDoRoteiro[] = [
   {
     momento: 'primeiro-contato',
-    titulo: 'Primeiro contato',
-    objetivo: 'Ganhar um "pode mandar" (ou os 20 minutos, pela CDL) com um fato que o dono confere na hora.',
+    titulo: 'Primeiro contato · referência histórica',
+    objetivo: 'Referência das mensagens antigas para interpretar o histórico. Primeiros contatos automáticos bloqueados; este roteiro não autoriza nova abordagem.',
     trechos: [
       {
         id: 'primeira-b',
         titulo: 'Primeira mensagem · B · observação concreta',
         texto:
           'Oi! Sou o Rômulo, do Prumo, e trabalho com criação de sites. Vi {O_A} {NOME} no Google: nota [nota] em [avaliações] avaliações. Preparei uma demonstração independente de site com as fotos e avaliações públicas de vocês e acesso ao WhatsApp.\n\nPosso te mostrar como ficou?',
-        dica: 'Troca o "encontrei vocês" genérico por um fato que o dono confere na hora. Sem nota boa (abaixo de 4,3 ou menos de 15 avaliações), sai a A.',
+        dica: 'Texto histórico. Demonstração e avaliações não autorizam contato nem comprovam necessidade. Não deduza ausência de site ou perda de clientes.',
         produtos: SITE,
       },
       {
@@ -264,7 +263,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Primeira mensagem · C · Raio-X',
         texto:
           'Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. Analisei como {O_A} {NOME} aparece no Google e encontrei [N] pontos que podem dificultar o contato de novos clientes.\n\nPosso te enviar essa análise gratuita de uma página?',
-        dica: 'Oferece um diagnóstico, não um site, e só sai com o Raio-X no ar. [N] é o número de pontos que a página mostra (1 a 3; com 1: "1 ponto que faz"): nunca prometa 3 de cabeça. O demo vai junto, na 2ª mensagem.',
+        dica: 'Texto histórico, sem autorização vigente de abordagem. [N] exige observação real; material publicado não autoriza envio.',
         produtos: SITE,
       },
       {
@@ -272,7 +271,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'CDL · primeiro contato com o associado',
         texto:
           'Oi [nome]! Sou o Rômulo, do Prumo, parceiro da [nome da CDL]. Ajudo empresas de [segmento] a organizar regras de orçamento para a equipe consultar no dia a dia.\n\nPosso te mostrar um exemplo ilustrativo de como essas regras ficam organizadas?',
-        dica: 'Só use "parceiro" depois de a CDL aceitar. Pela CDL a empresa pode entrar direto no Mapa: se nos 20 minutos ela mostrar que tem equipe (umas 8 pessoas ou mais), mande o convite para o Mapa.',
+        dica: 'Texto histórico. Só use "parceiro" com parceria confirmada e contato elegível; Mapa opcional conforme a necessidade, nunca apenas pelo porte.',
         produtos: PRUMO,
       },
     ],
@@ -280,14 +279,14 @@ export const ROTEIRO: PassoDoRoteiro[] = [
   {
     momento: 'pode-mandar',
     titulo: 'Depois do "pode mandar"',
-    objetivo: 'Mandar o link (o demo ou o Raio-X) no mesmo dia: quem continua a conversa depois dele é comprador.',
+    objetivo: 'Entregar somente o material solicitado no canal permitido. Continuar a conversa não confirma necessidade, proposta ou compra.',
     servico: 'encontrado',
     trechos: [
       {
         id: 'segunda-prumo',
         titulo: 'PRUMO · o Raio-X (empresa que já tem site)',
         texto: SEGUNDA_PRUMO,
-        dica: 'Só com a página do Raio-X no ar (o botão "Mandar o Raio-X" da ficha já leva este texto). Sem preço: o Respondido é sob proposta, depois dos 20 minutos. Se a empresa tem equipe, o passo seguinte é o convite para o Mapa.',
+        dica: 'Usar somente se esse material foi solicitado e está disponível. Responder preço diretamente quando perguntado; ter equipe não impõe Mapa.',
         produtos: PRUMO,
       },
       {
@@ -334,22 +333,22 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Preço do Encontrado (para juntar à segunda)',
         texto:
           'Se gostarem, coloco no ar com o endereço de vocês. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e um ajuste por mês incluídos. Vocês só pagam depois de ver o site funcionando.',
-        dica: 'A 2ª mensagem já leva este preço; use quando escrever a sua à mão. O preço logo de cara separa curiosos de compradores e evita o "quanto custa?" que trava a conversa.',
+        dica: 'Informe as condições vigentes quando perguntado ou quando pertinentes ao pedido. Perguntar preço não comprova compra.',
         produtos: SITE,
       },
     ],
   },
   {
     momento: 'followup',
-    titulo: 'Follow-up do 3º dia',
-    objetivo: 'Lembrar uma vez, no 3º dia, e deixar a porta aberta para um "não".',
+    titulo: 'Follow-up do 3º dia · referência histórica',
+    objetivo: 'Referência histórica de acompanhamento. Passagem do tempo não autoriza contato: conferir permissão, conversa atual e próximo passo combinado.',
     trechos: [
       {
         id: 'followup-sem-link',
         titulo: 'Ainda sem link',
         texto: FOLLOWUP,
         esteira: true,
-        dica: 'O n8n já manda este no 3º dia: confira a conversa antes de mandar de novo.',
+        dica: 'Mensagem da esteira legada; conferir histórico e elegibilidade. Não presume automação ativa nem autoriza nova tentativa.',
         produtos: SITE,
         raioX: false,
       },
@@ -376,7 +375,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'PRUMO · sem resposta',
         texto:
           'Oi [nome], é o Rômulo de novo, do Prumo. Ainda faz sentido a gente conversar 20 minutos sobre responder orçamento no mesmo dia? Se não for o momento, é só dizer.',
-        dica: 'Um só, 3 dias depois do primeiro contato. Sem resposta, deixe quieto.',
+        dica: 'Texto histórico; usar somente em acompanhamento elegível e combinado. Silêncio não autoriza insistência.',
         produtos: PRUMO,
       },
       {
@@ -389,11 +388,10 @@ export const ROTEIRO: PassoDoRoteiro[] = [
     ],
   },
   {
-    // Depois do Raio-X, só para empresa com equipe (09/10/2026): o Raio-X viu a
-    // empresa por fora, o Mapa vê por dentro. É a única porta para a Fonte.
+    // Investigação opcional da rotina, quando ajuda a definir o escopo.
     momento: 'convite-mapa',
-    titulo: 'Depois do Raio-X · empresa com equipe: o convite para o Mapa',
-    objetivo: 'Levar o dono às 16 perguntas do Mapa (uns 10 minutos, com estimativas do dono, sem extratos nem senhas). Só empresa com equipe, umas 8 pessoas ou mais; a pequena fica no Raio-X e nos produtos.',
+    titulo: 'Investigação opcional da rotina · convite para o Mapa',
+    objetivo: 'Oferecer investigação opcional quando a rotina da equipe exige entendimento adicional e o interessado aceita. São 16 perguntas, cerca de 10 minutos, sem extratos nem senhas.',
     servico: 'mapa',
     trechos: [
       {
@@ -401,13 +399,13 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Convite para o Mapa',
         // Uma linha por ideia e o link sozinho numa linha: no WhatsApp ele fica tocável e não se mistura ao texto.
         texto: [
-          'Oi, [nome]. Aqui é o Rômulo, do Prumo. O raio-x mostrou o lado de fora {ARTIGO} {NOME}, do jeito que o cliente vê no Google.',
+          'Oi, [nome]. Aqui é o Rômulo, do Prumo. Para entender a rotina {ARTIGO} {NOME}, podemos usar o Mapa se essa investigação ajudar vocês.',
           'O Mapa mostra o de dentro: o que hoje só anda com você, onde a informação mora e o que arrumar primeiro. Vocês recebem um documento e uma conversa de 45 minutos sobre ele, sem custo.',
           'São 16 perguntas, uns 10 minutos, com números aproximados informados pelo dono, sem extratos nem senhas:',
           '[link das 16 perguntas]',
           'Consegue responder até [dia]?',
         ].join('\n'),
-        dica: 'Só depois do Raio-X e só com empresa com equipe (umas 8 pessoas ou mais): é onde a Fonte se paga. Sem preço nesta mensagem, nem da Fonte: ela é sob proposta, depois do Mapa. O documento sai em até 3 dias úteis.',
+        dica: 'Confirmar problema da equipe, utilidade da investigação e aceite. Não exige Raio-X nem porte mínimo; o Mapa é gratuito e não obriga contratação. Combinar prazo compatível com a entrega.',
         produtos: PRUMO,
       },
     ],
@@ -435,7 +433,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       '"Isto só anda com você: [o que passa pelo dono]." Quem do time poderia decidir isso, se a regra estivesse escrita?',
       '"A informação de [assunto] mora em [onde]." Uma pessoa nova acha sozinha?',
       '"Pelas respostas, essas travas custam algo como [valor estimado] por mês." Faz sentido para você?',
-      'Para fechar: "O primeiro passo é [o que fazer primeiro]. Se quiserem construir isso com o time, é a Fonte: preparo a proposta por escrito e combinamos o prazo de apresentação." Sem time para usar a Fonte, encerre bem e aponte o produto que resolve.',
+      'Para combinar o próximo passo: "O problema que confirmamos é [problema]. Se quiserem uma proposta, vamos conferir o escopo e combinar uma data." Fonte somente quando a equipe precisar e puder adotar; não indicar outro produto automaticamente.',
     ],
   },
   {
@@ -448,7 +446,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         id: 'conversa-convite',
         titulo: 'Convite para a conversa',
         texto:
-          'Que bom! Antes de te propor qualquer coisa, quero entender como o cliente chega até vocês hoje e o que acontece depois que ele chama. São 20 minutos de conversa, por telefone ou vídeo. Se fizer sentido, preparo a proposta por escrito e combinamos quando ela será apresentada. Qual próximo passo funciona para vocês?',
+          'Para definir o escopo, quero entender um caso recente do atendimento de vocês e o que precisa melhorar. Podemos conversar por aqui ou, se preferir, por telefone ou vídeo. Qual formato funciona melhor?',
         dica: 'Só depois de um sim ou de uma pergunta do dono, nunca no WhatsApp frio. Anote cada número: é o "antes" da medição, e a diferença em 30 dias é a prova do Respondido.',
         produtos: TODOS,
       },
@@ -463,20 +461,20 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       'De cada 10 que chamam, quantos viram cliente?',
       'Quanto vale um cliente para vocês, em média, num serviço?',
       'De cada 10 clientes novos, quantos chegam pelo Google? Quem procura vocês lá, acha?',
-      'Para fechar: "Pelo que vocês me contaram, o maior vazamento está em [onde]: uns [quantos] clientes por mês. É isso que o [serviço] resolve, e a gente mede: conta antes de ligar e mostra a diferença em 30 dias. Preparo a proposta por escrito e combinamos o prazo de apresentação."',
+      'Para combinar o próximo passo: "Pelo caso que vocês descreveram, precisamos melhorar [processo]. Vamos confirmar o escopo e como medir a mudança?" Distinguir estimativas de dados observados; não prometer clientes recuperados ou proposta antes de ter contexto suficiente.',
     ],
   },
   {
     momento: 'proposta',
     titulo: 'Proposta',
-    objetivo: 'Conferir necessidade, adequação, intenção, participantes e próximo passo; preparar proposta com escopo, preço e início. Meta interna: até 24 h após abertura comercial confirmada, conforme informações e compromisso possível.',
+    objetivo: 'Preparar proposta quando necessidade, processo de decisão e escopo forem suficientes: o que entra, quanto custa e quando começa. Combinar a data; um gostei isolado não basta.',
     trechos: [
       {
         id: 'proposta-encontrado',
-        titulo: 'Encontrado (depois do "gostei")',
+        titulo: 'Encontrado (escopo confirmado)',
         texto:
           'Que bom que gostaram! Fica assim: coloco o site no ar com o endereço de vocês, reviso o perfil do Google e ponho o botão de WhatsApp. São R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e um ajuste por mês incluídos. Vocês só pagam depois de ver o site funcionando. Posso começar?',
-        dica: 'Confira a qualificação e a condição individual antes da versão final. Meta interna de preparação: até 24 h após abertura confirmada; conferir informações e compromisso antes de prometer prazo. Pediram mudança no demo? Faça antes de cobrar.',
+        dica: 'Confirmar escopo e condições antes de propor. Mudança combinada no demo entra na conferência; pagamento só depois de ver funcionando.',
         produtos: SITE,
       },
       {
@@ -489,10 +487,10 @@ export const ROTEIRO: PassoDoRoteiro[] = [
       },
       {
         id: 'proposta-fonte',
-        titulo: 'Fonte (depois do Mapa)',
+        titulo: 'Fonte (diagnóstico suficiente)',
         texto:
-          'Como vimos no Mapa: hoje [o que só anda com você]. A proposta: na primeira semana conferimos o Mapa com o time; depois escrevemos junto como a {NOME} vende, compra, entrega e cobra, e quem faz o quê, num Notion ou num agente com IA que o time consulta. O objetivo é que o time encontre a regra combinada sem depender de você para cada consulta. O projeto parte de R$ 1.500 (Drive, Notion ou caderno no Gemini; R$ 2.400 se for robô no WhatsApp ou chat próprio), metade para começar e metade na entrega. Se fizer sentido, começo [dia].',
-        dica: 'Só depois do Mapa. Meta interna de preparação: até 24 h da devolutiva, com escopo e dependências conferidos; combinar prazo individual antes de prometer. A manutenção da Fonte (R$ 190/mês, opcional, até 10 mudanças por mês) entra no fim como opção, nunca como condição.',
+          'Como conversamos: hoje [problema confirmado]. A proposta: na primeira semana conferimos as regras com o time; depois escrevemos junto como a {NOME} vende, compra, entrega e cobra, e quem faz o quê, num Notion ou num agente com IA que o time consulta. O objetivo é que o time encontre a regra combinada sem depender de você para cada consulta. O projeto parte de R$ 1.500 (Drive, Notion ou caderno no Gemini; R$ 2.400 se for robô no WhatsApp ou chat próprio), metade para começar e metade na entrega. Se fizer sentido, começo [dia].',
+        dica: 'Somente com necessidade e escopo confirmados; Mapa é opcional. A manutenção da Fonte (R$ 190/mês, opcional, até 10 mudanças por mês) entra no fim como opção, nunca como condição.',
         produtos: PRUMO,
       },
     ],
@@ -507,7 +505,7 @@ export const ROTEIRO: PassoDoRoteiro[] = [
         titulo: 'Pedir a decisão',
         texto:
           'Oi [nome], conseguiu olhar a proposta? Se fizer sentido, já reservo [dia] para começar. Se não for o momento, pode me dizer, sem problema: prefiro um não claro a ficar te cobrando.',
-        dica: 'Um dia depois da proposta. Sem resposta, um último toque em 3 dias e pronto.',
+        dica: 'Acompanhar na data combinada e no canal permitido; silêncio não autoriza uma nova cadência.',
         produtos: TODOS,
       },
       {
@@ -537,12 +535,11 @@ export const OBJECOES: Objecao[] = [
     id: 'ja-tem-site',
     fala: 'já temos site',
     sinais: ['ja temos site', 'ja temos um site', 'ja tem site', 'ja tem um site', 'ja tenho site', 'ja tenho um site', 'ja possuimos site', 'ja possuimos um site', 'ja temos nosso site'],
-    levaPara: 'respondido',
     resposta: {
       id: 'objecao-ja-tem-site',
       titulo: '"Já temos site"',
-      texto: 'Ótimo, então o site não é o problema. Uma pergunta só: quando alguém chama vocês no WhatsApp fora do horário, o que acontece com essa pessoa?',
-      dica: 'Leva para o Respondido. Se ele contar que ninguém responde, ofereça a conversa de 20 minutos.',
+      texto: 'Entendido, vocês já têm site. Não vou insistir em outro. Se houver algo específico que você queira resolver, pode me dizer.',
+      dica: 'Não trocar automaticamente a oferta por automação. Respeitar recusa; investigar outro problema somente se a pessoa o trouxer.',
       produtos: TODOS,
     },
   },
@@ -550,11 +547,10 @@ export const OBJECOES: Objecao[] = [
     id: 'ja-tem-agencia',
     fala: 'já temos agência',
     sinais: ['ja temos agencia', 'ja temos uma agencia', 'ja tem agencia', 'ja tem uma agencia', 'ja tenho agencia', 'ja tenho uma agencia', 'trabalhamos com agencia', 'trabalhamos com uma agencia', 'nossa agencia'],
-    levaPara: 'respondido',
     resposta: {
       id: 'objecao-ja-tem-agencia',
       titulo: '"Já temos agência"',
-      texto: 'Faz sentido. A agência traz o cliente; eu cuido do que acontece depois que ele chama: resposta, retorno e agenda. Se um dia quiser ver como funciona, é só me chamar. Bom trabalho!',
+      texto: 'Entendido, vocês já contam com uma agência. Obrigado por esclarecer; não vou insistir em outra oferta.',
       dica: 'Não dispute com a agência: deixe a porta aberta e não insista.',
       produtos: TODOS,
     },
@@ -569,7 +565,7 @@ export const OBJECOES: Objecao[] = [
       titulo: '"Quanto custa?"',
       texto:
         'Para colocar o site no ar com o endereço de vocês: R$ 690 uma vez e R$ 39 por mês, com domínio, hospedagem e um ajuste por mês incluídos. Vocês só pagam depois de ver o site funcionando. Quer que eu coloque?',
-      dica: 'Diga o preço na hora, sem rodeio. Lead do PRUMO: o Raio-X e o Mapa são grátis; Respondido e Fonte são sob proposta, com o valor por escrito e o prazo combinado após conferir o escopo. Se a pergunta é sobre o Mapa, use o "isso é pago?".',
+      dica: 'Diga a base e as condições vigentes da oferta perguntada, sem exigir reunião ou diagnóstico. Valor fechado por escrito antes de começar. Se a pergunta é sobre o Mapa, esclareça que ele é gratuito.',
       produtos: TODOS,
     },
   },
@@ -622,7 +618,7 @@ export const OBJECOES: Objecao[] = [
       id: 'objecao-mapa-e-pago',
       titulo: '"Isso é pago?"',
       texto: `${FRASE_MAPA_E_GRATIS} O documento fica com vocês de qualquer jeito, contratando ou não. Consegue responder as 16 perguntas até [dia]?`,
-      dica: 'Sem número nenhum: o valor da Fonte vai na proposta, por escrito, só depois do Mapa.',
+      dica: 'O Mapa é gratuito; não confundir com a Fonte. Se perguntarem pela Fonte, informar a base vigente e esclarecer o escopo, sem impor Mapa prévio.',
       produtos: PRUMO,
     },
   },
@@ -664,7 +660,7 @@ export const CDL: Trecho[] = [
     titulo: 'Associado que veio pela CDL',
     texto:
       'Oi [nome]! Sou o Rômulo, do Prumo, parceiro da [nome da CDL]. Estamos oferecendo aos associados uma análise gratuita de como a empresa aparece no Google e de como facilitar o contato dos clientes. Usamos dados públicos, sem formulário para vocês.\n\nPosso preparar a da sua empresa?',
-    dica: 'Do raio-x, a conversa segue para o Mapa (empresa com equipe) ou para os produtos (Encontrado, Respondido).',
+    dica: 'A conversa segue pela necessidade confirmada. Raio-X e Mapa são opcionais; parceria não autoriza envio indiscriminado.',
     produtos: PRUMO,
   },
 ]
@@ -685,7 +681,7 @@ export interface LeadDaColinha {
   /** Site: a variação da primeira mensagem (`mensagem: 'C'` = recebeu o raio-x). */
   abordagem?: { mensagem?: string }
   /**
-   * A empresa tem equipe (umas 8 pessoas ou mais)? Decide o convite para o Mapa.
+   * A empresa tem equipe? Informação de contexto; não decide sozinha convite para o Mapa.
    * O CRM ainda não sabe (a planilha não tem porte): ausente, o convite aparece e
    * a dica diz o filtro, para o Rômulo decidir; `false` o esconde.
    */
@@ -775,7 +771,7 @@ export function objecaoDaOferta(o: Objecao, lead: Pick<LeadDaColinha, 'produto' 
     ? `${textoDasFaixasIris()} O total depende de quantas fichas ficam ativas no mês. Quantas vocês têm hoje?`
     : 'Entendo. A Iris atende a governança da clínica e reúne as anotações das sessões para a reavaliação. O valor acompanha as fichas ativas do mês. Podemos conferir a quantidade e o trabalho que isso resolve antes de decidir?'
   else if (produto === 'prumo') texto = o.id === 'quanto-custa'
-    ? 'O raio-x e o Mapa são gratuitos. O trabalho é proposto depois de entendermos o problema, o impacto e quem decide. Qual ponto vocês querem resolver primeiro?'
+    ? `Raio-X e Mapa são gratuitos. Para implantação de atendimento, a base é ${precoDaTabela(CARDAPIO.find(s => s.id === 'respondido')!)}; Fonte: ${precoDaTabela(CARDAPIO.find(s => s.id === 'fonte')!)}. Qual dessas entregas você quer avaliar? O valor fechado depende do escopo, sem exigir diagnóstico ou reunião.`
     : 'Entendo. Vamos conferir o problema que precisa ser resolvido e o que entra na proposta. Qual parte parece maior do que o resultado esperado?'
   else if (produto === 'estampa') texto = o.id === 'quanto-custa'
     ? 'O preço do sistema para estamparia ainda precisa ser definido. Primeiro quero entender os pedidos, a equipe e o que precisa ficar organizado. Podemos ver isso por dez minutos?'
@@ -794,47 +790,40 @@ export function colinhaDoLead(lead: LeadDaColinha): ColinhaDoLead {
   const tipo = lead.resposta?.tipo
   const reconhecidas = objecoesNoTexto(lead.resposta?.trecho)
   const prumo = lead.produto === 'prumo'
-  // "Depois do Raio-X" = a página dele existe (leads.json); a do Site antes da
-  // venda é pequena demais para o Mapa e nunca o recebe.
-  const convidaMapa = prumo && Boolean(lead.links.raioX?.trim()) && lead.equipe !== false
-  const comMapa = (ms: Momento[]): Momento[] => (convidaMapa ? ['convite-mapa', ...ms] : ms)
+  if (tipo === 'exclusao') return { motivo: 'Interromper contato e seguir o procedimento de exclusão e proteção dos dados.', objecoes: [objecao('pode-apagar')], momentos: [] }
+  if (lead.etapa === 'perdido') return { motivo: 'Cadastro encerrado: nada a mandar; revisão interna não autoriza contato.', objecoes: [], momentos: [] }
+  if (tipo === 'negativa' && !reconhecidas.some(o => ['quanto-custa', 'ta-caro', 'ver-com-socio'].includes(o.id))) return { motivo: 'Respeitar a recusa, sem nova abordagem ou troca automática de oferta.', objecoes: [], momentos: [] }
   let momentos: Momento[] = []
   let objecoes: Objecao[] = reconhecidas
   let motivo = ''
 
   switch (lead.etapa) {
     case 'novo':
-      momentos = ['primeiro-contato']
-      motivo = 'Ainda sem contato: a primeira mensagem.'
+      momentos = []
+      motivo = 'Primeiros contatos automáticos bloqueados. Roteiros antigos são referência histórica, não autorização de abordagem.'
       break
     case 'contato':
-      if (prumo && lead.sinal === 'diagnostico' && tipo !== 'exclusao' && tipo !== 'negativa') {
-        momentos = ['mapa', 'proposta']
+      if (prumo && lead.sinal === 'diagnostico' && tipo !== 'negativa') {
+        momentos = ['mapa']
         motivo = 'Respondeu as 16 perguntas: mande o Mapa pronto e marque a devolutiva de 45 minutos.'
       } else if (tipo === 'interesse') {
-        // PRUMO: o "sim" recebe o Raio-X (08/10/2026); depois dele, com equipe, o
-        // convite para o Mapa (09/10/2026), e a conversa e a proposta dos produtos.
-        momentos = prumo ? ['pode-mandar', ...comMapa(['conversa', 'proposta'])] : ['pode-mandar', 'proposta']
-        motivo = convidaMapa
-          ? 'Respondeu com interesse depois do Raio-X: com equipe, o convite para o Mapa; sem, a conversa e o preço.'
-          : 'Respondeu com interesse: mande o próximo passo e já fale de preço.'
+        momentos = ['pode-mandar', 'conversa']
+        motivo = 'Atender o pedido e confirmar necessidade e escopo. Interesse não comprova compra nem exige Mapa ou proposta imediata.'
       } else if (tipo === 'licenca') {
         // 17/10/2026 (a Baobá): "pode enviar sim" ao material oferecido é licença, não "quero ver". O
-        // trecho é o de mandar; o preço fica para depois de ele dizer o que achou.
+        // trecho é o material solicitado; pergunta de preço recebe resposta direta.
         momentos = ['pode-mandar']
-        motivo = 'Deixou mandar o material: mande só o que ofereceu, sem preço, e depois pergunte o que achou.'
-      } else if (tipo === 'exclusao') {
-        objecoes = [objecao('pode-apagar'), ...reconhecidas]
-        motivo = 'Pediu para apagar: agradeça e apague no mesmo dia.'
+        motivo = 'Entregar só o material solicitado. Se perguntar preço, responder diretamente; permissão não confirma compra.'
+
       } else if (tipo === 'negativa') {
-        if (!reconhecidas.length) objecoes = OBJECOES
-        motivo = reconhecidas.length ? 'Respondeu negativa: a resposta pronta para o que ele disse.' : 'Respondeu negativa sem objeção reconhecida: escolha a resposta.'
+        objecoes = reconhecidas.filter(o => o.id === 'quanto-custa' || o.id === 'ta-caro' || o.id === 'ver-com-socio')
+        motivo = 'Respeitar a recusa. Esclarecer somente uma pergunta concreta, sem oferecer outro serviço ou insistir.'
       } else if (tipo === 'neutra') {
-        momentos = prumo ? comMapa(['conversa']) : ['pode-mandar']
+        momentos = ['conversa']
         motivo = 'Respondeu sem sim nem não: siga a conversa.'
       } else {
-        momentos = ['followup']
-        motivo = tipo === 'bot' ? 'Só o robô respondeu: ninguém leu ainda, vale o follow-up.' : 'Sem resposta ainda: o follow-up.'
+        momentos = []
+        motivo = 'Sem resposta humana confirmada: aguardar ou conferir o próximo passo combinado; não recomendar follow-up pelo silêncio.'
       }
       break
     case 'proposta':
@@ -845,10 +834,6 @@ export function colinhaDoLead(lead: LeadDaColinha): ColinhaDoLead {
     case 'ganho':
       momentos = ['fechamento']
       motivo = 'Ganho: o que combinar agora.'
-      break
-    case 'perdido':
-      if (tipo === 'exclusao') objecoes = [objecao('pode-apagar'), ...reconhecidas]
-      motivo = 'Lead encerrado: nada a mandar, a não ser que ele volte a escrever.'
       break
   }
 

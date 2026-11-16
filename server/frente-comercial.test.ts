@@ -1,6 +1,8 @@
+import '../src/testes/politica-historica.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import { watch } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -40,75 +42,42 @@ async function montar(leads: CrmLead[], fila: Array<{ id: string; estado: string
   return { dir, base, relogio, memoriaDaVenda, reservar, fechar };
 }
 
-test('reserva: o lead do time sai com o texto do Balcão e entra no ritmo de todos como "time"', async () => {
-  const m = await montar([lead('site:a'), lead('site:b')], [{ id: 'site:a', estado: 'pronto' }, { id: 'site:b', estado: 'pronto' }]);
-  try {
-    assert.deepEqual((await m.reservar('site:a')).corpo, { reservado: true, texto: MSG });
-    assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros['site:a'], { em: AGORA, por: 'time' });
-    // O segundo, logo depois: o intervalo de 30 min da Central vale para o time também.
-    assert.deepEqual((await m.reservar('site:b')).corpo, { reservado: false, motivo: 'intervalo', ate: new Date(AGORA + 30 * 60_000).toISOString() });
-    m.relogio.agora = AGORA + 30 * 60_000;
-    assert.equal((await m.reservar('site:b')).corpo.reservado, true);
-    // O mesmo lead de novo: já tem o primeiro do dia.
-    m.relogio.agora = AGORA + 60 * 60_000;
-    assert.equal((await m.reservar('site:a')).corpo.motivo, 'ja-tocado');
-  } finally { await m.fechar(); }
-});
-
-test('reserva: o toque da Central conta no ritmo do time e tira o lead dele', async () => {
+test('reserva: bloqueio prevalece sobre fila, ritmo, horário e pedidos concorrentes', async () => {
   const m = await montar([lead('site:a'), lead('site:b')], [{ id: 'site:a', estado: 'pronto' }, { id: 'site:b', estado: 'pronto' }]);
   try {
     await m.memoriaDaVenda.primeiroContato('site:b', 'central');
-    assert.equal((await m.reservar('site:a')).corpo.motivo, 'intervalo');
-    m.relogio.agora = AGORA + 30 * 60_000;
-    assert.equal((await m.reservar('site:b')).corpo.motivo, 'ja-tocado');
+    for (const horario of [AGORA, AGORA + 30 * 60_000, Date.parse('2026-10-19T21:00:00Z')]) {
+      m.relogio.agora = horario;
+      const resultados = await Promise.all([m.reservar('site:a'), m.reservar('site:b')]);
+      for (const r of resultados) {
+        assert.equal(r.corpo.reservado, false);
+        assert.equal(r.corpo.motivo, 'aquisicao-bloqueada');
+      }
+    }
+    assert.equal((await m.memoriaDaVenda.ler()).primeiros['site:a'], undefined);
   } finally { await m.fechar(); }
 });
 
-test('reserva: dois pedidos juntos não passam os dois pelo ritmo', async () => {
-  const m = await montar([lead('site:a'), lead('site:b')], [{ id: 'site:a', estado: 'pronto' }, { id: 'site:b', estado: 'pronto' }]);
+test('reserva: valida origem e identificador antes do bloqueio', async () => {
+  const m = await montar([lead('site:a')], [{ id: 'site:a', estado: 'pronto' }]);
   try {
-    const [a, b] = await Promise.all([m.reservar('site:a'), m.reservar('site:b')]);
-    assert.equal([a, b].filter((r) => r.corpo.reservado === true).length, 1);
-  } finally { await m.fechar(); }
-});
-
-test('reserva: Triagem, fora da fila, time pausado, gate e fora do expediente recusam', async () => {
-  const m = await montar(
-    [lead('site:a'), lead('estampa:r', { produto: 'estampa', sinal: 'revisar' } as Partial<CrmLead>), lead('site:fora'), lead('site:marca', { mensagemPronta: 'Olá {{nome}}, tudo bem?' })],
-    [{ id: 'site:a', estado: 'pronto' }, { id: 'estampa:r', estado: 'pronto' }, { id: 'site:marca', estado: 'pronto' }],
-  );
-  try {
-    assert.equal((await m.reservar('estampa:r')).corpo.motivo, 'nao-elegivel');
-    assert.equal((await m.reservar('site:fora')).corpo.motivo, 'nao-e-do-time');
-    assert.equal((await m.reservar('site:marca')).corpo.motivo, 'mensagem-barrada');
     assert.equal((await m.reservar('site:a', null)).status, 403);
     assert.equal((await m.reservar('site:a', 'https://outro.test')).status, 403);
     assert.equal((await m.reservar('../x')).status, 400);
-    m.relogio.agora = Date.parse('2026-10-19T21:00:00Z'); // 18:00 em São Paulo
-    assert.deepEqual((await m.reservar('site:a')).corpo, { reservado: false, motivo: 'fora-do-expediente', ate: null });
+    assert.equal((await m.reservar('site:a')).corpo.motivo, 'aquisicao-bloqueada');
     assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros, {});
-    await fs.writeFile(path.join(m.dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: false }));
-    m.relogio.agora = AGORA;
-    assert.equal((await m.reservar('site:a')).corpo.motivo, 'nao-e-do-time');
   } finally { await m.fechar(); }
 });
 
-test('reserva: quatro ofertas usam o texto aprovado da fonte e rejeitam número não confirmado', async () => {
+test('reserva: todas as ofertas e cadastros recusados permanecem bloqueados', async () => {
   for (const produto of ['site', 'prumo', 'iris', 'estampa'] as const) {
     const id = `${produto}:a`;
-    const convite = `https://wa.me/5511998887766?text=${encodeURIComponent(MSG)}`;
-    const extra: Partial<CrmLead> = produto === 'site' ? {} : { produto, sinal: 'revisar', mensagemPronta: undefined, triagem: { origemWhatsapp: 'cadastro confirmado' }, links: { convite, whatsapp: 'https://wa.me/5511998887766' } };
-    const m = await montar([lead(id, extra)], [{ id, estado: 'pronto' }]);
-    try { assert.deepEqual((await m.reservar(id)).corpo, { reservado: true, texto: MSG }); }
-    finally { await m.fechar(); }
+    const m = await montar([lead(id, { produto })], [{ id, estado: 'pronto' }]);
+    try {
+      assert.equal((await m.reservar(id)).corpo.motivo, 'aquisicao-bloqueada');
+      assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros, {});
+    } finally { await m.fechar(); }
   }
-  const id = 'iris:duvida';
-  const m = await montar([lead(id, { produto: 'iris', sinal: 'revisar', mensagemPronta: undefined,
-    triagem: { origemWhatsapp: 'não confirmado — número do Google' },
-    links: { convite: `https://wa.me/5511998887766?text=${encodeURIComponent(MSG)}`, whatsapp: 'https://wa.me/5511998887766' } })], [{ id, estado: 'pronto' }]);
-  try { assert.equal((await m.reservar(id)).corpo.motivo, 'nao-elegivel'); }
-  finally { await m.fechar(); }
 });
 
 test('quem faz o primeiro contato, do disco: a fila do time com ele ligado, e o que ele já começou sempre', async () => {
@@ -127,39 +96,39 @@ test('Fase 0: Plus não pode ser reservado pelo time, mesmo pronto numa fila ant
   const convite = `https://wa.me/5511998887766?text=${encodeURIComponent(MSG)}`;
   const m = await montar([lead(id, { produto: 'plus', plus: { oferta: 'site', fixo: false, descricao: '' }, links: { enviar: convite, whatsapp: 'https://wa.me/5511998887766' } })], [{ id, estado: 'pronto' }]);
   try {
-    assert.deepEqual((await m.reservar(id)).corpo, { reservado: false, motivo: 'nao-elegivel', ate: null });
+    assert.equal((await m.reservar(id)).corpo.motivo, 'aquisicao-bloqueada');
     assert.deepEqual([...await lerPrimeirosDoTime(m.dir)], []);
     assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros, {});
   } finally { await m.fechar(); }
 });
 
-test('mitigação: o 16º contato do time é barrado pela soma das cinco linhas e superfícies', async () => {
+test('aquisição bloqueada mesmo com histórico das cinco linhas e superfícies', async () => {
   const m = await montar([lead('site:novo')], [{ id: 'site:novo', estado: 'pronto' }]);
   try {
     const produtos = ['site', 'prumo', 'iris', 'estampa', 'plus'];
-    for (let i = 0; i < 15; i++) {
-      m.relogio.agora = AGORA - (15 - i) * 30 * 60_000;
+    for (let i = 0; i < 20; i++) {
+      m.relogio.agora = AGORA - (20 - i) * 30 * 60_000;
       await m.memoriaDaVenda.primeiroContato(`${produtos[i % produtos.length]}:${i}`, i % 2 ? 'central' : 'telegram');
     }
     m.relogio.agora = AGORA;
-    assert.deepEqual((await m.reservar('site:novo')).corpo, { reservado: false, motivo: 'dia', ate: '2026-10-20T03:00:00.000Z' });
+    assert.equal((await m.reservar('site:novo')).corpo.motivo, 'aquisicao-bloqueada');
   } finally { await m.fechar(); }
 });
 
 test('sem retrato não inventa avaliações nem envios; snapshot não expõe campos de integração', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'frente-'));
   try {
-    const vazio = await lerFrente(dir, AGORA); assert.equal(vazio.atualizadoEm, null); assert.equal(vazio.estado, 'iniciando');
+    const vazio = await lerFrente(dir, AGORA); assert.equal(vazio.atualizadoEm, null); assert.equal(vazio.estado, 'bloqueado');
     await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: new Date(AGORA).toISOString(), estado: 'pronto', setores: [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1, segredo: 'nao-sai' }], funil: [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167, numero: 'segredo' }], fila: [{ id: 'site:1', setor: 'Advocacia', numero: 'segredo', recibo: 'privado', nota: 80 }], apikey: 'nao-sai' }));
-    const v = await lerFrente(dir, AGORA); assert.equal(v.estado, 'pronto');
+    const v = await lerFrente(dir, AGORA); assert.equal(v.estado, 'bloqueado');
     // O teto mostrado é o da trava de ritmo da Central, não uma cota do time.
-    assert.equal(v.limite, 15);
+    assert.equal(v.limite, 20);
     assert.deepEqual(v.setores, [{ setor: 'Advocacia', avaliados: 12, selecionados: 3, enviados: 1 }]);
     assert.deepEqual(v.funil, [{ produto: 'iris', novo: 1884, contato: 2, proposta: 1, ganho: 0, perdido: 3, elegiveis: 100, contatosObservados: 12, respostasWhatsapp: 2, taxaResposta: 0.167 }]);
     assert.doesNotMatch(JSON.stringify(v), /segredo|privado|nao-sai/);
     await fs.writeFile(path.join(dir, 'frente-comercial.json'), JSON.stringify({ atualizadoEm: '2020-01-01T00:00:00Z', estado: 'pronto' }));
-    assert.equal((await lerFrente(dir, AGORA)).estado, 'sem-sinal');
+    assert.equal((await lerFrente(dir, AGORA)).estado, 'bloqueado');
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
 });
 
@@ -169,9 +138,9 @@ test('painel calcula a coorte atual do CRM, ignora contador antigo e mantém pau
   try {
     await fs.writeFile(path.join(m.dir, 'frente-comercial.json'), JSON.stringify({ estado: 'pausado', atualizadoEm: new Date(AGORA).toISOString(), respondidos: 99 }));
     const r = await fetch(`${m.base}/crm/frente`); const v = await r.json();
-    assert.equal(v.ativo, false); assert.equal(v.estado, 'pausado'); assert.equal(v.respondidos, 1);
+    assert.equal(v.ativo, false); assert.equal(v.estado, 'bloqueado'); assert.equal(v.respondidos, 1);
     assert.deepEqual(v.respostasHoje, { dia: '2026-10-19', enviados: 1, humanas: 1, robos: 0, semResposta: 0 });
-    assert.equal(v.intervaloMinutos, 30); assert.equal(v.porHora, 2); assert.equal(v.limite, 15);
+    assert.equal(v.intervaloMinutos, 10); assert.equal(v.porHora, 6); assert.equal(v.limite, 20);
     assert.equal((await lerFrente(m.dir, AGORA)).respostasHoje, null, 'sem CRM não inventa zero nem reutiliza contador antigo');
   } finally { await m.fechar(); }
 });
@@ -208,6 +177,7 @@ test('pausa é configuração de negócio da mesma origem, sem ampliar limites o
     assert.equal((await post({ ativo: true }, 'https://outro.test')).status, 403);
     assert.equal((await post({ ativo: true, limite: 1000 }, m.base)).status, 400);
     const arquivo = path.join(m.dir, 'frente-comercial-config.json'); await fs.writeFile(arquivo, JSON.stringify({ ativo: true, pausadoAte: '2030-01-01' }));
+    assert.equal((await post({ ativo: true }, m.base)).status, 409);
     assert.equal((await post({ ativo: false }, m.base)).status, 200);
     const config = JSON.parse(await fs.readFile(arquivo, 'utf8')); assert.equal(config.ativo, false); assert.equal(config.limite, undefined); assert.equal(config.pausadoAte, '2030-01-01');
   } finally { await m.fechar(); }
@@ -217,9 +187,9 @@ test('proteção pausa antes da reserva, mostra motivo no painel e recusa ativa�
   const ls = Array.from({ length: 5 }, (_, i) => lead(`site:enviado${i}`, { links: { whatsapp: `https://wa.me/551199888770${i}` }, marcos: { enviado: '2026-10-19T12:00:00Z' } }));
   const m = await montar([...ls, lead('site:novo')], [{ id: 'site:novo', estado: 'pronto' }]);
   try {
-    const reserva = await m.reservar('site:novo'); assert.equal(reserva.corpo.motivo, 'pausa');
-    assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros, {});
     const painel = await (await fetch(`${m.base}/crm/frente`)).json();
+    const reserva = await m.reservar('site:novo'); assert.equal(reserva.corpo.motivo, 'aquisicao-bloqueada');
+    assert.deepEqual((await m.memoriaDaVenda.ler()).primeiros, {});
     assert.equal(painel.ativo, false); assert.equal(painel.pausaAutomatica.motivo, 'sem-resposta-humana'); assert.match(painel.detalhe, /5 de 5/);
     const ativar = await fetch(`${m.base}/crm/frente/config`, { method: 'POST', headers: { Origin: m.base, 'Content-Type': 'application/json' }, body: JSON.stringify({ ativo: true }) });
     assert.equal(ativar.status, 409);
@@ -236,26 +206,29 @@ test('relato de restrição é local, validado e não permite retomada imediata'
     assert.equal((await sinal({ sinal: 'restricao' })).status, 200);
     const painel = await (await fetch(`${m.base}/crm/frente`)).json();
     assert.equal(painel.pausaAutomatica.motivo, 'restricao'); assert.match(painel.detalhe, /bloqueio ou restrição/);
-    const nova = await m.reservar('site:novo'); assert.equal(nova.corpo.motivo, 'pausa');
+    const nova = await m.reservar('site:novo'); assert.equal(nova.corpo.motivo, 'aquisicao-bloqueada');
   } finally { await m.fechar(); }
 });
 
 test('monitor pausa sem abrir painel nem fazer requisição HTTP', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'frente-vigia-'));
   await fs.writeFile(path.join(dir, 'frente-comercial-config.json'), JSON.stringify({ ativo: true }));
+  // Observar o rename, sem manter o arquivo de destino aberto durante a troca atômica no Windows.
+  let resolver!: () => void;
+  const gravou = new Promise<void>(resolve => { resolver = resolve; });
+  const watcher = watch(dir, (evento, nome) => {
+    if (evento === 'rename' && String(nome) === 'frente-comercial-config.json') resolver();
+  });
   const monitor = montarFrenteComercial(express.Router(), { dataDir: dir, agora: () => AGORA,
     memoriaDaVenda: criarMemoriaDaVenda(path.join(dir, 'venda-do-dia.json'), () => AGORA),
     visao: async () => ({ estado: 'ok', leads: [] }), saude: async () => 'desconectado', vigiar: true });
   try {
-    let ativo = true;
-    // A suíte inteira disputa disco e CPU; aguardar o efeito, sem depender de 500 ms.
-    const prazo = Date.now() + 5_000;
-    while (ativo && Date.now() < prazo) {
-      await new Promise(resolve => setTimeout(resolve, 10));
-      ativo = JSON.parse(await fs.readFile(path.join(dir, 'frente-comercial-config.json'), 'utf8')).ativo;
-    }
-    assert.equal(ativo, false);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([gravou, new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('A proteção não gravou a pausa')), 15_000); })]);
+    } finally { if (timeout) clearTimeout(timeout); }
+    assert.equal(JSON.parse(await fs.readFile(path.join(dir, 'frente-comercial-config.json'), 'utf8')).ativo, false);
     const p = JSON.parse(await fs.readFile(path.join(dir, 'prospeccao-pausa.json'), 'utf8'));
     assert.equal(p.motivo, 'desconectado');
-  } finally { monitor.pararProtecao(); await fs.rm(dir, { recursive: true, force: true }); }
+  } finally { watcher.close(); monitor.pararProtecao(); await fs.rm(dir, { recursive: true, force: true }); }
 });

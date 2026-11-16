@@ -28,6 +28,7 @@ $portas = [ordered]@{
   9120 = 'Central do SquadOne'
   9119 = 'Hermes (painel)'
   8080 = 'code-server'
+  8787 = 'Linear Pessoal'
 }
 
 function Registrar([string]$texto) {

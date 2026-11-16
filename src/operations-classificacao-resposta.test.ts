@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { classificarResposta, respostaParaAcompanhamento, resumoDasRespostas, type ClasseDaResposta } from './operations/classificacao-resposta'
 import type { CrmLead, CrmResposta } from './operations/types'
+import { mensagemDoConvite } from '../server/convite-mensagem.ts'
+import { primeiraDoPlus } from '../server/plus-mensagem.ts'
 
 const ENVIO = '2026-10-21T11:00:00Z', RESPOSTA = '2026-10-21T11:02:00Z', AGORA = Date.parse('2026-10-22T18:00:00Z')
 const resposta = (trecho: string, tipo: CrmResposta['tipo'] = 'interesse'): CrmResposta => ({ tipo, trecho, em: RESPOSTA })
@@ -12,6 +14,24 @@ const conversa = (q: string, t: string, papel?: string) => [
 ]
 
 describe('classificação comercial contextual', () => {
+  it('sim à oferta de exemplo é permissão, sem presumir decisor ou interesse comercial', () => {
+    const agora = new Date(ENVIO)
+    for (const produto of ['iris', 'estampa'] as const) {
+      for (const q of [mensagemDoConvite(produto, 'Empresa Teste', '', agora), primeiraDoPlus({ empresa: 'Empresa Teste', oferta: produto, whatsapp: '5527999990001' }).texto]) {
+        const c = classificarResposta(lead(resposta('Sim', 'neutra')), conversa(q, 'Sim'), AGORA)
+        assert.equal(c.classe, 'permissao')
+        assert.equal(c.materialSolicitado, true)
+      }
+    }
+    for (const oferta of ['site', 'prumo'] as const) {
+      const q = primeiraDoPlus({ empresa: 'Empresa Teste', oferta, whatsapp: '5527999990001' }).texto
+      const c = classificarResposta(lead(resposta('Sim', 'neutra')), conversa(q, 'Sim'), AGORA)
+      assert.equal(c.classe, 'permissao')
+      assert.equal(c.materialSolicitado, true)
+    }
+    const q = mensagemDoConvite('prumo', 'Empresa Teste', '', agora)
+    assert.equal(classificarResposta(lead(resposta('Sim', 'neutra')), conversa(q, 'Sim'), AGORA).classe, 'permissao')
+  })
   const casos: Array<[string,string,string,ClasseDaResposta,CrmResposta['tipo']?]> = [
     ['sim ao responsável', 'Consigo falar com o responsável?', 'Sim', 'acesso'],
     ['identidade explícita', '', 'Eu mesmo', 'acesso'],
@@ -29,6 +49,13 @@ describe('classificação comercial contextual', () => {
     ['pergunta sobre funcionamento', '', 'Como funciona o sistema?', 'interesse'],
     ['identidade com pergunta comercial', 'Consigo falar com o responsável?', 'Sou eu. Quanto custa?', 'interesse'],
     ['intenção de compra', '', 'Quero contratar', 'interesse'],
+    ['troca de sistema', '', 'Já tenho um sistema, mas quero contratar outro', 'interesse'],
+    ['troca de fornecedor', '', 'Já temos sistema, queremos trocar de fornecedor', 'interesse'],
+    ['avaliação de alternativa', '', 'Já tenho uma agência, mas gostaria de mudar', 'interesse'],
+    ['pergunta sobre alternativa', '', 'Já tenho um sistema. Quanto custa o de vocês?', 'interesse'],
+    ['fornecedor sem abertura', '', 'Já tenho um sistema', 'recusa'],
+    ['recusa explícita com troca', '', 'Não quero trocar meu sistema, obrigado', 'recusa'],
+    ['negativa incorreta preserva divergência', '', 'Já tenho um sistema, mas quero contratar outro', 'interesse','negativa'],
     ['negação vence palavra interesse', '', 'Não tenho interesse, obrigado', 'recusa'],
     ['negativa registrada', '', 'Não, obrigado', 'recusa','negativa'],
     ['restrição de exclusão', '', 'Pode excluir o conteúdo', 'exclusao','exclusao'],
@@ -68,6 +95,20 @@ describe('classificação comercial contextual', () => {
     const ms = [...conversa('Oi','Quanto custa?'), { em:'2026-10-22T12:00:00Z', direcao:'entrada' as const, texto:'Mensagem automática', papel:'robo' }]
     const c = classificarResposta(l,ms,AGORA)
     assert.equal(c.classe,'interesse'); assert.equal(c.houveRespostaHumana,true)
+  })
+  it('ok posterior preserva evidência do interesse sem confirmar compra nem proposta', () => {
+    const ms = [...conversa('Posso ajudar?', 'Tenho interesse em contratar'),
+      { em:'2026-10-22T11:00:00Z',direcao:'saida' as const,texto:'Vou esclarecer o escopo com você.' },
+      { em:'2026-10-22T11:01:00Z',direcao:'entrada' as const,texto:'Ok' }]
+    const c = classificarResposta(lead(resposta('Tenho interesse em contratar')),ms,AGORA)
+    assert.equal(c.classe,'neutra')
+    assert.equal(c.interesseHistorico?.trecho,'Tenho interesse em contratar')
+    assert.equal(c.evidencia?.trecho,'Ok')
+    assert.equal(c.materialSolicitado,false)
+    ms[3]!.texto = 'Não tenho interesse'
+    const recusou = classificarResposta(lead(resposta('Tenho interesse em contratar')),ms,AGORA)
+    assert.equal(recusou.classe,'recusa')
+    assert.ok(recusou.interesseHistorico)
   })
   it('entrada posterior ao bot requer revisão, sem presumir humanidade', () => {
     const l = lead(resposta('', 'bot'))
@@ -109,6 +150,46 @@ describe('classificação comercial contextual', () => {
     assert.deepEqual(classificarResposta({...l,resposta:efetiva,respostaFonte:l.resposta},ms,AGORA),c)
     const negativa=resposta('Não, obrigado','negativa')
     assert.equal(respostaParaAcompanhamento(negativa,{...c,classe:'permissao'}),negativa,'nunca reabre a recusa')
+  })
+  it('agradecimento posterior não apaga recusa explícita recuperada no histórico', () => {
+    const ms=[...conversa('Podemos conversar?','infelizmente não estamos interessado tá'),
+      {em:'2026-10-21T11:02:30Z',direcao:'saida' as const,texto:'Obrigado pelo retorno'},
+      {em:'2026-10-21T11:02:40Z',direcao:'entrada' as const,texto:'de nadaa'}]
+    const l=lead({...resposta('de nadaa','neutra'),em:ms[3].em})
+    const c=classificarResposta(l,ms,AGORA)
+    assert.equal(c.classe,'recusa');assert.match(c.evidencia?.trecho??'',/não estamos interessado/)
+    assert.equal(c.materialSolicitado,false)
+    assert.equal(respostaParaAcompanhamento(l.resposta,c)?.tipo,'negativa')
+    assert.equal(classificarResposta(lead(resposta('Não','neutra')),conversa('Vocês usam CRM?','Não'),AGORA).classe,'neutra')
+  })
+  it('contato de loja indicado pelo shopping é encaminhamento, sem presumir interesse',()=>{
+    const texto='BORDADOS EXEMPLO\n43 99999-0000 | TÉRREO'
+    const ms=[...conversa('Consigo falar com o responsável?','Obrigado por entrar em contato com o Shopping Exemplo'),
+      {em:'2026-10-21T11:10:00Z',direcao:'entrada' as const,texto}]
+    const c=classificarResposta(lead({...resposta(texto,'neutra'),em:ms[2].em}),ms,AGORA)
+    assert.equal(c.classe,'acesso');assert.equal(c.materialSolicitado,false)
+  })
+  it('saudações do lote não viram resposta humana mesmo com rótulo legado incorreto',()=>{
+    for(const texto of [
+      'Empresa Exemplo agradece seu contato. Como podemos ajudar?',
+      'Olá! Seja bem vindo (a). Qual produto deseja? Qual quantidade? Qual data de entrega?',
+      'Olá, seja muito bem vindo à empresa. Trabalhamos com uma diversidade de materiais!',
+      'A empresa agradece sua preferência. Nosso horário de funcionamento é de Segunda a sexta. Assim que nossa equipe estiver disponível, retornaremos seu contato.',
+      'Entraremos em contato. Horário comercial de: Seg. a Sexta 9 às 18h',
+      '*1/3* Olá, seja bem-vindo(a). Escolha uma das opções abaixo: 1 - Quero fazer um orçamento',
+    ])for(const tipo of ['interesse','licenca','neutra'] as const) {
+      const l=lead(resposta(texto,tipo)),antes=JSON.stringify(l)
+      const c=classificarResposta(l,conversa('Consigo falar com o responsável?',texto,'gente'),AGORA)
+      assert.equal(c.classe,'robo',texto);assert.equal(c.houveRespostaHumana,false,texto)
+      assert.equal(respostaParaAcompanhamento(l.resposta,c)?.tipo,'bot',texto)
+      assert.equal(JSON.stringify(l),antes)
+    }
+  })
+  it('robô anterior não apaga o acesso humano posterior da Stamp Fast',()=>{
+    const ms=[...conversa('Consigo falar com o responsável?','Olá, seja muito bem vindo à empresa!'),
+      {em:'2026-10-21T11:20:00Z',direcao:'entrada' as const,texto:'Pode falar por aqui sim!'}]
+    const c=classificarResposta(lead({...resposta(ms[2].texto,'neutra'),em:ms[2].em}),ms,AGORA)
+    assert.equal(c.classe,'acesso');assert.equal(c.houveRespostaHumana,true);assert.equal(c.materialSolicitado,false)
   })
   it('agradecimento com resposta específica não vira robô nem apaga a recusa da fonte',()=>{
     for(const texto of [
@@ -164,45 +245,4 @@ describe('classificação comercial contextual', () => {
     assert.equal(r.classes.interesse,1);assert.equal(r.classes.permissao,1);assert.equal(r.classes.robo,1)
     assert.equal(r.leituraSemResposta,1);assert.equal(r.semLeituraSemResposta,1)
   })
-  it('agradecimento posterior não apaga recusa explícita recuperada no histórico', () => {
-    const ms=[...conversa('Podemos conversar?','infelizmente não estamos interessado tá'),
-      {em:'2026-10-21T11:02:30Z',direcao:'saida' as const,texto:'Obrigado pelo retorno'},
-      {em:'2026-10-21T11:02:40Z',direcao:'entrada' as const,texto:'de nadaa'}]
-    const l=lead({...resposta('de nadaa','neutra'),em:ms[3].em})
-    const c=classificarResposta(l,ms,AGORA)
-    assert.equal(c.classe,'recusa');assert.match(c.evidencia?.trecho??'',/não estamos interessado/)
-    assert.equal(c.materialSolicitado,false)
-    assert.equal(respostaParaAcompanhamento(l.resposta,c)?.tipo,'negativa')
-    assert.equal(classificarResposta(lead(resposta('Não','neutra')),conversa('Vocês usam CRM?','Não'),AGORA).classe,'neutra')
-  })
-  it('contato de loja indicado pelo shopping é encaminhamento, sem presumir interesse',()=>{
-    const texto='BORDADOS EXEMPLO\n43 99999-0000 | TÉRREO'
-    const ms=[...conversa('Consigo falar com o responsável?','Obrigado por entrar em contato com o Shopping Exemplo'),
-      {em:'2026-10-21T11:10:00Z',direcao:'entrada' as const,texto}]
-    const c=classificarResposta(lead({...resposta(texto,'neutra'),em:ms[2].em}),ms,AGORA)
-    assert.equal(c.classe,'acesso');assert.equal(c.materialSolicitado,false)
-  })
-  it('saudações do lote não viram resposta humana mesmo com rótulo legado incorreto',()=>{
-    for(const texto of [
-      'Empresa Exemplo agradece seu contato. Como podemos ajudar?',
-      'Olá! Seja bem vindo (a). Qual produto deseja? Qual quantidade? Qual data de entrega?',
-      'Olá, seja muito bem vindo à empresa. Trabalhamos com uma diversidade de materiais!',
-      'A empresa agradece sua preferência. Nosso horário de funcionamento é de Segunda a sexta. Assim que nossa equipe estiver disponível, retornaremos seu contato.',
-      'Entraremos em contato. Horário comercial de: Seg. a Sexta 9 às 18h',
-      '*1/3* Olá, seja bem-vindo(a). Escolha uma das opções abaixo: 1 - Quero fazer um orçamento',
-    ])for(const tipo of ['interesse','licenca','neutra'] as const) {
-      const l=lead(resposta(texto,tipo)),antes=JSON.stringify(l)
-      const c=classificarResposta(l,conversa('Consigo falar com o responsável?',texto,'gente'),AGORA)
-      assert.equal(c.classe,'robo',texto);assert.equal(c.houveRespostaHumana,false,texto)
-      assert.equal(respostaParaAcompanhamento(l.resposta,c)?.tipo,'bot',texto)
-      assert.equal(JSON.stringify(l),antes)
-    }
-  })
-  it('robô anterior não apaga o acesso humano posterior da Stamp Fast',()=>{
-    const ms=[...conversa('Consigo falar com o responsável?','Olá, seja muito bem vindo à empresa!'),
-      {em:'2026-10-21T11:20:00Z',direcao:'entrada' as const,texto:'Pode falar por aqui sim!'}]
-    const c=classificarResposta(lead({...resposta(ms[2].texto,'neutra'),em:ms[2].em}),ms,AGORA)
-    assert.equal(c.classe,'acesso');assert.equal(c.houveRespostaHumana,true);assert.equal(c.materialSolicitado,false)
-  })
-
 })

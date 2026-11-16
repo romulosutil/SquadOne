@@ -22,12 +22,12 @@ f=importlib.util.module_from_spec(spec);spec.loader.exec_module(f)
 AVISAR_REAL=f.avisar_time
 OBSERVADOR_REAL=f.observador_ativo
 
-MSG='Olá! Vi que a Empresa de teste ainda não tem site. Fiz uma prévia, posso mandar?'
+MSG='Oi! No perfil da empresa que consultei, não encontrei um link para site próprio. Vocês já têm um site para apresentar os serviços?'
 
 def lead(id_='site:teste',n='5511998887766'):
     # Desde a curadoria da Marina (26/10/2026) o Site só é elegível com achado verificável do Raio-X.
     return {'id':id_,'produto':'site','empresa':'Empresa de teste','etapa':'novo','sinal':'pronto','marcos':{},'mensagemPronta':MSG,
-            'achados':[{'id':'sem-site'}],
+            'achados':[{'id':'sem-site'}], 'abordagem':{'mensagem':'E'},
             'links':{'whatsapp':'https://wa.me/'+n,'enviar':'https://dell.test/webhook/enviar?place_id='+id_.partition(':')[2]}}
 
 MODELO_NEUTRO={'hash':'modelo-neutro-teste','padroes':[],'semWhatsapp':[]}
@@ -72,19 +72,35 @@ class Frente(unittest.TestCase):
         for duble in (patch.object(f,'avisar_time',side_effect=aviso),patch.object(f,'observador_ativo',return_value=True),patch.object(f,'protecao_permite_envio',return_value=True)):
             duble.start();self.addCleanup(duble.stop)
         self.observador=f.observador_ativo  # o dublê: .return_value=False tira o observador do ar
+        # Regressões do executor histórico: simular autorização só nesta instância
+        # de teste. aquisicao-comercial.test.py carrega outro módulo e prova que a
+        # política real impede transporte mesmo após reserva e configuração inválida.
+        historico=patch.object(f,'bloqueio_aquisicao',return_value={'bloqueado':False,'motivo':'fixture-historica'})
+        historico.start();self.addCleanup(historico.stop)
         # Sem a régua recente da Marina a rodada para antes da inferência (falha fechada, 26/10/2026; coberto em
         # frente-comercial-curadoria.test.py). Aqui a régua é neutra: sem padrões nem destinos mortos. O hash dela
         # entra no fingerprint, então o teste já começa com a mesma régua que a rodada vai carregar.
         regua=patch.object(f.lib_curadoria(),'carregar_modelo',return_value=MODELO_NEUTRO)
         regua.start();self.addCleanup(regua.stop)
         f._MODELO_CURADORIA=MODELO_NEUTRO;self.addCleanup(setattr,f,'_MODELO_CURADORIA',None)
+        # O cenário desta suíte já tem fonte e autorização aprovadas. Campanha e
+        # descoberta têm suítes próprias; nunca consultar o manifesto real do host.
+        fonte={'fontePublicaIdentificavel':True,'identidadeDoNomeConfere':True,
+               'contatoCorrespondeAoPublicadoNaFicha':True,
+               'conferenciaTecnicaDoSite':{'dominio':'empresa.test','http':503,'em':self.now.isoformat()},
+               'conferenciaAtualDoPerfil':{'contatoAtualCorrespondeAFicha':True,
+                   'campoSiteDoPerfilDaPropriaEmpresa':'sem-link-de-site-no-perfil','em':self.now.isoformat()}}
+        for duble in (patch('campanha_site.ler',return_value=None),
+                      patch('campanha_site.evidencia_site',return_value=fonte),
+                      patch.object(f,'iso',side_effect=lambda now=None:(now or f.agora()).isoformat())):
+            duble.start();self.addCleanup(duble.stop)
 
     def test_pausa_entre_reserva_e_envio_nao_envia(self):
         f.protecao_permite_envio.return_value=False
         r=self.rodar({'leads':[lead()]},lambda l:{'reservado':True,'texto':MSG})
         self.assertEqual(r.envio.call_count,0);self.assertEqual(r.estados[-1]['estado'],'pausado')
 
-    def rodar(self,crm,reserva,primeiros=None,marcar=None,vezes=1,existe=None,envia=None):
+    def rodar(self,crm,reserva,primeiros=None,marcar=None,vezes=1,existe=None,envia=None,publicar=None):
         """Uma rodada com tudo de fora dublado; nunca o disco, a Central, o n8n ou o WhatsApp de verdade."""
         estados=[]
         with patch.object(f,'BASE',Path(self.tmp.name)/'base'),patch.object(f,'H',Path(self.tmp.name)),patch.object(f,'DATA',self.data),\
@@ -93,7 +109,8 @@ class Frente(unittest.TestCase):
              patch.object(f,'conexao',return_value={'apikey':'fake'}),patch.object(f,'reservar_na_central',side_effect=reserva) as reservar,\
              patch.object(f,'marcar_no_crm',side_effect=marcar) as clique,patch.object(f,'anotar_na_central',return_value=True) as nota,\
              patch.object(f,'enviar',side_effect=envia or (lambda *a:'id-real-da-integracao')) as envio,\
-             patch.object(f,'existe_no_whatsapp',side_effect=existe or (lambda l,auth:True)) as consulta,patch.object(f,'gravar',side_effect=lambda s:estados.append(json.loads(json.dumps(s)))):
+             patch.object(f,'existe_no_whatsapp',side_effect=existe or (lambda l,auth:True)) as consulta,\
+             patch.object(f,'revalidar_antes_do_envio',return_value=True),patch.object(f,'gravar',side_effect=lambda s:(estados.append(json.loads(json.dumps(s))),publicar(s) if publicar else None)):
             resultados=[f.rodada() for _ in range(vezes)]
         return types.SimpleNamespace(estados=estados,ai=ai,reservar=reservar,clique=clique,nota=nota,envio=envio,consulta=consulta,resultados=resultados)
 
@@ -198,6 +215,35 @@ class Frente(unittest.TestCase):
         for now in [dt.datetime(2026,10,18,20,tzinfo=dt.timezone.utc),dt.datetime(2026,10,19,10,tzinfo=dt.timezone.utc)]:
             self.assertEqual(f.proximo_expediente(now).isoformat(),'2026-10-19T08:00:00-03:00')
         self.assertEqual(f.proximo_expediente(self.now),self.now)
+
+    def test_todas_as_mensagens_barradas_mostram_bloqueio_e_motivo(self):
+        crm={'estado':'ok','leads':[lead(),lead('site:outro','5511998887700')]}
+        x=self.rodar(crm,lambda l:{'reservado':False,'motivo':'mensagem-barrada','detalhe':'o nome da empresa tem lixo'})
+        final=x.estados[-1]
+        self.assertEqual(final['estado'],'bloqueado')
+        self.assertIn('2 contato(s)',final['detalhe'])
+        self.assertIn('o nome da empresa tem lixo',final['detalhe'])
+        self.assertIn('fichas',final['detalhe'])
+        self.assertIsNone(final['proximoEnvioEm'])
+        self.assertLessEqual(len(final['detalhe']),400)
+        x.envio.assert_not_called();x.clique.assert_not_called()
+
+    def test_mensagem_barrada_sem_detalhe_da_central_tambem_nao_vira_concluido(self):
+        x=self.rodar({'estado':'ok','leads':[lead()]},lambda l:{'reservado':False,'motivo':'mensagem-barrada'})
+        self.assertEqual(x.estados[-1]['estado'],'bloqueado')
+        self.assertIn('validação de envio',x.estados[-1]['detalhe'])
+        x.envio.assert_not_called()
+
+    def test_correcao_da_mensagem_revalida_e_retoma_no_ciclo_seguinte(self):
+        tentativas=[]
+        def reserva(l):
+            tentativas.append(l['id'])
+            return {'reservado':False,'motivo':'mensagem-barrada'} if len(tentativas)==1 else {'reservado':True,'texto':MSG}
+        x=self.rodar({'estado':'ok','leads':[lead()]},reserva,vezes=2)
+        self.assertTrue(any(s['estado']=='bloqueado' for s in x.estados))
+        self.assertEqual(x.estados[-1]['estado'],'pronto')
+        self.assertEqual(x.envio.call_count,1)
+        self.assertEqual(x.estados[-1]['enviados'],1)
 
     # 3. Registro: o clique rastreado do n8n (o da Central) antes do envio, com o texto do Balcão.
     def test_rodada_completa_marca_no_crm_antes_de_enviar_o_texto_do_balcao(self):
@@ -570,8 +616,11 @@ class Frente(unittest.TestCase):
         conta=lambda expr:sum(math.prod(int(n) for n in termo.split('*')) for termo in expr.split('+'))
         self.assertEqual([int(d) for d in m.group(1).split(',')],[1,2,3,4,5],'seg–sex (getDay 1 a 5)')
         self.assertEqual((conta(m.group(2)),conta(m.group(3))),(f.EXPEDIENTE_INICIO,f.EXPEDIENTE_FIM))
-        # seg–sex também no relógio do .py: sexta às 17h30 de SP já fechou, e a fila volta na segunda às 8h.
-        sexta_fechou=dt.datetime(2026,10,23,20,30,tzinfo=dt.timezone.utc)
+        # seg–sex também no relógio do .py: sexta às 18h de SP já fechou, e a fila volta na segunda às 8h.
+        self.assertTrue(f.no_expediente(dt.datetime(2026,10,23,20,30,tzinfo=dt.timezone.utc)))
+        self.assertTrue(f.no_expediente(dt.datetime(2026,10,23,20,59,59,tzinfo=dt.timezone.utc)))
+        sexta_fechou=dt.datetime(2026,10,23,21,0,tzinfo=dt.timezone.utc)
+        self.assertFalse(f.no_expediente(sexta_fechou))
         self.assertEqual(f.proximo_expediente(sexta_fechou).isoformat(),'2026-10-26T08:00:00-03:00')
         contato=(raiz/'src/operations/primeiro-contato.ts').read_text(encoding='utf-8')
         tipo=re.search(r'export type RecusaDoTime\s*=([^\n]+)',contato).group(1)

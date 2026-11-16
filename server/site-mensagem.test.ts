@@ -8,12 +8,13 @@ import { ROTULO_DO_FOLLOWUP, ROTULO_DO_REENVIO, artigoDe, followupDe, reenvioDoR
 // A fonte é o JS que o n8n usa: roda ele aqui, numa caixa sem nada, e compara.
 // Mudou um texto ou a lista de femininos lá, este teste falha até o espelho mudar junto.
 const codigo = fs.readFileSync(path.join(import.meta.dirname, "..", "deploy", "dell", "claude-ops", "site-mensagem.js"), "utf8");
-const doN8n = vm.runInNewContext(`${codigo}\n;({ followupDe, segundaDe, artigoDe, varianteDe, preencher })`, {}) as {
+const doN8n = vm.runInNewContext(`${codigo}\n;({ followupDe, segundaDe, artigoDe, varianteDe, preencher, preencherPrimeira })`, {}) as {
   followupDe: (l: Record<string, string>) => { numero: string; texto: string; link: string };
   segundaDe: (l: Record<string, string>) => { numero: string; texto: string; link: string };
   artigoDe: (nome: string) => string;
   varianteDe: (placeId: string, eua: boolean, lead?: Record<string, unknown>) => { letra: string; molde: string };
   preencher: (molde: string, nome: string, url: string, detalhe: string) => string;
+  preencherPrimeira: (molde: string, nome: string, url: string, detalhe: string) => string;
 };
 
 const linhaDoN8n = (l: LeadDaMensagem) => ({ nome: l.nome, site_url: l.siteUrl, wa_me: l.waMe,
@@ -149,6 +150,19 @@ describe("site-mensagem: reenvio do só-robô (só do CRM, 14/10/2026)", () => {
 describe("site-mensagem: variação da primeira mensagem (Balcão)", () => {
   const pids = Array.from({ length: 200 }, (_, i) => `ChIJ${String(i).padStart(4, "0")}x`);
   const letras = (lead?: Record<string, unknown>) => pids.map((p) => doN8n.varianteDe(p, false, lead).letra);
+
+  it("a abertura usa o nome sem o complemento do Google, preservando hífens do nome", () => {
+    const molde = doN8n.varianteDe("locforte", false, { sem_demo: true }).molde;
+    for (const separador of [" - ", " – ", " — ", " | "]) {
+      const texto = doN8n.preencherPrimeira(molde, `Locforte Escoras e Equipamentos${separador}Uberlândia`, "", "");
+      assert.match(texto, /Encontrei o Locforte Escoras e Equipamentos no Google\./);
+      assert.doesNotMatch(texto, /Uberlândia/);
+    }
+    for (const nome of ["Auto-Escola São João", "Clínica de Uberlândia", "Clínica Maria e João", "Locforte Escoras e Equipamentos"]) {
+      assert.ok(doN8n.preencherPrimeira(molde, nome, "", "").includes(`${nome} no Google.`));
+    }
+    assert.match(doN8n.preencherPrimeira(molde, "Clínica Alfa - Uberlândia", "", ""), /Encontrei a Clínica Alfa no Google\./);
+  });
 
   it("sem nota boa sai sempre a A (o controle)", () => {
     for (const lead of [undefined, {}, { nota: "", avaliacoes: "" }, { nota: "4.2", avaliacoes: "300" }, { nota: 5, avaliacoes: 14 },

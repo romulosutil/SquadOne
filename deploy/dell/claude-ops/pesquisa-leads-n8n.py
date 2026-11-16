@@ -17,7 +17,7 @@ def workflow(credencial):
       {'id':'agenda','name':'Revisar durante a semana','type':'n8n-nodes-base.scheduleTrigger','typeVersion':1.2,'position':[0,0],
        'parameters':{'rule':{'interval':[{'field':'cronExpression','expression':'10 7,12,18 * * 1-5'}]}}},
       {'id':'janela','name':'Conferir semana autorizada','type':'n8n-nodes-base.code','typeVersion':2,'position':[240,0],
-       'parameters':{'jsCode':"const dia = new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Sao_Paulo'}).format(new Date()); const limite = dia >= '2026-11-01' && dia <= '2026-11-06' ? 10 : 0; return [{json:{limite}}];"}},
+       'parameters':{'jsCode':"// Escopo e datas vêm do manifesto vigente no executor Python; sem janela fixa no workflow.\nreturn [{json:{limite:10}}];"}},
       {'id':'pesquisa','name':'Pesquisar e higienizar sem envio','type':'n8n-nodes-base.httpRequest','typeVersion':4.4,'position':[500,0],
        'parameters':{'method':'POST','url':'http://luna-workflows:8766/pesquisa-leads','authentication':'genericCredentialType','genericAuthType':'httpHeaderAuth',
                      'sendBody':True,'specifyBody':'json','jsonBody':'={{ JSON.stringify({limite:$json.limite}) }}','options':{'timeout':330000}},

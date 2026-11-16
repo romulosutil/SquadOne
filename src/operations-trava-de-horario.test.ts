@@ -1,8 +1,9 @@
+import './testes/politica-historica.ts'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { avisoDeHorario } from './operations/resultados.ts'
 import { rotuloDoFollowup } from './operations/crm-formato.ts'
-import { aindaSemPrimeiroContato, ehPrimeiroContato, envioTravado, linksDePrimeiroContato, noExpedienteDeVenda, podeMandarPrimeiroContato } from './operations/trava-de-horario.ts'
+import { aindaSemPrimeiroContato, ehPrimeiroContato, envioTravado, liberarEnvio, linksDePrimeiroContato, noExpedienteDeVenda, podeMandarPrimeiroContato } from './operations/trava-de-horario.ts'
 import { noExpedienteDeVenda as daFila } from './operations/proxima-venda.ts'
 import type { CrmLead } from './operations/types.ts'
 
@@ -17,6 +18,15 @@ describe('trava de horário do envio', () => {
     assert.equal(envioTravado(AVISO, nenhum, 'a'), true)
     assert.equal(envioTravado(AVISO, new Set(['a']), 'a'), false)
     assert.equal(envioTravado(AVISO, new Set(['a']), 'b'), true, 'liberar um lead não libera os outros')
+  })
+
+  it('liberar devolve um conjunto novo e não altera o de entrada', () => {
+    const antes = new Set(['a'])
+    const depois = liberarEnvio(antes, 'b')
+    assert.deepEqual([...antes], ['a'])
+    assert.deepEqual([...depois].sort(), ['a', 'b'])
+    assert.notEqual(antes, depois)
+    assert.deepEqual([...liberarEnvio(depois, 'b')].sort(), ['a', 'b'], 'liberar de novo é inofensivo')
   })
 
   // 14/10/2026: o reenvio do só-robô é uma primeira abordagem (a anterior só chegou ao robô) e
@@ -61,12 +71,14 @@ describe('trava de horário do envio', () => {
 // OT-02 (16/10/2026): uma janela só para o aviso das telas do CRM, a Próxima venda e o Telegram.
 describe('uma regra de horário em todo envio', () => {
   const sp = (iso: string) => Date.parse(iso)
-  it('a janela é a do vendedor: seg a sex, 8h às 17h30 de São Paulo', () => {
+  it('a janela é a do vendedor: seg a sex, 8h às 18h de São Paulo', () => {
     const casos: Array<[string, boolean, string]> = [
       ['2026-10-14T11:00:00Z', true, 'quarta 8h'],
       ['2026-10-14T20:29:00Z', true, 'quarta 17h29'],
-      ['2026-10-14T20:30:00Z', false, 'quarta 17h30'],
-      ['2026-10-14T20:45:00Z', false, 'quarta 17h45: antes travava só às 18h'],
+      ['2026-10-14T20:30:00Z', true, 'quarta 17h30'],
+      ['2026-10-14T20:45:00Z', true, 'quarta 17h45'],
+      ['2026-10-14T20:59:59Z', true, 'quarta 17h59'],
+      ['2026-10-14T21:00:00Z', false, 'quarta 18h'],
       ['2026-10-17T13:00:00Z', false, 'sábado 10h: antes o sábado de manhã passava'],
       ['2026-10-18T13:00:00Z', false, 'domingo'],
     ]
@@ -77,7 +89,7 @@ describe('uma regra de horário em todo envio', () => {
 
   it('o aviso das telas do CRM aparece exatamente fora da janela', () => {
     assert.equal(avisoDeHorario([], sp('2026-10-14T20:29:00Z')), null)
-    assert.match(avisoDeHorario([], sp('2026-10-14T20:45:00Z')) ?? '', /segunda a sexta, das 8h às 17h30/)
+    assert.match(avisoDeHorario([], sp('2026-10-14T21:00:00Z')) ?? '', /segunda a sexta, das 8h às 18h/)
     assert.notEqual(avisoDeHorario([], sp('2026-10-17T13:00:00Z')), null, 'sábado trava')
   })
 

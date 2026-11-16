@@ -57,6 +57,19 @@ ficha aberta sem limpar rascunhos ou recolher a conversa expandida. A hora da
 consulta aparece separada da hora da mensagem. “Ao vivo” exige conexão ativa e
 leitura válida; consultas a cada 15 s e retorno ao app cobrem desconexões.
 
+Minhas decisões (21/10/2026): a fila tem uma linha por cliente, prioridade explícita, busca,
+filtro de oferta e páginas de oito itens. Separa Precisa de você, Em acompanhamento e Encerradas.
+Cada cliente abre uma jornada Entender → Agir → Acompanhar: evidência e motivo, ação contextual,
+acompanhamento do acontecimento, próximo passo com data e acesso ao desfecho na ficha. Os passos são
+navegação, sem porcentagem de venda presumida. Abrir o WhatsApp prepara a mensagem; o envio só
+é anotado por confirmação explícita ou observação. Atualizações mantêm o cliente selecionado,
+revisões e rascunhos; bloqueiam novas confirmações quando a fonte fica indisponível. A folha
+mantém uma só rolagem e o acesso à fila continua disponível mesmo sem pendências.
+
+Clareza das decisões (21/10/2026): Entender destaca uma situação, seguida dos trechos recentes
+do WhatsApp com autor e horário; orientações e marcos ficam em uma dobra. Agir mostra a conversa,
+a interpretação revisável e a resposta contextual; texto padrão é identificado. Acompanhar mostra
+as mensagens capturadas e permite complementar contexto ou definir ação e data. Após saída observada,
 Clareza das decisões (21/10/2026): Entender destaca uma situação, seguida dos trechos recentes
 do WhatsApp com autor e horário; orientações e marcos ficam em uma dobra. Agir mostra a conversa,
 a interpretação revisável e a resposta contextual; texto padrão é identificado. Acompanhar oferece

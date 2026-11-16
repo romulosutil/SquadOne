@@ -1,5 +1,10 @@
 # Decisões comerciais de 28/10/2026 (PM com autoridade delegada)
 
+> Direção vigente de 16/11/2026: primeiros contatos automáticos bloqueados. Não trocar número para contornar restrição. Autorizações conflitantes de aquisição abaixo estão substituídas; contratos, suporte e histórico mantêm seus escopos.
+
+> Referência técnica, sem liberação de aquisição: `REGRAS_DO_RITMO` conserva parâmetros legados de 20 por dia, 6 por hora e intervalo de 10 min. `limitesOperacionais=false` desabilita essa camada; a trava de aquisição de 16/11 continua bloqueando primeiros contatos automáticos independentemente desses valores. As cadências numéricas anteriores abaixo são histórico.
+
+
 Em 28/10/2026 o Rômulo aprovou as dez prioridades do primeiro dia de um especialista de CRM. Os itens que dependiam
 dele foram decididos por um PM com autoridade delegada ("Todos os itens que dependem de mim, decida com um Product
 Manager"). Este arquivo registra o que foi decidido. A versão completa, com os textos, está no `pm-decisoes.json` da sessão.
@@ -58,6 +63,7 @@ relativa; menos de 30 envios = 10), porte 10. Na Iris e na Estamparia a dor sai 
 
 ## Mensagens de 28/10
 
+<!-- ritmo-histórico -->
 O PM aprovou 15 retomadas (Comece, RADIX, Bruno Gouveia, NeuroConectar, Favarato, Kulniski, Gaius, Jéssica Barbosa, AC
 Previdenciária, Roda Mais, Ddetize, Stamp Fast, Casa do Bordado, Estampa Cor, Baobá): uma pergunta cada, sem R$, sem link,
 voltadas a uma chamada de 10 minutos com quem decide, ou um encerramento honesto para quem teve 4 ou mais retomadas sem
@@ -67,6 +73,7 @@ manutenção até 09/11). O disparo usa um script único na Mel (versionado desd
 `disparo-conversa.timer` lendo a lista aprovada do dia em `~/.local/share/disparo-conversa/listas/`), que lê o número do
 CRM, confere de novo a conversa antes de cada envio, espaça 4 a 5,5 min e anota na Ficha no formato
 `[Envio confirmado pelo operador · data]`.
+<!-- /ritmo-histórico -->
 
 ## Mix dos primeiros contatos (29/10/2026)
 
@@ -75,6 +82,7 @@ CRM (Site: 107 `pronto`, 7,9% de resposta, 5 "quis ver" e 1 proposta; Iris: 54,8
 e 1 "quis ver" em 31 contatos; Plus: 2 de 20 do teste; 0 ganho em todas as linhas; rodada de 28/10 com dez pendentes, todos
 de Site).
 
+<!-- ritmo-histórico -->
 Mix dos primeiros contatos até o 1º pagamento, dentro do teto de 15/dia compartilhados, 2/h, 30 min e dez pendentes por
 rodada: Site 9 (time automático, primeiro os `pronto` com fato verificável do Raio-X), Plus 3 (Rômulo, só oferta de site,
 até fechar o teste), Iris 3 (Rômulo ou o executor, sem oferta nova de período grátis), Estamparia 0 (volta quando houver
@@ -84,6 +92,7 @@ não usada fica vazia; nenhuma sobra passa para o dia seguinte. A divisão anter
 porque somava o dobro do teto. Revisão em 06/11/2026, ou antes se o teste do Plus fechar (com 2 ou mais "quis ver", novo
 lote; sem isso, as vagas vão para Site), se a Iris somar nove envios novos sem nenhum "quis ver" (cai para 1) ou se sair a
 primeira proposta qualificada.
+<!-- /ritmo-histórico -->
 
 As travas não mudaram: o teto é compartilhado e o código não tem cota por linha. A reserva de 6 pendentes para o Site e o
 repasse das 14h são regras de operação que o Rômulo aplica na revisão da rodada; virar código exige nova decisão, porque

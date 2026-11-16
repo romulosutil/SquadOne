@@ -1,10 +1,11 @@
+import './testes/politica-historica.ts'
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   elegivelParaOTime, frenteDosArquivos, primeirosDoTime, quemFazOPrimeiroContato, RECUSAS_GERAIS, reservaDoTime,
   type FrenteDoPrimeiro, type PedidoDoTime,
 } from './operations/primeiro-contato.ts'
-import { filaDeVenda, type ContextoDaVenda } from './operations/proxima-venda.ts'
+import { filaDaTela, filaDeVenda, type ContextoDaVenda } from './operations/proxima-venda.ts'
 import { REGRAS_DO_RITMO } from './operations/trava-de-ritmo.ts'
 import type { CrmGrupoHojeId, CrmLead, CrmVisao } from './operations/types.ts'
 import { decidir, estadoDoDia } from '../server/vendedor.ts'
@@ -103,18 +104,18 @@ describe('reservaDoTime: a janela e o ritmo da Central, para todos', () => {
     const sabado = reservaDoTime(base({ agora: Date.parse('2026-10-17T14:00:00Z') }))
     assert.equal(sabado.ok === false && sabado.motivo, 'fora-do-expediente')
   })
-  it('o toque da Central de 2 min atrás segura o intervalo de 30 min, com a hora em que libera', () => {
+  it('o toque da Central de 2 min atrás segura o intervalo de 10 min, com a hora em que libera', () => {
     const r = reservaDoTime(base({ primeiros: { outro: { em: AGORA - 2 * MIN } } }))
-    assert.deepEqual(r, { ok: false, motivo: 'intervalo', ate: AGORA + 28 * MIN })
+    assert.deepEqual(r, { ok: false, motivo: 'intervalo', ate: AGORA + 8 * MIN })
   })
-  it('o retrato conta: 4 envios na última hora (de qualquer superfície) seguram a hora', () => {
-    const leads = Array.from({ length: 4 }, (_, i) => lead(`e${i}`, { marcos: { enviado: new Date(AGORA - (59 - i * 15) * MIN).toISOString() } }))
+  it('o retrato conta: 6 envios na última hora (de qualquer superfície) seguram a hora', () => {
+    const leads = Array.from({ length: 6 }, (_, i) => lead(`e${i}`, { marcos: { enviado: new Date(AGORA - (59 - i * 9) * MIN).toISOString() } }))
     const r = reservaDoTime(base({ leads: [lead('L'), ...leads] }))
     assert.equal(r.ok === false && r.motivo, 'hora')
   })
   it('o teto do dia é o da trava de ritmo, somando Central, Telegram e time', () => {
-    // 15 no dia, todos antes da última hora: só o do dia segura.
-    const primeiros = Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`p${i}`, { em: AGORA - (65 + i) * MIN }]))
+    // 20 no dia, todos antes da última hora: só o do dia segura.
+    const primeiros = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`p${i}`, { em: AGORA - (65 + i) * MIN }]))
     const r = reservaDoTime(base({ primeiros }))
     assert.equal(r.ok === false && r.motivo, 'dia')
   })
@@ -144,7 +145,8 @@ describe('a tela e o Telegram não oferecem o primeiro contato dos leads do time
   const v = visao({ enviar: ['p0', 'p1', 'p2'] }, prontos)
   const tela: ContextoDaVenda = { primeiroLiberado: true, agora: AGORA }
 
-  it('a fila de venda: pula os do time e oferece o próximo do operador', () => {
+  it('fila operacional pula os do time; a lista de conversas não oferece aquisição', () => {
+    assert.deepEqual(filaDaTela(v, { agora: AGORA }), [])
     assert.deepEqual(filaDeVenda(v, tela).map((a) => a.leadId), ['p0'])
     assert.deepEqual(filaDeVenda(v, { ...tela, primeirosDoTime: new Set(['p0']) }).map((a) => a.leadId), ['p1'])
     assert.deepEqual(filaDeVenda(v, { ...tela, primeirosDoTime: new Set(['p0', 'p1', 'p2']) }), [])

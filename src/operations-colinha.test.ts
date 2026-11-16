@@ -31,11 +31,11 @@ const comConteudo = (ms: Momento[], produto: CrmProduto) => ms.filter((m) => tem
 
 /** Etapa + resposta -> momentos esperados para site e prumo. */
 const CASOS: { nome: string, etapa: CrmEtapa, tipo?: CrmTipoDeResposta, trecho?: string, site: Momento[], prumo: Momento[] }[] = [
-  { nome: 'novo: a primeira mensagem', etapa: 'novo', site: ['primeiro-contato'], prumo: ['primeiro-contato'] },
-  { nome: 'contato sem resposta: o follow-up', etapa: 'contato', site: ['followup'], prumo: ['followup'] },
-  { nome: 'contato só com o robô: o follow-up', etapa: 'contato', tipo: 'bot', trecho: 'Mensagem automática: em breve retornaremos.', site: ['followup'], prumo: ['followup'] },
-  { nome: 'contato com interesse: o próximo passo e a proposta', etapa: 'contato', tipo: 'interesse', trecho: 'pode mandar', site: ['pode-mandar', 'proposta'], prumo: ['pode-mandar', 'conversa', 'proposta'] },
-  { nome: 'contato neutro: seguir a conversa', etapa: 'contato', tipo: 'neutra', trecho: 'quem é você?', site: ['pode-mandar'], prumo: ['conversa'] },
+  { nome: 'novo: nenhuma sugestão de primeiro contato', etapa: 'novo', site: [], prumo: [] },
+  { nome: 'contato sem resposta: sem envio sugerido', etapa: 'contato', site: [], prumo: [] },
+  { nome: 'contato só com o robô: sem envio sugerido', etapa: 'contato', tipo: 'bot', trecho: 'Mensagem automática: em breve retornaremos.', site: [], prumo: [] },
+  { nome: 'contato com interesse: material pedido e conversa', etapa: 'contato', tipo: 'interesse', trecho: 'pode mandar', site: ['pode-mandar', 'conversa'], prumo: ['pode-mandar', 'conversa'] },
+  { nome: 'contato neutro: seguir a conversa', etapa: 'contato', tipo: 'neutra', trecho: 'quem é você?', site: ['conversa'], prumo: ['conversa'] },
   { nome: 'contato negativo: nenhum momento, só objeção', etapa: 'contato', tipo: 'negativa', trecho: 'Obrigado, mas já temos site', site: [], prumo: [] },
   { nome: 'contato com pedido de exclusão: nenhum momento', etapa: 'contato', tipo: 'exclusao', trecho: 'por favor não me mande mais', site: [], prumo: [] },
   { nome: 'proposta: proposta e fechamento', etapa: 'proposta', site: ['proposta', 'fechamento'], prumo: ['proposta', 'fechamento'] },
@@ -98,12 +98,13 @@ describe('o trecho de cada etapa e resposta', () => {
     assert.ok(!idsDosTrechos(comDemo).includes('segunda-raio-x'))
   })
 
-  it('o follow-up de quem recebeu a C lembra o raio-x; o de quem recebeu A ou B, o site', () => {
+  it('follow-ups históricos permanecem consultáveis sem sugerir envio por silêncio', () => {
     const c = { ...lead('site', 'contato'), empresa: 'Jéssica Barbosa Advocacia', abordagem: { mensagem: 'C' } }
-    assert.deepEqual(idsDosTrechos(c), ['followup-raio-x'])
+    assert.deepEqual(idsDosTrechos(c), [])
     assert.ok(preencher(FOLLOWUP_RAIO_X, c).includes('como a Jéssica Barbosa Advocacia aparece'))
-    assert.deepEqual(idsDosTrechos({ ...c, abordagem: { mensagem: 'A' } }), ['followup-sem-link', 'followup-com-link'])
-    assert.deepEqual(idsDosTrechos(lead('site', 'contato')), ['followup-sem-link', 'followup-com-link'])
+    assert.deepEqual(idsDosTrechos({ ...c, abordagem: { mensagem: 'A' } }), [])
+    assert.match(passo('followup').titulo, /histórica/)
+    assert.match(passo('primeiro-contato').objetivo, /não autoriza nova abordagem/)
   })
 
   it('a primeira mensagem C não promete 3 pontos', () => {
@@ -121,14 +122,11 @@ describe('o trecho de cada etapa e resposta', () => {
     assert.deepEqual(precosNoTexto(preencher(trecho.texto, com)), [], 'sem preço no frio')
   })
 
-  it('negativa com objeção reconhecida mostra ela primeiro', () => {
-    assert.equal(idsDasObjecoes(lead('site', 'contato', 'negativa', 'Obrigado, mas já temos site'))[0], 'ja-tem-site')
-    assert.equal(idsDasObjecoes(lead('site', 'contato', 'negativa', 'trabalhamos com uma agência'))[0], 'ja-tem-agencia')
-  })
-
-  it('negativa sem objeção reconhecida mostra todas, para o Rômulo escolher', () => {
-    assert.deepEqual(idsDasObjecoes(lead('site', 'contato', 'negativa', 'não, obrigado')), OBJECOES.filter((o) => o.resposta.produtos.includes('site')).map((o) => o.id))
-    assert.deepEqual(idsDasObjecoes(lead('prumo', 'contato', 'negativa', 'não, obrigado')), OBJECOES.filter((o) => o.resposta.produtos.includes('prumo')).map((o) => o.id))
+  it('recusa não gera novo pitch nem troca automática de oferta', () => {
+    for (const texto of ['Obrigado, mas já temos site', 'trabalhamos com uma agência', 'não, obrigado']) {
+      assert.deepEqual(idsDasObjecoes(lead('site', 'contato', 'negativa', texto)), [])
+      assert.deepEqual(idsDasObjecoes(lead('prumo', 'contato', 'negativa', texto)), [])
+    }
   })
 
   it('exclusão traz "pode apagar" primeiro, em contato e em perdido', () => {
@@ -267,7 +265,7 @@ describe('sob proposta e sem cliente fundador', () => {
 
   it('a base interna da proposta continua com o valor da tabela', () => {
     assert.equal(precoDaTabela(servico('respondido')), 'R$ 2.400 + R$ 290/mês (só depois de uma conversa, nunca no WhatsApp frio)')
-    assert.equal(precoDaTabela(servico('fonte')), 'R$ 1.500 (a partir de, 50/50, só depois do Mapa)')
+    assert.equal(precoDaTabela(servico('fonte')), 'R$ 1.500 (a partir de, 50/50, escopo confirmado)')
     assert.equal(precoDaTabela(servico('fonte-em-dia')), 'R$ 190/mês (opcional, até 10 mudanças por mês, depois dos 30 dias de ajustes)')
   })
 
@@ -341,7 +339,7 @@ describe('hierarquia: ver, arrumar, manter', () => {
     ])
     assert.match(servico('encontrado').condicao ?? '', /depois de ver no ar/)
     assert.match(servico('respondido').condicao ?? '', /depois de uma conversa/)
-    assert.match(servico('fonte').condicao ?? '', /50\/50.*depois do Mapa/)
+    assert.match(servico('fonte').condicao ?? '', /50\/50.*escopo confirmado/)
   })
 
   it('o Respondido tem antes e depois medidos', () => {
@@ -379,23 +377,23 @@ describe('hierarquia: ver, arrumar, manter', () => {
   })
 })
 
-describe('convite para o Mapa, depois do Raio-X', () => {
+describe('Mapa opcional, sem inferir necessidade pelo porte ou material', () => {
   const RAIO_X = 'https://raio-x-prumo.vercel.app/sorriso'
   const comRaioX = (produto: CrmProduto, tipo: CrmTipoDeResposta, equipe?: boolean): LeadDaColinha =>
     ({ ...lead(produto, 'contato', tipo, 'gostei, pode mandar'), links: { raioX: RAIO_X }, ...(equipe === undefined ? {} : { equipe }) })
 
-  it('lead com equipe que gostou do Raio-X recebe o convite, antes da conversa e da proposta', () => {
-    assert.deepEqual(idsDosMomentos(comRaioX('prumo', 'interesse', true)), ['pode-mandar', 'convite-mapa', 'conversa', 'proposta'])
-    assert.ok(idsDosTrechos(comRaioX('prumo', 'interesse', true)).includes('mapa-convite'))
+  it('equipe e interesse não impõem convite ou proposta', () => {
+    assert.deepEqual(idsDosMomentos(comRaioX('prumo', 'interesse', true)), ['pode-mandar', 'conversa'])
+    assert.ok(!idsDosTrechos(comRaioX('prumo', 'interesse', true)).includes('mapa-convite'))
   })
 
-  it('resposta neutra depois do Raio-X também convida', () => {
-    assert.deepEqual(idsDosMomentos(comRaioX('prumo', 'neutra', true)), ['convite-mapa', 'conversa'])
+  it('resposta neutra após material permanece conversa', () => {
+    assert.deepEqual(idsDosMomentos(comRaioX('prumo', 'neutra', true)), ['conversa'])
   })
 
-  it('o convite vem com "isso é pago?" e "não tenho tempo" à mão', () => {
+  it('não introduz objeções de Mapa antes de haver pedido', () => {
     const ids = idsDasObjecoes(comRaioX('prumo', 'interesse', true))
-    assert.ok(ids.includes('mapa-e-pago') && ids.includes('sem-tempo'), ids.join(', '))
+    assert.ok(!ids.includes('mapa-e-pago') && !ids.includes('sem-tempo'), ids.join(', '))
   })
 
   it('a objeção reconhecida no texto vem primeiro', () => {
@@ -410,8 +408,8 @@ describe('convite para o Mapa, depois do Raio-X', () => {
     assert.ok(!idsDasObjecoes(comRaioX('prumo', 'interesse', false)).includes('mapa-e-pago'))
   })
 
-  it('porte desconhecido: o convite aparece e a dica diz o filtro', () => {
-    assert.ok(idsDosMomentos(comRaioX('prumo', 'interesse')).includes('convite-mapa'))
+  it('porte desconhecido não gera convite; dica exige problema e aceite', () => {
+    assert.ok(!idsDosMomentos(comRaioX('prumo', 'interesse')).includes('convite-mapa'))
     assert.match(passo('convite-mapa').trechos[0].dica ?? '', /equipe/)
   })
 
@@ -429,7 +427,7 @@ describe('convite para o Mapa, depois do Raio-X', () => {
     const linhas = texto.split('\n').filter((l) => l.trim())
     assert.ok(linhas.length >= 3 && linhas.length <= 5, `${linhas.length} linhas`)
     assert.match(linhas[0], /Aqui é o Rômulo, do Prumo/)
-    assert.match(texto, /raio-x/)
+    assert.match(texto, /se essa investigação ajudar/)
     assert.match(texto, /16 perguntas/)
     assert.ok(linhas.includes('[link das 16 perguntas]'), 'o link sozinho numa linha')
     assert.ok(linhas[linhas.length - 1].trim().endsWith('?'))
@@ -437,13 +435,13 @@ describe('convite para o Mapa, depois do Raio-X', () => {
     assert.ok(!/\p{Extended_Pictographic}/u.test(texto), 'sem emoji')
     assert.deepEqual(precosNoTexto(texto), [])
     const preenchido = preencher(texto, { empresa: 'Clínica Sorriso', links: { raioX: RAIO_X } })
-    assert.match(preenchido, /O raio-x mostrou o lado de fora da Clínica Sorriso,/)
+    assert.match(preenchido, /Para entender a rotina da Clínica Sorriso,/)
   })
 
   it('quem respondeu as 16 perguntas recebe a devolutiva do Mapa', () => {
     const respondeu: LeadDaColinha = { ...lead('prumo', 'contato'), sinal: 'diagnostico' }
-    assert.deepEqual(idsDosMomentos(respondeu), ['mapa', 'proposta'])
-    assert.ok(idsDosTrechos(respondeu).includes('proposta-fonte'))
+    assert.deepEqual(idsDosMomentos(respondeu), ['mapa'])
+    assert.ok(!idsDosTrechos(respondeu).includes('proposta-fonte'))
     assert.ok(!idsDosMomentos({ ...lead('site', 'contato'), sinal: 'diagnostico' }).includes('mapa'))
   })
 })
@@ -486,6 +484,21 @@ describe('integridade do conteúdo', () => {
   })
 })
 
+
+it('preço de implantação e Fonte responde com bases vigentes, sem gate de diagnóstico', () => {
+  const resposta = colinhaDoLead(lead('prumo', 'contato', 'licenca', 'Quanto custa?')).objecoes.find(o => o.id === 'quanto-custa')!.resposta.texto
+  assert.ok(resposta.includes(precoDaTabela(CARDAPIO.find(s => s.id === 'respondido')!)))
+  assert.ok(resposta.includes(precoDaTabela(CARDAPIO.find(s => s.id === 'fonte')!)))
+  assert.match(resposta, /sem exigir diagnóstico ou reunião/)
+})
+
+it('exclusão e recusa interrompem sugestões mesmo em proposta e encerramento', () => {
+  for (const etapa of ['novo', 'contato', 'proposta', 'ganho', 'perdido'] as const) {
+    assert.deepEqual(colinhaDoLead(lead('site', etapa, 'exclusao', 'Pode apagar')).momentos, [])
+    assert.deepEqual(colinhaDoLead(lead('site', etapa, 'negativa', 'Não, obrigado')).momentos, [])
+  }
+})
+
 // A objeção de preço é da oferta que o lead discute (Plus: a oferta dele), e o valor só sai da tabela dela. Sem este teste,
 // um "quanto custa" da Iris ou da estamparia podia voltar a responder com o R$ 690 do Site sem nada falhar.
 describe('objecaoDaOferta: o preço da objeção é o da oferta do lead', () => {
@@ -508,11 +521,13 @@ describe('objecaoDaOferta: o preço da objeção é o da oferta do lead', () => 
     assert.ok(!objecaoDaOferta(caro, doProduto('iris')).resposta.texto.includes('R$ 690'))
   })
 
-  it('PRUMO diz que raio-x e Mapa são grátis e que o trabalho é proposto depois, sem preço', () => {
+  it('PRUMO informa bases vigentes sem exigir diagnóstico ou reunião', () => {
     const r = objecaoDaOferta(quanto, doProduto('prumo'))
-    assert.match(r.resposta.texto, /raio-x e o Mapa são gratuitos/)
-    assert.match(r.resposta.texto, /proposto depois/)
-    for (const o of [quanto, caro]) assert.ok(!objecaoDaOferta(o, doProduto('prumo')).resposta.texto.includes('R$'))
+    assert.match(r.resposta.texto, /Raio-X e Mapa são gratuitos/)
+    assert.ok(r.resposta.texto.includes(precoDaTabela(CARDAPIO.find(s => s.id === 'respondido')!)))
+    assert.ok(r.resposta.texto.includes(precoDaTabela(CARDAPIO.find(s => s.id === 'fonte')!)))
+    assert.match(r.resposta.texto, /sem exigir diagnóstico ou reunião/)
+    assert.ok(!r.resposta.texto.includes('R$ 690'))
   })
 
   it('Estamparia não tem preço definido: nenhum R$ em nenhuma das duas objeções', () => {

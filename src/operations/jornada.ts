@@ -12,9 +12,7 @@
 // A fonte do negócio continua sendo o repositório prumo (00-contexto/negocio.md,
 // "A oferta" e "Jornada do cliente"): mudou lá, mude aqui e refaça o guia.
 
-import { REGRAS_DO_RITMO } from './trava-de-ritmo'
-import { caminhoDaAba } from './vendas-abas'
-import { CARDAPIO, objecoesNoTexto, type IdDoServico, type ServicoDoCardapio } from './colinha'
+import { CARDAPIO, type IdDoServico, type ServicoDoCardapio } from './colinha'
 import type { AchadoDoRaioX, CrmLead, CrmProduto, IdDoAchado } from './types'
 import { ehOfertaPropria, type OfertaPropria as OfertaDoJson } from '../../server/ofertas.ts'
 
@@ -29,7 +27,7 @@ export type IdDoPasso =
 export type Trilho = 'tronco' | 'fora' | 'dentro' | 'fecho'
 
 export const ROTULO_DO_TRILHO: Record<Trilho, string> = {
-  tronco: 'Todo lead',
+  tronco: 'Descoberta e conversa',
   fora: 'Por fora (o caminho do cliente)',
   dentro: 'Por dentro (empresa com equipe)',
   fecho: 'Fechamento',
@@ -73,9 +71,9 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Achado',
     trilho: 'tronco',
     quem: 'robô',
-    como: 'Caçador (n8n 01, 06:00: Google Places + nota do Gemini); Iris e estamparias pelos caçadores próprios (dias úteis, 9h, ligados em 16/10/2026, pausados em 17/10; caem na Triagem de Primeiros contatos); Plus pelo Catálogo de Negócios Maçônicos',
+    como: 'Caçador (n8n 01, 06:00: Google Places + nota do Gemini); Iris e estamparias pelos caçadores próprios (pausados desde 17/10/2026; não religar nesta rodada; acervo na Triagem); Plus pelo Catálogo de Negócios Maçônicos',
     entra: 'O caçador gravou a empresa na planilha (ou, no Plus, no leads.json).',
-    sai: 'O Raio-X (ou o site) publicado vai para "Raio-X pronto".',
+    sai: 'Uma conversa elegível confirma a necessidade; Raio-X e demonstração são opcionais quando ajudam a decisão.',
     blueprint: ['SITE-1', 'OFERTAS-1'],
   },
   {
@@ -84,8 +82,8 @@ export const PASSOS: PassoDaJornada[] = [
     trilho: 'tronco',
     quem: 'robô',
     como: 'raio-x.py (11:15 e 17:15) e o Balcão (n8n 03, de hora em hora) marcam "pronto" e sorteiam a mensagem; no PRUMO, o Raio-X à mão (projeto prumo-raio-x)',
-    entra: 'Raio-X publicado e o lead marcado "pronto", ainda sem a primeira mensagem.',
-    sai: 'A primeira mensagem enviada leva para "Primeira mensagem".',
+    entra: 'Raio-X produzido para uma observação útil; não é requisito de toda venda nem autorização de contato.',
+    sai: 'Apresentar somente quando pertinente e no canal permitido. Material pronto não comprova interesse ou envio.',
     servico: 'raio-x',
     blueprint: ['SITE-2'],
   },
@@ -94,10 +92,10 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Primeira mensagem',
     trilho: 'tronco',
     quem: 'você',
-    como: `O time comercial (só o Site em pronto) ou a Ficha do lead, pelo WhatsApp, no expediente e na trava de ritmo (intervalo mínimo de ${Math.round(REGRAS_DO_RITMO.intervaloMs / 60_000)} min, ${REGRAS_DO_RITMO.porHora} por hora móvel; teto diário vigente mostrado na Central); o observador marca envio e leitura sozinho`,
+    como: 'Primeiros contatos automáticos bloqueados após o softban por spam de 13/11/2026. Reconexão, configuração ativa ou passagem do tempo não liberam a fila. Descoberta começa por contato elegível e necessidade, com Rômulo responsável.',
     entra: 'Enviada (ou convite enviado), sem resposta de gente.',
-    sai: 'Resposta de gente leva para "Respondeu". Sem resposta: follow-up no 3º dia (só para quem leu, no mesmo dia). Vendas mostra a saída por prazo no 7º dia; a planilha marca expirado no 7º, junto.',
-    prazo: 'follow-up no 3º dia; saída por prazo em Vendas em 7 dias; expiração da planilha também em 7 dias',
+    sai: 'Resposta humana inicia descoberta. Silêncio e robô não confirmam recusa ou necessidade. Estados de expiração do histórico precisam de revisão; não autorizam retomada.',
+    prazo: 'Próximo passo conforme o combinado; sem cobrança automática por silêncio.',
     blueprint: ['SITE-3', 'PRUMO-1', 'OFERTAS-3'],
   },
   {
@@ -108,7 +106,7 @@ export const PASSOS: PassoDaJornada[] = [
     quem: 'você',
     como: 'O observador lê a resposta e o Gemini classifica (interesse, neutra, negativa, robô, exclusão); você responde com o Roteiro',
     entra: 'Respondeu e a 2ª mensagem ainda não saiu.',
-    sai: 'Interesse: a 2ª mensagem (o Raio-X ou o demo, com o preço do Encontrado). Negativa: a resposta da objeção. Exclusão: agradecer e apagar no mesmo dia.',
+    sai: 'Atender o pedido recebido e confirmar a necessidade. Permissão para material não é compra. Recusa interrompe a abordagem; exclusão segue o procedimento de proteção dos dados.',
     prazo: 'interesse respondido em até 2 h',
     blueprint: ['SITE-4', 'OFERTAS-4'],
   },
@@ -118,10 +116,10 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Recebeu a 2ª mensagem',
     trilho: 'tronco',
     quem: 'você',
-    como: 'A 2ª mensagem de Vendas (o observador do WhatsApp a marca quando sai); "Gerar demo" quando ele quer ver o site (20 a 40 min depois do toque)',
-    entra: 'A 2ª mensagem saiu (Raio-X, demo ou os dois, com o preço do Encontrado).',
-    sai: 'Abre um trilho, ou os dois: por fora, a conversa sobre os produtos; por dentro, o convite para o Mapa (só empresa com equipe).',
-    prazo: 'qualificar (dor, impacto, decisor) e depois a proposta, em até 24 h de cada "gostei"',
+    como: 'Entregar somente o material pertinente solicitado. Abrir WhatsApp não confirma envio; conferir recibo ou confirmação explícita antes de registrar.',
+    entra: 'Material realmente enviado e registrado com evidência.',
+    sai: 'Confirmar necessidade, adequação e processo de decisão. Mapa é opcional quando sua investigação ajuda a escolher o escopo.',
+    prazo: 'Resposta útil ao pedido; proposta quando houver contexto suficiente, não por um "gostei".',
     blueprint: ['SITE-5', 'PRUMO-2'],
   },
   {
@@ -130,10 +128,10 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Conversa',
     trilho: 'fora',
     quem: 'você',
-    como: 'Conversa de 20 a 45 min (roteiro em prumo/04-venda/roteiro-conversa-45min.md); marque no Calendar e salve o próximo passo na Ficha',
-    entra: 'Quer o site, ou o Raio-X mostrou um trecho do caminho que ele quer arrumar.',
-    sai: 'Proposta por escrito em até 24 h.',
-    prazo: 'proposta em até 24 h depois da conversa',
+    como: 'Rômulo entende um caso real, a solução atual, quem decide e o próximo passo. Use mensagem ou reunião conforme a necessidade; não exigir ligação para uma compra simples.',
+    entra: 'A pessoa descreveu o que quer resolver ou pediu condições de uma entrega específica.',
+    sai: 'Proposta de uma entrega pertinente com escopo, condições e próximo passo; esclarecer lacunas antes de prometer.',
+    prazo: 'Prazo combinado com o cliente e compatível com a capacidade de entrega.',
     blueprint: ['PRUMO-2-P1', 'OFERTAS-5'],
   },
   {
@@ -141,8 +139,8 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Convite para o Mapa',
     trilho: 'dentro',
     quem: 'você',
-    como: 'Convite do Roteiro ("Mapa grátis: 16 perguntas, uns 10 minutos"); só empresa com umas 8 pessoas ou mais',
-    entra: 'Recebeu a 2ª mensagem, a empresa tem equipe e o Mapa ainda não foi respondido.',
+    como: 'Convite do Roteiro: Mapa gratuito e opcional quando a rotina da equipe exige investigação; confirmar utilidade e aceite',
+    entra: 'A empresa tem equipe, existe necessidade de investigar regras/processos e o dono aceitou o Mapa. Não é passagem obrigatória de toda oportunidade.',
     sai: 'O dono responde as 16 perguntas no formulário: "Mapa respondido".',
     servico: 'mapa',
     blueprint: ['PRUMO-3-E1'],
@@ -167,8 +165,8 @@ export const PASSOS: PassoDaJornada[] = [
     quem: 'você',
     como: 'Conversa de 45 min sobre o documento (o documento é do dono, contrate ou não)',
     entra: 'Devolutiva marcada como próximo passo na Ficha.',
-    sai: 'Proposta da Fonte (e dos produtos que o Mapa apontou) em até 24 h.',
-    prazo: 'proposta em até 24 h depois da devolutiva',
+    sai: 'Confirmar necessidade, decisão e escopo; propor a entrega pertinente quando houver contexto suficiente.',
+    prazo: 'Próximo passo e prazo combinados, sem obrigação de proposta',
     servico: 'fonte',
     blueprint: ['PRUMO-4'],
   },
@@ -178,9 +176,9 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Proposta enviada',
     trilho: 'fecho',
     quem: 'você',
-    como: 'proposta-modelo do prumo (04-venda) com o cardápio; marque "Proposta enviada" na Ficha',
-    entra: 'Proposta marcada na Ficha.',
-    sai: 'Ganhou (na Ficha ou na página do lead) ou recusou; sem decisão, cobre com data no próximo passo.',
+    como: 'Proposta de escopo definido, com preço vigente, dependências, entrega e suporte; registrar a versão e a evidência do envio.',
+    entra: 'Envio da proposta confirmado. Proposta preparada não é enviada.',
+    sai: 'Registrar aceite da versão, cobrança e recebimento como fatos distintos. Acompanhar conforme o compromisso, respeitando espera e recusa.',
     blueprint: ['SITE-7', 'PRUMO-5'],
   },
   {
@@ -189,8 +187,8 @@ export const PASSOS: PassoDaJornada[] = [
     trilho: 'fecho',
     quem: 'você',
     como: 'Encontrado: no ar e pago depois de ver; Fonte: 2 semanas, 50/50; depois, as mensalidades',
-    entra: 'Ganhou (ou Concluído na Etapa da planilha).',
-    sai: 'Entrega feita e a mensalidade correndo.',
+    entra: 'Ganho legado ou contratação registrada; conferir o aceite e as condições, sem inferir pagamento.',
+    sai: 'Entrega, aceite, cobrança e recebimento verificados separadamente; manutenção apenas nas condições contratadas.',
     blueprint: ['SITE-7-C1', 'PRUMO-5-C1'],
   },
   {
@@ -198,9 +196,9 @@ export const PASSOS: PassoDaJornada[] = [
     nome: 'Perdido',
     trilho: 'fecho',
     quem: 'robô',
-    como: 'Recusou, pediu para apagar, 7 dias sem mensagem do lead ou sem contato fácil',
-    entra: 'Saiu do funil.',
-    sai: 'Volta sozinho se ele escrever; um próximo passo ou a proposta o trazem de volta.',
+    como: 'Conserva recusas, exclusões, dispensas e expirações das fontes legadas. A Carteira distingue encerramento explícito de revisão por tempo.',
+    entra: 'Encerramento explícito ou estado legado que exige revisão; silêncio não comprova venda perdida.',
+    sai: 'Revisão interna preserva o histórico e não autoriza contato. Nova conversa elegível precisa respeitar recusas e contexto atual.',
     blueprint: ['SITE-7-B1'],
   },
 ]
@@ -234,13 +232,10 @@ export const OFERTAS_PROPRIAS: OfertaPropria[] = [
   },
 ]
 
-/**
- * O que a jornada oferece a cada oferta própria do JSON (28/10/2026): o item do catálogo acima e o porquê. É
- * conteúdo de cada oferta, por isso fica aqui; o Record faz o vue-tsc cobrar a oferta nova.
- */
+/** Hipótese por oferta própria; o catálogo central exige cobertura quando surgir outra oferta. */
 const OFERTA_PROPRIA_NA_JORNADA: Record<OfertaDoJson, { id: IdDaOfertaPropria; porque: string }> = {
-  iris: { id: 'iris', porque: 'Clínica de terapia: a Íris, diário de sessão e dossiê; confirmar aderência e condições vigentes.' },
-  estampa: { id: 'crm-estamparia', porque: 'Estamparia: CRM de estamparia em implantação; confirmar necessidade, impacto, decisor e condições próprias antes da proposta.' },
+  iris: { id: 'iris', porque: 'Hipótese da oferta cadastrada: Íris em uso. Avaliação dirigida da rotina, prontidão, suporte e condições vigentes; sem Raio-X ou Mapa obrigatório.' },
+  estampa: { id: 'crm-estamparia', porque: 'Hipótese da oferta cadastrada: CRM de estamparia em implantação. Confirmar necessidade, impacto, decisor, prontidão e homologação; piloto não é produto pronto.' },
 }
 
 export type IdDaOferta = IdDoServico | IdDaOfertaPropria
@@ -373,59 +368,42 @@ export interface ProximoDaJornada {
 
 /** O que fazer agora com o lead: o salvo à mão manda; sem ele, o que a jornada diz. */
 export function proximoDaJornada(lead: LeadDaJornada): ProximoDaJornada {
-  if (lead.proximoPasso?.texto && lead.etapa !== 'ganho' && lead.etapa !== 'perdido') {
+  const tipo = lead.resposta?.tipo
+  if (tipo === 'exclusao') return { acao: 'Interromper contato e seguir o procedimento de exclusão e proteção dos dados.', quem: 'você' }
+  if (lead.etapa === 'perdido' || tipo === 'negativa' || ['recusou', 'recusou-pasta', 'sem-interesse', 'descartado', 'sem-contato', 'expirou', 'esfriou'].includes(lead.sinal)) {
+    return { acao: 'Nada a mandar. Conferir o encerramento no histórico; revisão interna não autoriza nova abordagem.', quem: 'o dono' }
+  }
+  if (lead.etapa === 'ganho') return { acao: 'Conferir aceite, entrega, cobrança e recebimento separadamente; cumprir somente o suporte contratado.', quem: 'você' }
+  if (/preço|preco|valor|quanto (?:custa|fica)/i.test(lead.resposta?.trecho ?? '')) {
+    return { acao: 'Responder diretamente ao pedido de preço com as condições vigentes da oferta; esclarecer o escopo sem exigir Raio-X, Mapa ou reunião.', quem: 'você', quando: 'em até 2 h' }
+  }
+  if (lead.etapa === 'novo') return { acao: 'Conferir a necessidade e o canal elegível. Primeiros contatos automáticos bloqueados; material pronto não autoriza envio.', quem: 'você' }
+  if (lead.proximoPasso?.texto) {
     return { acao: lead.proximoPasso.texto, quem: 'você', quando: lead.proximoPasso.data, marcadoAMao: true }
   }
-  const funil = funilDoLead(lead)
-  const tipo = lead.resposta?.tipo
-  const dentro = trilhoDeDentro(lead)
   switch (passoAtual(lead)) {
     case 'achado':
-      return funil === 'prumo' || ehOfertaPropria(funil)
-        ? { acao: 'Revisar o lead na Triagem e mandar o convite', quem: 'você' }
-        : { acao: 'Esperar o Raio-X, que sai às 11:15 e às 17:15', quem: 'robô' }
     case 'raio-x':
-      return lead.sinal === 'publicado'
-        ? { acao: 'Esperar o Balcão marcar "pronto", de hora em hora', quem: 'robô' }
-        // A Ficha tem o próprio botão (AC-22, 17/10/2026): "pela Próxima venda" mandava para outro lugar.
-        : { acao: 'Mandar a primeira mensagem', quem: 'você', quando: 'no expediente, no ritmo da trava' }
+      return { acao: 'Conferir a necessidade e o canal elegível; primeiros contatos automáticos bloqueados.', quem: 'você' }
     case 'primeiro-contato':
-      if (lead.followupHoje) return { acao: 'Mandar o follow-up de hoje', quem: 'você', quando: 'hoje' }
-      return {
-        acao: `Esperar a resposta; o follow-up aparece em ${caminhoDaAba('afazer')} no 3º dia`,
-        quem: 'o dono',
-        ...(lead.diasParaSair !== undefined ? { quando: lead.diasParaSair <= 1 ? 'vai para Perdido amanhã' : `vai para Perdido em ${lead.diasParaSair} dias` } : {}),
-      }
+      return { acao: 'Aguardar resposta ou o próximo passo combinado. Silêncio e resposta de robô não comprovam recusa nem autorizam cobrança automática.', quem: 'o dono' }
     case 'resposta':
-      if (tipo === 'exclusao') return { acao: 'Agradecer e apagar o lead', quem: 'você', quando: 'hoje' }
-      if (tipo === 'negativa') return { acao: 'Responder a objeção com o Roteiro, sem insistir depois de um "não"', quem: 'você' }
-      // A licença (17/10/2026) não é "quero ver": só o material autorizado, sem preço.
-      if (tipo === 'licenca') return { acao: 'Mandar o material que ele deixou mandar, sem preço, e depois perguntar o que achou', quem: 'você', quando: 'hoje' }
-      if (tipo === 'interesse' || lead.interesseParado) {
-        return {
-          acao: funil === 'prumo' ? 'Mandar o Raio-X na 2ª mensagem' : 'Mandar a 2ª mensagem com o Raio-X ou o demo e o preço do Encontrado',
-          quem: 'você',
-          quando: 'em até 2 h',
-        }
-      }
-      return { acao: 'Seguir a conversa com o Roteiro', quem: 'você' }
+      if (tipo === 'licenca') return { acao: 'Entregar somente o material solicitado, no canal permitido. Permissão para material não confirma necessidade nem compra.', quem: 'você', quando: 'em até 2 h' }
+      return { acao: 'Atender o pedido recebido e entender o que precisa resolver. Interesse e permissão não confirmam compra; propor escopo quando houver contexto suficiente.', quem: 'você', quando: 'em até 2 h' }
     case 'segunda':
-      return dentro
-        ? { acao: 'Convidar para o Mapa e, se ele quiser o site ou o WhatsApp, marcar a conversa', quem: 'você', quando: 'qualificar (dor, impacto, decisor) e depois a proposta, em até 24 h do "gostei"' }
-        : { acao: 'Marcar a conversa, ou fechar o Encontrado se ele pediu para pôr no ar', quem: 'você', quando: 'qualificar (dor, impacto, decisor) e depois a proposta, em até 24 h do "gostei"' }
     case 'conversa':
-      return { acao: 'Marcar a conversa, qualificar (dor, impacto, decisor) e depois mandar a proposta', quem: 'você', quando: 'proposta em até 24 h depois da conversa, com a qualificação confirmada' }
+      return { acao: 'Confirmar necessidade, processo de decisão e escopo. Proposta quando houver contexto suficiente; não exigir diagnóstico ou reunião para uma compra simples.', quem: 'você' }
     case 'mapa':
-      return { acao: 'Completar o rascunho do Mapa e marcar a devolutiva de 45 min', quem: 'você' }
+      return { acao: 'Conferir o rascunho do Mapa com o dono e combinar a devolutiva. O diagnóstico não obriga a contratar Fonte.', quem: 'você' }
     case 'mapa-convite':
     case 'devolutiva':
-      return { acao: 'Qualificar (dor, impacto, decisor) e depois mandar a proposta da Fonte e dos produtos que o Mapa apontou', quem: 'você', quando: 'em até 24 h' }
+      return { acao: 'Conferir o problema e o escopo pertinente; usar o Mapa quando útil. Proposta da Fonte somente se a necessidade justificar.', quem: 'você' }
     case 'proposta':
-      return { acao: 'Cobrar a decisão e salvar a data no próximo passo', quem: 'você' }
+      return { acao: 'Acompanhar a decisão na data combinada e registrar o próximo passo; aceite, entrega e pagamento são fatos distintos.', quem: 'você' }
     case 'ganho':
-      return { acao: 'Entregar e começar a mensalidade', quem: 'você' }
+      return { acao: 'Conferir entrega e recebimento conforme as condições contratadas.', quem: 'você' }
     case 'perdido':
-      return { acao: 'Nada a mandar, a não ser que ele volte a escrever', quem: 'o dono' }
+      return { acao: 'Nada a mandar; revisão interna não autoriza contato.', quem: 'o dono' }
   }
 }
 
@@ -454,26 +432,26 @@ export interface OfertaDoLead {
  */
 // Conceito institucional: espelho para os prompts e o guia. Fonte: prumo/00-contexto/organizacao.md.
 export const CONCEITO_PRUMO: readonly string[] = [
-  'O Prumo é consultoria digital e produtos digitais. Arruma o caminho do cliente até o caixa: a consultoria arruma o caminho e o produto mantém funcionando.',
+  'O Prumo é consultoria digital e produtos digitais. Arruma o caminho do cliente até o caixa. A entrada é pela necessidade concreta, sem uma nova marca ou diagnóstico institucional obrigatório.',
   'A experiência em produto, engenharia e design, com passagens por Caixa, Pay4Fun e Qintess, é de Rômulo Sutil Corrêa. Essas organizações não são clientes atribuídos ao Prumo.',
   'O SquadOne sustenta a operação interna. A Fonte da própria Prumo é piloto em homologação, com conclusão do aceite pendente. Vale Norte é uma demonstração fictícia. Nenhuma dessas provas comprova ganho de vendas ou economia.',
   'Íris: Em uso, diário de sessão e dossiê para clínicas de terapia, com revisão do terapeuta. A IA não pontua protocolos nem toma decisões clínicas. CRM de estamparia: Em implantação, conversas, clientes e pedidos; WhatsApp sujeito à homologação. Esses estados não são liberação de qualidade.',
-  'Produtos por assinatura têm conversa própria, sem exigir Raio-X ou Mapa. Site/Encontrado mantém a prioridade entre candidatos aprovados. CRM de estamparia exige necessidade, impacto e decisor confirmados antes de ampliar a venda.',
-  'Permissão para material, resposta e demonstração não são venda. Acompanhar qualificação, proposta, aceite e recebimento; avaliar ciclo e margem com custos e horas quando houver dados. Nenhum conceito altera autorização de envio, preço ou cadência.',
+  'Direção de 16/11/2026: Rômulo confirmou softban por spam após os disparos de 13/11 e autorizou a reconstrução comercial. Primeiros contatos automáticos bloqueados; reconexão não autoriza retomada. Este conceito não atesta deploy dos controles.',
+  'Site/Encontrado e implantação delimitada de um fluxo comercial são hipóteses iniciais, não limite eterno do portfólio. SaaS tem avaliação dirigida, fora da aquisição ampla, com prontidão e comprador demonstrados. O fundador conduz descoberta e venda.',
+  'Raio-X e Mapa são opcionais quando ajudam uma decisão suficiente. Fonte conserva método, conferência com a equipe e escopo contratado. Preços, contratos e autorizações de suporte permanecem.',
+  'Permissão para material, resposta e demonstração não são venda. Separar cadastro, conversa, oportunidade, proposta, contratação e recebimento; avaliar economia com custos e horas observados, sem fundir empresas por telefone.',
 ]
 
 export const REGRAS_DA_OFERTA: string[] = [
-  'O Raio-X (grátis) é a porta de todo lead, com ou sem site. Até ele ver o Raio-X, não se oferece mais nada.',
-  'Depois do Raio-X há dois trilhos, e eles se somam: por fora (Encontrado, Respondido e Acompanhado, Anúncios, Redes) e por dentro (Mapa → Fonte → Manutenção). Um lead com equipe pode fazer o Mapa e, ao mesmo tempo, querer o site.',
-  'O que o Raio-X achou decide a ordem e o porquê: a oferta que resolve o ponto de mais peso vem primeiro, citando o número ("Raio-X: 12 avaliações contra 60 no meio dos primeiros de “dentista em Anápolis”"). Sem os achados em Vendas (Raio-X anterior a 15/10/2026 ou feito à mão sem eles), vale a ordem de sempre e o Raio-X aberto decide.',
-  'Ponto de site ou de perfil (sem site, site fora do ar ou sem o nome deles, botão “Site” levando para rede social, site sem celular ou WhatsApp, horário que não aparece, fotos que não são deles) → Encontrado. Nota baixa ou poucas avaliações → Respondido e Acompanhado (cliente respondido e acompanhado é o que vira avaliação). Fora do topo da busca → Anúncios, só com site e perfil em dia; antes, o Encontrado.',
-  'Sem site (Site antes da venda, Plus com oferta "site"): o Encontrado vem logo depois do Raio-X; é o que o demo e a 2ª mensagem vendem, e paga só depois de ver no ar.',
-  'Com site (serviços PRUMO, Plus com oferta "prumo"): Respondido e Acompanhado, Anúncios ou Redes, conforme o que o Raio-X mostrou. O Encontrado só se o Raio-X achou um ponto de site ou de perfil, ou ele pedir um novo.',
-  'O Mapa (grátis) só para empresa com umas 8 pessoas ou mais, depois do Raio-X (ou direto pela CDL). O porte vem do CNPJ do site (EPP ou DEMAIS, o alvo do filtro de porte do Lead Scout); sem ele, confirme antes de convidar.',
-  'A Fonte só existe depois do Mapa; a Manutenção, só depois da Fonte e dos 30 dias de ajustes.',
-  'Respondido e Acompanhado, Fonte e Manutenção não têm preço no frio: saem por escrito na proposta, em até 24 h.',
-  'Disse "já temos site": não insista no Encontrado; o Raio-X mostra o resto do caminho (WhatsApp, avaliações). Se o Raio-X achou um ponto no site dele, mostre o ponto e deixe o Encontrado para quando ele quiser arrumar.',
-  'Iris e CRM de estamparia são ofertas próprias, fora do cardápio: não se misturam com Raio-X nem Mapa.',
+  'Começar pela necessidade e pela oferta pedida. Raio-X e Mapa são instrumentos opcionais; não impedem informar condições ou contratar um serviço simples.',
+  'A oferta/canal do cadastro orienta uma hipótese de conversa, não confirma necessidade. Categoria pública, porte, ausência de URL e avaliações não comprovam problema, orçamento ou decisor.',
+  'Achados do Raio-X são contexto verificável. Nota baixa ou poucas avaliações não demonstram falha de atendimento; já ter site não implica precisar de automação, anúncios ou redes.',
+  'Site/Encontrado e implantação de um fluxo são as hipóteses iniciais. Não ampliar catálogo ou aquisição por inferência; outros produtos podem ganhar foco com prontidão, comprador e economia demonstrados.',
+  'Responder perguntas de preço diretamente com a tabela e as condições vigentes; quando houver variação, explicar o escopo. Não exigir diagnóstico, reunião ou preenchimento completo de qualificação para responder.',
+  'Interesse, licença e permissão para material não são compra. Preparar proposta quando necessidade, processo de decisão e escopo forem suficientes; não por um gostei isolado.',
+  'Mapa só quando uma investigação da rotina da equipe ajudar a decisão e o interessado aceitar. A Fonte não exige Mapa prévio como etapa comercial; mantém método e conferência com a equipe. Manutenção apenas nas condições contratadas, após os ajustes incluídos.',
+  'Íris e CRM de estamparia seguem conversa própria e avaliação dirigida, fora da aquisição ampla. Estado de uso/implantação não é prova de produto pronto; preservar dependências, qualidade e condições específicas.',
+  'Recusa, exclusão e encerramento não recebem sugestão de abordagem. Revisar expiração histórica internamente não autoriza retomada. Primeiros contatos automáticos permanecem bloqueados.',
 ]
 
 /** O serviço que resolve cada ponto do Raio-X (a regra 4 acima, em código). */
@@ -525,105 +503,42 @@ export function fraseDoAchado(a: AchadoDoRaioX): string {
   }
 }
 
-/** O que cada serviço faz pelo ponto que o Raio-X achou (vai depois do "Raio-X: …"). */
-const RESOLVE: Partial<Record<IdDoServico, string>> = {
-  encontrado: 'O Encontrado resolve: site no ar com o endereço deles no perfil, perfil do Google revisado e botão de WhatsApp (paga só depois de ver no ar).',
-  respondido: 'Cliente respondido na hora e acompanhado depois é o que vira avaliação: Respondido e Acompanhado.',
-  anuncios: 'Anúncios põem a empresa no alto da busca enquanto o perfil sobe.',
-}
-
 /** O que oferecer a este lead agora, depois e não oferecer, com o motivo de cada um. */
 export function ofertaDoLead(lead: LeadDaJornada): OfertaDoLead {
-  const funil = funilDoLead(lead)
   const r: OfertaDoLead = { agora: [], depois: [], naoAgora: [], aConfirmar: [] }
-  if (lead.etapa === 'perdido') {
-    r.naoAgora.push({ id: 'raio-x', porque: 'Lead encerrado: nada a oferecer, a não ser que ele volte a escrever.' })
+  if (lead.etapa === 'perdido' || lead.resposta?.tipo === 'negativa' || lead.resposta?.tipo === 'exclusao'
+    || ['recusou', 'recusou-pasta', 'sem-interesse', 'descartado', 'sem-contato', 'expirou', 'esfriou'].includes(lead.sinal)) {
+    r.naoAgora.push({ id: 'raio-x', porque: 'Encerramento, recusa ou exclusão: nada a oferecer. Revisão interna não autoriza nova abordagem.' })
     return r
   }
-  if (ehOfertaPropria(funil)) {
-    const { id, porque } = OFERTA_PROPRIA_NA_JORNADA[funil]
-    r.agora.push({ id, porque })
-    r.naoAgora.push({ id: 'raio-x', porque: 'Iris e estamparias não passam pelo Raio-X nem pelo Mapa.' })
+  if (lead.etapa === 'ganho') {
+    r.aConfirmar.push('Conferir escopo aceito, entrega e recebimento; manter somente o que foi contratado, sem upsell automático.')
     return r
   }
-
-  // Recebeu a 2ª mensagem = ela saiu (é ela que o leva) ou o lead já passou dela.
-  const antesDoRaioX: IdDoPasso[] = ['achado', 'raio-x', 'primeiro-contato', 'resposta']
-  const viuRaioX = Boolean(lead.marcos.segundaEnviada) || !antesDoRaioX.includes(passoAtual(lead))
-  const comSite = funil === 'prumo'
-  const disseQueTemSite = objecoesNoTexto(lead.resposta?.trecho).some((o) => o.id === 'ja-tem-site')
-  const semSite = !comSite && !disseQueTemSite
-  const mapaRespondido = lead.sinal === 'diagnostico'
-
-  // O que o Raio-X achou, por serviço. A página já vem na ordem de peso: o primeiro achado de cada serviço dá a ordem.
-  const achados = lead.achados ?? []
-  const doRaioX = (s: IdDoServico) => {
-    const deste = achados.filter((a) => OFERTA_DO_ACHADO[a.id] === s)
-    return deste.length ? `Raio-X: ${deste.map(fraseDoAchado).join('; ')}.` : ''
-  }
-  const achou = (s: IdDoServico) => achados.some((a) => OFERTA_DO_ACHADO[a.id] === s)
-  const pesoNoRaioX = (id: IdDaOferta) => {
-    const i = achados.findIndex((a) => OFERTA_DO_ACHADO[a.id] === id)
-    return i < 0 ? achados.length : i
-  }
-
-  // 1. A porta.
-  if (!viuRaioX) r.agora.push({ id: 'raio-x', porque: 'Ainda não viu o Raio-X: é a porta de todo lead, grátis.' })
-
-  // 2. Por fora. `agora`: entra assim que ele vê o Raio-X.
-  const fora: Array<OfertaSugerida & { agora: boolean }> = []
-  if (semSite) {
-    fora.push({ id: 'encontrado', agora: true, porque: achou('encontrado') ? `${doRaioX('encontrado')} ${RESOLVE.encontrado}` : 'Não tem site: o demo e a 2ª mensagem vendem o Encontrado (paga só depois de ver no ar).' })
-    fora.push({ id: 'respondido', agora: false, porque: achou('respondido') ? `Com o site no ar. ${doRaioX('respondido')} ${RESOLVE.respondido}` : 'Com o site no ar, se ele perde cliente no WhatsApp (demora, fora do horário, orçamento que some).' })
+  if (!lead.spiced?.dor?.trim()) r.aConfirmar.push('Necessidade: qual problema ou entrega a empresa quer resolver? Interesse e permissão para material não comprovam compra.')
+  if (lead.spiced?.decisao.decisor_confirmado !== 'sim') r.aConfirmar.push('Decisão: quem decide e qual próximo passo foi combinado?')
+  r.aConfirmar.push('Escopo: confirmar entrega, dependências e condições pertinentes antes de propor. Responder perguntas de preço diretamente com as condições vigentes.')
+  const funil = funilDoLead(lead)
+  if (lead.produto === 'plus' && !lead.plus?.oferta) {
+    r.aConfirmar.push('Plus é o canal; a oferta ainda não foi confirmada. Não presumir Site.')
+  } else if (ehOfertaPropria(funil)) {
+    r.depois.push({ ...OFERTA_PROPRIA_NA_JORNADA[funil] })
+    r.aConfirmar.push('Qualidade e operação: conferir a versão atual e capacidade de entrega antes de ampliar a venda.')
   } else {
-    fora.push({
-      id: 'respondido',
-      agora: true,
-      porque: achou('respondido') ? `${doRaioX('respondido')} ${RESOLVE.respondido}`
-        : disseQueTemSite ? 'Disse que já tem site: o resto do caminho é o WhatsApp.' : 'Já tem site: o próximo trecho é quem chama no WhatsApp ser respondido.',
-    })
-    if (!achou('encontrado')) fora.push({ id: 'encontrado', agora: false, porque: 'Só se o site atual não aparece no Google ou ele pedir um novo.' })
-    else if (disseQueTemSite) fora.push({ id: 'encontrado', agora: false, porque: `Disse que já tem site, mas o Raio-X achou um ponto nele. ${doRaioX('encontrado')} Mostre o ponto; o Encontrado só se ele quiser arrumar.` })
-    else fora.push({ id: 'encontrado', agora: true, porque: `${doRaioX('encontrado')} ${RESOLVE.encontrado}` })
-  }
-  // Anúncios só com site e perfil em dia: com ponto de site ou de perfil, o Encontrado vem antes.
-  const sitePorArrumar = semSite || achou('encontrado')
-  fora.push(achou('anuncios')
-    ? { id: 'anuncios', agora: !sitePorArrumar, porque: `${sitePorArrumar ? 'Depois do site e do perfil em dia. ' : ''}${doRaioX('anuncios')} ${RESOLVE.anuncios}` }
-    : { id: 'anuncios', agora: false, porque: 'Com site e perfil do Google em dia, se o Raio-X mostra pouca gente chegando.' })
-  fora.push({ id: 'redes', agora: false, porque: 'Se a rede social está parada (o Raio-X automático não confere as redes).' })
-  // Os de agora primeiro; em cada grupo, o do ponto de mais peso no Raio-X; empate, a ordem acima.
-  const ordenados = fora.map((o, i) => ({ o, i }))
-    .sort((a, b) => Number(b.o.agora) - Number(a.o.agora) || pesoNoRaioX(a.o.id) - pesoNoRaioX(b.o.id) || a.i - b.i)
-  for (const { o: { agora, ...oferta } } of ordenados) {
-    if (agora && viuRaioX) r.agora.push(oferta)
-    else r.depois.push(agora ? { ...oferta, porque: `Depois do Raio-X. ${oferta.porque}` } : oferta)
-  }
-
-  // 3. Por dentro.
-  if (mapaRespondido) {
-    r.agora.push({ id: 'fonte', porque: 'Respondeu o Mapa: depois da devolutiva, a proposta da Fonte.' })
-    r.depois.push({ id: 'fonte-em-dia', porque: 'Depois da Fonte e dos 30 dias de ajustes (opcional).' })
-  } else if (trilhoDeDentro(lead)) {
-    const comEquipe = lead.equipe === true
-    const mapa: OfertaSugerida = {
-      id: 'mapa',
-      porque: comEquipe
-        ? `Empresa com equipe (${lead.porte ? `porte ${lead.porte} pelo CNPJ, o alvo do Mapa` : 'confirmada'}): o Mapa (grátis) mostra por dentro o que o Raio-X mostrou por fora.`
-        : 'Se tiver equipe (umas 8 pessoas ou mais): o Mapa (grátis) mostra por dentro o que o Raio-X mostrou por fora.',
+    r.depois.push({ id: funil === 'site' ? 'encontrado' : 'respondido', porque: funil === 'site'
+      ? 'Hipótese da oferta cadastrada: Site/Encontrado, se a empresa confirmar necessidade. Não exige Raio-X; pagamento permanece após ver no ar.'
+      : 'Hipótese da frente cadastrada: implantação delimitada de um fluxo, se houver problema demonstrado. Já ter site não comprova necessidade de automação.' })
+    if (lead.sinal === 'diagnostico') {
+      r.depois.push({ id: 'fonte', porque: 'O Mapa respondido ajuda a entender regras e rotina; avaliar Fonte somente se a necessidade justificar, preservando método e conferência com a equipe.' })
+      r.depois.push({ id: 'fonte-em-dia', porque: 'Opcional após Fonte contratada e os 30 dias de ajustes, nas condições vigentes.' })
+    } else if (lead.equipe === true || funil === 'prumo') {
+      r.aConfirmar.push('Mapa opcional: existe problema de regras ou rotina da equipe que exige investigação? Porte sozinho não justifica convite nem Fonte.')
     }
-    ;(viuRaioX && comEquipe ? r.agora : r.depois).push(viuRaioX ? mapa : { ...mapa, porque: `Depois do Raio-X. ${mapa.porque}` })
-    if (!comEquipe) r.aConfirmar.push('Porte: a empresa tem umas 8 pessoas ou mais? Só com equipe vale o convite para o Mapa.')
-    r.depois.push({ id: 'fonte', porque: 'Só depois do Mapa.' })
-  } else {
-    r.naoAgora.push({ id: 'mapa', porque: funil === 'site' ? 'Site antes da venda: empresa pequena, o Mapa não tem para onde levar.' : 'Empresa sem equipe: a Fonte não se paga.' })
   }
-
-  // 4. O que falta saber.
-  if (!achados.length && lead.links.raioX) {
-    r.aConfirmar.push('O que o Raio-X achou não chegou a Vendas: abra o Raio-X e ofereça primeiro o que resolve o ponto de mais peso.')
+  for (const achado of lead.achados ?? []) {
+    r.aConfirmar.push(`Observação pública: ${fraseDoAchado(achado)}. Confirmar relevância com a empresa; não demonstra necessidade de comprar um serviço.`)
   }
-  if (comSite && !disseQueTemSite && !achados.length) r.aConfirmar.push('O site atual aparece no Google? Se não, ofereça o Encontrado.')
+  if (!lead.achados?.length && lead.links.raioX) r.aConfirmar.push('Raio-X disponível sem achados estruturados: consultar apenas se ajudar a decisão; não é etapa obrigatória.')
   return r
 }
 
@@ -707,19 +622,13 @@ export function guiaDaJornada(): string {
   l.push('## O desenho')
   l.push('')
   l.push('```')
-  l.push(' TODO LEAD     Achado → Raio-X pronto → Primeira mensagem → Respondeu → Recebeu a 2ª mensagem')
-  l.push('                                                                           │')
-  l.push('                     ┌─────────────────────────────────────────────────────┤  (um, outro ou os dois)')
-  l.push('                     ▼                                                     ▼')
-  l.push(' POR FORA      Conversa (Encontrado, Respondido,           POR DENTRO   Convite para o Mapa → Mapa respondido')
-  l.push('               Anúncios, Redes)                            (só equipe)  → Devolutiva de 45 min (→ Fonte)')
-  l.push('                     │                                                     │')
-  l.push('                     └──────────────────────────┬──────────────────────────┘')
-  l.push('                                                ▼')
-  l.push(' FECHO                       Proposta (em até 24 h) → Ganho → mensalidades')
+  l.push(' NECESSIDADE → Conversa suficiente → Proposta com escopo → Aceite')
+  l.push('                                                        ↓')
+  l.push(' ENTREGA e conferência → Cobrança e recebimento → Suporte contratado')
+  l.push(' Raio-X e Mapa: opcionais quando ajudam a decisão, sem passagem obrigatória.')
   l.push('```')
   l.push('')
-  l.push('Iris e estamparias andam num caminho curto: Achado → Primeira mensagem (convite) → Respondeu → Conversa → Proposta → Ganho.')
+  l.push('Íris e estamparia têm avaliação dirigida, fora da aquisição ampla. Os passos abaixo preservam o histórico das fontes; não obrigam cada oportunidade a passar por todos eles.')
   l.push('')
   l.push('## Os passos')
   l.push('')

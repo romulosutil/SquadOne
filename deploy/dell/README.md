@@ -1,3 +1,47 @@
+## Integração e política vigente (16/11/2026)
+
+O atualizador automático usa o bootstrap `atualizar-central.sh`, instalado em
+`~/.local/bin/atualizar-central`, e executa o módulo versionado
+`deploy/dell/atualizar_central.py`. Valida o candidato em palco isolado antes do
+fast-forward e da troca do build. Conserva o marcador do commit realmente
+construído, os gates de aquisição e POSIX, backups e recuperação sem reset hard.
+Recusa checkout alterado, estado de ociosidade ambíguo ou Central ocupada.
+Mudanças apenas em Markdown são validadas sem build nem reinício. Atualização
+de dependências usa instalação isolada e recuperação conjunta com o build.
+Falhas são registradas no journal, sem mensagens na fila de avisos.
+
+Esta integração só autoriza `atualizar-central.timer`. Os timers
+`frente-comercial.timer` e `prospeccao-diaria.timer`, a frente e o manifesto de
+campanha permanecem desativados. A política `config/aquisicao-comercial.json`
+mantém primeiros contatos automáticos bloqueados na reserva e antes do
+transporte, inclusive com flags históricas de cotas desabilitadas. Não há
+reconexão de WhatsApp ou reinstalação geral de observadores nesta etapa.
+
+As instruções de prospecção abaixo são históricas e não autorizam retomada.
+
+## Continuidade da prospecção (12/11/2026, histórico)
+
+Instalar `continuidade_comercial.py` e `prospeccao_diaria.py` em `~/.local/bin/`,
+junto do executor; as units `prospeccao-diaria.service/timer` usam o mecanismo
+systemd existente. A rotina busca candidatos às 08h10, 10h10, 12h10, 14h10 e
+16h10 dos dias úteis de São Paulo. O calendário comercial também exclui feriados.
+Não há API paga nem envio dentro da aquisição. O executor revalida a fonte,
+aprovação dos três agentes, destino, reserva, conta e ritmo antes de enviar.
+
+Autorização contínua é um manifesto explícito com `modo: continuo-dias-uteis`,
+`escopo: novos-site`, início datado e teto de 20 recibos/dia. Manifestos anteriores
+não são prorrogados implicitamente. A pausa da conta só é liberada pela rota de
+configuração existente, após as conferências. As pendências da rodada permanecem.
+
+Verificar com `systemctl --user status prospeccao-diaria.timer`, o journal do
+serviço e `~/.local/share/prospeccao-diaria/uso.json`. Diagnósticos de continuidade
+ficam no estado normal da frente; dedupe dos avisos fica em
+`frente-comercial-continuidade.json`. Não apagar registros para tentar reenvio.
+
+Publicação com backup e testes: `scripts/publicar-continuidade-comercial.py` na
+Mel, após preparar o stage descrito pelo script. `--testar` retorna antes de
+qualquer alteração dos serviços e da configuração produtiva.
+
 # Central de Operações no Dell
 
 ## Limpeza e pausas conferidas em 03/11/2026

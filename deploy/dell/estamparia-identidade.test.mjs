@@ -1,5 +1,3 @@
-// Importa server/*.ts com parameter properties, que o strip-only do Node não aceita: rodar da raiz do
-// repo com `npx tsx --test deploy/dell/estamparia-identidade.test.mjs`, nunca `node --test` puro.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import fs from 'node:fs/promises'

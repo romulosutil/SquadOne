@@ -34,7 +34,10 @@ import type { CrmLead } from './types'
 import { hora } from './crm-formato'
 import type { Guardador } from './guardador'
 
+import politica from '../../config/politica-envios.json'
+
 export interface RegrasDoRitmo {
+  habilitado?: boolean
   intervaloMs: number
   porHora: number
   /** Teto do dia na 1ª semana, na 2ª e daí em diante. */
@@ -48,10 +51,11 @@ export interface RegrasDoRitmo {
 }
 
 export const REGRAS_DO_RITMO: RegrasDoRitmo = {
+  habilitado: politica.limitesOperacionais,
   // 23/10: teto 15/dia e rodada de dez sem resposta humana, por decisão do Rômulo.
-  intervaloMs: 30 * 60_000,
-  porHora: 2,
-  tetosPorSemana: [15],
+  intervaloMs: 10 * 60_000,
+  porHora: 6,
+  tetosPorSemana: [20],
   // Data histórica preservada; o teto único não cresce com a idade do número.
   inicioDoNumero: '2026-10-16',
   pausadoAte: null,
@@ -98,6 +102,7 @@ export function tetoDoDia(agora: number, regras: RegrasDoRitmo = REGRAS_DO_RITMO
 export type MotivoDoRitmo = 'pausa' | 'dia' | 'hora' | 'intervalo'
 
 export interface EstadoDoRitmo {
+  semLimites?: boolean
   /** null = pode enviar agora. */
   motivo: MotivoDoRitmo | null
   /** Quando o próximo primeiro contato pode sair (ms); null quando livre. */
@@ -116,6 +121,7 @@ export function ritmoDoEnvio(instantes: readonly number[], agora: number, regras
   const enviadosHoje = passados.filter(t => diaSP(t) === hoje).length
   const teto = tetoDoDia(agora, regras)
   const base = { enviadosHoje, teto }
+  if (regras.habilitado === false) return { ...base, motivo: null, ate: null, semLimites: true }
   const { intervaloMs, porHora } = limitesDeAgora(agora, regras)
   const pausa = regras.pausadoAte ? Date.parse(regras.pausadoAte) : NaN
   if (Number.isFinite(pausa) && agora < pausa) return { ...base, motivo: 'pausa', ate: pausa }
@@ -148,6 +154,7 @@ export function motivoCurtoDoRitmo(ritmo: Pick<EstadoDoRitmo, 'motivo' | 'ate' |
 
 /** O que a tela diz quando segura o envio (e uma linha curta de quanto falta quando não segura). */
 export function textoDoRitmo(estado: EstadoDoRitmo, regras: RegrasDoRitmo = REGRAS_DO_RITMO): string {
+  if (estado.semLimites) return `${estado.enviadosHoje} primeiros contatos hoje. Sem cota ou intervalo obrigatório.`
   const quando = estado.ate === null ? '' : hora(new Date(estado.ate).toISOString())
   const { intervaloMs, porHora } = limitesDeAgora(Date.now(), regras)
   const minutos = Math.round(intervaloMs / MIN)

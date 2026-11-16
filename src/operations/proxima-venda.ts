@@ -874,7 +874,7 @@ export function agoraDaFicha(lead: CrmLead, acao: Pick<AcaoDeVenda, 'titulo' | '
     if (nossas.length) return { frase: `Esperando a resposta dele desde ${diaCurto(new Date(Math.max(...nossas)).toISOString())}.`, citaOProximo: false }
   }
   // Novo lead: a vez é do robô, ou a primeira mensagem ainda não entrou na Hoje (o Plus passa de 10).
-  return { frase: `Nada para fazer com ele agora: ${minuscula(proximoDaJornada(lead).acao)}.`, citaOProximo: false }
+  return { frase: `Nada para fazer com ele agora: ${minuscula(proximoDaJornada(lead).acao).replace(/\.+$/, '')}.`, citaOProximo: false }
 }
 
 /** Os registros de desfecho da aba CRM (os de ganho e dispensar são de 17/10/2026, AC-08 e AC-10). */
@@ -934,3 +934,13 @@ export function desfechosDoLead(lead: Pick<CrmLead, 'etapa' | 'motivoPerda' | 'p
 // A regra mora na trava de horário (uma só para toda tela, OT-02); daqui só se reexporta, porque o
 // vendedor do servidor e os testes a importam deste módulo.
 export { EXPEDIENTE_DE_VENDA, noExpedienteDeVenda } from './trava-de-horario'
+
+/** Chamada de apresentação; não envia nem confirma o passo. */
+export function chamadaDaAcao(acao: Pick<AcaoDeVenda, 'tipo' | 'empresa' | 'rascunho' | 'copiloto'>): string {
+  if (acao.tipo === 'desfecho') return `Marque que ${acao.empresa} recusou`
+  const quem = acao.copiloto?.momento?.quem
+  const destino = quem === 'recepcao' ? `a recepção de ${acao.empresa}`
+    : quem === 'robo' ? `o atendimento automático de ${acao.empresa}`
+    : acao.empresa
+  return acao.rascunho ? `Envie para ${destino}, isto:` : `Escreva para ${destino}:`
+}

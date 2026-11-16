@@ -1,7 +1,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 /** Uma leitura por vez, prazo de rede e retomada imediata ao voltar ao app. */
-export function useAtualizacaoViva(ler: (signal: AbortSignal) => Promise<unknown>, intervalo = 30_000) {
+export function useAtualizacaoViva(ler: (signal: AbortSignal) => Promise<unknown>, intervalo = 30_000, aoExpirar?: () => void) {
   const atualizando = ref(false)
   const conferidoEm = ref<number | null>(null)
   let ativo = false
@@ -14,7 +14,7 @@ export function useAtualizacaoViva(ler: (signal: AbortSignal) => Promise<unknown
     pendente = false
     clearTimeout(timer)
     controle = new AbortController()
-    const prazo = setTimeout(() => controle?.abort(), 25_000)
+    const prazo = setTimeout(() => { aoExpirar?.();controle?.abort() }, 25_000)
     atualizando.value = true
     try { const ok = await ler(controle.signal); if (ok !== false && ativo && !controle.signal.aborted) conferidoEm.value = Date.now() }
     finally {

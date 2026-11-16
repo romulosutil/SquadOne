@@ -4,9 +4,11 @@ import { trabalhosRegistrados } from './trabalho-registrado'
 import type { AcaoDeVenda } from '../operations/proxima-venda'
 import { decisoesHumanasDoEscritorio } from './minha-vez'
 import { orientacaoDoAtendimento } from '../operations/atendimento-cliente'
+import { indexarResponsaveisDaConversa } from '../operations/responsavel-conversa'
 
 export function pendenciasDaJornada(leads: readonly CrmLead[], acoes: readonly AcaoDeVenda[], agora: number) {
-  return decisoesHumanasDoEscritorio(leads, acoes, agora).filter(d => d.estado === 'agora' && orientacaoDoAtendimento(d.lead, leads, agora).estado === 'agora')
+  const responsaveis = indexarResponsaveisDaConversa(leads, agora)
+  return decisoesHumanasDoEscritorio(leads, acoes, agora).filter(d => d.estado === 'agora' && orientacaoDoAtendimento(d.lead, leads, agora, responsaveis).estado === 'agora')
 }
 
 /** Fases de leitura, não uma nova máquina de estados do serviço. Cada marco exige sua própria evidência. */

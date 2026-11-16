@@ -353,7 +353,7 @@ export const UM_DIA: HoraDoDia[] = [
   {
     hora: '09:00',
     itens: [
-      { onde: 'dell', titulo: 'Acompanhamento dos leads', nota: 'expira o lead sem resposta no 7º dia (o follow-up é decidido pela Central)' },
+      { onde: 'dell', titulo: 'Acompanhamento dos leads', nota: 'aponta o acompanhamento conforme a cadência vigente; encerramento e envio dependem das regras e da confirmação aplicáveis' },
       { onde: 'dell', titulo: 'Caçadores de clínicas e de estamparias', nota: 'pausados desde 17/10; sem novas coletas' },
       { onde: 'dell', titulo: 'ASMR: conceito do dia', nota: 'Hermes' },
     ],

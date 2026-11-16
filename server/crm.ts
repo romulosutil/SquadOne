@@ -4,7 +4,9 @@ import { resumirSinaisComerciais } from '../src/operations/sinais-comerciais.ts'
 import { PREFIXO_RESPONSAVEL, lerResponsavelConversa, textoResponsavelConversa, projetarResponsavelConversa, validarSucessaoResponsavel, identidadeDaConversa } from '../src/operations/responsavel-conversa.ts';
 import { timingSafeEqual } from 'node:crypto';
 import fs from "node:fs/promises";
+import { projetarCarteiraCrm, type CarteiraCrm } from '../src/operations/carteira-crm.ts';
 import { PREFIXO_QUALIFICACAO_COMERCIAL, lerNotaQualificacaoComercial, textoDaQualificacaoComercial, projetarQualificacaoComercial, qualificacaoComercialAtual, temQualificacaoComercial, type QualificacaoComercial } from '../src/operations/qualificacao-comercial.ts';
+import { lerTrabalhoRegistrado } from '../src/office/trabalho-registrado.ts';
 import { PREFIXO_CICLO, lerEventoCiclo, textoEventoCiclo, cicloDoLead, ultimoEnvioDaProposta } from '../src/operations/ciclo-comercial.ts';
 import { motivoDaPerdaDoLead, type MotivoDePerda } from '../src/operations/motivos-de-perda.ts';
 import { RegistroComercialDuravel, hashCanonicoComercial, type ChaveComercial, type FatoComercialNaFonte } from './registro-comercial-duravel.ts';
@@ -335,6 +337,7 @@ export function bracoDaColuna(valor: string): BracoVideo | undefined {
  */
 export function elegiveisDaColuna(valor: string): string | undefined {
   const t = valor.toUpperCase().replace(/[^A-Z]/g, "");
+  if (t === "E") return "E";
   if (!t || [...t].some((l) => !"ABCD".includes(l))) return undefined;
   return ["A", "B", "C", "D"].filter((l) => t.includes(l)).join("");
 }
@@ -692,6 +695,8 @@ export type CrmFonteId = CrmProduto | "registros";
  * A idade do retrato é calculada na tela a partir de geradoEm.
  */
 export interface CrmVisao {
+  /** Projecao de leitura por conta/conversa/oportunidade; preserva o modelo legado. */
+  carteira?: CarteiraCrm;
   estado: "ok" | "sem-retrato" | "retrato-invalido";
   publicacao?: CrmPublicacao;
   mensagem?: string;
@@ -800,9 +805,17 @@ function registrosPorLead(retrato: CrmRetrato): Map<string, Registro[]> {
   return mapa;
 }
 
-/** Proposta vale até ser desfeita; próximo passo é o último registrado (texto vazio limpa). */
+/** Conteudo/referencia atestado: template atual nao reconstrói envio passado. */
+export function propostaTemEvidencia(conteudo: string): boolean {
+  const t = conteudo.trim();
+  return (t.length >= 20 || /https?:\/\/|R\$\s*\d|\d+(?:[,.]\d+)?\s*\/\s*m[eê]s/i.test(t)) && !/\[(?:dia|preencher|confirmar|o maior vazamento)[^\]]*\]/i.test(t)
+    && !/^(?:proposta\s*(?:enviada|mandada)|enviei\s+(?:a\s+)?proposta)[.!\s]*$/i.test(t);
+}
+
+/** Proposta com evidencia vale ate ser desfeita; proximo passo e o ultimo registro. */
 function manuais(registros: Registro[]) {
   let proposta: Registro | undefined;
+  let propostaSemEvidencia: Registro | undefined;
   let proximo: Registro | undefined;
   // A perda marcada na Central: a última vale, e o "desfeito" do mesmo tipo a apaga.
   let semContato: Registro | undefined;
@@ -815,12 +828,15 @@ function manuais(registros: Registro[]) {
       || (r.tipo === "dispensado_desfeito" && semContato?.tipo === "dispensado")) semContato = undefined;
     if (r.tipo === "ganhou") ganho = r;
     if (r.tipo === "ganhou_desfeito") ganho = undefined;
-    if (r.tipo === "proposta") proposta = r;
-    if (r.tipo === "proposta_desfeita") proposta = undefined;
+    if (r.tipo === "proposta") {
+      proposta = propostaTemEvidencia(r.texto) ? r : undefined;
+      propostaSemEvidencia = proposta ? undefined : r;
+    }
+    if (r.tipo === "proposta_desfeita") { proposta = undefined; propostaSemEvidencia = undefined; }
     if (r.tipo === "proximo_passo") proximo = r.texto ? r : undefined;
   }
   return {
-    proposta, proximo, semContato, ganho, notas: registros.filter((r) => r.tipo === "nota").length,
+    proposta, propostaSemEvidencia, proximo, semContato, ganho, notas: registros.filter((r) => r.tipo === "nota").length,
     // Instantes dos envios anotados, em ordem: quem decide se valem é a regra de cada um (depois de quê).
     segundas: registros.filter((r) => r.tipo === "segunda_enviada").map((r) => r.em),
     followups: registros.filter((r) => r.tipo === "followup_enviado").map((r) => r.em),
@@ -833,8 +849,8 @@ function manuais(registros: Registro[]) {
 /**
  * "Interesse parado nunca some" (14/10/2026). Com 48 h de janela, "Manda aí" e "Pode sim" de 08–09/10
  * saíram da Hoje sem o CRM saber se o link foi mandado. Quem disse que quer ver fica até a 2ª mensagem
- * sair DEPOIS da resposta: anotada na Central (`segunda_enviada`) ou, quando a planilha trouxer a coluna,
- * `ultima_saida_em`. A saída normal da etapa (recusa, proposta, ganho, Perdido pelos 7 dias) também
+ * sair DEPOIS da resposta: anotada na Central (`segunda_enviada`) ou reconhecida no conteúdo da conversa.
+ * Uma saída genérica (`ultima_saida_em`) não comprova a entrega. A saída normal da etapa (recusa, proposta, ganho, Perdido pelos 7 dias) também
  * tira, porque `conversa` só vale em Em contato. `null` = não está parado; `{ desde }` = parado desde.
  */
 export function interesseParado(entrada: {
@@ -852,7 +868,6 @@ export function interesseParado(entrada: {
   // do que ficar para sempre por falta de data.
   const depois = (t: number) => desde === undefined || t > desde;
   if (entrada.segundas.some(depois)) return null;
-  if (entrada.ultimaSaida !== undefined && desde !== undefined && entrada.ultimaSaida > desde) return null;
   return desde === undefined ? {} : { desde };
 }
 
@@ -1050,13 +1065,13 @@ function eventosManuais(registros: Registro[]): CrmEvento[] {
   };
   return registros.map((r) => ({
     tipo: r.tipo,
-    rotulo: rotulo[r.tipo],
+    rotulo: r.tipo === 'proposta' && !propostaTemEvidencia(r.texto) ? 'Proposta registrada · envio sem evidência' : rotulo[r.tipo],
     em: new Date(r.em).toISOString(),
     origem: "manual" as const,
     fonte: TIPOS_DE_ENVIO.has(r.tipo) ? "aba CRM (anotado ao tocar no link na Central)" : "aba CRM (registrado na Central)",
     ...((r.tipo === 'nota' && (r.texto.startsWith(PREFIXO_CICLO) || r.texto.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL) || r.texto.startsWith(PREFIXO_RESPONSAVEL))) || ['spiced', 'cadencia_enviada'].includes(r.tipo) || ehTipoAarr(r.tipo) || (r.tipo === 'followup_enviado' && lerRegistroFollowup(r.texto)) ? { registroTexto: r.texto } : {}),
     ...(ehTipoAarr(r.tipo) ? { texto: resumoDoRegistroAarr(r.tipo, lerRegistroAarr(r.tipo, r.texto)!) }
-      : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_CICLO) ? { texto: `Ciclo comercial: ${lerEventoCiclo(r.texto)?.tipo ?? 'registro inválido'}` }
+      : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_CICLO) ? { texto: `Ciclo comercial: ${lerEventoCiclo(r.texto)?.tipo ?? (lerTrabalhoRegistrado(r.texto) ? 'compromisso interno' : 'registro inválido')}` }
       : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_QUALIFICACAO_COMERCIAL) ? { texto: 'Revisão humana da qualificação comercial.' }
       : r.tipo === 'nota' && r.texto.startsWith(PREFIXO_RESPONSAVEL) ? { texto:'Responsável pelo atendimento confirmado na Central.' }
       : r.tipo === 'spiced' ? { texto: 'Qualificação comercial confirmada pelo Rômulo.' }
@@ -1234,9 +1249,7 @@ function leadDoSite(linha: Linha, contexto: {
     ultimaEntrada: maior(instante(c("ultimaEntradaEm")), conv.ultimaEntrada),
     ultimaSaida: maior(instante(c("ultimaSaidaEm")), conv.ultimaSaida),
   };
-  // Para o interesse parado só vale a coluna da planilha (ou o link visto, já em `segundas`): um
-  // "vou pedir o link ao time" na conversa é mensagem nossa, mas o link continua por mandar.
-  const saidaDaPlanilha = instante(c("ultimaSaidaEm"));
+  // Só a entrega/material anotado ou reconhecido em segundas cumpre a promessa; saída genérica não prova entrega.
   const resposta = respostaDaLinha(c);
   // "expirado" é a regra de tempo da planilha, não decisão de ninguém: próximo passo ou proposta
   // registrados na Central a suspendem, como suspendem a regra do CRM (comPrazoDoContato). O reenvio
@@ -1251,7 +1264,7 @@ function leadDoSite(linha: Linha, contexto: {
   const emConversa = calculada.etapa === "contato" && SINAIS_DE_CONVERSA.has(calculada.sinal);
   const corte = Date.parse(CORTE_DO_ACOMPANHAMENTO);
   const acervo = t.enviado !== undefined && t.enviado < corte;
-  const parado = interesseParado({ conversa: emConversa && !ehRecusa(resposta), resposta, respondeu: t.respondeu, segundas, ultimaSaida: saidaDaPlanilha });
+  const parado = interesseParado({ conversa: emConversa && !ehRecusa(resposta), resposta, respondeu: t.respondeu, segundas });
   // Achado da simulação das jornadas (16/10/2026): depois da 2ª mensagem anotada, quem escreveu por
   // último foi o Rômulo, mas o "respondeu há menos de 48 h" mantinha o lead em "Respostas para
   // responder", e a Hoje pedia de novo o que já tinha saído. A 2ª anotada depois da resposta encerra a vez.
@@ -1756,11 +1769,11 @@ export function siteProprioDoLead(lead: Pick<CrmLead, "produto" | "links">): str
 
 const GRUPOS_DE_HOJE: Array<Omit<CrmGrupoHoje, "itens">> = [
   { id: "proximo", titulo: "Próximo passo para hoje", explicacao: "Combinados que você marcou para hoje ou que já passaram da data." },
-  { id: "followup", titulo: "Follow-up para mandar", explicacao: `Em contato há ${DIAS_ATE_FOLLOWUP} a ${DIAS_SEM_RESPOSTA - 1} dias e sem resposta (o recibo de leitura não decide mais desde a Fase 3); quem só ouviu o robô, já no dia seguinte, com um reenvio pedindo o responsável. Quem sai do funil antes vem primeiro.` },
+  { id: "followup", titulo: "Continuidade para revisar", explicacao: "Seleção legada por tempo e leitura. Conferir a conversa, o combinado e a elegibilidade antes de agir; silêncio e robô não autorizam nova cobrança." },
   { id: "resposta", titulo: "Respostas para responder", explicacao: "Quem quer ver e ainda não recebeu a 2ª mensagem vem primeiro e fica até ela sair; depois, quem escreveu por último." },
-  { id: "revisar", titulo: "Prospects para revisar", explicacao: "Serviços PRUMO, Iris e estamparias na Etapa Revisar: veja o site e decida o convite." },
+  { id: "revisar", titulo: "Cadastros para revisar", explicacao: "Cadastros das fontes legadas. Pesquisa pública não comprova necessidade ou permissão de contato; primeiros contatos automáticos estão bloqueados." },
   { id: "proposta", titulo: "Propostas esperando retorno", explicacao: "Propostas enviadas, do mais antigo para o mais novo." },
-  { id: "enviar", titulo: "Primeiro contato para enviar", explicacao: "O botão abre o WhatsApp com a primeira mensagem; o envio é marcado quando ela aparece na conversa. Sem demo, você gera quando o lead pedir." },
+  { id: "enviar", titulo: "Fila histórica de primeiros contatos", explicacao: "Primeiros contatos automáticos bloqueados. Abrir WhatsApp não marca envio; material pronto e cadastro público não autorizam abordagem." },
 ];
 
 /** A ação da Hoje para o reenvio do só-robô (o rótulo do link é ROTULO_DO_REENVIO, de site-mensagem.ts). */
@@ -1981,6 +1994,7 @@ export const NOME_DA_FONTE: Record<CrmFonteId, string> = {
 
 export function visaoSemRetrato(agora: Date, estado: "sem-retrato" | "retrato-invalido", mensagem: string, contexto: Partial<ContextoDoCrm> = {}): CrmVisao {
   return {
+    carteira: projetarCarteiraCrm([], agora.getTime(), false),
     estado,
     mensagem,
     minutosAteVelho: MINUTOS_ATE_RETRATO_VELHO,
@@ -2131,6 +2145,11 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
       lead.diasNaEtapa = dias(Date.parse(lead.desde), agora); lead.respostaNova = false; lead.followupHoje = false;
     }
     lead.revisaoComercial = revisao ? undefined : revisaoComercialDoLead(lead, agora);
+    if (manuais(registros.get(lead.id) ?? []).propostaSemEvidencia && lead.etapa !== 'ganho' && !lead.perdaManual) {
+      const aviso = 'Proposta registrada sem conteúdo enviado ou referência verificável. Conferir o histórico e completar a evidência; não há entrega comprovada.';
+      lead.divergencias.push(aviso);
+      lead.revisaoComercial = aviso;
+    }
     lead.demoProtegida = protecaoDaDemo(lead);
     if (lead.revisaoComercial) {
       lead.respostaNova = false;
@@ -2146,9 +2165,15 @@ export function montarCrm(retrato: CrmRetrato, contexto: ContextoDoCrm): CrmVisa
     .filter((pasta) => pasta.placeId && !idsDoSite.has(pasta.placeId) && pasta.lugar !== "_descartados")
     .map((pasta) => `${pasta.lugar ? `${pasta.lugar}/` : ""}${pasta.slug}`)
     .sort();
+  const fontesComFalha = Object.entries(retrato.fontes).filter(([, fonte]) => Boolean(fonte.erro));
+  const carteira = projetarCarteiraCrm(leads, agora, fontesComFalha.length === 0);
+  for (const [id] of fontesComFalha) carteira.cobertura.alertas.push(
+    `Leitura da fonte ${id} incompleta: histórico existente preservado; os totais da carteira não estão confirmados.`,
+  );
   return {
     estado: "ok",
     geradoEm: retrato.geradoEm,
+    carteira,
     ...(retrato.publicacao ? { publicacao: retrato.publicacao } : {}),
     minutosAteVelho: MINUTOS_ATE_RETRATO_VELHO,
     fontes: ([...PRODUTOS, "registros"] as const).map((id) => ({
@@ -2235,7 +2260,7 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   // Texto vai como está: o n8n grava com cellFormat RAW, então "=..." fica texto e nunca vira fórmula.
   let estruturada: string | undefined;
   if (tipo === 'nota' && typeof corpo.texto === 'string' && (corpo.texto.trim().startsWith('[ciclo-comercial-v1]') || corpo.texto.trim().startsWith('[qualificacao-comercial-v1]'))) {
-    const ciclo = lerEventoCiclo(corpo.texto, agora.getTime());
+    const ciclo = lerEventoCiclo(corpo.texto, agora.getTime()) ?? lerTrabalhoRegistrado(corpo.texto, agora.getTime());
     const q = lerNotaQualificacaoComercial(corpo.texto, agora.getTime());
     if (!ciclo && !q) throw new RegistroInvalido('Nota comercial inválida: confira campos, confirmação humana e datas reais.');
     estruturada = ciclo ? textoEventoCiclo(ciclo, agora.getTime()) : textoDaQualificacaoComercial(q!, agora.getTime());
@@ -2247,6 +2272,7 @@ export function validarRegistro(entrada: unknown, agora: Date): CrmRegistroEntra
   }
   const textoSeguro = estruturada ?? (aarr ? JSON.stringify(aarr) : tipo === 'spiced' ? JSON.stringify(lerRegistroSpiced(corpo.texto)) : tipo === 'cadencia_enviada' ? JSON.stringify(lerRegistroCadencia(corpo.texto)) : bruto);
   if (tipo === "nota" && !textoSeguro) throw new RegistroInvalido("Escreva a nota.");
+  if (tipo === 'proposta' && !propostaTemEvidencia(textoSeguro)) throw new RegistroInvalido('Informe o conteúdo realmente enviado ou a referência verificável da proposta, sem campos por preencher.');
   let data = typeof corpo.data === "string" ? corpo.data.trim() : "";
   if (aarr) data = 'data' in aarr ? aarr.data : '';
   if (data && !/^\d{4}-\d{2}-\d{2}$/.test(data)) throw new RegistroInvalido("Data inválida (use AAAA-MM-DD).");
@@ -2457,7 +2483,7 @@ export function naoGravouNoN8n(status: number, corpo: Record<string, unknown>): 
 }
 
 function chaveComercialDoRegistro(registro: { tipo: string; texto: string }, oportunidade: string, agora: number, ocorrencia = 0): ChaveComercial | undefined {
-  const ciclo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora) : null;
+  const ciclo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora) ?? lerTrabalhoRegistrado(registro.texto, agora) : null;
   const q = registro.tipo === 'nota' ? lerNotaQualificacaoComercial(registro.texto, agora) : null;
   const aarr = ehTipoAarr(registro.tipo) ? lerRegistroAarr(registro.tipo, registro.texto, agora) : null;
   const dono = registro.tipo === 'nota' ? lerResponsavelConversa(registro.texto, agora) : null;
@@ -2709,11 +2735,11 @@ export class CrmStore {
         catch (e) { throw new RegistroInvalido(e instanceof Error ? e.message : 'Responsável mudou.'); }
       }
     }
-    const cicloNovo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora.getTime()) : null;
+    const cicloNovo = registro.tipo === 'nota' ? lerEventoCiclo(registro.texto, agora.getTime()) ?? lerTrabalhoRegistrado(registro.texto, agora.getTime()) : null;
     if (cicloNovo) {
       try {
         const transicao = validarTransicaoDoCicloComercial(lead, cicloNovo, agora);
-        if (transicao !== 'duplicado' && ['proposta_enviada', 'aceite'].includes(cicloNovo.tipo)) {
+        if (transicao !== 'duplicado' && (cicloNovo.tipo === 'proposta_enviada' || cicloNovo.tipo === 'aceite')) {
           if (!qualificadoParaProposta(lead, agora.getTime())) throw new Error('Complete a qualificação confirmada antes do envio final ou aceite.');
           const proposta = cicloDoLead(lead, agora.getTime()).propostas.find(p => p.id === cicloNovo.vinculo);
           const q = qualificacaoComercialAtual(lead, agora.getTime());

@@ -20,7 +20,7 @@ import { recomendacoesDoTime } from '../operations/recomendacoes-do-time'
 import { proximoPassoDoTime } from '../operations/proximo-passo-do-time'
 import { filaDaTela, type Resolvidas, type SugestaoDeVenda } from '../operations/proxima-venda'
 import type { CrmVisao, CrmLead } from '../operations/types'
-import type { ResumoAtendimentoEstamparia } from '../office/modelo'
+import type { ResumoAtendimentoEstamparia } from '../operations/estamparia-atendimento'
 import type { TimeLido } from '../casca/hoje'
 import type { Capacidades } from '../casca/destinos'
 import { navegar, interceptarLink } from '../casca/rota'
@@ -106,7 +106,7 @@ const { atualizando, conferidoEm, sincronizar } = useAtualizacaoViva(async signa
 const { conectado: crmAoVivo } = useSinalDoCrm(sincronizar)
 const filaPrioritaria = computed(() => filaDaTela(visaoDoCrm.value, { agora: agora.value, sugestoes: sugestoes.value }, resolvidas.value))
 const conversasPrioritarias = computed(() => conversasParaConduzir(visaoDoCrm.value?.leads ?? [], agora.value))
-const recomendacoes = computed(() => !erroFrente.value && frente.value?.ativo && frente.value.estado !== 'sem-sinal' ? recomendacoesDoTime({ avaliados: frente.value.avaliados ?? 0, selecionados: frente.value.selecionados ?? 0, enviados: frente.value.enviados ?? 0, setores: frente.value.setores ?? [] }) : [])
+const recomendacoes = computed(() => !erroFrente.value && frente.value?.ativo && frente.value.estado !== 'sem-sinal' && frente.value.estado !== 'bloqueado' ? recomendacoesDoTime({ avaliados: frente.value.avaliados ?? 0, selecionados: frente.value.selecionados ?? 0, enviados: frente.value.enviados ?? 0, setores: frente.value.setores ?? [] }) : [])
 const acoesDoCrm = computed(() => erroDoCrm.value || visaoDoCrm.value?.estado !== 'ok' ? [] : filaPrioritaria.value.filter(a => !a.primeiroContato))
 const decisoesPendentes = computed(() => pendenciasDaJornada(visaoDoCrm.value?.leads ?? [], acoesDoCrm.value, agora.value))
 const movimentos = computed(() => movimentosDoEscritorio(visaoDoCrm.value?.leads ?? [], agora.value))

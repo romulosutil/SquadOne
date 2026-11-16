@@ -1,0 +1,20 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import {createHash} from 'node:crypto'
+import {conferirIdentidadeCaptura,criarLeitorIdentidadeCaptura,type ProvaIdentidadeCaptura} from './identidade-captura.ts'
+import {hashCanonicoComercial as hash} from './registro-comercial-duravel.ts'
+const sha=(s:string)=>createHash('sha256').update(s).digest('hex')
+const now=Date.parse('2026-11-03T17:00:00Z'),config={v:1 as const,identidadePrumoHash:sha('fixture-account'),desde:'2026-10-24T00:00:00Z'}
+const msg={idOriginal:'fixture-message',direcao:'entrada' as const,ocorridoEm:'2026-11-03T15:00:02Z',conteudoHash:sha('fixture-text')}
+const proof=(em:string):ProvaIdentidadeCaptura=>({v:1,coletor:'hermes',garantia:'socket-hermes',contaHash:config.identidadePrumoHash,sessaoHash:sha('session'),instancia:null,capturadoEm:'2026-11-03T15:00:03Z',mensagem:{...msg,ocorridoEm:em}})
+function fixture(){const ps=[proof('2026-11-03T15:00:00Z'),proof(msg.ocorridoEm)];const cert={v:1,mensagem:msg,provasSha256:ps.map(hash).sort(),autorizadoEm:'2026-11-03T16:00:00Z',motivo:'Clock discrepancy reviewed',autorizacao:'Explicit operator request, fixture'};return {ps,cert,fonte:{ativa:true,assinatura:'fixture',config,jsonl:ps.map(p=>JSON.stringify(p)).join('\n'),reconciliacoes:[cert]}}}
+test('unreviewed two-second discrepancy remains blocked',()=>{const f=fixture();delete (f.fonte as any).reconciliacoes;assert.equal(conferirIdentidadeCaptura(msg,f.fonte,now).estado,'conflito')})
+test('only exact reviewed proof set can reconcile clocks; source remains unchanged',()=>{const f=fixture(),before=f.fonte.jsonl;assert.equal(conferirIdentidadeCaptura(msg,f.fonte,now).estado,'verificada');assert.equal(f.fonte.jsonl,before)})
+test('new proof invalidates approval even for same account and text',()=>{const f=fixture();f.fonte.jsonl+='\n'+JSON.stringify({...f.ps[0],sessaoHash:sha('new-session')});assert.equal(conferirIdentidadeCaptura(msg,f.fonte,now).estado,'conflito')})
+test('different account or content cannot be reconciled even with supplied hashes',()=>{for(const change of [{contaHash:sha('foreign')},{mensagem:{...msg,conteudoHash:sha('changed')}}]){const f=fixture();f.ps[0]={...f.ps[0],...change};f.fonte.jsonl=f.ps.map(p=>JSON.stringify(p)).join('\n');f.cert.provasSha256=f.ps.map(hash);assert.equal(conferirIdentidadeCaptura(msg,f.fonte,now).estado,'conflito')}})
+test('larger discrepancy and future authorization fail closed',()=>{for(const kind of ['large','future']){const f=fixture();if(kind==='large'){f.ps[0]=proof('2026-11-03T14:59:59Z');f.fonte.jsonl=f.ps.map(p=>JSON.stringify(p)).join('\n');f.cert.provasSha256=f.ps.map(hash)}else f.cert.autorizadoEm='2026-11-03T18:00:00Z';assert.equal(conferirIdentidadeCaptura(msg,f.fonte,now).estado,'conflito')}})
+test('reconciliation cannot authorize another message or omit hashes',()=>{for(const kind of ['message','hash']){const f=fixture();if(kind==='message')f.cert.mensagem={...msg,idOriginal:'other-message'};else f.cert.provasSha256=[];assert.equal(conferirIdentidadeCaptura(msg,f.fonte,now).estado,'conflito')}})
+test('reader loads sidecar and includes reconciliation in invalidation signature',async t=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),'capture-review-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));const f=fixture();await fs.writeFile(path.join(dir,'config.json'),JSON.stringify(config));await fs.writeFile(path.join(dir,'2799991234.jsonl'),f.fonte.jsonl);const read=criarLeitorIdentidadeCaptura(dir,()=>now),before=await read('2799991234');assert.equal(conferirIdentidadeCaptura(msg,before,now).estado,'conflito');await fs.writeFile(path.join(dir,'2799991234.reconciliacoes.json'),JSON.stringify({v:1,registros:[f.cert]}));const after=await read('2799991234');assert.notEqual(before.assinatura,after.assinatura);assert.equal(conferirIdentidadeCaptura(msg,after,now).estado,'verificada');await fs.writeFile(path.join(dir,'2799991234.reconciliacoes.json'),'{broken');assert.equal(conferirIdentidadeCaptura(msg,await read('2799991234'),now).estado,'conflito')})

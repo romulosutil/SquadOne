@@ -114,6 +114,7 @@ export interface PastaDoLead {
   raioXEm?: string;
   /** `raio_x_achados` do recibo (15/10/2026): os pontos da página em dado. Raio-X mais antigo não tem. */
   raioXAchados?: AchadoDoRaioX[];
+  /** Diagnóstico privado com fontes, sem afirmar que há demo ou página publicada. */
   pesquisaSiteAchados?: AchadoDoRaioX[];
   /** Demo sob pedido: o botão "Gerar demo" gravou PEDIDO-DEMO.json e o gerador ainda não terminou. */
   demoPedidoEm?: string;
@@ -238,8 +239,7 @@ async function lerPasta(raiz: string, lugar: LugarDaPasta, slug: string): Promis
   try {
     const pesquisa = await lerTextoOuNada(path.join(diretorio, 'raio-x-pesquisa-gratuita.json'), 32 * 1024);
     if (pesquisa) pesquisaSiteAchados = achadosDaPesquisaSite(JSON.parse(pesquisa), placeId);
-  } catch { /* Pesquisa inválida não autoriza contato; preserva o recibo original. */ }
-
+  } catch { /* Pesquisa inválida não autoriza contato. O recibo original permanece intacto. */ }
   // Fotos e capa só importam enquanto o site não existe (lead na fila do gerador).
   const [fotos, capa] = publicado
     ? [{ total: 0, alguma: false }, { total: 0, alguma: false }]

@@ -293,6 +293,8 @@ export interface CrmUltimaFalha {
 }
 
 export interface CrmVisao {
+  /** Projecao de relacionamentos e evidencia comercial; sem migrar IDs legados. */
+  carteira?: import('./carteira-crm').CarteiraCrm
   estado: 'ok' | 'sem-retrato' | 'retrato-invalido'
   mensagem?: string
   geradoEm?: string

@@ -60,6 +60,26 @@ async function preencherProposta(raiz: any, incompleta = false) {
 }
 
 describe('Ciclo comercial: UI por etapas e fonte confirmada', () => {
+  it('registra próxima ação com prévia humana sem fabricar proposta ou recebimento', async () => {
+    const { raiz, app, estado } = tela.montar({ lead: lead('trabalho-interno'), disponivel: true })
+    try {
+      await clicar(raiz, 'Registrar próxima ação e responsável')
+      for (const [rotulo, valor] of [['Área de trabalho', 'time'], ['Responsável pela ação', 'Operador'], ['Próxima ação', 'Conferir escopo'], ['Resultado esperado', 'Escopo conferido'], ['Condição para agir', 'Cliente confirmar dados'], ['Referência do documento', 'ACAO-01']]) await mudar(raiz, rotulo, valor)
+      await revisar(raiz)
+      assert.match(texto(raiz), /Confira antes de registrar/)
+      assert.equal(chamadas.length, 0)
+      await confirmar(raiz)
+      assert.equal(chamadas.length, 1)
+      const evento = JSON.parse(chamadas[0].texto.slice(PREFIXO_CICLO.length))
+      assert.equal(evento.tipo, 'trabalho'); assert.equal(evento.fila, 'time')
+      for (const campo of ['valor', 'mensalidade', 'vinculo', 'ofertaId']) assert.equal(evento[campo], undefined)
+      assert.match(texto(raiz), /Aguardando a nota exata/)
+      assert.equal(botao(raiz, 'Registrar próxima ação e responsável').disabled, true)
+      estado.lead.eventos.push(registro(chamadas[0].texto)); await tela.runtime.nextTick()
+      assert.match(texto(raiz), /Registro confirmado na fonte comercial/)
+      assert.equal(botao(raiz, 'Registrar próxima ação e responsável').disabled, false)
+    } finally { app.unmount() }
+  })
   it('rejeição comprovadamente não enviada permite corrigir preservando o ID e exige nova revisão humana', async () => {
     globalThis.fetch = (async (_u, op) => { chamadas.push(JSON.parse(String(op?.body))); return new Response(JSON.stringify(chamadas.length === 1 ? { error: 'Confira a condição', naoEnviado: true } : { estado: 'aguardando_projecao' }), { status: chamadas.length === 1 ? 400 : 202 }) }) as typeof fetch
     const { raiz, app } = tela.montar({ lead: lead('rejeitada-segura'), disponivel: true })

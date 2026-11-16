@@ -2,6 +2,7 @@ import type { CrmLead } from '../operations/types'
 import { OFERTA, ehOfertaPropria } from '../../server/ofertas.ts'
 import type { TrabalhoDoTime } from '../operations/proximo-passo-do-time'
 import { itemDaFilaComercial } from '../operations/fila-comercial'
+import { indexarResponsaveisDaConversa } from '../operations/responsavel-conversa'
 import { motivoDaMinhaVez } from './minha-vez'
 import { FASES_DO_ESCRITORIO, faseDoEscritorio, fasesDoCliente, movimentosDoEscritorio, type FaseDoEscritorio } from './jornada-do-escritorio'
 
@@ -20,8 +21,9 @@ export function estacoesDaProducao(leads: readonly CrmLead[], pendentes: readonl
   const prioridade = new Map(pendentes.map((id, i) => [id, i]))
   const estacoes: EstacaoDaProducao[] = FASES_DO_ESCRITORIO.map((f, i) => ({ ...f, setor: SETORES[i], fichas: [], comVoce: 0 }))
   const escolhas = new Map(frente?.fila.map(c => [c.id, c]) ?? [])
+  const responsaveis = indexarResponsaveisDaConversa(leads, agora)
   for (const lead of leads) {
-    const fase = faseDoEscritorio(lead, agora), fila = fase === 1 && !lead.atendimentoComercial || fase === 6 ? null : itemDaFilaComercial(lead, leads, agora), escolha = escolhas.get(lead.id)
+    const fase = faseDoEscritorio(lead, agora), fila = fase === 1 && !lead.atendimentoComercial || fase === 6 ? null : itemDaFilaComercial(lead, leads, agora, responsaveis), escolha = escolhas.get(lead.id)
     let ficha: FichaNaEsteira
     if (escolha?.estado === 'incerto') ficha = { id: lead.id, empresa: lead.empresa, responsavel: 'Time comercial', acao: 'Conferir o envio sem confirmação antes de continuar.', situacao: 'conferencia', rotulo: 'Envio em conferência' }
     else if (fase === 6) ficha = { id: lead.id, empresa: lead.empresa, responsavel: 'Resultado registrado', acao: 'Consultar o desfecho na jornada.', situacao: 'resultado', rotulo: lead.etapa === 'ganho' ? 'Ganho registrado' : 'Encerrado' }
@@ -30,10 +32,9 @@ export function estacoesDaProducao(leads: readonly CrmLead[], pendentes: readonl
       ficha = { id: lead.id, empresa: lead.empresa, responsavel: lead.produto === 'plus' ? 'Rômulo' : 'Time comercial', acao: 'Conferir perfil, entrega e abordagem antes do primeiro contato.', situacao: lead.produto === 'plus' ? 'conferencia' : selecionado ? 'time' : 'aguardando', rotulo: selecionado ? 'Na fila do primeiro contato' : 'A preparar · aguarda seleção' }
     }
     else if (fila?.area === 'time') ficha = { id: lead.id, empresa: lead.empresa, responsavel: fila.responsavel, acao: fila.acao, condicao: fila.condicao, situacao: fila.emEspera ? 'aguardando' : 'time', rotulo: fila.emEspera ? 'Aguardando condição' : lead.atendimentoComercial ? 'Na fila do atendimento' : 'Trabalho registrado' }
-    else if (fila?.area === 'conferencia') ficha = { id: lead.id, empresa: lead.empresa, responsavel: 'Time · conferência', acao: fila.acao, situacao: 'conferencia', rotulo: 'Conferir contexto' }
     else if (prioridade.has(lead.id) || lead.atendimentoComercial && motivoDaMinhaVez(lead, agora)) ficha = { id: lead.id, empresa: lead.empresa, responsavel: fila?.responsavel || 'Rômulo', acao: fila?.acao || 'Conferir o próximo passo na jornada.', situacao: 'sua-vez', rotulo: 'Sua vez' }
     else if (lead.atendimentoComercial?.alvo === 'operador') ficha = { id: lead.id, empresa: lead.empresa, responsavel: 'Time · conferência', acao: lead.atendimentoComercial.motivo, situacao: 'conferencia', rotulo: 'Conferir contexto' }
-    else ficha = { id: lead.id, empresa: lead.empresa, responsavel: fila?.area === 'cliente' ? 'Cliente / condição de espera' : fila?.responsavel || 'Atendimento', acao: fila?.acao || 'Acompanhar a conversa.', situacao: 'aguardando', rotulo: 'Aguardando' }
+    else ficha = { id: lead.id, empresa: lead.empresa, responsavel: fila?.area === 'cliente' ? 'Cliente / condição de espera' : fila?.responsavel || 'Atendimento', acao: fila?.acao || 'Acompanhar a conversa.', situacao: fila?.area === 'conferencia' ? 'conferencia' : 'aguardando', rotulo: fila?.area === 'conferencia' ? 'Conferir contexto' : 'Aguardando' }
     ficha.condicao ??= fila?.condicao
     estacoes[fase - 1].fichas.push(ficha)
   }

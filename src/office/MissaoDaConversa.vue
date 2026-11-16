@@ -8,6 +8,8 @@ import ContextoDaDecisao from './ContextoDaDecisao.vue'
 import AcompanhamentoObservado from './AcompanhamentoObservado.vue'
 import PainelOperacional from '../components/PainelOperacional.vue'
 import OrientacaoDaConversa from './OrientacaoDaConversa.vue'
+import JornadaDoCliente from './JornadaDoCliente.vue'
+import { momentoDaOrientacao } from './orientacao-da-conversa'
 import { orientaContato } from './orientacao-da-conversa'
 import { ROTULO_DA_ETAPA } from '../operations/crm-formato'
 import type { FatoDaVenda } from './andamento'
@@ -21,7 +23,7 @@ import type { PlanoBi } from '../operations/bi-operacao'
 import type { ProcedimentoDaDecisao } from './procedimento-da-decisao'
 import { textoDoAtendimento, guardarTextoDoAtendimento } from './rascunho-atendimento'
 
-const props = defineProps<{ lead: CrmLead; agente?: Pessoa; disponivel: boolean; registroDisponivel?: boolean; motivo: string; acao?: AcaoDeVenda | null; estado?: EstadoDaDecisao; orientacao?: PlanoBi; procedimentoInicial?: ProcedimentoDaDecisao; passoInicial?: 1|2|3 }>()
+const props = defineProps<{ lead: CrmLead; agente?: Pessoa; disponivel: boolean; registroDisponivel?: boolean; motivo: string; acao?: AcaoDeVenda | null; estado?: EstadoDaDecisao; orientacao?: PlanoBi; procedimentoInicial?: ProcedimentoDaDecisao; passoInicial?: 1|2|3; compacto?: boolean }>()
 const emit = defineEmits<{ ficha: [id: string]; registrado: []; interagiu: []; ocupado: [valor: boolean]; fila: [] }>()
 const procedimento = computed(() => props.procedimentoInicial ?? procedimentoDaDecisao(props.lead))
 const plano = computed(() => props.orientacao ?? planoDoLead(props.lead))
@@ -36,11 +38,9 @@ const impedimentoDoTexto = computed(() => preparo.value?.mensagem && !mudou.valu
 const passo = ref<number>(props.passoInicial ?? (props.estado === 'agora' || !props.estado || procedimento.value.tipo === 'robo' ? 1 : 3))
 const secaoAtual = ref<HTMLElement | null>(null)
 watch(passo, async () => { await nextTick(); secaoAtual.value?.focus({ preventScroll: true }); secaoAtual.value?.scrollIntoView({ block: 'start' }) })
-const passos = [{ nome: 'Orientação', detalhe: 'O que fazer e quando' }, { nome: 'Mensagem', detalhe: 'Revisar e abrir WhatsApp' }, { nome: 'Acompanhamento', detalhe: 'O que aconteceu depois' }]
+const passos = computed(() => props.compacto ? [{ nome: 'Agora', detalhe: '' }, { nome: 'Mensagem', detalhe: '' }, { nome: 'Histórico', detalhe: '' }] : [{ nome: 'Orientação', detalhe: 'O que fazer e quando' }, { nome: 'Mensagem', detalhe: 'Revisar e abrir WhatsApp' }, { nome: 'Acompanhamento', detalhe: 'O que aconteceu depois' }])
 const marcos = computed(() => marcosDaMissao(props.lead))
-const agora = computed(() => procedimento.value.tipo === 'interno'
-  ? { frase: procedimento.value.titulo, como: procedimento.value.resultadoEsperado }
-  : procedimento.value.tipo === 'robo'
+const agora = computed(() => procedimento.value.tipo === 'robo'
   ? { frase: procedimento.value.titulo, como: 'Use o menu ou aguarde o atendimento. O pedido de encaminhamento só cabe quando ainda não há uma pessoa na conversa.' }
   : preparo.value?.proximaAcao
   ? { frase: preparo.value.proximaAcao, como: preparo.value.porque }
@@ -58,7 +58,7 @@ const ajuste = ref<'concluir' | 'reagendar' | null>(null), registrar = ref(false
 const fatoDoRegistro = ref<FatoDaVenda>('passo')
 function abrirRegistro(fato: FatoDaVenda) { fatoDoRegistro.value = fato; registrar.value = true; ajuste.value = null; passo.value = 3 }
 function acompanharEnvio() { saidaAoAbrir.value = props.lead.conversa?.ultimaSaida ?? (props.lead.conversa?.ultima.direcao === 'saida' ? props.lead.conversa.ultima.em : null); abriu.value = true; passo.value = 3 }
-const contexto = () => JSON.stringify([props.lead.etapa, props.lead.resposta, props.lead.conversa, props.lead.eventos, props.lead.proximoPasso, props.lead.proposta, props.lead.links, props.lead.atendimentoComercial, props.acao?.chave, props.acao?.rascunho])
+const contexto = () => JSON.stringify([props.lead.etapa, props.lead.resposta, props.lead.conversa, props.lead.eventos, props.lead.proximoPasso, props.lead.proposta, props.lead.links, props.acao?.chave, props.acao?.rascunho])
 const contextoRevisado = ref(contexto())
 const mudou = computed(() => contextoRevisado.value !== contexto())
 const linkDaAcao = computed(() => orientarContato.value && props.disponivel && props.estado !== 'encerrada' && preparo.value?.podeAbrir && !mudou.value ? whatsappParaRevisao(props.lead.links.whatsapp, mensagem.value) : '')
@@ -94,23 +94,30 @@ watch(() => props.estado, (estado, anterior) => { if (anterior === 'agora' && es
 </script>
 
 <template>
-  <article class="missao-conversa" aria-labelledby="missao-titulo">
-    <header class="missao-conversa__cabeca"><span class="missao-conversa__contexto">{{ nomesDasOfertas[lead.produto] }} · {{ agente?.nome ?? 'Seu time' }}</span><h2 id="missao-titulo">{{ lead.empresa }}</h2><div class="missao-conversa__estado"><span class="etiqueta">{{ ROTULO_DA_ETAPA[lead.etapa] }}</span><span class="missao-conversa__contexto">{{ motivo }}</span></div></header>
-    <nav class="missao-conversa__passos" aria-label="Passos desta decisão"><button v-for="(etapa, i) in passos" :key="etapa.nome" type="button" :aria-current="passo === i + 1 ? 'step' : undefined" :disabled="ocupado" @click="passo = i + 1"><span>{{ i + 1 }}</span><span class="missao-conversa__nome-passo"><strong>{{ etapa.nome }}</strong><small>{{ etapa.detalhe }}</small></span></button></nav>
+  <article class="missao-conversa" :class="{'missao-conversa--compacta':compacto}" aria-labelledby="missao-titulo">
+    <header class="missao-conversa__cabeca"><span class="missao-conversa__contexto">{{ nomesDasOfertas[lead.produto] }}<template v-if="!compacto"> · {{ agente?.nome ?? 'Seu time' }}</template></span><h2 id="missao-titulo">{{ lead.empresa }}</h2><div class="missao-conversa__estado"><span class="etiqueta">{{ ROTULO_DA_ETAPA[lead.etapa] }}</span><span class="missao-conversa__contexto">{{ compacto ? plano.responsavel : motivo }}</span></div></header>
+    <JornadaDoCliente v-if="compacto" :lead="lead" compacto />
+    <p v-if="compacto && passo !== 1" class="missao-conversa__proximo"><strong>Próximo passo:</strong> {{ plano.acao }}</p>
+    <nav class="missao-conversa__passos" aria-label="Passos desta decisão"><button v-for="(etapa, i) in passos" :key="etapa.nome" type="button" :aria-current="passo === i + 1 ? 'step' : undefined" :disabled="ocupado" @click="passo = i + 1"><span v-if="!compacto">{{ i + 1 }}</span><span class="missao-conversa__nome-passo"><strong>{{ etapa.nome }}</strong><small v-if="etapa.detalhe">{{ etapa.detalhe }}</small></span></button></nav>
     <p v-if="!disponivel" class="recado recado--atencao" role="status">Sem leitura recente desta conversa. A atualização tenta novamente automaticamente.</p>
     <p v-if="preparando && passo === 2" class="texto-2 texto-pequeno" role="status">Preparando a mensagem com a conversa e o próximo passo deste cliente…</p>
     <div v-if="erroDoPreparo" class="recado recado--atencao" role="alert"><p>{{ erroDoPreparo }}</p><button type="button" class="botao botao--leve" :disabled="preparando || ocupado" @click="prepararMensagem">Preparar novamente</button></div>
     <div v-if="mudou && passo !== 3" class="recado recado--atencao" role="status"><p>A conversa ou a próxima ação mudou desde que você abriu esta decisão.</p><button class="botao botao--leve" type="button" :disabled="ocupado" @click="revisarContexto">Revisar contexto atualizado</button></div>
 
     <section v-if="passo === 1" ref="secaoAtual" tabindex="-1" class="missao-conversa__secao" aria-label="Entender o contexto">
-      <div class="missao-conversa__situacao"><span>Situação da conversa</span><strong>{{ situacao }}</strong></div>
-      <OrientacaoDaConversa :plano="plano" :procedimento="procedimento">
+      <PainelOperacional v-if="compacto" :titulo="plano.acao" :contexto="`${plano.responsavel} · ${momentoDaOrientacao(plano.prazo).titulo}`" :tom="plano.tipo === 'agir' ? 'acao' : 'neutro'">
+        <p v-if="plano.condicao" class="texto-2 texto-pequeno">{{ plano.condicao }}</p>
+        <template #acoes><button type="button" class="botao botao--primario" :disabled="ocupado || !disponivel" @click="orientarContato && estado !== 'encerrada' ? passo = 2 : conferirNaFicha ? emit('ficha', lead.id) : passo = 3">{{ orientarContato && estado !== 'encerrada' ? 'Preparar mensagem →' : conferirNaFicha ? 'Conferir na ficha →' : 'Acompanhar →' }}</button></template>
+      </PainelOperacional>
+      <div v-if="!compacto" class="missao-conversa__situacao"><span>Situação da conversa</span><strong>{{ situacao }}</strong></div>
+      <OrientacaoDaConversa v-if="!compacto" :plano="plano" :procedimento="procedimento">
         <template #acoes>
           <button type="button" class="botao botao--primario" :disabled="ocupado || !disponivel" @click="orientarContato && estado !== 'encerrada' ? passo = 2 : conferirNaFicha ? emit('ficha', lead.id) : passo = 3">{{ orientarContato && estado !== 'encerrada' ? 'Revisar mensagem →' : conferirNaFicha ? 'Conferir e resolver na ficha →' : 'Ver acompanhamento →' }}</button>
           <button type="button" class="botao botao--leve" :disabled="ocupado" @click="emit('ficha', lead.id)">Abrir ficha completa</button>
         </template>
       </OrientacaoDaConversa>
-      <PainelOperacional titulo="O que sustenta esta orientação" contexto="Evidências da conversa" descricao="Confira o que já aconteceu antes de escolher a resposta.">
+      <details v-if="compacto" class="dobra"><summary>Como fazer e evidências da conversa</summary><OrientacaoDaConversa :plano="plano" :procedimento="procedimento" /><ContextoDaDecisao :lead="lead" /></details>
+      <PainelOperacional v-else titulo="O que sustenta esta orientação" contexto="Evidências da conversa" descricao="Confira o que já aconteceu antes de escolher a resposta.">
         <ContextoDaDecisao :lead="lead" />
         <details class="dobra"><summary>Avanços registrados · {{ marcos.filter(m => m.observado).length }}</summary><ul class="missao-conversa__marcos"><li v-for="m in marcos" :key="m.id"><strong>{{ m.nome }}</strong><span>{{ m.detalhe ?? (m.observado ? 'Registrado' : 'Sem registro') }}</span></li></ul></details>
       </PainelOperacional>
@@ -130,7 +137,7 @@ watch(() => props.estado, (estado, anterior) => { if (anterior === 'agora' && es
           <button v-if="impedimentoDoTexto" type="button" class="botao botao--primario" disabled>Abrir no WhatsApp</button>
           <button v-else-if="!linkDaAcao && !preparando" type="button" class="botao botao--primario" :disabled="ocupado" @click="emit('ficha', lead.id)">{{ acaoEfetiva?.conferirHistorico ? 'Conferir histórico na ficha' : 'Conferir condições na ficha' }}</button>
         </div>
-        <p v-if="procedimento.tipo !== 'interno'" class="texto-2 texto-pequeno">Envie pelo WhatsApp. O time acompanha o texto que realmente sair, incluindo suas edições, assim que a integração o capturar.</p>
+        <p class="texto-2 texto-pequeno">Envie pelo WhatsApp. O time acompanha o texto que realmente sair, incluindo suas edições, assim que a integração o capturar.</p>
       </template>
       <template v-else><p class="texto-2">Este passo pede {{ conferirNaFicha ? 'uma conferência interna antes de preparar contato.' : 'acompanhamento da conversa e dos combinados.' }}</p><button type="button" class="botao botao--primario" :disabled="ocupado" @click="conferirNaFicha ? emit('ficha', lead.id) : passo = 3">{{ conferirNaFicha ? 'Conferir contexto na ficha →' : 'Ver acompanhamento →' }}</button></template>
       <button v-if="orientarContato || conferirNaFicha" type="button" class="botao botao--leve" :disabled="ocupado" @click="passo = 3">Acompanhar conversa →</button>
@@ -143,7 +150,7 @@ watch(() => props.estado, (estado, anterior) => { if (anterior === 'agora' && es
       <OrientacaoDaConversa v-if="procedimento.tipo === 'interno' && plano.tipo === 'aguardar'" :plano="plano" :procedimento="procedimento" />
       <PainelOperacional titulo="Acompanhamento da conversa" contexto="Envios e respostas observados">
       <AcompanhamentoObservado :lead="lead" :saida-ao-abrir="abriu ? saidaAoAbrir : undefined" />
-      <p v-if="disponivel && props.registroDisponivel === false" class="texto-2 texto-pequeno">O acompanhamento continua disponível. Complementos e próximos passos aguardam a conexão de registro.</p>
+      <p v-if="disponivel && props.registroDisponivel === false" class="texto-2 texto-pequeno">O acompanhamento continua disponível. Registros e próximos passos estão desativados nesta visualização.</p>
       <ContextoDaDecisao :lead="lead" />
       </PainelOperacional>
       <div v-if="lead.proximoPasso && estado !== 'encerrada'" class="missao-conversa__combinado"><strong>Próximo passo · {{ formatarData(lead.proximoPasso.data) }}</strong><p>{{ lead.proximoPasso.texto }}</p><div v-if="!ajuste && !registrar && registroDisponivel" class="missao-conversa__acoes"><button type="button" class="botao" :disabled="ocupado" @click="ajuste = 'concluir'">Concluir este passo</button><button type="button" class="botao botao--leve" :disabled="ocupado" @click="ajuste = 'reagendar'">Reagendar</button></div><AjustarProximoPasso v-if="ajuste" :key="lead.id + ajuste" :lead="lead" :modo="ajuste" :disponivel="registroDisponivel" @confirmado="emit('interagiu')" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fechar="ajuste = null" /></div>
@@ -200,4 +207,8 @@ watch(() => props.estado, (estado, anterior) => { if (anterior === 'agora' && es
 .missao-conversa .botao { white-space: normal; }
 @media(max-width:47.99rem) { .missao-conversa__passos button { font-size: var(--tam-mini); gap: var(--esp-1); } .missao-conversa__nome-passo small { display: none; } .missao-conversa__acoes .botao--primario { width: 100%; } }
 @media(max-width:28rem) { .missao-conversa__passos { grid-template-columns: 1fr; } .missao-conversa__passos button { justify-content: flex-start; gap: var(--esp-3); padding-inline: var(--esp-3); font-size: var(--tam-apoio); } }
+.missao-conversa--compacta h2 { font-size:var(--tam-secao); }
+.missao-conversa--compacta .missao-conversa__passos { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.missao-conversa--compacta .missao-conversa__passos button { justify-content:center;padding:var(--esp-1);font-size:var(--tam-mini); }
+.missao-conversa__proximo { font-size:var(--tam-apoio);padding:var(--esp-2);background:var(--realce);border-radius:var(--raio-selo); }
 </style>

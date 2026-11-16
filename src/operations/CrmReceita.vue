@@ -92,6 +92,7 @@ async function salvar() {
   } catch (erro) { estado.value = 'falhou'; aviso.value = erro instanceof Error ? erro.message : String(erro) }
 }
 async function desfazer(tipo: 'valor_proposta' | 'pagamento_confirmado', registro: RegistroReceita) {
+  if (registro.eventoCiclo) { aviso.value = 'Corrija este recebimento em Proposta, contratação e recebimento, vinculando ao fato original. O histórico é preservado.'; return }
   if (bloqueado.value) return
   try { await gravar('receita_desfeita', textoDoRegistroAarr('receita_desfeita', { tipo, referencia: chaveDoPagamento(registro), data: diaAarr(Date.now()) })) }
   catch (erro) { estado.value = 'falhou'; aviso.value = erro instanceof Error ? erro.message : String(erro) }

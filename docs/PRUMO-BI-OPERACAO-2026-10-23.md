@@ -75,5 +75,23 @@ por oferta/nicho/mensagem, sequências após robô e escolhas dos agentes ligada
 prazo/condição e resultado esperado. Não gera nem envia mensagens ao contato.
 
 Artefatos de apuração e validação estão em `output/bi-operacao-2026-10-23/`.
-São arquivos locais de trabalho, não mídia pública. Publicação, início da rodada
-e validação de produção precisam ser confirmados no recibo de implantação.
+São arquivos locais de trabalho, não mídia pública.
+
+## Publicação e preservação verificadas
+
+Publicado no Dell em 23/10/2026 às 15h12 de São Paulo, após autorização explícita
+do Rômulo, com a condição de preservar funil e escritório. O recibo
+`output/bi-operacao-2026-10-23/publicacao.json` registra 29 arquivos publicados,
+3.753 testes aprovados, tipos e build aprovados e 82 testes do executor aprovados.
+
+A implantação partiu das fontes existentes no Dell e guardou cópias anteriores.
+Foram conferidos os mesmos 3.523 contatos, todos os registros humanos anteriores,
+a equipe do escritório e as fontes fora do escopo. A navegação em produção entre
+fila de ações, BI, funil e escritório foi conferida visualmente; as capturas estão
+na pasta de validação. Nenhum histórico foi reiniciado para implantar o BI.
+
+A rodada começou às 15h12, com teto de 15/dia, 2/h e intervalo de 30 minutos.
+Na conferência após o próximo ciclo, o serviço e o timer estavam ativos, a frente
+estava pronta e havia uma vaga reservada de dez, sem pausa automática. Reserva
+não comprova envio. O estado pausado do recibo inicial era o retrato do executor
+anterior ao próximo ciclo; a conferência posterior consta em `validacao.json`.

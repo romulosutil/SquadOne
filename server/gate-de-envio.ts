@@ -165,10 +165,12 @@ export function numeroDoLink(url: string | undefined): string {
 function problemasDoNome(nome: string, texto: string): ProblemaDoGate[] {
   const n = nome.trim();
   if (!n) return [{ codigo: "nome_invalido", motivo: "o nome da empresa está vazio" }];
-  const lixo = /[\u0000-\u001f<>{}[\]|\\]|https?:|www\.|@|\b(?:undefined|null|NaN)\b/i.test(n) || !/\p{L}{2}/u.test(n);
+  const lixo = /[\u0000-\u001f<>{}[\]\\]|https?:|www\.|@|\b(?:undefined|null|NaN)\b/i.test(n) || !/\p{L}{2}/u.test(n);
   if (lixo) return [{ codigo: "nome_invalido", trecho: n.slice(0, 40), motivo: "o nome da empresa tem lixo" }];
-  const palavras = normalizar(n).split(/[\s,.;:-]+/).filter((p) => p.length >= 3);
-  const repetida = palavras.find((p, i) => i > 0 && p === palavras[i - 1]);
+  // Separadores de título são legítimos; conectivos fazem parte da sequência
+  // real do nome ("Franco e Franco" não equivale a "Franco Franco").
+  const palavras = normalizar(n).split(/[\s,.;:|–—-]+/).filter(Boolean);
+  const repetida = palavras.find((p, i) => p.length >= 3 && i > 0 && p === palavras[i - 1]);
   if (repetida) return [{ codigo: "nome_invalido", trecho: n.slice(0, 40), motivo: "o nome da empresa repete a palavra" }];
   const vezes = normalizar(texto).split(normalizar(n)).length - 1;
   if (vezes > 2) return [{ codigo: "nome_invalido", trecho: n.slice(0, 40), motivo: "o nome da empresa aparece demais na mensagem" }];

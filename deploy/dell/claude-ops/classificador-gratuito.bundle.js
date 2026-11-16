@@ -1,32 +1,5 @@
-var PrumoClassificacaoGratuita = (() => {
-  var __defProp = Object.defineProperty;
-  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
-  var __getOwnPropNames = Object.getOwnPropertyNames;
-  var __hasOwnProp = Object.prototype.hasOwnProperty;
-  var __export = (target, all) => {
-    for (var name in all)
-      __defProp(target, name, { get: all[name], enumerable: true });
-  };
-  var __copyProps = (to, from, except, desc) => {
-    if (from && typeof from === "object" || typeof from === "function") {
-      for (let key of __getOwnPropNames(from))
-        if (!__hasOwnProp.call(to, key) && key !== except)
-          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
-    }
-    return to;
-  };
-  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
-
-  // src/operations/classificacao-resposta.ts
-  var classificacao_resposta_exports = {};
-  __export(classificacao_resposta_exports, {
-    ROTULOS_DA_CLASSIFICACAO: () => ROTULOS_DA_CLASSIFICACAO,
-    VERSAO_CLASSIFICACAO_RESPOSTA: () => VERSAO_CLASSIFICACAO_RESPOSTA,
-    classificarResposta: () => classificarResposta,
-    respostaParaAcompanhamento: () => respostaParaAcompanhamento,
-    resumoDasRespostas: () => resumoDasRespostas
-  });
-
+var PrumoClassificacaoGratuita;
+(() => {
   // src/operations/mensagem-automatica.ts
   function textoDeMensagemAutomatica(texto, papel) {
     const s = texto.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -34,25 +7,17 @@ var PrumoClassificacaoGratuita = (() => {
     const explicita = /\b(?:mensagem automatica|atendimento automatico|digite (?:o numero|[0-9])|escolha uma (?:das )?opc(?:ao|oes))\b/.test(s) || /\[opcoes:/.test(s);
     const respondeuAoContato = /\b(?:mas|contudo|porem)\b.{0,160}\b(?:ja (?:temos|tenho|possuimos|utilizamos|usamos)|utilizamos um sistema|nao (?:temos interesse|tenho interesse|oferecemos atendimento)|somos uma instituicao)\b/.test(s);
     if (respondeuAoContato && !explicita) return false;
+    const aviso = s.replace(/[\p{Extended_Pictographic}\uFE0F\u200D]/gu, " ").replace(/\s+/g, " ").trim();
+    const recepcao = /^(?:ola[!,. ]*)?(?:iremos|vamos) (?:te |lhe )?atender em instantes[!. ]*$/.test(aviso);
+    const ausencia = /^(?:ola[!,. ]*)?agradecemos sua mensagem[!. ]+nao estamos disponiveis no momento[, ]+mas responderemos assim que possivel[!. ]*$/.test(aviso);
+    const hora = String.raw`\d{1,2}(?::\d{2}|h(?:\d{2})?)?`;
+    const expediente = new RegExp(String.raw`^atendimento de segunda(?:-feira)? (?:a|ate) sexta(?:-feira)? das ${hora} (?:as|a) ${hora}[!. ]*(?:ligacoes em caso (?:de )?urgencia[!. ]*)?(?:instagram\s+@[a-z0-9_.]+\s+)?respostas por ordem de contato[!. ]*fora do horario[, ]+feriados e finais de semana[, ]+somente urgencia[!. ]*$`).test(aviso);
+    if (recepcao || ausencia || expediente) return true;
     return explicita || /\b(?:seja(?:m)? (?:muito )?bem[ -]*vind[oa]s?|recebemos sua mensagem|em breve[, ]+(?:um|uma|nossa equipe|responderemos|retornaremos)|logo (?:voce )?sera atendid[oa]|horario de atendimento|nosso whatsapp esta fora do ar)\b/.test(s) || /\bagradece(?:mos)? (?:o )?(?:seu )?contato\b/.test(s) && /\b(?:como podemos ajudar|como posso (?:te )?ajudar|em que podemos|deixe|informe|aguarde|retornaremos|retornarei|orcamento)\b/.test(s) || /\b(?:horario de funcionamento|horario comercial)\b/.test(s) && /\b(?:retornaremos|entraremos em contato|assim que|agradece|segunda|sexta|seg\.)\b/.test(s);
   }
 
   // src/operations/classificacao-resposta.ts
-  var VERSAO_CLASSIFICACAO_RESPOSTA = "respostas-2026-10-27-adversarial";
-  var ROTULOS_DA_CLASSIFICACAO = {
-    interesse: "Interesse comercial expl\xEDcito",
-    conversa: "Pedido de conversa \xB7 hor\xE1rio n\xE3o confirmado",
-    permissao: "Permiss\xE3o para material",
-    acesso: "Acesso ou encaminhamento",
-    curiosidade: "Curiosidade, sem inten\xE7\xE3o de compra confirmada",
-    robo: "Resposta autom\xE1tica",
-    silencio: "Sem resposta registrada",
-    neutra: "Resposta sem interesse expl\xEDcito",
-    recusa: "Recusa",
-    exclusao: "Pedido de exclus\xE3o",
-    pendente: "Contexto insuficiente \xB7 revisar",
-    "nao-contatado": "Sem envio registrado"
-  };
+  var VERSAO_CLASSIFICACAO_RESPOSTA = "respostas-2026-11-06-contexto";
   var normalizar = (t) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
   var textoDe = (m) => m.texto ?? m.trecho ?? "";
   var normalizarResposta = (t) => normalizar(t).replace(/^(?:\*\[[^\]]+\]\*|\*[\p{L}][^*\n]{0,100}\*:?)\s*/u, "");
@@ -65,13 +30,14 @@ var PrumoClassificacaoGratuita = (() => {
   var permissao = /^(?:claro[,! ]*)?(?:pode(?:m)?(?: sim)?(?: me| nos)? (?:mandar|enviar|mostrar)|manda(?: ai| o link| o video)?|envie(?: o link| o video)?)/;
   var positivo = /quanto (?:custa|fica)|qual (?:e )?o (?:preco|valor)|(?:quais|como sao) (?:os )?(?:precos|valores)|como (?:isso |ele |o sistema |a plataforma )?funciona|tenho interesse|temos interesse|quero (?:contratar|comprar|implantar)|queremos (?:contratar|comprar|implantar)|precisamos (?:disso|de um sistema|organizar)|me explica(?: melhor)? como/;
   var pedirMaterial = /(?:manda|envia|mande|envie|mandar|enviar|ver|conhecer)\b.{0,50}\b(?:video|link|demonstracao|material|sistema|plataforma)/;
+  var negacaoTruncada = /\b(?:mas|mais)\s+['’]ao\s+(?:tenho|temos)\s+interesse\b/;
   var recusa = /nao (?:tenho|temos) interesse|nao (?:estou|estamos|estao) interessad[oa]s?\b|nao (?:quero|queremos|preciso|precisamos)|nao[, ]+obrigad|sem interesse|nao (?:me )?(?:mande|envie|contate)|nao (?:precisa|precisam) (?:me |nos )?(?:mandar|enviar|mostrar) (?:mais )?nada\b|pare de|vou deixar(?: amigo)?|nao autorizo/;
   var exclusaoExplicita = /(?:^|[.!?;]\s*|\b(?:por favor|por gentileza)[,.]?\s+)(?:apague|exclua|remova|retire)\s+(?:(?:o|esse|este|meu|nosso)\s+)*(?:numero|telefone|contato|dados)\b|^(?:por favor[,.]?\s+)?me (?:tire|retire|remova) (?:da|dessa|desta) lista\b/;
   var cortesia = /^(?:de nada+|por nada|obrigad[oa]+|valeu|ok|certo|tudo bem|bom dia|boa tarde|boa noite|ola|oi)[!.,\s]*$/;
   var numeroErrado = /\b(?:numero (?:esta |e )?errado|alguma coisa errada no numero|nao tenho nada a ver com)\b/;
   var fornecedorAtual = /ja (?:tenho|temos) (?:site|agencia|um sistema|sistema)/;
   var troca = /(?:quero|queremos|preciso|precisamos|pretendo|pretendemos|gostaria de|gostariamos de|estou pensando em|estamos pensando em)\b.{0,55}\b(?:trocar|mudar|substituir|outro|outra)|(?:trocar|mudar|substituir)\b.{0,40}\b(?:sistema|fornecedor|agencia|site)/;
-  var sinalComercial = (t) => !recusa.test(t) && (positivo.test(t) || troca.test(t));
+  var sinalComercial = (t) => !recusa.test(t) && !negacaoTruncada.test(t) && (positivo.test(t) || troca.test(t));
   var timing = /estou (?:no transito|ocupad|apertad)|essa semana estou|vou (?:ver|conversar|avaliar|verificar)|nao (?:decido|resolvo) sozinh/;
   var pedidoDeConversa = /\b(?:agende|agenda|marque)\b.{0,70}\bcomigo\b.{0,45}\b(?:bate-papo|conversa|reuniao|demonstracao)|\b(?:quero|gostaria de|podemos) (?:agendar|marcar)\b.{0,65}\b(?:conversa|reuniao|bate-papo|demonstracao)/;
   function classificarResposta(lead, mensagens, agora = Infinity) {
@@ -125,6 +91,7 @@ var PrumoClassificacaoGratuita = (() => {
     if (!fonte && lead.marcos.respondeu && !dataHumanaValida) return sair("pendente", "O marco de resposta tem data incompat\xEDvel com o envio ou a observa\xE7\xE3o; conferir a fonte.", false, true);
     if (!fonte && !entradas.length && !houveRespostaHumana) return Number.isFinite(enviado) ? sair("silencio", base.leituraConfirmada ? "H\xE1 recibo de leitura, sem resposta registrada; a inten\xE7\xE3o \xE9 desconhecida." : "Sem resposta nem leitura confirmada; n\xE3o significa que ignorou.") : sair("nao-contatado", "Sem envio registrado; fora do denominador de respostas.");
     if (posteriorAoBot && !papelHumano) return sair("pendente", "H\xE1 entrada posterior ao rob\xF4 ainda sem classifica\xE7\xE3o confirmada; conferir o encaminhamento ou a resposta.", false, true);
+    if (negacaoTruncada.test(t)) return sair("recusa", "Nega\xE7\xE3o truncada ap\xF3s mas/mais: leitura contextual de prov\xE1vel recusa, sem interesse confirmado. Preservar a fala e revisar a interpreta\xE7\xE3o antes de qualquer retomada.", false, true);
     if (recusa.test(t)) return sair("recusa", "A fala cont\xE9m recusa expl\xEDcita; permiss\xE3o anterior n\xE3o confirma interesse atual.");
     if (fornecedorAtual.test(t) && !sinalComercial(t)) return sair("recusa", "A pessoa informou que j\xE1 tem uma solu\xE7\xE3o, sem abertura comercial registrada.");
     if (fonte?.tipo === "negativa" && sinalComercial(t)) return sair("interesse", "H\xE1 inten\xE7\xE3o comercial expl\xEDcita apesar da negativa registrada; conferir a diverg\xEAncia sem reabrir a conversa automaticamente.", pedirMaterial.test(t), true);
@@ -143,31 +110,7 @@ var PrumoClassificacaoGratuita = (() => {
     if (fonte?.tipo === "interesse" && (!t || afirmacao.test(t))) return sair("pendente", "R\xF3tulo antigo de interesse sem pergunta ou conte\xFAdo suficiente para distinguir acesso de permiss\xE3o.", false, true);
     return sair("neutra", "Resposta humana sem sinal comercial expl\xEDcito; manter o contexto e o combinado.");
   }
-  function respostaParaAcompanhamento(fonte, leitura) {
-    if (leitura.classe === "exclusao" && leitura.houveRespostaHumana && leitura.evidencia && exclusaoExplicita.test(normalizarResposta(leitura.evidencia.trecho)) && fonte?.tipo !== "exclusao") return {
-      ...fonte,
-      tipo: "exclusao",
-      trecho: leitura.evidencia.trecho,
-      em: leitura.evidencia.em ?? fonte?.em
-    };
-    if (fonte && ["interesse", "licenca", "neutra"].includes(fonte.tipo) && leitura.classe === "recusa") return { ...fonte, tipo: "negativa", trecho: leitura.evidencia?.trecho ?? fonte.trecho, em: leitura.evidencia?.em ?? fonte.em };
-    if (fonte && ["interesse", "licenca", "neutra"].includes(fonte.tipo) && leitura.classe === "robo") return { ...fonte, tipo: "bot", trecho: "" };
-    if (!fonte || !["interesse", "licenca"].includes(fonte.tipo)) return fonte;
-    const tipo = leitura.classe === "interesse" ? "interesse" : leitura.materialSolicitado ? "licenca" : "neutra";
-    return tipo === fonte.tipo ? fonte : { ...fonte, tipo };
-  }
-  function resumoDasRespostas(leads, agora) {
-    const enviados = leads.filter((l) => Number.isFinite(Date.parse(l.marcos.enviado ?? "")) && Date.parse(l.marcos.enviado) <= agora);
-    const classes = Object.fromEntries(Object.keys(ROTULOS_DA_CLASSIFICACAO).map((k) => [k, 0]));
-    let leituraSemResposta = 0, semLeituraSemResposta = 0, revisar = 0, humanas = 0;
-    for (const l of enviados) {
-      const c = l.classificacaoResposta ?? classificarResposta(l, void 0, agora);
-      classes[c.classe]++;
-      if (c.revisar) revisar++;
-      if (c.houveRespostaHumana) humanas++;
-      if (c.classe === "silencio") c.leituraConfirmada ? leituraSemResposta++ : semLeituraSemResposta++;
-    }
-    return { enviados: enviados.length, classes, leituraSemResposta, semLeituraSemResposta, revisar, humanas };
-  }
-  return __toCommonJS(classificacao_resposta_exports);
+
+  // classificador-n8n.js
+  PrumoClassificacaoGratuita = { classificarResposta };
 })();

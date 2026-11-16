@@ -1,14 +1,16 @@
 import type { CrmLead } from './types'
+import { trabalhosRegistrados } from '../office/trabalho-registrado'
 
 /** Fatos humanos na aba CRM existente; a projeção não é outra fonte editável. Valores em centavos. */
 export const PREFIXO_CICLO = '[ciclo-comercial-v1] '
 export const OFERTAS_CICLO = ['encontrado', 'respondido', 'anuncios', 'anuncios-duas', 'redes', 'fonte', 'fonte-em-dia', 'iris', 'estampa', 'pacote'] as const
 export type OfertaCiclo = typeof OFERTAS_CICLO[number]
 export type ComponenteCiclo = 'inicial' | 'mensal'
-export type TipoCiclo = 'proposta' | 'proposta_enviada' | 'aceite' | 'entrega_vista' | 'condicao_cobranca' | 'cobranca' | 'pagamento' | 'correcao'
+export type TipoCiclo = 'proposta' | 'proposta_enviada' | 'aceite' | 'entrega_vista' | 'condicao_cobranca' | 'cobranca' | 'pagamento' | 'trabalho' | 'correcao'
 export type GatilhoCobranca = 'aceite' | 'site_visto_no_ar' | 'data_combinada' | 'marco_confirmado'
 export interface EventoCiclo {
   v: 1; id: string; tipo: TipoCiclo; data: string; humano: true; referencia: string
+  fila?: 'voce' | 'time' | 'cliente'; tarefa?: string; resultado?: string
   vinculo?: string
   ofertaId?: OfertaCiclo; ofertas?: Exclude<OfertaCiclo, 'pacote'>[]; oferta?: string; versao?: number
   escopo?: string; prazo?: string; condicoes?: string; responsavel?: string
@@ -19,16 +21,17 @@ export interface EventoCiclo {
   gatilho?: GatilhoCobranca; condicao?: string; vigenciaInicio?: string; vigenciaFim?: string; liberadaEm?: string
 }
 export type LeadCiclo = Pick<CrmLead, 'eventos'>
-const TIPOS: TipoCiclo[] = ['proposta', 'proposta_enviada', 'aceite', 'entrega_vista', 'condicao_cobranca', 'cobranca', 'pagamento', 'correcao']
+const TIPOS: TipoCiclo[] = ['proposta', 'proposta_enviada', 'aceite', 'entrega_vista', 'condicao_cobranca', 'cobranca', 'pagamento', 'trabalho', 'correcao']
 const COMUNS = ['v', 'id', 'tipo', 'data', 'humano', 'referencia']
 const CAMPOS: Record<TipoCiclo, string[]> = {
+  trabalho: ['fila', 'tarefa', 'responsavel', 'resultado', 'condicao', 'vencimento'],
   proposta: ['ofertaId', 'ofertas', 'oferta', 'versao', 'escopo', 'prazo', 'condicoes', 'responsavel', 'valor', 'mensalidade'],
   proposta_enviada: ['vinculo', 'evidencia'], aceite: ['vinculo', 'evidencia', 'documento'], entrega_vista: ['vinculo', 'evidencia'],
   condicao_cobranca: ['vinculo', 'evidencia', 'componente', 'valor', 'gatilho', 'condicao', 'vigenciaInicio', 'vigenciaFim', 'liberadaEm'],
   cobranca: ['vinculo', 'evidencia', 'componente', 'competencia', 'valor', 'vencimento', 'forma'],
   pagamento: ['vinculo', 'evidencia', 'componente', 'competencia', 'valor'], correcao: ['vinculo', 'evidencia'],
 }
-const TEXTOS = ['referencia', 'vinculo', 'oferta', 'escopo', 'prazo', 'condicoes', 'responsavel', 'evidencia', 'documento', 'forma', 'condicao'] as const
+const TEXTOS = ['tarefa', 'resultado', 'referencia', 'vinculo', 'oferta', 'escopo', 'prazo', 'condicoes', 'responsavel', 'evidencia', 'documento', 'forma', 'condicao'] as const
 export const referenciaNormalCiclo = (v: string) => v.trim().normalize('NFKC').toLocaleLowerCase('pt-BR')
 export function diaCiclo(agora = Date.now()): string { return new Date(agora - 10800_000).toISOString().slice(0, 10) }
 function dataValida(v: unknown): v is string {
@@ -63,6 +66,9 @@ export function validarEventoCiclo(valor: unknown, agora = Date.now()): EventoCi
       if (!Array.isArray(e.ofertas) || !e.ofertas.length || e.ofertas.length > 9 || e.ofertas.some(o => o === ('pacote' as OfertaCiclo) || !OFERTAS_CICLO.includes(o)) || new Set(e.ofertas).size !== e.ofertas.length) throw new Error('Pacote exige ofertas estáveis e distintas.')
       e.ofertas = [...e.ofertas].sort()
     } else if (e.ofertas !== undefined) throw new Error('Lista de ofertas pertence somente a pacote.')
+  } else if (e.tipo === 'trabalho') {
+    exigir('fila', 'tarefa', 'responsavel', 'resultado', 'condicao')
+    if (!['voce', 'time', 'cliente'].includes(e.fila!)) throw new Error('Fila de trabalho inválida.')
   } else {
     exigir('vinculo', 'evidencia')
     if (e.tipo === 'aceite') exigir('documento')
@@ -90,7 +96,7 @@ export function validarEventoCiclo(valor: unknown, agora = Date.now()): EventoCi
 export function textoEventoCiclo(e: EventoCiclo, agora = Date.now()): string { return PREFIXO_CICLO + assinaturaEventoCiclo(validarEventoCiclo(e, agora)) }
 export function lerEventoCiclo(texto: unknown, agora = Date.now()): EventoCiclo | null {
   if (typeof texto !== 'string' || !texto.startsWith(PREFIXO_CICLO) || texto.length > 1000) return null
-  try { return validarEventoCiclo(JSON.parse(texto.slice(PREFIXO_CICLO.length)), agora) } catch { return null }
+  try { const e = validarEventoCiclo(JSON.parse(texto.slice(PREFIXO_CICLO.length)), agora); return e.tipo === 'trabalho' ? null : e } catch { return null }
 }
 export function propostaExigeSiteVisto(e: EventoCiclo): boolean { return e.ofertaId === 'encontrado' || e.ofertaId === 'pacote' && !!e.ofertas?.includes('encontrado') }
 export function pendenciasDaProposta(e: EventoCiclo): string[] {
@@ -137,6 +143,7 @@ function conferirNovo(lead: LeadCiclo, e: EventoCiclo, historico: EventoCiclo[],
     if (anteriores.some(v => v.data > e.data)) throw new Error('Nova versão não pode anteceder a versão anterior.')
     return
   }
+  if (e.tipo === 'trabalho') return // Compromisso interno: não implica proposta, aceite, cobrança ou recebimento.
   const vinculo = ativos.find(v => v.id === e.vinculo)
   if (!vinculo) throw new Error('O vínculo deve estar confirmado e ativo na aba CRM.')
   if (e.data < vinculo.data) throw new Error('O fato não pode anteceder seu vínculo.')
@@ -199,6 +206,9 @@ function reconstruir(lead: LeadCiclo, agora: number): Reconstrucao {
   for (const r of linhas) {
     const texto = r.registroTexto ?? r.texto
     if (!texto.startsWith(PREFIXO_CICLO)) continue
+    // Notas de trabalho são compromissos internos legados, lidos por trabalho-registrado.
+    // Não são fatos do ledger financeiro nem problemas dele.
+    try { if (JSON.parse(texto.slice(PREFIXO_CICLO.length))?.tipo === 'trabalho') continue } catch { /* Validador financeiro registra a falha abaixo. */ }
     const e = lerEventoCiclo(texto, Date.parse(r.em))
     if (!e) { estado.problemas.push('Nota do ciclo inválida ou posterior à data do registro.'); continue }
     const visto = vistos.get(e.id)
@@ -214,7 +224,21 @@ function reconstruir(lead: LeadCiclo, agora: number): Reconstrucao {
 export function eventosDoCiclo(lead: LeadCiclo, agora = Date.now()): EventoCiclo[] { return reconstruir(lead, agora).ativos }
 /** Replay usa o histórico inteiro: um ID corrigido nunca pode ser reutilizado para outro fato. */
 export function validarTransicaoCiclo(lead: LeadCiclo, evento: EventoCiclo, agora = Date.now()): 'novo' | 'duplicado' {
-  const e = validarEventoCiclo(evento, agora), estado = reconstruir(lead, agora)
+  const e = validarEventoCiclo(evento, agora)
+  if (e.tipo === 'trabalho') {
+    for (const r of lead.eventos ?? []) {
+      if (r.tipo !== 'nota' || r.origem !== 'manual' || !(Date.parse(r.em) <= agora)) continue
+      const texto = r.registroTexto ?? r.texto ?? ''
+      if (!texto.startsWith(PREFIXO_CICLO)) continue
+      let anterior: EventoCiclo
+      try { anterior = JSON.parse(texto.slice(PREFIXO_CICLO.length)) } catch { continue }
+      if (anterior.id !== e.id) continue
+      if (assinaturaEventoCiclo(anterior) !== assinaturaEventoCiclo(e)) throw new Error('Identificador já usado por outro fato, inclusive compromisso interno.')
+      return 'duplicado'
+    }
+    return 'novo'
+  }
+  const estado = reconstruir(lead, agora)
   const mesmo = estado.historico.find(v => v.id === e.id)
   if (mesmo && assinaturaEventoCiclo(mesmo) !== assinaturaEventoCiclo(e)) throw new Error('Identificador já usado por outro fato, inclusive se corrigido.')
   if (estado.problemas.length) throw new Error(`Histórico comercial incoerente: ${estado.problemas[0]}`)
@@ -234,6 +258,7 @@ export function cicloDoLead(lead: LeadCiclo, agora = Date.now()) {
   })
   return { historico, eventos, problemas, propostas: eventos.filter(e => e.tipo === 'proposta').map(e => ({ ...e, pendencias: pendenciasDaProposta(e) })),
     envios: eventos.filter(e => e.tipo === 'proposta_enviada'), aceites: eventos.filter(e => e.tipo === 'aceite'), condicoes: eventos.filter(e => e.tipo === 'condicao_cobranca'), cobrancas, pagamentos,
+    trabalho: trabalhosRegistrados(lead, agora).at(-1),
     recebido: pagamentos.reduce((n, p) => n + p.valor, 0), primeiroRecebimento: pagamentos.map(e => e.data).sort()[0] }
 }
 /**

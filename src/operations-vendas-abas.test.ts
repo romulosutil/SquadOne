@@ -7,7 +7,7 @@ import {
 describe('abas de Vendas na ordem do trabalho', () => {
   it('Fazer → Triar → Entender, e Entender tem Funil, Números e Resultados', () => {
     assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.id), ['afazer', 'triagem', 'entender'])
-    assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.rotulo), ['Conversas para você', 'Primeiros contatos', 'Entender'])
+    assert.deepEqual(ABAS_DE_VENDAS.map((a) => a.rotulo), ['Conversas para você', 'Aquisição', 'Entender'])
     assert.deepEqual(SECOES_DE_ENTENDER.map((s) => s.id), ['bi', 'funil', 'numeros', 'resultados'])
   })
 
@@ -44,6 +44,7 @@ describe('lerEnderecoDeVendas: os links de antes continuam abrindo o mesmo lugar
     assert.equal(vista('?ver=funil'), 'funil')
     assert.equal(vista('?ver=numeros'), 'numeros')
     assert.equal(vista('?ver=resultados'), 'resultados')
+    assert.equal(vista('?ver=bi'), 'bi')
   })
 
   it('?ver=jornada cai no Funil com o passo; o passo fora do Funil não vale', () => {
@@ -74,7 +75,7 @@ describe('enderecoDeVendas: o que a tela escreve de volta', () => {
   })
 
   it('ida e volta: ler o que se escreveu dá a mesma vista', () => {
-    for (const v of ['afazer', 'triagem', 'funil', 'numeros', 'resultados'] as const) {
+    for (const v of ['afazer', 'triagem', 'funil', 'numeros', 'resultados', 'bi'] as const) {
       const l = lerEnderecoDeVendas(enderecoDeVendas({ vista: v, lead: 'x' }).replace('/crm', ''))
       assert.equal(l.tipo === 'vendas' && l.vista, v)
     }

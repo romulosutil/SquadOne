@@ -14,3 +14,7 @@ A Prumo define público, oferta, preço e qualidade da entrega; o SquadOne suste
 
 Site/Encontrado conserva a prioridade entre candidatos aprovados registrada em 26/10. A decisão da Prumo de 28/10 sobre o custo de vender produtos de volume individualmente também permanece: prioridade da fila não comprova margem ou melhor canal. Avaliar conversa qualificada, proposta, aceite, recebimento, ciclo e margem quando houver dados de custos e horas. Produtos por assinatura têm caminho próprio, e o CRM de estamparia exige a qualificação já definida. A atualização de 30/10 corrige as fontes de descrição do guia e reutiliza `CONCEITO_PRUMO` no Assistente e no copiloto. O conceito canônico de `prumo/00-contexto/organizacao.md` acompanha os workflows pelo sincronizador existente. Preços, passos da jornada, cadência e autorizações de contato permanecem vigentes.
 
+## Planejamento de SGP Prisma e Fiscal em 30 de outubro
+
+Rômulo definiu a meta de 10 clientes por produto para SGP, Prisma e Fiscal, com busca no Brasil inteiro e atendimento remoto. A preparação comercial e a descoberta começam na semana de 2 a 6/11/2026. O [plano de SalesOps](../PRUMO-SALESOPS-SGP-PRISMA-FISCAL-2026-10-30.md) organiza públicos, parceiros de validação, etapas até o primeiro pagamento e capacidade de atendimento. A descrição e a liberação dos produtos continuam nas fichas oficiais da Prumo; o plano não altera os executores comerciais.
+

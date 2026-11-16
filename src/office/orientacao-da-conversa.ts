@@ -1,9 +1,11 @@
 import type { CrmLead } from '../operations/types'
 import type { PlanoBi } from '../operations/bi-operacao'
 import { procedimentoDaDecisao } from './procedimento-da-decisao'
+import { intencaoDoPasso } from '../operations/retomadas'
 
 /** Apenas composição da orientação. Os gates do servidor continuam obrigatórios. */
 export function orientaContato(lead: CrmLead, plano: PlanoBi): boolean {
+  if (lead.proximoPasso?.texto && intencaoDoPasso(lead.proximoPasso.texto) === 'interna') return false
   return plano.tipo === 'agir' && ['humano', 'recepcao', 'robo'].includes(procedimentoDaDecisao(lead).tipo)
 }
 

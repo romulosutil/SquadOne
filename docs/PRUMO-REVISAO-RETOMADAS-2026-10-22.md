@@ -21,13 +21,13 @@ Piauí e Casa do Bordado: uma pergunta sobre a utilidade na rotina, depois de
 conferir a conversa atual. Aldeia e The Best: validar o destino indicado.
 RADIX tem pedido de bate-papo, mas retomada confirmada em 22/10; não duplicar.
 
-O aparelho devolveu três mensagens da Piauí e cinco de um contato pessoa física. Com autorização
-específica para Gemini/Google, três áudios desse contato e da Ddetize foram transcritos.
+O aparelho devolveu três mensagens da Piauí e cinco de Jeferson. Com autorização
+específica para Gemini/Google, três áudios de Jeferson/Ddetize foram transcritos.
 Nova Era não devolveu áudio; Masque, Recipeças e Ramavi continuaram sem conversa
 recuperada. Um pedido de recuperação aceito tecnicamente não foi contado como
 histórico recebido. Os recortes não representam backup integral do WhatsApp.
 
-Esse contato foi marcado **sem contato** (número errado). O pedido
+Jeferson foi marcado **sem contato**: o áudio confirma número errado. O pedido
 de desculpas e o “ok” encerraram a conversa; nenhuma nova confirmação foi enviada.
 Ddetize tratava de Instagram e já recebeu abordagens depois da sexta solicitada,
 16/10; aguardar nova abertura, sem inventar retorno para a próxima sexta.

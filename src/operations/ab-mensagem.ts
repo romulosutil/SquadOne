@@ -129,7 +129,7 @@ function lerPar(par: Par, sorteados: CrmLead[], agora: number): LeituraDoPar {
 
 /** A leitura do A/B estratificado a partir do retrato do CRM. Ignora o período da tela: o teste conta inteiro. */
 export function leituraDoAbMensagem(leads: CrmLead[], agora: number, produto: 'site' | 'prumo' = 'site'): LeituraDoAbMensagem {
-  const enviados = leads.filter(l => l.produto === produto && Number.isFinite(enviadoEm(l)))
+  const enviados = leads.filter(l => l.produto === produto && l.abordagem?.mensagem !== 'E' && Number.isFinite(enviadoEm(l)))
   const comColuna = enviados.filter(l => l.abordagem?.elegiveis)
   const sorteados = comColuna.filter(l => ehLetra(l.abordagem?.mensagem) && l.abordagem!.elegiveis!.includes(l.abordagem!.mensagem!))
   const inicioMs = comColuna.length ? Math.min(...comColuna.map(enviadoEm)) : null

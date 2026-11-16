@@ -1,29 +1,50 @@
 """Escopo da campanha autorizada de 3 a 6/11; não envia nem altera CRM."""
 import datetime as dt
+from contextlib import closing
+import sqlite3
 import json
 from pathlib import Path
 import re
 import unicodedata
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
+from politica_envios import LIMITES_OPERACIONAIS
 
 ARQUIVO = Path.home() / '.local/share/squadone-operations/campanha-site-2026-11-02.json'
+ATUAL = Path.home() / '.local/share/squadone-operations/campanha-site-ativa.json'
+REGISTRO = Path.home() / '.local/share/frente-comercial/registro.sqlite'
 _cache = None
 
 
 def ler():
     global _cache
+    arquivo = ATUAL if ATUAL.exists() else ARQUIVO
     try:
-        st = ARQUIVO.stat()
+        st = arquivo.stat()
     except FileNotFoundError:
         return None
-    key = (str(ARQUIVO), st.st_mtime_ns, st.st_size)
+    key = (str(arquivo), st.st_mtime_ns, st.st_size)
     if _cache is None or _cache[0] != key:
-        _cache = key, json.loads(ARQUIVO.read_text())
+        _cache = key, json.loads(arquivo.read_text())
     return _cache[1]
 
 
+def da_nova_pesquisa(lead, config):
+    """O recorte atual troca a carteira antiga, sem apagar contatos ou histórico."""
+    desde = (config or {}).get('pesquisaNovaDesde')
+    if not desde: return True
+    try:
+        inicio = dt.datetime.fromisoformat(desde.replace('Z', '+00:00'))
+        return any(e.get('tipo') == 'encontrado' and
+                   dt.datetime.fromisoformat(e['em'].replace('Z', '+00:00')) >= inicio
+                   for e in lead.get('eventos', []))
+    except (ValueError, KeyError, TypeError): return False
+
+
 def autorizar(lead, config, agora=None, envio=False):
+    if not LIMITES_OPERACIONAIS:
+        return (lead.get('produto') == 'site' and lead.get('etapa') == 'novo'
+                and (config is None or config.get('ativo') is True) and da_nova_pesquisa(lead, config))
     if config is None:
         return True  # Sem opt-in, preserva a operação anterior.
     if (not isinstance(config, dict) or config.get('versao') != 1
@@ -34,11 +55,24 @@ def autorizar(lead, config, agora=None, envio=False):
     if agora.tzinfo is None:
         return False
     dia = agora.astimezone(ZoneInfo('America/Sao_Paulo')).date()
+    if config.get('modo') == 'continuo-dias-uteis':
+        try:
+            inicio = dt.date.fromisoformat(config['inicioEnvios'] if envio else config['inicioPreparacao'])
+            return (config.get('escopo') == 'novos-site' and dia >= inicio
+                    and (not envio or dia.weekday() < 5)
+                    and lead.get('produto') == 'site' and lead.get('etapa') == 'novo')
+        except (ValueError, KeyError, TypeError):
+            return False
     try:
         inicio = dt.date.fromisoformat(config['inicioEnvios'] if envio else config['inicioPreparacao'])
         fim = dt.date.fromisoformat(config['fimEnvios'])
     except (ValueError, KeyError, TypeError):
         return False
+    if envio and config.get('naoEnviarAntesDe'):
+        try:
+            inicio_exato = dt.datetime.fromisoformat(config['naoEnviarAntesDe'].replace('Z', '+00:00'))
+            if inicio_exato.tzinfo is None or agora < inicio_exato: return False
+        except (ValueError, TypeError): return False
     if envio and 'principais' in config:
         principais, reservas = config['principais'], config.get('reservas', [])
         if not isinstance(principais, list) or not isinstance(reservas, list):
@@ -49,10 +83,35 @@ def autorizar(lead, config, agora=None, envio=False):
             and lead.get('id') in config['leadsAutorizados'])
 
 
+def quantidade_confirmados(config, linhas, agora=None):
+    """Recibos únicos da coorte no período; tentativa e reserva não contam."""
+    continuo = config.get('modo') == 'continuo-dias-uteis' and config.get('escopo') == 'novos-site'
+    ids = set(config.get('principais', []) + config.get('reservas', []))
+    inicio = ((agora or dt.datetime.now(dt.timezone.utc)).astimezone(ZoneInfo('America/Sao_Paulo')).date()
+              if continuo else dt.date.fromisoformat(config['inicioEnvios']))
+    fim = inicio if continuo else dt.date.fromisoformat(config['fimEnvios'])
+    confirmados = set()
+    for chave, id_, estado, em, recibo in linhas:
+        if (not (str(id_).startswith('site:') if continuo else id_ in ids)
+                or estado != 'enviado' or not chave or not recibo): continue
+        data = dt.datetime.fromisoformat(em.replace('Z', '+00:00'))
+        if data.tzinfo is None: raise ValueError('Recibo sem fuso')
+        if inicio <= data.astimezone(ZoneInfo('America/Sao_Paulo')).date() <= fim: confirmados.add(chave)
+    return len(confirmados)
+
+
 def permite(lead, agora=None, envio=False):
     try:
-        return autorizar(lead, ler(), agora, envio)
-    except (OSError, ValueError, TypeError):
+        config = ler()
+        if not autorizar(lead, config, agora, envio): return False
+        if LIMITES_OPERACIONAIS and config and 'metaContatos' in config:
+            limite = config['metaContatos']
+            if type(limite) is not int or not 1 <= limite <= 60: return False
+            with closing(sqlite3.connect(Path(REGISTRO).resolve().as_uri() + '?mode=ro', uri=True)) as db:
+                linhas = db.execute('SELECT chave,id,estado,em,recibo FROM contatos').fetchall()
+            if quantidade_confirmados(config, linhas, agora) >= limite: return False
+        return True
+    except (OSError, ValueError, TypeError, KeyError, sqlite3.Error):
         return False
 
 
@@ -143,7 +202,7 @@ def evidencia_site(lead, raiz=None, agora=None):
                     'campoSiteDoPerfilDaPropriaEmpresa': ui.get('tipoSite'),
                     'dominioNoCampoSite': ui.get('dominio'),
                     'avisoFechamentoPermanente': ui.get('fechamentoPermanente'),
-                    'metodo': 'Interface pública Google Maps conferida hoje, sem API Places e sem cobrança. O campo Site pertence a este perfil, não à busca de concorrentes. Ausência de link no perfil não prova inexistência de site.'}
+                    'metodo': 'Interface pública Google Maps conferida na data indicada em em, sem API Places e sem cobrança. O campo Site pertence a este perfil, não à busca de concorrentes. Ausência de link no perfil não prova inexistência de site.'}
                 revisao = ui.get('revisaoDeIdentidade')
                 if (isinstance(revisao, dict) and ui.get('contatoConfere') is True
                         and revisao.get('nomePublico') and revisao.get('criterio')):

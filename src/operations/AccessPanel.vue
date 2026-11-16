@@ -12,7 +12,7 @@ const links = computed(() => ferramentasDoMais(props.tools))
 </script>
 
 <template>
-  <section v-if="links.length" class="painel access" aria-labelledby="access-title">
+  <section class="painel access" aria-labelledby="access-title">
     <h2 id="access-title">Ferramentas</h2>
     <ul>
       <li v-for="l in links" :key="l.id">

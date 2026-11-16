@@ -1,7 +1,6 @@
 import type { CrmLead } from '../operations/types'
 import { contatoPausado } from '../operations/aprendizado-comercial'
 import { planoDoLead } from '../operations/bi-operacao'
-import { trabalhosRegistrados } from './trabalho-registrado'
 import { cicloDoLead } from '../operations/ciclo-comercial'
 import { planoFuturoEmEspera, procedimentoDaDecisao } from './procedimento-da-decisao'
 import { decisoesDoEscritorio, type Decisao } from './decisoes'
@@ -24,8 +23,7 @@ export function motivoDaMinhaVez(lead: CrmLead, agora: number): string | null {
   }
   if (plano.tipo === 'aguardar') return null
   const ciclo = cicloDoLead(lead, agora)
-  const trabalho = trabalhosRegistrados(lead, agora).at(-1)
-  if (trabalho) return trabalho.fila === 'voce' ? trabalho.tarefa : null
+  if (ciclo.trabalho) return ciclo.trabalho.fila === 'voce' ? ciclo.trabalho.tarefa! : null
   if (ciclo.propostas.some(p => !ciclo.eventos.some(e => e.tipo === 'proposta_enviada' && e.vinculo === p.id)) || ciclo.cobrancas.some(c => c.saldo > 0)) return plano.acao
   const conversa = lead.conversa
   const entrada = Math.max(instante(conversa?.ultimaEntrada), conversa?.ultima.direcao === 'entrada' ? instante(conversa.ultima.em) : 0)

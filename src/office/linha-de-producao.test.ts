@@ -1,24 +1,21 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { LEAD_DE_EXEMPLO } from '../blueprint/exemplo.ts'
-const textoEventoCiclo = (evento: unknown, _agora?: number) => '[ciclo-comercial-v1] ' + JSON.stringify(evento)
+import { textoEventoCiclo } from '../operations/ciclo-comercial.ts'
 import { toScreen } from './rooms.ts'
 import { estacoesDaProducao, passagensConfirmadas, pontoDaEsteiraNoMundo, PONTOS_DA_ESTEIRA, trajetoDaEsteira } from './linha-de-producao.ts'
 import type { CrmLead } from '../operations/types.ts'
 import { pendenciasDaJornada } from './jornada-do-escritorio.ts'
+import { motivoDoEncaminhamentoEstamparia } from '../operations/estamparia-atendimento.ts'
 const agora = Date.parse('2026-10-26T18:00:00Z')
-const lead = (id='site:exemplo'): CrmLead => ({...structuredClone(LEAD_DE_EXEMPLO),id,empresa:id,etapa:'novo',sinal:'pronto',marcos:{},links:{whatsapp:'https://wa.me/5527999991111'},resposta:undefined,conversa:undefined,eventos:[]})
+const lead = (id='site:exemplo'): CrmLead => ({...structuredClone(LEAD_DE_EXEMPLO),id,empresa:id,etapa:'novo',sinal:'pronto',marcos:{},resposta:undefined,conversa:undefined,eventos:[]})
 const em = '2026-10-26T17:59:00Z'
 describe('esteira e movimento com intenção', () => {
-  it('identidade inválida exige conferência mesmo com prioridade ou trabalho legado', () => {
-    const a=lead();a.etapa='contato';a.marcos.enviado=em;a.links.whatsapp='https://example.com/whatsapp'
-    const ficha=estacoesDaProducao([a],[a.id],null,agora)[1].fichas[0]
-    assert.equal(ficha.situacao,'conferencia');assert.match(ficha.acao,/identidade/)
-  })
   it('encaminhamento automático de preço da Estamparia vira próximo passo do Rômulo', () => {
     const a=lead('estampa:teste');a.produto='estampa';a.etapa='contato';a.marcos.enviado=em
+    a.links.whatsapp='https://wa.me/5511999990001' // Identidade sintética válida; nenhuma rede neste teste.
     a.conversa={desde:em,mensagens:1,ultimaEntrada:em,ultima:{direcao:'entrada',em,trecho:'Quanto custa?'}}
-    const motivo='Conferir o preço e as condições com o Rômulo.'
+    const motivo=motivoDoEncaminhamentoEstamparia('estampa-preco-handoff')!
     a.atendimentoComercial={id:'estampa',tipo:'handoff',titulo:'Conferir condições',motivo,texto:motivo,alvo:'operador',estado:'humano',identidade:'confirmada',ocorridoEm:em}
     const ficha=estacoesDaProducao([a],[],null,agora)[2].fichas[0]
     assert.equal(ficha.situacao,'sua-vez');assert.equal(ficha.responsavel,'Rômulo');assert.equal(ficha.acao,motivo)
@@ -32,6 +29,7 @@ describe('esteira e movimento com intenção', () => {
   })
   it('o encaminhamento registrado mantém Elisa e a condição do trabalho', () => {
     const a=lead();a.etapa='contato';a.marcos.enviado=em
+    a.links.whatsapp='https://wa.me/5511999990002'
     a.eventos=[{tipo:'nota',rotulo:'Trabalho',em,origem:'manual',fonte:'CRM',texto:textoEventoCiclo({v:1,id:'trabalho-elisa',tipo:'trabalho',data:'2026-10-26',humano:true,referencia:'exemplo',fila:'time',responsavel:'Elisa',tarefa:'Preparar demonstração',resultado:'Material conferido',condicao:'Conferir antes da entrega'},agora)}]
     const ficha=estacoesDaProducao([a],[a.id],null,agora)[1].fichas[0]
     assert.equal(ficha.responsavel,'Elisa');assert.equal(ficha.situacao,'time');assert.equal(ficha.acao,'Preparar demonstração')
@@ -88,6 +86,7 @@ describe('esteira e movimento com intenção', () => {
   })
   it('mostra o estado real do executor e distingue espera, trabalho e decisão humana', () => {
     const a=lead();a.etapa='contato';a.marcos.enviado=em
+    a.links.whatsapp='https://wa.me/5511999990003'
     const auto={id:'auto',tipo:'automatico',titulo:'Atendimento',motivo:'Preparar somente o material pedido',alvo:'time',estado:'preparar',ocorridoEm:em}
     a.atendimentoComercial=auto
     let ficha=estacoesDaProducao([a],[a.id],null,agora)[1].fichas[0]

@@ -76,7 +76,7 @@ const VARIACAO_EN = 'Hi! I’m Rômulo from Prumo, and I build business websites
 // C, se o sorteio cair nela): o Balcao grava a letra nova junto com o wa_link novo.
 // 14/10/2026: o sorteio pelo hash deu lugar a alocarVariante (abaixo): a letra passa a ter
 // estado (a coluna mensagem_variante + ab_elegiveis), nao sai mais so do place_id.
-const LETRAS = ['A', 'B', 'C', 'D'];
+const LETRAS = ['A', 'B', 'C', 'D', 'E'];
 // Aprovada pelo Rômulo em 19/10/2026, às 21h37 ("Aprovar os textos para teste"; docs/PRUMO-TEXTOS-VENDAS-2026-10-19.md).
 // A aprovação é desta constante, escrita à mão: nunca autorizar a partir de campo do lead ou saída de modelo.
 const EVENTO_CRITICO_APROVADO = true;
@@ -101,6 +101,36 @@ function eventoCriticoDe(lead) {
   }
   return null;
 }
+
+// E é descoberta contextual autorizada em 06/11; série separada do A/B histórico.
+const VERSAO_DESCOBERTA_SITE = 'descoberta-site-v1-20261106';
+
+function descobertaDe(lead) {
+  if (!lead || lead.descoberta_versao !== VERSAO_DESCOBERTA_SITE) return null;
+  const achados = Array.isArray(lead.raio_x_achados) ? lead.raio_x_achados : [];
+  const ids = new Set(achados.filter(a => a && typeof a === 'object').map(a => a.id));
+  let fato = '', pergunta = '';
+  const perfil = lead.tipo_site_conferido;
+  if (ids.has('site-fora-do-ar')) {
+    const a = achados.find(a => a && a.id === 'site-fora-do-ar');
+    if (a && /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/i.test(a.dominio || '') && a.dominio.length <= 180) {
+      fato = 'Ao conferir o endereço ' + a.dominio + ', a página não abriu no teste.';
+      pergunta = 'Vocês usam esse endereço para receber pedidos ou o atendimento acontece por outro canal?';
+    }
+  }
+  if (!fato && ids.has('sem-site')) {
+    fato = 'No perfil da empresa que consultei, não encontrei um link para site próprio.';
+    pergunta = 'Vocês já têm um site para apresentar os serviços e receber pedidos?';
+  }
+  if (!fato && ids.has('site-e-rede-social')) {
+    // O achado pode representar rede social OU WhatsApp: não presumir qual deles.
+    fato = perfil === 'link-WhatsApp-no-campo-site' ? 'No perfil da empresa que consultei, o campo de site levava ao WhatsApp.' : 'Na análise do perfil, encontrei um canal de contato no lugar de um site próprio.';
+    pergunta = 'Vocês já têm um site para apresentar os serviços e receber pedidos?';
+  }
+  if (!fato) return null;
+  return 'Oi! Sou o Rômulo, do Prumo, e trabalho com sites para empresas. ' + fato + '\n\n' + pergunta;
+}
+
 const NOTA_MINIMA_B = 4.3;
 const AVALIACOES_MINIMAS_B = 15;
 const citaNota = (t) => t.indexOf('{NOTA}') >= 0 || t.indexOf('{AVALIACOES}') >= 0;
@@ -134,16 +164,18 @@ function fatosDoGoogle(lead) {
 // Os indices de VARIACOES que este lead pode receber (com texto e com os fatos que o texto cita).
 const LETRAS_SEM_DEMO = ['A', 'C', 'D'];
 function indicesElegiveis(lead, aprovado = EVENTO_CRITICO_APROVADO) {
+  if (lead && lead.descoberta_versao === VERSAO_DESCOBERTA_SITE) return descobertaDe(lead) ? [4] : [];
   const semDemo = Boolean(lead && lead.sem_demo);
   const fatos = fatosDoGoogle(lead);
   const raioX = raioXDe(lead);
-  const cabe = (t, i) => Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t))
+  const cabe = (t, i) => i !== 4 && Boolean(t) && (fatos || !citaNota(t)) && (raioX || !citaRaioX(t))
     && (!semDemo || LETRAS_SEM_DEMO.indexOf(LETRAS[i]) >= 0)
     && (LETRAS[i] !== 'D' || (aprovado === true && Boolean(eventoCriticoDe(lead))));
   return VARIACOES.map((t, i) => (cabe(t, i) ? i : -1)).filter(i => i >= 0);
 }
 // O molde da letra com {NOTA}, {AVALIACOES} e {PONTOS} ja preenchidos.
 function moldeDaLetra(letra, lead) {
+  if (letra === 'E') return descobertaDe(lead);
   let molde = letra === 'A' && lead && lead.sem_demo ? PRIMEIRA_SEM_DEMO : VARIACOES[LETRAS.indexOf(letra)];
   const fatos = fatosDoGoogle(lead);
   const raioX = raioXDe(lead);

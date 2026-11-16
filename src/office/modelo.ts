@@ -103,6 +103,3 @@ export interface RoomView {
 }
 
 export type RoomPhase = 'pending' | 'building' | 'closing' | null
-
-
-export interface ResumoAtendimentoEstamparia { modo:'respostas'|'pausado'|'indisponivel'|'aguarda-ativacao';desde:string|null;responsavel:string;enviadas:number;incertas:number;retomada?:{autorizadaEm:string;entradas:number} }

@@ -26,9 +26,9 @@ export type DetalheDoCliente = 'orientacao' | 'ficha'
 export const NOME_DAS_ABAS: Readonly<Record<VistaDeVendas | AbaDeVendas, string>> = {
   bi: 'BI da operação',
   afazer: 'Conversas para você',
-  triagem: 'Primeiros contatos',
+  triagem: 'Aquisição',
   entender: 'Entender',
-  funil: 'Funil',
+  funil: 'Carteira',
   numeros: 'Diagnóstico',
   resultados: 'Resultados',
 }
@@ -41,7 +41,7 @@ export const ENDERECO_DO_ROTEIRO = '/mais?abrir=roteiro'
 
 export const SECOES_DE_ENTENDER: ReadonlyArray<{ id: Extract<VistaDeVendas, 'funil' | 'numeros' | 'resultados' | 'bi'>; rotulo: string; dica: string }> = [
   { id: 'bi', rotulo: NOME_DAS_ABAS.bi, dica: 'Decisões, público, mensagens, quebras e escolhas dos agentes por cliente.' },
-  { id: 'funil', rotulo: NOME_DAS_ABAS.funil, dica: 'Todos os leads por etapa, no Quadro ou na Lista; o filtro Passo mostra um passo da jornada.' },
+  { id: 'funil', rotulo: NOME_DAS_ABAS.funil, dica: 'Necessidades, propostas, contratacoes e recebimentos; cadastros e historico por oferta ficam separados.' },
   { id: 'numeros', rotulo: NOME_DAS_ABAS.numeros, dica: 'Onde o funil perde e quanto a venda espera depois do "sim"; os testes A/B ficam em Experimentos.' },
   { id: 'resultados', rotulo: NOME_DAS_ABAS.resultados, dica: 'Os enviados do período por nicho, mensagem, versão do site e horário.' },
 ]
@@ -49,7 +49,7 @@ export const SECOES_DE_ENTENDER: ReadonlyArray<{ id: Extract<VistaDeVendas, 'fun
 /** As abas, na ordem do trabalho: Fazer → Triar → Entender. A dica vai no title, não na frente. */
 export const ABAS_DE_VENDAS: ReadonlyArray<{ id: AbaDeVendas; rotulo: string; href: string; dica: string }> = [
   { id: 'afazer', rotulo: NOME_DAS_ABAS.afazer, href: '/crm', dica: 'Respostas humanas e combinados que precisam de você, em ordem de prioridade.' },
-  { id: 'triagem', rotulo: NOME_DAS_ABAS.triagem, href: '/crm?ver=triagem', dica: 'O time avalia, seleciona, prepara e envia os primeiros contatos. Acompanhe as escolhas e os resultados.' },
+  { id: 'triagem', rotulo: NOME_DAS_ABAS.triagem, href: '/crm?ver=triagem', dica: 'Politica de aquisicao e historico de pesquisa; novos primeiros contatos automaticos bloqueados.' },
   { id: 'entender', rotulo: NOME_DAS_ABAS.entender, href: '/crm?ver=funil', dica: 'Entender: o Funil, o Diagnóstico e os Resultados, e o Roteiro de venda.' },
 ]
 

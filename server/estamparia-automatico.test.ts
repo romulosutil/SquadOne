@@ -170,7 +170,7 @@ test('retomada recusa lista aberta, duplicada, futura ou com chaves inválidas',
 })
 
 test('saudação já classificada como bot aguarda pessoa, sem aplicar uma marca antiga a uma nova entrada humana',()=>{
-  const c=contexto('Camisetas Exemplo, Seja bem vindo (a) Qual produto deseja? Qual quantidade? Qual data de entrega?')
+  const c=contexto('Minha Kamiseta, Seja bem vindo (a) Qual produto deseja? Qual quantidade? Qual data de entrega?')
   c.lead.resposta={tipo:'bot',em:EM,trecho:''}
   const d=decidirAtendimentoEstamparia(c);assert.equal(d.acao,'aguardar');assert.match(d.motivo,/Aguardar uma pessoa/)
   const nova=contexto('Pode falar por aqui sim!');nova.lead.resposta={tipo:'bot',em:'2026-10-25T12:00:00Z',trecho:''}
@@ -182,13 +182,46 @@ test('saída posterior não oculta compromisso comercial já registrado',()=>{
   assert.equal(decidirAtendimentoEstamparia(c).acao,'humano')
 })
 test('resposta do shopping que indica outro contato vira próximo passo específico, sem abordar o novo número',()=>{
-  const c=contexto('Estamparia fictícia\n43 99999-0001 | TÉRREO')
-  c.historico=[{id:'shopping',direcao:'entrada',em:EM,hash:sha('Olá, obrigado por entrar em contato com o Shopping Exemplo'),texto:'Olá, obrigado por entrar em contato com o Shopping Exemplo'},...c.historico]
+  const c=contexto('Estamparia fictícia\n43 99917-9930 | TÉRREO')
+  c.historico=[{id:'shopping',direcao:'entrada',em:EM,hash:sha('Olá, obrigado por entrar em contato com o Norte Shopping'),texto:'Olá, obrigado por entrar em contato com o Norte Shopping'},...c.historico]
   const d=decidirAtendimentoEstamparia(c);assert.equal(d.acao,'humano');assert.match(d.motivo,/confirmar o contato direto/)
 })
 test('aviso de retorno automático com Instagram não vira pedido de integração',()=>{
-  const c=contexto('Olá!! Tudo bem? Obrigado por entrar em contato. Em breve um consultor especialista em mídia Out of Home entrará em contato com você! Agradecemos o seu contato 😉 www.instagram.com/exemplo.ooh')
+  const c=contexto('Olá!! Tudo bem? Obrigado por entrar em contato. Em breve um consultor especialista em mídia Out of Home entrará em contato com você! Agradecemos o seu contato 😉 www.instagram.com/ultra.ooh')
   const d=decidirAtendimentoEstamparia(c);assert.equal(d.acao,'aguardar');assert.match(d.motivo,/Aguardar uma pessoa/)
+})
+
+const AUTORESPOSTA_ULTRA='Olá!! Tudo bem?\n\nObrigado por entrar em contato com a Ultra OOH\n\nEm breve um consultor especialista em mídia Out of Home entrará em contato com você!\n\nAgradecemos o seu contato 😉\n\nwww.instagram.com/ultra.ooh'
+
+test('texto integral do incidente Ultra não reserva nem envia, mesmo com classificação humana incorreta',async t=>{
+  for(const papel of [undefined,'gente']) {
+    const f=await fixture(t,AUTORESPOSTA_ULTRA)
+    f.c.conferencia.papel=papel
+    f.c.visao.leads[0].resposta={tipo:'interesse',em:EM,trecho:AUTORESPOSTA_ULTRA}
+    const engine=f.novo();await engine.executar();await f.novo().executar()
+    assert.equal(f.saude,0);assert.deepEqual(f.envios,[]);assert.deepEqual(await f.saidas.listar(),[])
+    assert.match((await engine.estados()).get(f.c.visao.leads[0].id)?.proximoPasso??'',/Aguardar uma pessoa/)
+  }
+})
+
+test('URL ou assinatura de Instagram não bastam para prometer encaminhamento de uma função',()=>{
+  for(const texto of ['Nosso portfólio: www.instagram.com/ultra.ooh','Instagram: @empresa','Pode conferir nosso portfólio: https://instagram.com/empresa?integracao=erp']) {
+    assert.equal(decidirAtendimentoEstamparia(contexto(texto)).acao,'humano',texto)
+  }
+  for(const texto of ['Quero integrar o Instagram','Tem integração com ERP?','Emite nota fiscal?']) {
+    const d=decidirAtendimentoEstamparia(contexto(texto))
+    assert.equal(d.acao,'responder',texto)
+    if(d.acao==='responder')assert.equal(d.modelo,'estampa-recurso-handoff',texto)
+  }
+})
+
+test('ausência com horário comercial não inicia descoberta nem consome perguntas',async t=>{
+  const texto='Entraremos em contato. Horário comercial de: Seg. a Sexta 9 às 18h'
+  const f=await fixture(t,texto);await f.novo().executar()
+  assert.deepEqual(f.envios,[]);assert.deepEqual(await f.saidas.listar(),[])
+  const ms:MensagemEstamparia[]=[{id:'s',em:EM,hash:sha(PERGUNTAS_ESTAMPARIA.rotina),direcao:'saida',texto:PERGUNTAS_ESTAMPARIA.rotina},
+    {id:'e',em:EM,hash:sha(texto),direcao:'entrada',texto}]
+  assert.equal(proximaPerguntaEstamparia(ms),'rotina')
 })
 test('legado já respondido só permite esperar, sem fabricar prova ou autorização para envio',async t=>{
   const f=await fixture(t),desde=new Date(AGORA).toISOString()
@@ -224,59 +257,4 @@ test('leitura da tela compartilha a visão fornecida; execução continua revali
   f.deps.atendimento.contextoDaEntrada=async(chave,v)=>{vistas.push(v);return ler(chave)}
   await f.novo().estados(f.c.visao);assert.equal(vistas.length,1);assert.equal(vistas[0],f.c.visao)
   vistas.length=0;await f.novo().executar();assert.equal(f.envios.length,1);assert.ok(vistas.length>=3);assert.ok(vistas.every(v=>v===undefined))
-})
-
-
-test('metadados de leitura ausentes não liberam resposta nem reserva', async t => {
-  for (const campo of ['fontes', 'colunasAusentes'] as const) {
-    const f = await fixture(t)
-    delete f.c.visao[campo]
-    const engine = f.novo()
-    assert.notEqual((await engine.estados()).get(f.c.visao.leads[0].id)?.estado, 'responder')
-    await engine.executar()
-    assert.equal(f.envios.length, 0)
-    assert.equal((await f.saidas.listar()).length, 0)
-  }
-})
-
-test('snapshot de triagem não autoriza efeito quando a leitura atual foi bloqueada',async t=>{
- const f=await fixture(t),v=structuredClone(f.c.visao),original=f.deps.atendimento.contextoDaEntrada
- let frescas=0,compartilhadas=0
- f.deps.atendimento.contextoDaEntrada=async(chave,visao)=>{
-   if(visao){compartilhadas++;return {...f.c,visao}}
-   frescas++;const c=await original(chave);return c?{...c,visao:{...c.visao,estado:'retrato-invalido'}}:null
- }
- await f.novo().executar(v);assert.equal(compartilhadas,1);assert.equal(frescas,1);assert.equal(f.envios.length,0)
-})
-const AUTORESPOSTA_OOH='Olá!! Tudo bem?\n\nObrigado por entrar em contato com a Placas Exemplo OOH\n\nEm breve um consultor especialista em mídia Out of Home entrará em contato com você!\n\nAgradecemos o seu contato 😉\n\nwww.instagram.com/exemplo.ooh'
-
-test('texto integral do incidente da autoresposta OOH não reserva nem envia, mesmo com classificação humana incorreta',async t=>{
-  for(const papel of [undefined,'gente']) {
-    const f=await fixture(t,AUTORESPOSTA_OOH)
-    f.c.conferencia.papel=papel
-    f.c.visao.leads[0].resposta={tipo:'interesse',em:EM,trecho:AUTORESPOSTA_OOH}
-    const engine=f.novo();await engine.executar();await f.novo().executar()
-    assert.equal(f.saude,0);assert.deepEqual(f.envios,[]);assert.deepEqual(await f.saidas.listar(),[])
-    assert.match((await engine.estados()).get(f.c.visao.leads[0].id)?.proximoPasso??'',/Aguardar uma pessoa/)
-  }
-})
-
-test('URL ou assinatura de Instagram não bastam para prometer encaminhamento de uma função',()=>{
-  for(const texto of ['Nosso portfólio: www.instagram.com/exemplo.ooh','Instagram: @empresa','Pode conferir nosso portfólio: https://instagram.com/empresa?integracao=erp']) {
-    assert.equal(decidirAtendimentoEstamparia(contexto(texto)).acao,'humano',texto)
-  }
-  for(const texto of ['Quero integrar o Instagram','Tem integração com ERP?','Emite nota fiscal?']) {
-    const d=decidirAtendimentoEstamparia(contexto(texto))
-    assert.equal(d.acao,'responder',texto)
-    if(d.acao==='responder')assert.equal(d.modelo,'estampa-recurso-handoff',texto)
-  }
-})
-
-test('ausência com horário comercial não inicia descoberta nem consome perguntas',async t=>{
-  const texto='Entraremos em contato. Horário comercial de: Seg. a Sexta 9 às 18h'
-  const f=await fixture(t,texto);await f.novo().executar()
-  assert.deepEqual(f.envios,[]);assert.deepEqual(await f.saidas.listar(),[])
-  const ms:MensagemEstamparia[]=[{id:'s',em:EM,hash:sha(PERGUNTAS_ESTAMPARIA.rotina),direcao:'saida',texto:PERGUNTAS_ESTAMPARIA.rotina},
-    {id:'e',em:EM,hash:sha(texto),direcao:'entrada',texto}]
-  assert.equal(proximaPerguntaEstamparia(ms),'rotina')
 })

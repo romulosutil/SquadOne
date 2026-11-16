@@ -61,8 +61,9 @@ describe('copiloto: o dossiê', () => {
     assert.equal(d.lead.funil, 'site')
     assert.equal(d.passo.id, 'resposta')
     assert.equal(d.proximo.quem, 'você')
-    assert.ok(d.oferta.agora.some((o) => o.id === 'raio-x'))
-    assert.ok(d.oferta.naoOferecer.some((o) => o.id === 'mapa'))
+    assert.deepEqual(d.oferta.agora, [])
+    assert.ok(d.oferta.depois.some((o) => o.id === 'encontrado' && /Hipótese/.test(o.porque)))
+    assert.ok(!d.oferta.naoOferecer.some((o) => o.id === 'mapa'))
     assert.equal(d.resposta?.trecho, 'pode mandar')
     assert.equal(d.raioX.situacao, 'com texto')
     assert.equal(d.cardapio.find((s) => s.id === 'respondido')?.precoParaOCliente, 'sob proposta')
@@ -300,15 +301,18 @@ describe('copiloto: a leitura da saída', () => {
   })
   it('avisa: oferta que a jornada manda não oferecer, oferta própria e item grátis na proposta', () => {
     const r = lerSaidaDoCopiloto(saida({
-      ofertas: [{ id: 'mapa', porque: 'x' }, { id: 'iris', porque: 'y' }],
+      ofertas: [{ id: 'raio-x', porque: 'x' }, { id: 'iris', porque: 'y' }],
       proposta: { itens: [{ id: 'raio-x' }, { id: 'encontrado' }] },
-    }), dossie)
+    }), montarDossie(lead({ etapa: 'perdido' })))
     assert.equal(r.ok, true)
     if (r.ok !== true) return
-    assert.ok(r.avisos.some((a) => /Mapa está em "não oferecer"/.test(a)))
+    assert.ok(r.avisos.some((a) => /Raio-X está em "não oferecer"/.test(a)))
     assert.ok(r.avisos.some((a) => /Iris é oferta própria/.test(a)))
     assert.ok(r.avisos.some((a) => /grátis/.test(a)))
-    assert.deepEqual(r.sugestao.proposta.itens.map((i) => i.id), ['encontrado'])
+    assert.deepEqual(r.sugestao.proposta.itens, [], 'encerrado não recebe proposta')
+    const aberto = lerSaidaDoCopiloto(saida({ proposta: { itens: [{ id: 'raio-x' }, { id: 'encontrado' }] } }), dossie)
+    assert.ok(aberto.ok)
+    if (aberto.ok) assert.deepEqual(aberto.sugestao.proposta.itens.map(i => i.id), ['encontrado'])
   })
   it('avisa número que não está no dossiê (sem inventar fato)', () => {
     const r = lerSaidaDoCopiloto(saida({ mensagem: 'Os 5 primeiros da busca têm 234 avaliações; vocês têm 37.' }), dossie)

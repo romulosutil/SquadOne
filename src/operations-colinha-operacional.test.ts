@@ -30,13 +30,14 @@ test('Mapa permite estimativas informadas pelo dono e conserva a privacidade do 
   assert.equal(mapa().preco, 'grátis')
 })
 
-test('prazo de cliente é combinado e meta de 24 h permanece somente interna', () => {
+test('prazo de cliente é combinado após contexto suficiente, sem promessa automática de 24 h', () => {
   const mensagens = [FRASE_SOB_PROPOSTA, ...ROTEIRO.flatMap(p => p.trechos.map(t => t.texto))].join('\n')
   assert.doesNotMatch(mensagens, /proposta[^.\n]*(?:24\s*h|até amanhã)/i)
   assert.match(FRASE_SOB_PROPOSTA, /Combinamos o prazo de envio depois de conferir/)
   const proposta = ROTEIRO.find(p => p.momento === 'proposta')!
-  assert.match(proposta.objetivo, /Meta interna: até 24 h/)
-  assert.match(proposta.objetivo, /informações e compromisso possível/)
+  assert.match(proposta.objetivo, /necessidade, processo de decisão e escopo forem suficientes/)
+  assert.match(proposta.objetivo, /Combinar a data/)
+  assert.match(proposta.objetivo, /gostei isolado não basta/)
   const perguntas = ROTEIRO.flatMap(p => p.perguntas ?? []).join('\n')
   assert.doesNotMatch(perguntas, /proposta[^.\n]*até amanhã/i)
 })

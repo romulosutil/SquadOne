@@ -1,3 +1,19 @@
+## Cadência de dez minutos (12/11/2026)
+
+96 testes TypeScript das suítes de cadência, ritmo, primeiro contato, frente, memória diária e rodada passaram. Builds da interface e servidor aprovados. Dois testes novos de publicação da fila reproduzem a reserva antes da publicação e a previsão fictícia de fila vazia; ambos e os 85 testes existentes do executor passaram.
+
+Regressões da continuidade comercial (12/11/2026):
+`deploy/dell/continuidade-comercial.test.py` cobre pausa automática com causa,
+campanha completa/vencida, recibos únicos, dados ilegíveis, fuso, aviso durável,
+falha de aviso e preservação das métricas. `prospeccao-continua.test.py` cobre a
+troca diária sem lista congelada, fonte vigente, proteção de contatos e retirada
+da data fixa do workflow. `prospeccao-diaria.test.py` cobre perfil público completo,
+Place ID, destino único, sites existentes, fechamento, URLs e materialização sem
+publicação presumida. O teste de SQLite mantém 300 conexões referenciadas e exige
+que todas estejam fechadas após cada consulta, reproduzindo o vazamento observado.
+São 28 casos novos. A suíte de curadoria usa fontes sintéticas
+e isola o manifesto real do host. Validação no Dell: 203 testes Python aprovados.
+
 # Testes: o que cada arquivo cobre
 
 ## Permissões: validar no Linux
@@ -421,6 +437,29 @@ com a máquina. `auth-escopos`, `squad` e `agenda-no-dell` gravam num diretório
 temporário (chdir/env antes do import) e nunca em `data/`; `avisos` e
 `telegram-polling` gravam a fila e o offset em temporário; `fetch` é dublê em todos. A verificação
 continua sendo typecheck + build + exercitar a rota.
+Regressões da continuidade comercial (12/11/2026):
+`deploy/dell/continuidade-comercial.test.py` cobre pausa automática com causa,
+campanha completa/vencida, recibos únicos, dados ilegíveis, fuso, aviso durável,
+falha de aviso e preservação das métricas. `prospeccao-continua.test.py` cobre a
+troca diária sem lista congelada, fonte vigente, proteção de contatos e retirada
+da data fixa do workflow. `prospeccao-diaria.test.py` cobre perfil público completo,
+Place ID, destino único, sites existentes, fechamento, URLs e materialização sem
+publicação presumida. O teste de SQLite mantém 300 conexões referenciadas e exige
+que todas estejam fechadas após cada consulta, reproduzindo o vazamento observado.
+São 28 casos novos. A suíte de curadoria usa fontes sintéticas
+e isola o manifesto real do host. Validação no Dell: 203 testes Python aprovados.
+
+A cadência de dez minutos solicitada posteriormente em 12/11 tem quatro novos
+casos em `src/operations-cadencia-dez-minutos.test.ts`: fronteira de 10 minutos,
+seis contatos/hora móvel, vinte/dia com continuidade amanhã e trava compartilhada
+entre Central e Telegram. Validação: 96 testes TypeScript aprovados nas suítes de
+cadência, ritmo, primeiro contato, frente, memória diária e rodada; builds da
+interface e do servidor aprovados no Dell.
+
+`deploy/dell/frente-publicacao-fila.test.py` acrescenta dois casos: a reserva lê a
+fila aprovada do arquivo já no primeiro ciclo, e uma fila vazia não promete um
+horário de envio. O primeiro falha com a ordem antiga e passa com a publicação
+anterior à reserva; os dois e os 85 testes do executor passaram no Dell.
 
 ## Arquivos que faltavam no inventário (acrescentados em 19/10/2026)
 
@@ -463,3 +502,66 @@ para o lead com qualificação comercial; e o pagamento confirmado pela Receita 
 só a partir do registro; o mesmo de ponta a ponta em `server/crm-aarr.test.ts`: quem pagou não vira Perdido no D+10, e o desfazer
 do pagamento devolve o vencimento) e `src/operations-motivos-de-perda.test.ts` (a lista fechada dos sete motivos, a leitura dos registros antigos "sem-dor" e "concorrente", a tradução de cada motivo automático, o desfecho gravado por motivo, o registrado vencendo o automático e perdendo valor depois de um desfazer, o motivo solto sem desfecho que não vale, a nota do Funil e
 o texto da Ficha).
+
+`deploy/dell/prospeccao-diaria.test.py` também reproduz o layout atual de horários
+do Maps sem o marcador legado `oh`, preserva a rejeição de perfil sem telefone e
+confere a categoria pública transmitida com origem e data, sem afirmar atividade.
+Os dois testes novos falharam no código anterior e passaram após a correção.
+
+`deploy/dell/prospeccao-reposicao.test.py` cobre treze regressões: consumo do
+estoque, aprovados e avaliações pendentes sem duplicação, reprovações e tentativas
+fora do estoque, pausas e limites, timer de dois minutos, fim do corte antigo de
+sessenta leituras, renovação diária, suspensão com estoque suficiente, recuperação
+de sincronização, falhas sem dados privados, leitura parcial e confirmação dos
+novos IDs no CRM após o webhook. A continuidade ganhou mais três casos sobre fila
+consumida, preservação de pausa/meta e detecção de reposição sem atualização.
+
+`deploy/dell/evolution/webhook-envios.test.py` cobre a inclusão explícita de
+`SEND_MESSAGE` preservando autenticação, endereço e demais eventos; webhook
+desligado não é reativado. O evento nativo de saída é aceito pelo adaptador, sem
+duplicar um upsert posterior e sem capturar não leads. Três casos passaram no
+Dell. Com as suítes do parser, reposição, continuidade, executor e publicação da
+fila, são 132 testes Python nesta correção. Saída real após a configuração foi
+observada em 12/11 às 16h38min19s, com o mesmo recibo da integração.
+
+Diagnóstico de 13/11/2026: a rodada iniciada em 10/11 atingiu dez reservas sem
+resposta humana confirmada. O bloqueio entre dias é intencional e está coberto
+por `server/rodada-comercial.test.ts`; vinte envios/dia não reiniciam essa rodada.
+O executor, porém, publicava `pronto` e uma previsão de envio mesmo após a recusa
+`sem-resposta`. `frente-publicacao-fila.test.py` agora reproduz essa recusa e
+`rodada-nao-iniciada`: exige `bloqueado`, previsão nula, causa explícita, fila
+preservada e nenhuma tentativa de envio ou clique. O intervalo temporário mantém
+o horário devolvido pela Central. As pré-condições de fonte/curadoria e o relógio
+dessa suíte são sintéticos; não dependem do estado instalado no host.
+
+Os dois casos de bloqueio falharam com o executor anterior e passaram com a
+correção local. Validação: 24 testes Python de publicação/continuidade no Windows
+(somente import de `fcntl` substituído; nenhum `flock` exercitado), 27 TypeScript
+de rodada/reserva/cadência e 13 Python de reposição no Linux do Dell. A correção
+de status não foi instalada em produção e não abre nova rodada.
+
+Lacuna de execução automática: `npm test` não inclui as suítes Python; o
+`atualizar-central.sh` executa build sem testes. Não há `.github/workflows` neste
+checkout. Existência de regressões não equivale a bloqueio automático de deploy.
+
+Após o pedido de 13/11 para retirar limites e pareceres, e a confirmação explícita
+de ativação em produção, `server/envios-sem-travas.test.ts` e
+`deploy/dell/envios-sem-travas.test.py` cobrem a política vigente: ausência de
+cotas/intervalo/calendário, rodada sem limite de pendências, dedupe persistente,
+recusa/exclusão preservadas, nenhuma inferência exigida, recorte de pesquisa nova
+e atualização do observador após sincronizar novos cadastros no CRM. São nove
+testes aprovados no Linux do Dell. `npm run test:envios` integra as duas suítes;
+o atualizador executa esse comando antes do build. O workflow GitHub correspondente
+foi preparado no checkout, sem commit/push nesta tarefa. Os testes antigos de
+limites na cópia local declaram explicitamente a política histórica.
+
+Publicação às 15h55 de São Paulo, com backup. Conferência às 16h04: nove novos
+cadastros, quatro envios com recibo, três capturas e duas projeções já no CRM.
+A primeira captura permanece ausente; recibo preservado e nenhum reenvio.
+O refresh da lista do observador foi corrigido para os próximos lotes.
+
+
+Atualização de 13/11, 16h58: as duas capturas foram recuperadas com originais e prova da conta, e 28/28 recibos conferidos têm marco no CRM. O gate `npm run test:envios` agora soma 40 testes no Dell: três TypeScript de política, sete Python de envios, seis de prontidão da captura, quatro de foco, quinze de história/identidade e cinco de classificador. O contrato de export também foi conferido no sandbox real do n8n com quatro casos fictícios; getters de módulo não eram preservados. A suíte não implica fila histórica limpa: 22 lotes de respostas aguardam um conflito de hash de 30/10, documentado em [captura-envios-2026-11-13.md](captura-envios-2026-11-13.md).
+
+
+Atualização de 13/11, 18h11: fila histórica resolvida (26 lotes, 27 eventos). `npm run test:envios` passou com 54 testes no Dell, adicionando nove de áudio comprovado/durabilidade e cinco de ordem cronológica no CRM. Mais 30 testes de envelopes/entrega durável passaram em palco isolado. As quatro respostas mais recentes foram comparadas à fonte e à Central; nenhuma divergência permaneceu. Evidências e limites: [lotes-respostas-2026-11-13.md](lotes-respostas-2026-11-13.md).

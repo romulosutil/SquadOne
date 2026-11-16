@@ -30,7 +30,6 @@ export function mensagemDoConvite(produto: string, empresa: string, segmento: st
   if (produto !== 'prumo') throw new ConviteDesconhecido(produto)
   const seg = segmento.trim().toLowerCase()
   const distribuidora = /^distribuidoras? /.test(seg)
-  const publico = distribuidora ? seg.replace(/^distribuidoras? /, 'distribuidoras ') : 'empresas como a de vocês'
   const areas = !distribuidora ? 'de preço, prazo e atendimento' : /autope/.test(seg) ? 'de orçamento, preço e compras' : /constru/.test(seg) ? 'de preço, desconto e crédito' : /aliment|bebida/.test(seg) ? 'de preço, prazo e cobrança' : 'de preço, crédito e entregas'
   return `${ola}! Sou o Rômulo, do Prumo. Ajudo empresas a organizar regras ${areas} para a equipe consultar no dia a dia.\n\nPosso te mostrar um exemplo ilustrativo de como essas regras ficam organizadas?`
 }

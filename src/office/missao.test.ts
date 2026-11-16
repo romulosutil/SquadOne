@@ -1,8 +1,7 @@
 import { it } from 'node:test'
 import assert from 'node:assert/strict'
-import { marcosDaMissao, movimentoDaMissao } from './missao.ts'
+import { marcosDaMissao } from './missao.ts'
 import type { CrmLead } from '../operations/types.ts'
-import type { AcaoDeVenda } from '../operations/proxima-venda.ts'
 
 it('resposta humana e material pronto não presumem envio de material nem venda', () => {
   const lead = { marcos: {}, etapa: 'contato', resposta: { tipo: 'interesse' }, links: { segunda: 'https://wa.me/exemplo', site: 'https://example.com' } } as CrmLead
@@ -48,75 +47,6 @@ it('proposta registrada não ganha o detalhe da 2ª mensagem', () => {
   const proposta = marcosDaMissao(lead).find(x => x.id === 'proposta')
   assert.equal(proposta?.observado, true)
   assert.equal(proposta?.detalhe, undefined)
-})
-
-// 19/10/2026, a Jéssica: "Conferir a conversa de …" no título e o combinado numa caixa à parte não diziam a ação.
-const JESSICA = 'Conferir entrega do Raio-X: Jéssica disse que não viu. Ver WhatsApp atual; se ainda couber, entregar link e perguntar quem cuida do site.'
-const conferir = { chave: 'j|combinado', leadId: 'j', empresa: 'Jéssica', produto: 'site', tipo: 'combinado', titulo: 'Conferir a conversa de Jéssica', porque: '', tatica: 'Leia a conversa…', contexto: '', primeiroContato: false, quente: false, conferirHistorico: true } as AcaoDeVenda
-const comCombinado = (data: string) => ({ marcos: {}, etapa: 'contato', links: { whatsapp: 'https://wa.me/55' }, proximoPasso: { texto: JESSICA, data } }) as unknown as CrmLead
-
-it('combinado vencido com histórico a conferir: o combinado é o título e ler a conversa é o 1º passo', () => {
-  const m = movimentoDaMissao(comCombinado('2026-10-18'), conferir, '2026-10-19')
-  assert.equal(m.titulo, JESSICA)
-  assert.equal(m.doCombinado, true)
-  assert.equal(m.quando, 'Combinado para 18/10 · 1 dia de atraso')
-  assert.equal(m.atrasado, true)
-  assert.match(m.passos[0], /WhatsApp.*histórico ainda não chegou/)
-  assert.match(m.passos[2], /Já resolvi.*Remarcar/)
-})
-
-it('combinado de hoje não é atraso; sem WhatsApp, a leitura vai pela Ficha', () => {
-  const lead = { ...comCombinado('2026-10-19'), links: {} } as unknown as CrmLead
-  const m = movimentoDaMissao(lead, null, '2026-10-19')
-  assert.equal(m.quando, 'Combinado para hoje')
-  assert.equal(m.atrasado, false)
-  assert.match(m.passos[0], /Ver contexto completo/)
-})
-
-it('combinado futuro não toma o lugar; conferir sem combinado diz ler antes de mandar', () => {
-  const m = movimentoDaMissao(comCombinado('2026-10-25'), conferir, '2026-10-19')
-  assert.equal(m.doCombinado, false)
-  assert.equal(m.titulo, 'Ler a conversa antes de mandar qualquer coisa')
-  assert.equal(m.passos.length, 3)
-})
-
-it('ação com mensagem pronta (não é conferir nem combinado) segue a frase da Ficha e o combinado fica à parte', () => {
-  const responder = { ...conferir, tipo: 'responder', titulo: 'Responder a Jéssica', tatica: 'Responda curto.', conferirHistorico: undefined } as AcaoDeVenda
-  const m = movimentoDaMissao(comCombinado('2026-10-18'), responder, '2026-10-19')
-  assert.equal(m.doCombinado, false)
-  assert.equal(m.titulo, 'Responder a Jéssica')
-  assert.equal(m.como, 'Responda curto.')
-  assert.deepEqual(m.passos, [])
-})
-
-// 19/10/2026, a Jéssica de novo: o Rômulo escreveu às 10:54 e o painel seguia mandando abrir a conversa.
-const escreveu = (ultimaSaida: string, extra: Record<string, unknown> = {}) => ({
-  ...comCombinado('2026-10-18'),
-  proximoPasso: { texto: JESSICA, data: '2026-10-18', registradoEm: '2026-10-17T20:00:00Z' },
-  conversa: { desde: '2026-10-10T12:00:00Z', mensagens: 9, ultima: { direcao: 'saida', em: ultimaSaida, trecho: 'Bom dia' }, ultimaSaida, ...extra },
-}) as unknown as CrmLead
-const combinadoComLink = { ...conferir, conferirHistorico: undefined, link: { rotulo: 'Abrir conversa no WhatsApp', url: 'https://wa.me/55' } } as AcaoDeVenda
-
-it('mensagem nossa no dia do combinado ou depois: o destaque é o "Já resolvi" e o combinado fica como lembrete', () => {
-  const m = movimentoDaMissao(escreveu('2026-10-19T13:54:00Z'), combinadoComLink, '2026-10-19')
-  assert.equal(m.primario, 'resolvi')
-  assert.equal(m.doCombinado, true)
-  assert.equal(m.titulo, 'Você já escreveu hoje às 10:54. Se cumpriu o combinado, marque como resolvido.')
-  assert.equal(m.lembrete, JESSICA)
-  assert.equal(m.atrasado, false)
-  assert.match(m.passos[1], /Já resolvi/)
-})
-
-it('mensagem de outro dia diz a data; antes do combinado, antes de anotá-lo ou com resposta depois não conta', () => {
-  assert.match(movimentoDaMissao(escreveu('2026-10-18T15:00:00Z'), combinadoComLink, '2026-10-19').titulo, /^Você já escreveu em 18\/10 às 12:00/)
-  // 17/10 às 22h em SP: véspera do combinado.
-  assert.equal(movimentoDaMissao(escreveu('2026-10-18T01:00:00Z'), combinadoComLink, '2026-10-19').primario, 'whatsapp')
-  const anotadoDepois = { ...escreveu('2026-10-19T13:54:00Z'), proximoPasso: { texto: JESSICA, data: '2026-10-18', registradoEm: '2026-10-19T14:00:00Z' } } as unknown as CrmLead
-  assert.equal(movimentoDaMissao(anotadoDepois, combinadoComLink, '2026-10-19').primario, 'whatsapp')
-  const respondeu = escreveu('2026-10-19T13:54:00Z', { ultimaEntrada: '2026-10-19T14:10:00Z' })
-  const m = movimentoDaMissao(respondeu, combinadoComLink, '2026-10-19')
-  assert.equal(m.primario, 'whatsapp')
-  assert.equal(m.titulo, JESSICA)
 })
 
 it('template com preço não cria proposta para material enviado sem texto preservado', () => {

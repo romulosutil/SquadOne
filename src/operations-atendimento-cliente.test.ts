@@ -2,7 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { orientacaoDoAtendimento } from './operations/atendimento-cliente'
 import { classificarResposta } from './operations/classificacao-resposta'
-import { planoDoLead } from './operations/bi-operacao'
+import { itemDaFilaComercial } from './operations/fila-comercial'
+import { textoEventoCiclo } from './operations/ciclo-comercial'
 import { orientaContato } from './office/orientacao-da-conversa'
 import { LEAD_DE_EXEMPLO } from './blueprint/exemplo'
 import { enderecoDeVendas, lerEnderecoDeVendas } from './operations/vendas-abas'
@@ -10,23 +11,28 @@ import type { CrmLead } from './operations/types'
 
 const agora = Date.parse('2026-10-25T15:00:00Z')
 function cliente(): CrmLead {
-  const l = { ...structuredClone(LEAD_DE_EXEMPLO), eventos: [], marcos: { enviado: '2026-10-25T14:00:00Z' },
+  const l = { ...structuredClone(LEAD_DE_EXEMPLO), eventos: [], links: { whatsapp: 'https://wa.me/5511999990001' }, marcos: { enviado: '2026-10-25T14:00:00Z' },
     resposta: { tipo: 'interesse', trecho: 'Pode mandar o link.', em: '2026-10-25T14:05:00Z' },
     conversa: { desde:'2026-10-25T14:00:00Z',mensagens:2,ultimaEntrada:'2026-10-25T14:05:00Z',ultima:{direcao:'entrada',trecho:'Pode mandar o link.',em:'2026-10-25T14:05:00Z'},recentes:[{direcao:'saida',trecho:'Posso enviar a demonstração?',em:'2026-10-25T14:00:00Z'},{direcao:'entrada',trecho:'Pode mandar o link.',em:'2026-10-25T14:05:00Z'}] },
   } as CrmLead
   l.classificacaoResposta = classificarResposta(l)
   return l
 }
-test('a orientação apresenta o plano comercial vigente sem trocar sua tarefa ou responsável', () => {
-  const l=cliente(), p=planoDoLead(l,agora), a=orientacaoDoAtendimento(l,[l],agora)
-  assert.deepEqual(a.plano,p)
+test('a orientação mantém ação, responsável e resultado da fila comercial', () => {
+  const l=cliente(), item=itemDaFilaComercial(l,[l],agora)!, a=orientacaoDoAtendimento(l,[l],agora)
+  assert.equal(a.plano.acao,item.acao)
+  assert.equal(a.plano.responsavel,item.responsavel)
+  assert.equal(a.plano.resultado,item.resultado)
+  assert.equal(a.estado,'agora')
+  assert.equal(orientaContato(l,a.plano),true)
 })
-test('tarefa comercial interna mantém conferência e não prepara contato com o cliente',()=>{
+for(const fila of ['time','voce'] as const) test(`trabalho registrado para ${fila} preserva tarefa e não vira mensagem ao cliente`,()=>{
   const l=cliente()
-  l.atendimentoComercial={id:'tarefa-teste',tipo:'conferir',titulo:'Conferir o material combinado',motivo:'Conferência interna pendente',alvo:'material',estado:'pendente'}
+  l.eventos=[{tipo:'nota',rotulo:'Trabalho',em:'2026-10-25T14:10:00Z',origem:'manual',fonte:'teste',texto:textoEventoCiclo({v:1,id:'tarefa-teste',tipo:'trabalho',data:'2026-10-25',humano:true,referencia:'tarefa',fila,responsavel:fila==='time'?'Elisa':'Rômulo',tarefa:'Conferir a demonstração prometida',condicao:'Material aprovado',resultado:'Entrega conferida'},agora)}]
   const a=orientacaoDoAtendimento(l,[l],agora)
+  assert.equal(a.plano.acao,'Conferir a demonstração prometida')
   assert.equal(a.procedimento.tipo,'interno')
-  assert.equal(a.plano.tipo,'conferir')
+  assert.equal(a.plano.tipo,fila==='time'?'aguardar':'conferir')
   assert.equal(orientaContato(l,a.plano),false)
 })
 test('espera e desfecho não são reabertos por uma orientação de atendimento',()=>{

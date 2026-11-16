@@ -34,8 +34,7 @@ function ultimoEnvioConfirmado(lead: CrmLead): number {
   return Math.max(0, ...lead.eventos.filter(e => e.origem === 'manual' && /^\[Envio confirmado pelo operador · \d{4}-\d{2}-\d{2}\]\r?\n\S/.test(e.texto ?? '')).map(e => instante(e.em)))
 }
 
-/** Leitores que já fornecem a interpretação podem complementar o contrato; a fonte legada continua suficiente. */
-function materialSolicitadoPendente(lead: CrmLead & { classificacaoResposta?: { materialSolicitado: boolean } }): boolean {
+function materialSolicitadoPendente(lead: CrmLead): boolean {
   const solicitado = lead.classificacaoResposta?.materialSolicitado
     ?? (lead.resposta?.tipo === 'licenca' || lead.resposta?.tipo === 'interesse' && !!lead.links.segunda)
   return solicitado && !instante(lead.marcos.segundaEnviada) && !instante(lead.conversa?.linkEm)
@@ -88,16 +87,19 @@ export function decisoesDoEscritorio(leads: readonly CrmLead[], acoes: readonly 
   const ordem = new Map([...new Set([...porAcao.keys(), ...conversas.map(c => c.lead.id)])].map((id, i) => [id, i]))
   const prioridade = (d: Decisao) => d.lead.atendimentoComercial ? planosComerciais.get(d.lead.id)!.ordem/10 : porConversa.get(d.lead.id)?.prioridade ?? observadas.get(d.lead.id)?.prioridade ?? (d.acao ? prioridadeDaAcao(d.acao) : undefined) ?? PRIORIDADE_DA_FILA.combinado
   return leads.flatMap((lead): Decisao[] => {
-    if(lead.atendimentoComercial?.alvo==='time') return [{lead,estado:'acompanhando',motivo:lead.atendimentoComercial.motivo,acao:null}]
-    if(lead.atendimentoComercial||planoPedeConferenciaInterna(planosComerciais.get(lead.id)!)) return [{lead,estado:'agora',motivo:lead.atendimentoComercial?.titulo??planosComerciais.get(lead.id)!.acao,acao:porAcao.get(lead.id)??null}]
     const atendida = respostaJaAtendida(lead)
     const candidata = porAcao.get(lead.id) ?? null
     const materialPendente = materialSolicitadoPendente(lead)
     const acao = atendida && candidata?.tipo === 'responder' ? null : candidata
     const conversa = atendida && porConversa.get(lead.id)?.rotulo === 'Resposta recebida' ? undefined : porConversa.get(lead.id)
+    // A tarefa de conferência permanece visível, inclusive em contato encerrado,
+    // mas nunca herda link ou rascunho de uma ação comercial anterior.
+    if (lead.atendimentoComercial?.alvo === 'operador' || planoPedeConferenciaInterna(planosComerciais.get(lead.id)!)) return [{ lead, estado: 'agora', motivo: lead.atendimentoComercial?.titulo ?? planosComerciais.get(lead.id)!.acao, acao: candidata?.interna ? candidata : null }]
     if (lead.etapa === 'ganho' || lead.etapa === 'perdido') return [{ lead, estado: 'encerrada', motivo: lead.etapa === 'ganho' ? 'Venda ganha' : 'Conversa encerrada', acao: null }]
     const esperaPlanejada = planoFuturoEmEspera(lead, new Date(agora))
-    const protegido = contatoPausado(lead) || esperaPlanejada || lead.resposta?.tipo === 'negativa' || lead.resposta?.tipo === 'exclusao'
+    const protegido = contatoPausado(lead) || esperaPlanejada || lead.resposta?.tipo === 'negativa' || lead.resposta?.tipo === 'exclusao' || ['recusa', 'exclusao'].includes(lead.classificacaoResposta?.classe ?? '')
+    if (!protegido && lead.atendimentoComercial?.alvo === 'time') return [{ lead, estado: 'acompanhando', motivo: lead.atendimentoComercial.motivo, acao: null }]
+    if (!protegido && (lead.atendimentoComercial || planoPedeConferenciaInterna(planosComerciais.get(lead.id)!))) return [{ lead, estado: 'agora', motivo: lead.atendimentoComercial?.titulo ?? planosComerciais.get(lead.id)!.acao, acao: porAcao.get(lead.id) ?? null }]
     if (!protegido && lead.etapa !== 'proposta' && !lead.proposta && !comAcaoAlemDaResposta.has(lead.id) && roboConfirmadoAtual(lead, agora) && !materialPendente && !retomadaDoLead(lead, new Date(agora))) return [{ lead, estado: 'acompanhando', motivo: 'Resposta automática confirmada · conferir atendimento humano', acao: null }]
     if ((!protegido || acao?.tipo === 'desfecho') && (acao || conversa || materialPendente)) return [{ lead, estado: 'agora', motivo: materialPendente ? 'Material solicitado ainda não enviado' : conversa?.rotulo ?? acao!.titulo, acao }]
     const temConversa = lead.etapa === 'contato' || lead.etapa === 'proposta' || !!lead.conversa || !!lead.proximoPasso

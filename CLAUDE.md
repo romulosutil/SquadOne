@@ -1,5 +1,10 @@
 # SquadOne
 
+> Referência técnica, sem liberação de aquisição: `REGRAS_DO_RITMO` conserva parâmetros legados de 20 por dia, 6 por hora e intervalo de 10 min. `limitesOperacionais=false` desabilita essa camada; a trava de aquisição de 16/11 continua bloqueando primeiros contatos automáticos independentemente desses valores. As cadências numéricas anteriores abaixo são histórico.
+
+
+> Direção comercial vigente (16/11/2026): primeiros contatos automáticos bloqueados; reconexão e flags não autorizam retomada. Raio-X e Mapa opcionais; SaaS em avaliação dirigida, sem promover piloto a produto pronto. Descrições datadas de cadência abaixo são históricas. Autoridade comercial: `../prumo/00-contexto/negocio.md` e `organizacao.md`; controles atuais: `RULES.md`.
+
 ## Conceito institucional do Prumo (30/10/2026)
 
 Antes de escrever sobre o Prumo, consulte `../prumo/00-contexto/organizacao.md` (Conceito institucional de referência), `negocio.md` e `produtos.md`. A consultoria arruma o caminho e o produto mantém funcionando. Experiência do fundador, operação interna, piloto em homologação e demo fictícia têm origens distintas. O espelho `CONCEITO_PRUMO` em `src/operations/jornada.ts` orienta o guia gerado, o Assistente e o copiloto. Ao atualizar esse contexto, regenere o guia. A distribuição aos workflows usa o sincronizador existente; não muda preços, qualidade, cadência ou autorização de contato.
@@ -51,6 +56,7 @@ build + exercitar a rota.
 
 Um processo Express serve a API e a SPA Vue. Sem banco.
 
+<!-- ritmo-histórico -->
 ```
 server.ts                 Express: monta o webhook do Telegram antes do porteiro, o porteiro, as rotas e o Vite/estáticos
   server/acesso.ts        porteiro de IP (403 antes de qualquer rota); no Dell, identidade do Serve e escrita da mesma origem
@@ -222,6 +228,11 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           MissaoDaConversa (os botões explícitos Enviei/Marcar a recusa/Pular), ConversaDoAgente, RevisarResposta, AjustarProximoPasso, AndamentoDaVenda, AcompanhamentoObservado, SpriteDaSala
   src/casca/ (resto)      atualizacao-viva.ts (uma leitura por vez, com prazo, retomada ao voltar ao app), tema.ts (PURO)/temaVivo.ts/SeletorDeTema.vue (claro/escuro), AssistentePainel/AssistenteCartao.vue
                           Ficha oferece o primeiro contato de um Novo (o ritmo antes do horário, desabilitado com o motivo)
+    proxima-venda.ts      PURO (16/10/2026): a fila de venda, uma ação por vez na ordem de quem está mais perto de comprar
+                          (responder > mandar a proposta > combinado > "o que achou?" 20–72 h depois do link > proposta sem retorno > follow-up >
+                          recusa para marcar (OT-06) > primeiro contato, este só com a trava de ritmo livre), com o porquê, a tática e a mensagem
+                          pronta; CrmPanel e CentralRota consomem a fila única de proxima-venda.ts (OT-01); o vendedor do Telegram
+                          usa a mesma fila; a Ficha mostra a ação dela no "Agora" (OT-04)
     primeiro-contato.ts   PURO (19/10/2026): quem faz o 1º contato (quemFazOPrimeiroContato: a fila do time ligado, ou o envio que ele começou,
                           é do time; o resto, do Rômulo), elegivelParaOTime (só Site `pronto`, nunca `revisar`/Plus) e reservaDoTime (EXPEDIENTE_DE_VENDA
                           e REGRAS_DO_RITMO contando todas as superfícies). A fila de venda e o vendedor tiram o 1º contato dos leads do time
@@ -241,6 +252,12 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
                           sem letra, a mensagem vai pelo regime da data; follow-up anotado e quem respondeu depois;
                           leu/respondeuDeGente/quisVer/enviadoNosUltimos são a ÚNICA regra de Números e do "Por que não
                           está vendendo", e taxaPorExpediente (só Site) alimenta o avisoDeHorario (17/10/2026, AC-03)
+    proxima-venda.ts      PURO: a fila de venda (filaDeVenda, a mesma do vendedor), a fila da tela (filaDaTela) e a contagem do
+                          dia (resumoDoDia): a aba "A fazer N", o "N na fila" e o "Ver a fila inteira (N)" leem dela, N com a
+                          atual (17/10/2026, AC-02); CrmPanel abre AtendimentoCliente e a Ficha (AC-01);
+                          fraseDaAcao é a frase única do passo (cartão, Telegram e o "Agora" da Ficha, via acaoDoLead/agoraDaFicha,
+                          AC-12), linkDoPasso escolhe o link pelo tipo e nunca abre o gerar_demo (AC-05), desfechosDoLead alimenta a
+                          faixa "Desfecho" da Ficha (AC-08) e anotacoesAMao o anotar à mão (AC-09)
     triagem.ts            PURO (17/10/2026, AC-10): a Triagem (/crm?ver=triagem, CrmHoje.vue) em lotes de 10 fixos (o próximo só
                           depois de decidir o atual); Convidar (travas de horário e ritmo com o motivo curto) e Dispensar (registro
                           dispensado, Desfazer por 8 s, "Dispensar os que sobraram" em série com segundo toque); marca local podada
@@ -350,6 +367,7 @@ src/App.vue               a casca (07/10/2026): rota atual, barra inferior/later
 seed/squad.seed.json      roster inicial — FORA de data/, ver "Volume" abaixo
 data/                     volume em produção; nada aqui é versionado
 ```
+<!-- /ritmo-histórico -->
 
 ### Quatro invariantes que o código assume
 
@@ -418,6 +436,7 @@ texto puro. Contratação por botão (uso único, só em memória). Áudio custa
 arquivo não muda (o Easypanel, reserva fria, o lê). Contratação aplica na squad da proposta.
 O Escritório é só frontend e não grava nada; estado de pessoa só com fonte, nunca inventado.
 
+<!-- ritmo-histórico -->
 **Perfis.** `SQUADONE_MODE`: `app` (Easypanel) ou `operations` (Dell, só loopback); valor
 desconhecido derruba o boot. A Central é somente leitura para **serviços e infraestrutura** (nunca para, reinicia nem reconfigura n8n, Hermes, Docker, systemd),
 mas **grava domínio**, por gesto ou regra fixa: o registro do CRM (pelo webhook do n8n), o dia da venda (`venda-do-dia.json`), o estado do vendedor e do lead quente,
@@ -469,6 +488,7 @@ coluna e o follow-up do 05 · Acompanhamento não entram (detalhes em `perfis-e-
 Mensagem A sem demo (15/10/2026, decisão do Rômulo): a A vale para lead sem demo, inclusive sem recibo
 nenhum (o Balcão marca `pronto`); quem responde "quero ver" ganha o "Gerar demo", e o demo sai depois.
 Todos os textos das mensagens seguem um guia só, no topo das `VARIACOES` em `site-mensagem.js`.
+<!-- /ritmo-histórico -->
 
 Plus (15/10/2026, pedido do Rômulo): quinto filtro do CRM (`produto: "plus"`) com os melhores leads, vindos do Catálogo de
 Negócios Maçônicos. Não é uma quinta oferta: cada lead leva `plus.oferta` (site = sem site; prumo = com site; iris = psicologia/terapia;
@@ -509,4 +529,7 @@ Easypanel, projeto `aladdin`, app `squadone-app`, em `https://aladdin-squadone-a
 
 ## Fase 0 do diagnóstico de vendas (19/10/2026)
 
-Decisão do Rômulo já tomada, com os números da retomada de 22–23/10/2026 (fonte única: `REGRAS_DO_RITMO` em `src/operations/trava-de-ritmo.ts`): teto único de 15 primeiros contatos/dia compartilhados, somando time comercial, telas e Telegram; 2/h, 30 min entre envios e dez pendentes por rodada. Nenhuma linha fica congelada; até o 1º pagamento o mix do PM divide os 15 (`docs/PRUMO-DECISOES-PM-2026-10-28.md`). Iris e CRM de estamparia estão prontos; os caçadores continuam pausados (AC-11). Plus é rede quente: teste de 20 envios feitos só pelo Rômulo, fora do executor automático. A abertura com um fato verificável do Raio-X virou a variante D do A/B e o follow-up novo o braço B, ambos aprovados pelo Rômulo em 19/10 para teste ("Aprovar os textos para teste"; o envio segue humano). Registro completo em `docs/referencia/perfis-e-experimentos.md`, seção "Fase 0 do diagnóstico de vendas".
+<!-- ritmo-histórico -->
+Decisão do Rômulo já tomada, com os números da retomada de 22–23/10/2026 (fonte única: `REGRAS_DO_RITMO` em `src/operations/trava-de-ritmo.ts`): teto único de 15 primeiros contatos/dia compartilhados, somando time comercial, telas e Telegram; 2/h, 30 min entre envios e dez pendentes por rodada. Nenhuma linha fica congelada; até o 1º pagamento o mix do PM divide os 15 (`docs/PRUMO-DECISOES-PM-2026-10-28.md`). Íris em uso e CRM de estamparia em implantação; esses estados não atestam prontidão; os caçadores continuam pausados (AC-11). Plus é rede quente: teste de 20 envios feitos só pelo Rômulo, fora do executor automático. A abertura com um fato verificável do Raio-X virou a variante D do A/B e o follow-up novo o braço B, ambos aprovados pelo Rômulo em 19/10 para teste ("Aprovar os textos para teste"; o envio segue humano). Registro completo em `docs/referencia/perfis-e-experimentos.md`, seção "Fase 0 do diagnóstico de vendas".
+
+<!-- /ritmo-histórico -->

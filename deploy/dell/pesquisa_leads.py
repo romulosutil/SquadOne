@@ -398,13 +398,14 @@ def selecionar(crm, dossiers, novos, limite, campanha=None):
     if campanha is not None:
         from campanha_site import autorizar
         alvos=[]
-        for ident in dict.fromkeys(campanha.get('leadsAutorizados', [])):
+        continuo = campanha.get('modo') == 'continuo-dias-uteis' and campanha.get('escopo') == 'novos-site'
+        ids = (l['id'] for l in crm['leads'] if l.get('produto') == 'site' and l.get('etapa') == 'novo') if continuo else campanha.get('leadsAutorizados', [])
+        for ident in dict.fromkeys(ids):
             l=byid.get(ident);old=dossiers.get(ident)
             if not l or protegido(l) or not autorizar(l,campanha,agora()):continue
             if old and old.get('assinatura')==assinatura(l) and timestamp(old.get('em')) and agora().timestamp()-timestamp(old['em'])<7*86400:continue
             alvos.append(l)
         return alvos[:limite]
-
     initial=ler(BASE/'amostra.json',[])
     all_leads=byid | {l['id']:l for l in novos}
     initial_pending=[all_leads[i] for i in initial if i in all_leads and i not in dossiers]
@@ -440,7 +441,8 @@ def executar(limite=5):
         uso=ler(BASE/'uso.json',{});dia=now.astimezone(SP).date().isoformat()
         if uso.get('dia')!=dia:uso={'dia':dia,'reservados':0,'consultas':{}}
         limite=min(limite,max(0,60-uso['reservados']))
-        campanha=ler(Path.home()/'.local/share/squadone-operations/campanha-site-2026-11-02.json',None)
+        from campanha_site import ler as ler_campanha
+        campanha=ler_campanha()
         targets=selecionar(crm,dossiers,novos,limite,campanha)
         # Reserva antes das chamadas; crash não libera orçamento nem repete automaticamente.
         uso['reservados']+=len(targets);salvar(BASE/'uso.json',uso)

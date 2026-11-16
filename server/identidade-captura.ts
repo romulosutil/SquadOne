@@ -11,7 +11,7 @@ export interface ProvaIdentidadeCaptura {
   sessaoHash:string|null; instancia:'prumo'|null; capturadoEm:string; mensagem:MensagemIdentidadeCaptura
 }
 /** Assinatura é invalidação de contexto, não assinatura criptográfica da captura. */
-export interface FonteIdentidadeCaptura { ativa:boolean; assinatura:string; config?:ConfigIdentidadeCaptura; jsonl:string; erro?:string }
+export interface FonteIdentidadeCaptura { ativa:boolean; assinatura:string; config?:ConfigIdentidadeCaptura; jsonl:string; erro?:string; reconciliacoes?:unknown[] }
 export type ConferenciaIdentidadeCaptura = { estado:'legado'|'verificada'|'ausente'|'conflito'; assinatura:string; motivo:string }
 export type LeitorIdentidadeCaptura = (conversa?:string)=>Promise<FonteIdentidadeCaptura>
 const objeto=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v)
@@ -71,14 +71,70 @@ export function criarLeitorIdentidadeCaptura(pasta=path.join(os.homedir(),'.loca
     try{config=validarConfigIdentidadeCaptura(JSON.parse(configTexto))}catch{return {ativa:true,assinatura:hashCanonicoComercial({configTexto}),jsonl:'',erro:'Configuração de identidade inválida; confira a captura.'}}
     let jsonl='',erro:string|undefined
     if(conversa)try{jsonl=await ler(conversa+'.jsonl')}catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')erro='Provas da captura indisponíveis; confira a fonte privada.'}
-    return {ativa:true,config,jsonl,assinatura:assinaturaProvasCaptura(config,jsonl,agora(),erro??null),...(erro?{erro}:{})}
+    let reconciliacoes:unknown[]|undefined
+    if(conversa)try {
+      const raw=JSON.parse(await ler(conversa+'.reconciliacoes.json'))
+      if(!objeto(raw)||!exato(raw,['v','registros'])||raw.v!==1||!Array.isArray(raw.registros)||raw.registros.length>50)throw new Error('Formato inválido')
+      reconciliacoes=raw.registros
+    }catch(e){if((e as NodeJS.ErrnoException).code!=='ENOENT')erro='Conciliação da captura indisponível ou inválida; conferir a auditoria.'}
+    const assinatura=assinaturaProvasCaptura(config,jsonl,agora(),erro??null)
+    return {ativa:true,config,jsonl,assinatura:reconciliacoes?hashCanonicoComercial({assinatura,reconciliacoes}):assinatura,...(reconciliacoes?{reconciliacoes}:{}),...(erro?{erro}:{})}
   }
 }
+/** Conciliação humana explícita de relógio: cobre apenas o conjunto exato de provas revisadas.
+ * Originais permanecem intactos. Prova nova, outro conteúdo ou outra conta falham fechados. */
+export function reconciliacaoDeRelogioConfere(mensagem:MensagemIdentidadeCaptura,fonte:FonteIdentidadeCaptura,agora=Date.now()):boolean {
+  try {
+    if(!fonte.config||fonte.erro||!Array.isArray(fonte.reconciliacoes))return false
+    const candidatas=fonte.reconciliacoes.filter(r=>objeto(r)&&hashCanonicoComercial(r.mensagem)===hashCanonicoComercial(mensagem))
+    if(candidatas.length!==1)return false
+    const r=candidatas[0] as Record<string,unknown>
+    const campos=['v','mensagem','provasSha256','autorizadoEm','motivo','autorizacao']
+    if((!exato(r,campos)&&!exato(r,[...campos,'reentregas'])&&!exato(r,[...campos,'reentregas','capturaCanonicaTardia']))
+      ||r.capturaCanonicaTardia!==undefined&&r.capturaCanonicaTardia!==true||r.v!==1||!instante(r.autorizadoEm)||Date.parse(r.autorizadoEm)>agora
+      ||typeof r.motivo!=='string'||!r.motivo.trim()||r.motivo.length>400||typeof r.autorizacao!=='string'||!r.autorizacao.trim()||r.autorizacao.length>400
+      ||!Array.isArray(r.provasSha256)||!r.provasSha256.length||!r.provasSha256.every(sha)||new Set(r.provasSha256).size!==r.provasSha256.length)return false
+    const todas=fonte.jsonl.split('\n').filter(l=>l.trim()).map(l=>validarProvaIdentidadeCaptura(JSON.parse(l)))
+    const ps=todas.filter(p=>p.mensagem.idOriginal===mensagem.idOriginal&&p.mensagem.direcao===mensagem.direcao)
+    if(ps.length<2||!ps.some(p=>hashCanonicoComercial(p.mensagem)===hashCanonicoComercial(mensagem)))return false
+    if(ps.some(p=>p.contaHash!==fonte.config!.identidadePrumoHash||p.mensagem.conteudoHash!==mensagem.conteudoHash
+      ||Date.parse(p.capturadoEm)<Date.parse(fonte.config!.desde)||Date.parse(p.capturadoEm)>Date.parse(r.autorizadoEm as string)))return false
+    // Exceção nominal de reentrega, sem tolerância global de relógio: a mesma
+    // mensagem já foi observada antes do horário alegado pelo coletor tardio.
+    const reentregas=r.reentregas===undefined?[]:r.reentregas
+    if(!Array.isArray(reentregas)||r.reentregas!==undefined&&!reentregas.length
+      ||!reentregas.every(v=>objeto(v)&&exato(v,['provaSha256','origemSha256'])&&sha(v.provaSha256)&&sha(v.origemSha256)&&v.provaSha256!==v.origemSha256))return false
+    const usadas=new Set<unknown>()
+    for(const p of ps){
+      if(Math.abs(Date.parse(p.mensagem.ocorridoEm)-Date.parse(mensagem.ocorridoEm))<=2000)continue
+      // A captura preservada pode ser a observação tardia do Hermes. Esse
+      // caso exige opt-in nominal e a âncora Evolution anterior, sem reescrever
+      // a tuple canônica nem transformar um desvio em tolerância global.
+      const tardia=r.capturaCanonicaTardia===true
+      const ligacoes=reentregas.filter(v=>(tardia?v.origemSha256:v.provaSha256)===hashCanonicoComercial(p))
+      if(ligacoes.length!==1)return false
+      const ligacao=ligacoes[0]
+      const origem=tardia?p:ps.find(o=>hashCanonicoComercial(o)===ligacao.origemSha256)
+      const entrega=tardia?ps.find(o=>hashCanonicoComercial(o)===ligacao.provaSha256):p
+      if(!origem||!entrega||origem.coletor!=='evolution'||entrega.coletor!=='hermes'
+        ||hashCanonicoComercial((tardia?entrega:origem).mensagem)!==hashCanonicoComercial(mensagem)
+        ||Date.parse(origem.mensagem.ocorridoEm)>Date.parse(origem.capturadoEm)
+        ||Date.parse(origem.capturadoEm)>=Date.parse(entrega.mensagem.ocorridoEm)
+        ||Date.parse(entrega.mensagem.ocorridoEm)>Date.parse(entrega.capturadoEm))return false
+      usadas.add(ligacao)
+    }
+    if(usadas.size!==reentregas.length)return false
+    const hashes=[...new Set(ps.map(p=>hashCanonicoComercial(p)))].sort()
+    return JSON.stringify(hashes)===JSON.stringify([...r.provasSha256].sort())
+  } catch {return false}
+}
+
 /** Confere a tuple exata. Origem do coletor gravada no JSONL não identifica a conta. */
 export function conferirIdentidadeCaptura(mensagem:MensagemIdentidadeCaptura,fonte:FonteIdentidadeCaptura,agora=Date.now()):ConferenciaIdentidadeCaptura {
   const base={assinatura:fonte.assinatura}
   if(!fonte.ativa)return {...base,estado:'legado',motivo:'Conferência legada sem configuração de identidade.'}
   if(fonte.erro||!fonte.config||Date.parse(fonte.config.desde)>agora)return {...base,estado:'conflito',motivo:fonte.erro??'Configuração de identidade exige revisão.'}
+  const conciliada=reconciliacaoDeRelogioConfere(mensagem,fonte,agora)
   const provas:ProvaIdentidadeCaptura[]=[]
   for(const linha of fonte.jsonl.split('\n')){
     if(!linha.trim())continue
@@ -87,13 +143,13 @@ export function conferirIdentidadeCaptura(mensagem:MensagemIdentidadeCaptura,fon
     if(p.mensagem.idOriginal!==mensagem.idOriginal||p.mensagem.direcao!==mensagem.direcao)continue
     if(Date.parse(p.capturadoEm)>agora)return {...base,estado:'conflito',motivo:'Há prova de captura com horário futuro; confira a fonte privada.'}
     if(Date.parse(p.capturadoEm)<Date.parse(fonte.config.desde))continue
-    if(p.mensagem.ocorridoEm!==mensagem.ocorridoEm||p.mensagem.conteudoHash!==mensagem.conteudoHash)return {...base,estado:'conflito',motivo:'A prova diverge do registro original; confira a captura.'}
+    if((p.mensagem.ocorridoEm!==mensagem.ocorridoEm||p.mensagem.conteudoHash!==mensagem.conteudoHash)&&!conciliada)return {...base,estado:'conflito',motivo:'A prova diverge do registro original; confira a captura.'}
     provas.push(p)
   }
   if(!provas.length)return {...base,estado:'ausente',motivo:'Conta da captura ainda sem prova verificável; revisão interna necessária.'}
   if(provas.some(p=>p.contaHash!==fonte.config!.identidadePrumoHash))return {...base,estado:'conflito',motivo:'A captura não comprova a mesma conta configurada; revisão interna necessária.'}
   // Duplicatas, coletores e sessões diferentes da MESMA conta não criam novas mensagens.
-  return {...base,estado:'verificada',motivo:'Conta conferida com a prova e o registro original.'}
+  return {...base,estado:'verificada',motivo:conciliada?'Conta conferida; divergência de relógio conciliada por revisão auditada dos mesmos IDs, conteúdo e conta.':'Conta conferida com a prova e o registro original.'}
 }
 export function mensagemDaCaptura(v:unknown):MensagemIdentidadeCaptura|null {
   if(!objeto(v)||typeof v.id!=='string'||!v.id||!['entrada','saida'].includes(String(v.direcao))||!instante(v.em)||typeof v.texto!=='string')return null

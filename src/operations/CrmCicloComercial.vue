@@ -1,6 +1,6 @@
 <script lang="ts">
 type Fase = import('./ciclo-comercial').TipoCiclo
-interface FormaCiclo { id: string; data: string; referencia: string; vinculo: string; ofertaId: string; ofertas: string[]; versao: string; escopo: string; prazo: string; condicoes: string; responsavel: string; valor: string; mensalidade: string; evidencia: string; documento: string; componente: string; competencia: string; vencimento: string; forma: string; gatilho: string; condicao: string; vigenciaInicio: string; vigenciaFim: string; liberadaEm: string }
+interface FormaCiclo { fila: string; tarefa: string; resultado: string; id: string; data: string; referencia: string; vinculo: string; ofertaId: string; ofertas: string[]; versao: string; escopo: string; prazo: string; condicoes: string; responsavel: string; valor: string; mensalidade: string; evidencia: string; documento: string; componente: string; competencia: string; vencimento: string; forma: string; gatilho: string; condicao: string; vigenciaInicio: string; vigenciaFim: string; liberadaEm: string }
 interface OperacaoCiclo { estado: 'pronto' | 'enviando' | 'aguardando' | 'ambiguo' | 'confirmado'; esperado?: string; previa?: import('./ciclo-comercial').EventoCiclo; humano: boolean; aviso: string }
 interface SessaoCiclo { fase?: Fase; formas: Partial<Record<Fase, FormaCiclo>>; operacoes: Record<string, OperacaoCiclo>; ultimoConfirmado?: string }
 // Só memória da sessão. Fechar/reabrir ou trocar de lead não elimina uma operação incerta.
@@ -11,6 +11,7 @@ let sequenciaCiclo = 0
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import type { CrmLead } from './types'
+import { lerTrabalhoRegistrado } from '../office/trabalho-registrado'
 import { qualificadoParaProposta } from './spiced'
 import { qualificacaoComercialAtual, temQualificacaoComercial } from './qualificacao-comercial'
 import { cicloDoLead, diaCiclo, lerEventoCiclo, OFERTAS_CICLO, PREFIXO_CICLO, propostaExigeSiteVisto, textoEventoCiclo, validarTransicaoCiclo, type EventoCiclo, type OfertaCiclo, type TipoCiclo } from './ciclo-comercial'
@@ -26,7 +27,7 @@ function restaurar(chave: string): SessaoCiclo {
 const sessao = ref(restaurar(identidade.value))
 const ciclo = computed(() => cicloDoLead(props.lead))
 const ofertaNomes: Record<OfertaCiclo, string> = { encontrado: 'Site · Encontrado', respondido: 'Respondido e Acompanhado', anuncios: 'Anúncios · uma plataforma', 'anuncios-duas': 'Anúncios · duas plataformas', redes: 'Redes sociais', fonte: 'Fonte', 'fonte-em-dia': 'Fonte em dia', iris: 'Iris', estampa: 'CRM de estamparia', pacote: 'Pacote de ofertas' }
-const titulos: Record<TipoCiclo, string> = { proposta: 'Preparar proposta', proposta_enviada: 'Confirmar envio da proposta', aceite: 'Registrar aceite e documento', entrega_vista: 'Confirmar site visto no ar', condicao_cobranca: 'Definir condição de cobrança', cobranca: 'Registrar cobrança', pagamento: 'Confirmar recebimento', correcao: 'Corrigir um registro' }
+const titulos: Record<TipoCiclo, string> = { trabalho: 'Registrar próxima ação e responsável', proposta: 'Preparar proposta', proposta_enviada: 'Confirmar envio da proposta', aceite: 'Registrar aceite e documento', entrega_vista: 'Confirmar site visto no ar', condicao_cobranca: 'Definir condição de cobrança', cobranca: 'Registrar cobrança', pagamento: 'Confirmar recebimento', correcao: 'Corrigir um registro' }
 const propostaAtual = computed(() => ciclo.value.propostas.at(-1))
 const aceiteAtual = computed(() => ciclo.value.aceites.find(a => a.vinculo === propostaAtual.value?.id))
 const condicoesAtuais = computed(() => ciclo.value.condicoes.filter(c => c.vinculo === aceiteAtual.value?.id))
@@ -46,7 +47,7 @@ const fase = computed(() => sessao.value.fase ?? faseSugerida.value)
 const moeda = (n: number) => (n / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const novoId = () => `ciclo-${globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${++sequenciaCiclo}`}`
 function novaForma(): FormaCiclo {
-  return { id: novoId(), data: diaCiclo(), referencia: '', vinculo: '', ofertaId: '', ofertas: [], versao: String(Math.max(0, ...ciclo.value.propostas.map(p => p.versao ?? 0)) + 1), escopo: '', prazo: '', condicoes: '', responsavel: '', valor: '', mensalidade: '', evidencia: '', documento: '', componente: '', competencia: '', vencimento: '', forma: '', gatilho: '', condicao: '', vigenciaInicio: '', vigenciaFim: '', liberadaEm: '' }
+  return { fila: 'voce', tarefa: '', resultado: '', id: novoId(), data: diaCiclo(), referencia: '', vinculo: '', ofertaId: '', ofertas: [], versao: String(Math.max(0, ...ciclo.value.propostas.map(p => p.versao ?? 0)) + 1), escopo: '', prazo: '', condicoes: '', responsavel: '', valor: '', mensalidade: '', evidencia: '', documento: '', componente: '', competencia: '', vencimento: '', forma: '', gatilho: '', condicao: '', vigenciaInicio: '', vigenciaFim: '', liberadaEm: '' }
 }
 function formaDaFase(tipo: Fase): FormaCiclo {
   if (!sessao.value.formas[tipo]) sessao.value.formas[tipo] = novaForma()
@@ -81,7 +82,7 @@ watch(rascunho, () => { const op = operacao.value; if (op.estado === 'pronto') {
 function conferirFonte() {
   for (const op of Object.values(sessao.value.operacoes)) {
     if (!op.esperado || op.estado === 'confirmado') continue
-    const confirmado = props.lead.eventos.some(r => r.tipo === 'nota' && r.origem === 'manual' && Number.isFinite(Date.parse(r.em)) && Date.parse(r.em) <= Date.now() && (r.registroTexto ?? r.texto) === op.esperado && !!lerEventoCiclo(r.registroTexto ?? r.texto, Date.parse(r.em)))
+    const confirmado = props.lead.eventos.some(r => r.tipo === 'nota' && r.origem === 'manual' && Number.isFinite(Date.parse(r.em)) && Date.parse(r.em) <= Date.now() && (r.registroTexto ?? r.texto) === op.esperado && !!(op.previa?.tipo === 'trabalho' ? lerTrabalhoRegistrado(r.registroTexto ?? r.texto, Date.parse(r.em)) : lerEventoCiclo(r.registroTexto ?? r.texto, Date.parse(r.em))))
     if (confirmado) { op.estado = 'confirmado'; op.humano = false; op.aviso = 'Registro confirmado na fonte comercial.'; sessao.value.ultimoConfirmado = op.aviso; sessao.value.fase = undefined }
   }
 }
@@ -111,6 +112,8 @@ function montar(): EventoCiclo {
     const valor = centavos(r.valor), mensalidade = centavos(r.mensalidade)
     if (valor !== undefined) e.valor = valor
     if (mensalidade !== undefined) e.mensalidade = mensalidade
+  } else if (fase.value === 'trabalho') {
+    for (const k of ['fila', 'tarefa', 'responsavel', 'resultado', 'condicao', 'vencimento'] as const) texto(k)
   } else {
     texto('vinculo'); texto('evidencia')
     if (fase.value === 'aceite') texto('documento')
@@ -175,7 +178,7 @@ function resumo(e: EventoCiclo): string {
 const previaLinhas = computed(() => {
   const e = operacao.value.previa
   if (!e) return []
-  return [resumo(e), e.ofertaId ? `Oferta: ${ofertaNomes[e.ofertaId]}${e.ofertas ? ` (${e.ofertas.map(o => ofertaNomes[o]).join(', ')})` : ''}` : '', e.vinculo ? `Relacionado a: ${vinculado.value ? resumo(vinculado.value) : 'registro ausente na leitura atual; confira o contexto'}` : '', e.escopo ? `Escopo: ${e.escopo}` : '', e.prazo ? `Prazo: ${e.prazo}` : '', e.condicoes ? `Condições: ${e.condicoes}` : '', e.documento ? `Documento: ${e.documento}` : '', e.condicao ? `Condição: ${e.condicao}` : '', e.vigenciaInicio ? `Vigência: ${e.vigenciaInicio}${e.vigenciaFim ? ` até ${e.vigenciaFim}` : ''}` : '', e.vencimento ? `Vencimento: ${e.vencimento}` : '', e.forma ? `Forma: ${e.forma}` : '', e.evidencia ? `Evidência: ${e.evidencia}` : '', e.tipo === 'proposta' && (e.valor === undefined || e.mensalidade === undefined) ? 'Rascunho incompleto: valores ausentes continuam a combinar; envio e contratação bloqueados.' : ''].filter(Boolean)
+  return [resumo(e), e.tipo === 'trabalho' ? `Fila: ${e.fila} / ${e.responsavel} / ${e.tarefa} / ${e.resultado}` : '', e.ofertaId ? `Oferta: ${ofertaNomes[e.ofertaId]}${e.ofertas ? ` (${e.ofertas.map(o => ofertaNomes[o]).join(', ')})` : ''}` : '', e.vinculo ? `Relacionado a: ${vinculado.value ? resumo(vinculado.value) : 'registro ausente na leitura atual; confira o contexto'}` : '', e.escopo ? `Escopo: ${e.escopo}` : '', e.prazo ? `Prazo: ${e.prazo}` : '', e.condicoes ? `Condições: ${e.condicoes}` : '', e.documento ? `Documento: ${e.documento}` : '', e.condicao ? `Condição: ${e.condicao}` : '', e.vigenciaInicio ? `Vigência: ${e.vigenciaInicio}${e.vigenciaFim ? ` até ${e.vigenciaFim}` : ''}` : '', e.vencimento ? `Vencimento: ${e.vencimento}` : '', e.forma ? `Forma: ${e.forma}` : '', e.evidencia ? `Evidência: ${e.evidencia}` : '', e.tipo === 'proposta' && (e.valor === undefined || e.mensalidade === undefined) ? 'Rascunho incompleto: valores ausentes continuam a combinar; envio e contratação bloqueados.' : ''].filter(Boolean)
 })
 async function copiar(condicoes = false) {
   const p = operacao.value.previa?.tipo === 'proposta' ? operacao.value.previa : propostaAtual.value
@@ -201,7 +204,7 @@ async function copiar(condicoes = false) {
     <p v-if="fase === 'entrega_vista'">Confirme a evidência de que o cliente viu funcionando. Publicar ou abrir o site pela nossa conta não comprova isso.</p>
     <p v-if="operacao.estado === 'confirmado'" role="status">{{ operacao.aviso }} <button type="button" class="botao botao--leve" :disabled="travado" @click="abrir(fase, '', true)">Iniciar outro registro desta etapa</button></p>
     <form v-else-if="!concluido" class="crm-form" @submit.prevent="revisar">
-      <label v-if="fase !== 'proposta'"><span>{{ fase === 'pagamento' ? 'Cobrança a receber' : fase === 'cobranca' ? 'Condição contratada' : fase === 'condicao_cobranca' ? 'Aceite e documento confirmado' : fase === 'correcao' ? 'Registro a corrigir' : 'Versão exata da proposta' }}</span><select v-model="rascunho.vinculo" :disabled="!editavel" required><option value="">Selecione o registro confirmado</option><option v-for="e in vinculos" :key="e.id" :value="e.id">{{ resumo(e) }}</option></select></label>
+      <label v-if="fase !== 'proposta' && fase !== 'trabalho'"><span>{{ fase === 'pagamento' ? 'Cobrança a receber' : fase === 'cobranca' ? 'Condição contratada' : fase === 'condicao_cobranca' ? 'Aceite e documento confirmado' : fase === 'correcao' ? 'Registro a corrigir' : 'Versão exata da proposta' }}</span><select v-model="rascunho.vinculo" :disabled="!editavel" required><option value="">Selecione o registro confirmado</option><option v-for="e in vinculos" :key="e.id" :value="e.id">{{ resumo(e) }}</option></select></label>
       <template v-if="fase === 'proposta'">
         <label><span>Oferta aprovada</span><select v-model="rascunho.ofertaId" :disabled="!editavel" required><option value="">Selecione a oferta desta proposta</option><option v-for="o in OFERTAS_CICLO" :key="o" :value="o">{{ ofertaNomes[o] }}</option></select></label>
         <fieldset v-if="rascunho.ofertaId === 'pacote'" :disabled="!editavel"><legend>Ofertas incluídas no pacote</legend><label v-for="o in OFERTAS_CICLO.filter(o => o !== 'pacote')" :key="o" class="crm-ciclo__check"><input v-model="rascunho.ofertas" type="checkbox" :value="o"> {{ ofertaNomes[o] }}</label></fieldset>
@@ -213,9 +216,18 @@ async function copiar(condicoes = false) {
         <label><span>Condições comerciais</span><textarea v-model="rascunho.condicoes" rows="2" maxlength="180" :disabled="!editavel" /><small>Registre inclusões e exclusões, suporte e valores pagos diretamente a terceiros; não suponha verba de anúncios ou hospedagem.</small></label>
         <label><span>Responsável pela entrega</span><input v-model="rascunho.responsavel" maxlength="180" :disabled="!editavel"></label>
       </template>
+      <template v-if="fase === 'trabalho'">
+        <p class="crm-nota-pequena">Compromisso interno de acompanhamento. Não registra proposta, contratação ou recebimento.</p>
+        <label><span>Área de trabalho</span><select v-model="rascunho.fila" :disabled="!editavel" required><option value="voce">Precisa de você</option><option value="time">Time em execução</option><option value="cliente">Aguardando cliente</option></select></label>
+        <label><span>Responsável pela ação</span><input v-model="rascunho.responsavel" maxlength="180" :disabled="!editavel" required></label>
+        <label><span>Próxima ação</span><input v-model="rascunho.tarefa" maxlength="180" :disabled="!editavel" required></label>
+        <label><span>Resultado esperado</span><input v-model="rascunho.resultado" maxlength="180" :disabled="!editavel" required></label>
+        <label><span>Condição para agir ou encerrar a espera</span><input v-model="rascunho.condicao" maxlength="180" :disabled="!editavel" required></label>
+        <label><span>Próxima conferência, se combinada</span><input v-model="rascunho.vencimento" type="date" :disabled="!editavel"></label>
+      </template>
       <label><span>{{ fase === 'pagamento' ? 'Referência do recebimento verificado' : fase === 'correcao' ? 'Referência da correção' : 'Referência do documento ou fato' }}</span><input v-model="rascunho.referencia" maxlength="180" :disabled="!editavel" required><small>Use uma referência interna; não informe dados bancários ou pessoais.</small></label>
       <label><span>Data real do fato</span><input v-model="rascunho.data" type="date" :max="diaCiclo()" :disabled="!editavel" required></label>
-      <label v-if="fase !== 'proposta'"><span>{{ fase === 'correcao' ? 'Motivo e evidência da correção' : 'Evidência conferida por você' }}</span><input v-model="rascunho.evidencia" maxlength="180" :disabled="!editavel" required></label>
+      <label v-if="fase !== 'proposta' && fase !== 'trabalho'"><span>{{ fase === 'correcao' ? 'Motivo e evidência da correção' : 'Evidência conferida por você' }}</span><input v-model="rascunho.evidencia" maxlength="180" :disabled="!editavel" required></label>
       <label v-if="fase === 'aceite'"><span>Documento de contratação e versão aceita</span><input v-model="rascunho.documento" maxlength="180" :disabled="!editavel" required></label>
       <template v-if="fase === 'condicao_cobranca'">
         <label><span>Componente combinado</span><select v-model="rascunho.componente" :disabled="!editavel" required><option value="">Selecione</option><option value="inicial">Valor inicial ou parcela acordada</option><option value="mensal">Mensalidade por competência</option></select></label>
@@ -242,6 +254,7 @@ async function copiar(condicoes = false) {
     </section>
     <p v-if="operacao.aviso && operacao !== pendente" class="recado" role="status">{{ operacao.aviso }}</p>
     <div v-if="propostaAtual || operacao.previa?.tipo === 'proposta'" class="crm-form__botoes"><button type="button" class="botao botao--leve" @click="copiar(false)">Copiar proposta para revisão</button><button type="button" class="botao botao--leve" @click="copiar(true)">Copiar condições comerciais</button></div>
+    <button type="button" class="botao botao--leve" :disabled="travado" @click="abrir('trabalho', '', true)">Registrar próxima ação e responsável</button>
     <details class="dobra"><summary>Histórico comercial e correções</summary>
       <p class="crm-nota-pequena">Corrigir acrescenta um registro e preserva o original. Corrija fatos dependentes primeiro; não edite o recebimento anterior.</p>
       <ul class="crm-lista"><li v-for="e in ciclo.historico" :key="e.id">{{ resumo(e) }}{{ !ciclo.eventos.some(a => a.id === e.id) && e.tipo !== 'correcao' ? ' · corrigido' : '' }} <button v-if="e.tipo !== 'correcao' && ciclo.eventos.some(a => a.id === e.id)" type="button" class="botao botao--leve" :disabled="travado" @click="abrir('correcao', e.id)">Corrigir este registro</button></li></ul>

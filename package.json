@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "vue-tsc --noEmit",
-    "test": "tsx --test server/*.test.ts server/financas/*.test.ts src/*.test.ts src/office/*.test.ts src/casca/*.test.ts src/blueprint/*.test.ts"
+    "test": "tsx --test server/*.test.ts server/financas/*.test.ts src/*.test.ts src/office/*.test.ts src/casca/*.test.ts src/blueprint/*.test.ts",
+    "test:envios": "node --import tsx --test server/envios-sem-travas.test.ts && python3 deploy/dell/envios-sem-travas.test.py && python3 deploy/dell/captura-pronta.test.py && python3 deploy/dell/foco-comercial.test.py && node --test deploy/hermes/scripts/squadone_history.test.mjs && node --test scripts/classificador-gratuito.test.mjs && python3 deploy/dell/whatsapp-observador/envelopes-audio.test.py && python3 deploy/dell/claude-ops/whatsapp-resposta-ordem.test.py",
+    "test:aquisicao": "node scripts/testar-aquisicao.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

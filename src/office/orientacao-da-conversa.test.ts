@@ -23,7 +23,7 @@ test('material solicitado permite orientação de contato; contexto a revisar re
 })
 
 test('tarefa interna não vira mensagem ao cliente mesmo quando o plano é agir', () => {
-  const l = cliente({ proximoPasso: { texto: 'Revisão interna: conferir condições', data: '2026-10-25', registradoEm: '2026-10-25T12:03:00Z' } })
+  const l = cliente({ proximoPasso: { texto: 'Revisão interna: conferir condições', data: '2026-10-20', registradoEm: '2026-10-19T12:00:00Z' } })
   const plano = planoDoLead(l)
   assert.equal(plano.tipo, 'agir')
   assert.equal(orientaContato(l, plano), false)

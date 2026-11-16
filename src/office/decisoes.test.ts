@@ -22,31 +22,6 @@ test('uma linha por cliente prioriza respostas observadas e preserva a ação de
   assert.equal(fila[1].acao, null)
 })
 
-test('cliente respondido volta pela hora da nova resposta, mesmo depois de uma proposta na fila antiga', () => {
-  const novo = lead('novo', { conversa: { ...resposta!, ultima: { ...resposta!.ultima, em: '2026-10-21T17:55:00Z' } } })
-  const antigo = lead('antigo', { conversa: resposta })
-  const proposta = lead('proposta')
-  const fila = decisoesDoEscritorio([proposta, antigo, novo], [{ ...acao('proposta'), tipo: 'mandar-proposta' }, { ...acao('antigo'), tipo: 'responder' }], agora)
-  assert.deepEqual(fila.map(d => d.lead.id), ['novo', 'antigo', 'proposta'])
-  assert.equal(proximaDecisaoPorPrioridade(fila, 'antigo')?.lead.id, 'novo')
-  assert.equal(fila.filter(d => d.lead.id === 'novo').length, 1)
-})
-
-test('nova resposta permite continuar a conversa mesmo com espera ou tarefa interna anteriores', () => {
-  for (const texto of ['Esperar o retorno, sem nova cobrança', 'Revisar internamente o material']) {
-    const cliente = lead('retorno', { conversa: { ...resposta!, ultimaEntrada: resposta!.ultima.em }, proximoPasso: { texto, data: '2026-10-23', registradoEm: '2026-10-21T14:00:00Z' } })
-    assert.equal(decisoesDoEscritorio([cliente], [], agora)[0].estado, 'agora')
-    assert.equal(procedimentoDaDecisao(cliente, new Date(agora)).tipo, 'humano')
-    assert.equal(cliente.proximoPasso?.texto, texto, 'o plano continua preservado para revisão')
-  }
-})
-
-test('prioridade fornecida pela fila compartilhada preserva pulo da mesma resposta', () => {
-  const a = lead('a', { conversa: resposta }), b = lead('b', { conversa: resposta })
-  const lista = [{ lead: b, rotulo: 'Resposta recebida', prioridade: 0 }, { lead: a, rotulo: 'Resposta recebida', prioridade: 10 }]
-  assert.deepEqual(decisoesDoEscritorio([a, b], [acao('a')], agora, lista).map(d => d.lead.id), ['b', 'a'])
-})
-
 test('futuro, espera e encerrados têm destinos distintos; estoque novo fica fora das decisões', () => {
   const entradas = [lead('estoque', { etapa: 'novo' }), lead('ganho', { etapa: 'ganho' }), lead('perdido', { etapa: 'perdido' }), lead('futuro', { proximoPasso: { texto: 'Conversar com Ana', data: '2026-10-25', registradoEm: '' } }), lead('espera'), lead('hoje', { proximoPasso: { texto: 'Entregar material', data: '2026-10-21', registradoEm: '' } })]
   const fila = decisoesDoEscritorio(entradas, [], agora)

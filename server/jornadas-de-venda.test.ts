@@ -1,3 +1,4 @@
+import '../src/testes/politica-historica.ts'
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PastaDoLead } from "./auto-production.ts";
@@ -163,11 +164,13 @@ describe("vendedor: um aviso por vez, só no expediente", () => {
   const vResposta = conferida(visaoCom({ status: "enviado", enviado_em: dias(1), respondeu_em: horas(1), resposta_tipo: "neutra", resposta_trecho: "me explica melhor?", resposta_em: horas(1) }));
   const t = AGORA.getTime();
 
-  it("expediente: seg a sex, 08:00 a 17:30 de São Paulo", () => {
+  it("expediente vigente: seg a sex, das 08:00 até antes das 18:00 de São Paulo", () => {
     assert.equal(noExpedienteDeVenda(Date.parse("2026-10-14T11:00:00Z")), true); // 08:00
     assert.equal(noExpedienteDeVenda(Date.parse("2026-10-14T10:59:00Z")), false); // 07:59
     assert.equal(noExpedienteDeVenda(Date.parse("2026-10-14T20:29:00Z")), true); // 17:29
-    assert.equal(noExpedienteDeVenda(Date.parse("2026-10-14T20:30:00Z")), false); // 17:30
+    assert.equal(noExpedienteDeVenda(Date.parse("2026-10-14T20:30:00Z")), true); // 17:30
+    assert.equal(noExpedienteDeVenda(Date.parse("2026-10-14T20:59:00Z")), true); // 17:59
+    assert.equal(noExpedienteDeVenda(Date.parse("2026-10-14T21:00:00Z")), false); // 18:00
     assert.equal(noExpedienteDeVenda(Date.parse("2026-10-17T13:00:00Z")), false); // sábado
   });
 

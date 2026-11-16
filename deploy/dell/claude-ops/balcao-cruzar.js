@@ -126,7 +126,7 @@ for (const linha of linhas.map(l => l.json)) {
 // A linha leva nota e avaliacoes (Cacador): sem nota boa, a variacao B nao entra.
 // O recibo leva raio_x_url e raio_x_pontos (raio-x.py): sem os dois, a C nao entra.
 // Sem site_url (demo sob pedido ou sem recibo), sem_demo: A ou C (a C so com raio-x); nos EUA, nenhuma (null).
-const leadDaVariante = (m) => ({ ...m.linha, raio_x_url: m.rec.raio_x_url, raio_x_pontos: m.rec.raio_x_pontos, raio_x_achados: m.rec.raio_x_achados, sem_demo: !m.siteUrl });
+const leadDaVariante = (m) => ({ ...m.linha, raio_x_url: m.rec.raio_x_url, raio_x_pontos: m.rec.raio_x_pontos, raio_x_achados: m.rec.raio_x_achados, sem_demo: !m.siteUrl, ...(!m.linha.enviado_em && !m.linha.respondeu_em && !['enviado','expirado','recusado','fechado'].includes(String(m.linha.status || '')) ? {descoberta_versao: VERSAO_DESCOBERTA_SITE} : {}) });
 // Só quem grava a letra entra na alocação: o enviado sem site (semSite) só ganha o wa_me.
 const pedidosDeLetra = aMontar
   .filter(m => !m.semSite && telefoneE164(m.linha.telefone))

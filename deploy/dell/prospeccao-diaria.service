@@ -1,0 +1,11 @@
+[Unit]
+Description=Repor candidatos de Site por fontes públicas gratuitas
+After=network-online.target squadone-operations.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/bin/prospeccao_diaria.py
+TimeoutStartSec=12min
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

@@ -114,7 +114,7 @@ describe('agoraDaFicha sem ação na fila: diz que não há nada e por quê', ()
     ['próximo passo salvo para depois', { etapa: 'contato', sinal: 'respondeu', proximoPasso: { texto: 'Ligar às 10h', data: '2026-10-20', registradoEm: '' } },
       /^Nada para fazer com ele agora; o próximo passo salvo é “Ligar às 10h”, para ter 20\/10\.$/],
     ['esperando desde o último envio', { etapa: 'contato', sinal: 'enviado', marcos: { enviado: '2026-10-12T15:00:00Z' } }, /^Esperando a resposta dele desde seg 12\/10\.$/],
-    ['a vez é do robô', { etapa: 'novo', sinal: 'na-fila' }, /^Nada para fazer com ele agora: esperar o Raio-X/],
+    ['cadastro sem necessidade e sem autorização não inicia contato', { etapa: 'novo', sinal: 'na-fila' }, /^Nada para fazer com ele agora: conferir a necessidade e o canal elegível/],
   ]
   for (const [nome, extra, esperado] of casos) {
     it(nome, () => assert.match(agoraDaFicha(lead('x', extra), null).frase, esperado))

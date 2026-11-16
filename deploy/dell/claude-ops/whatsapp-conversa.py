@@ -474,6 +474,10 @@ const saida = [];
 for (const a of m.achados) {
   const l = a.linha;
   const tipoAntes = txt(a.planilha === 'site' ? l.resposta_tipo : l['Tipo da resposta']);
+  // Replay de lote antigo não substitui uma resposta posterior já registrada.
+  const respostaRegistradaEm = Date.parse(txt(a.planilha === 'site' ? l.resposta_em : l['Resposta em']));
+  const respostaDoLoteEm = Date.parse(ultima.em);
+  if (Number.isFinite(respostaRegistradaEm) && Number.isFinite(respostaDoLoteEm) && respostaRegistradaEm > respostaDoLoteEm) continue;
   // Robô depois de gente (lembrete respondido pela saudação automática) não apaga o que a pessoa disse.
   if (tipo === 'bot' && HUMANOS.includes(tipoAntes)) continue;
   // 17/10/2026: uma recusa não é apagada por uma resposta neutra depois ("ok", "obrigado", um áudio que ninguém

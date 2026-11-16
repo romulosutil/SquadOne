@@ -15,7 +15,7 @@
  * No desktop o Assistente participa da tela à direita e pode ser recolhido;
  * no celular o mesmo conteúdo abre sob demanda.
  */
-import { defineAsyncComponent, computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import BarraInferior from './casca/BarraInferior.vue'
 import Sheet from './components/Sheet.vue'
 import BarraLateral from './casca/BarraLateral.vue'

@@ -63,7 +63,7 @@ it('resolve o formato real da sessão, preserva saídas de outro aparelho e acei
     const res = () => ({ codigo: 200, corpo: null as any, status(codigo: number) { this.codigo = codigo; return this }, json(corpo: any) { this.corpo = corpo; return this } })
     const recente = res(); await h.consultar(req({ numero: '5511999990000' }), recente)
     assert.equal(recente.corpo.metodo, 'janela-recente')
-    assert.equal(chamadas[0][1].remoteJid, jidReal, 'não usa o nono dígito que a sessão não reconhece')
+    assert.equal(chamadas[0][1].remoteJid, '987654321@lid', 'usa o LID comprovado pela sessão para alcançar o chat migrado')
     assert.equal(chamadas[0][1].id, undefined, 'não usa âncora antiga para buscar respostas posteriores à desconexão')
     assert.equal(chamadas[0][2], agora)
     assert.equal(chaveDoNumero('551199990000:12@s.whatsapp.net'), chave)

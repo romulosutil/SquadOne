@@ -22,6 +22,10 @@ graphify-out/
 .headroom/
 .tokensave/
 
+# Relatórios, capturas e cópias de trabalho locais; não são fontes do app.
+output/
+brag-output*/
+
 # notas de sessão locais (Claude/Codex); não versionar
 CHECKPOINT.md
 __pycache__/
@@ -30,3 +34,11 @@ __pycache__/
 # Saídas locais e cópias de trabalho não são fontes do aplicativo.
 output/
 brag-output*/
+
+outputs/
+
+.dist-*/
+
+.impeccable/
+
+package-lock.json

@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import politica from '../config/politica-envios.json';
+import { bloqueioAquisicao } from './aquisicao-comercial.ts';
 import express, { type Router } from 'express';
 import type { CrmVisao, CrmLead } from '../src/operations/types.ts';
 import { ehProduto } from './ofertas.ts';
@@ -8,7 +10,7 @@ import { tetoDoDia, limitesDeAgora } from '../src/operations/trava-de-ritmo.ts';
 import { respostasDoDia } from './respostas-do-dia.ts';
 import { criarProtecaoProspeccao, lerPausaAutomatica, RetomadaRecusada, type SinalDaConta } from './protecao-prospeccao.ts';
 import { noExpedienteDeVenda } from '../src/operations/trava-de-horario.ts';
-import { conferirMensagem } from './gate-de-envio.ts';
+import { conferirMensagem, resumoDosProblemas } from './gate-de-envio.ts';
 import type { MemoriaDaVenda } from './venda-do-dia.ts';
 import type { RodadaComercial } from './rodada-comercial.ts';
 import { lerJustificativaComercial } from '../src/operations/justificativa-comercial.ts';
@@ -54,26 +56,27 @@ export async function lerPrimeirosDoTime(dataDir: string): Promise<Set<string>> 
 
 /** Estado derivado do serviço de domínio. Nenhum segredo ou comando chega ao navegador. */
 export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pick<CrmVisao, 'estado' | 'leads'> | null) {
+  const bloqueio = await bloqueioAquisicao();
+  const aquisicao = { estado: 'bloqueada' as const, motivo: bloqueio.motivo, detalhe: 'Primeiros contatos automáticos suspensos após a restrição do WhatsApp. A retomada exige revisão da política de aquisição.', primeirosContatosAutomaticos: false as const };
   const config = (await lerJson(path.join(dataDir, CONFIG))) ?? { ativo: false };
   const bruto = await lerJson(path.join(dataDir, ESTADO));
   const pausaAutomatica = await lerPausaAutomatica(dataDir);
   // O teto é o da trava de ritmo da Central, dividido com as telas e o Telegram: não é uma cota do time.
-  const limite = tetoDoDia(agora);
+  const limite = politica.limitesOperacionais ? tetoDoDia(agora) : null;
   const respostasHoje = visao?.estado === 'ok' ? respostasDoDia(visao.leads, agora) : null;
   // Desde quando e por quê (29/10/2026): a pausa de 28/10 às 19:41 ficou sem autor nem motivo na tela.
   const pausa = pausaDoTime(config, pausaAutomatica);
-  const metricas = { respostasHoje, pausaAutomatica, pausa, intervaloMinutos: limitesDeAgora(agora).intervaloMs / 60_000, porHora: limitesDeAgora(agora).porHora };
+  const metricas = { respostasHoje, pausaAutomatica, pausa, limitesAtivos: politica.limitesOperacionais, aprovacoesComerciais: politica.aprovacoesComerciais, intervaloMinutos: politica.limitesOperacionais ? limitesDeAgora(agora).intervaloMs / 60_000 : 0, porHora: politica.limitesOperacionais ? limitesDeAgora(agora).porHora : null };
   const ativo = config.ativo === true && !pausaAutomatica;
   // A última rodada: a hora gravada pelo script (`atualizadoEm`); sem ela legível, o mtime do arquivo de estado.
   const gravada = bruto ? Date.parse(bruto.atualizadoEm) : NaN;
   const ultimaRodada = Number.isFinite(gravada) ? gravada : bruto ? await fs.stat(path.join(dataDir, ESTADO)).then((st) => st.mtimeMs).catch(() => null) : null;
   const ultimaRodadaEm = ultimaRodada === null ? null : new Date(ultimaRodada).toISOString();
   const cicloParado = ativo && noExpedienteDeVenda(agora) && (ultimaRodada === null || agora - ultimaRodada > CICLO_PARADO_APOS_MS);
-  if (!bruto) return { ...metricas, ativo, estado: pausaAutomatica ? 'pausado' : 'iniciando', detalhe: pausaAutomatica?.detalhe ?? '', limite, fila: [], setores: [], funil: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
-  const stale = !Number.isFinite(Date.parse(bruto.atualizadoEm)) || agora - Date.parse(bruto.atualizadoEm) > 10 * 60_000;
+  if (!bruto) return { ...metricas, aquisicao, ativo, estado: 'bloqueado', proximoEnvioEm: null, detalhe: pausaAutomatica?.detalhe ?? '', limite, fila: [], setores: [], funil: [], atualizadoEm: null, ultimaRodadaEm, cicloParado };
   return {
-    ...metricas,
-    ativo, estado: pausaAutomatica ? 'pausado' : stale ? 'sem-sinal' : config.ativo === false ? 'pausado' : bruto.estado,
+    ...metricas, aquisicao,
+    ativo, estado: 'bloqueado',
     cicloParado, ultimaRodadaEm,
     limite, dia: bruto.dia, atualizadoEm: bruto.atualizadoEm,
     avaliados: bruto.avaliados ?? 0, selecionados: bruto.selecionados ?? 0,
@@ -89,7 +92,7 @@ export async function lerFrente(dataDir: string, agora = Date.now(), visao?: Pic
       selecionados: typeof s.selecionados === 'number' ? s.selecionados : 0,
       enviados: typeof s.enviados === 'number' ? s.enviados : 0,
     })),
-    proximoEnvioEm: pausaAutomatica ? null : bruto.proximoEnvioEm ?? null,
+    proximoEnvioEm: null,
     detalhe: pausaAutomatica?.detalhe ?? (typeof bruto.detalhe === 'string' ? bruto.detalhe.slice(0, 400) : ''),
     fila: (Array.isArray(bruto.fila) ? bruto.fila : []).slice(0, 100).map((l: Record<string, unknown>) => ({
       id: l.id, empresa: l.empresa, produto: l.produto, setor: l.setor, nota: l.nota, estado: l.estado, motivo: l.motivo,
@@ -123,7 +126,7 @@ function mesmaOrigem(req: express.Request): boolean {
 export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
   const { dataDir } = deps;
   const agora = deps.agora ?? Date.now;
-  const protecao = criarProtecaoProspeccao({ dir: dataDir, agora, visao: deps.visao, saude: deps.saude, avaliarSilencio: !deps.rodada });
+  const protecao = criarProtecaoProspeccao({ dir: dataDir, agora, visao: deps.visao, saude: deps.saude, avaliarSilencio: politica.limitesOperacionais && !deps.rodada });
   const relogios: ReturnType<typeof setTimeout>[] = [];
   if (deps.vigiar) {
     const conferir = () => { void protecao.verificar().catch(() => console.error('[frente] proteção não pôde ser conferida; envios exigem nova verificação.')); };
@@ -153,6 +156,7 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
     try {
       if (!mesmaOrigem(req)) return res.status(403).json({ error: 'Confirme a configuração na própria Central.' });
       if (Object.keys(req.body ?? {}).length !== 1 || typeof req.body.ativo !== 'boolean') return res.status(400).json({ error: 'Informe se o time deve iniciar primeiros contatos.' });
+      if (req.body.ativo && (await bloqueioAquisicao()).bloqueado) return res.status(409).json({ ativo: false, motivo: 'aquisicao-bloqueada', error: 'Primeiros contatos automáticos bloqueados pela política de aquisição.' });
       return res.json(await protecao.configurar(req.body.ativo));
     } catch (e) {
       if (e instanceof RetomadaRecusada) return res.status(409).json({ error: e.message });
@@ -174,6 +178,8 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
     }
     if (!mesmaOrigem(req)) return void res.status(403).json({ reservado: false, error: 'Só da mesma origem.' });
     try {
+      const bloqueio = await bloqueioAquisicao();
+      if (bloqueio.bloqueado) return void res.json({ reservado: false, motivo: 'aquisicao-bloqueada', detalhe: bloqueio.motivo, ate: null });
       const visao = deps.visao ? await deps.visao() : null;
       if (!visao || visao.estado !== 'ok') return void res.status(503).json({ reservado: false, motivo: 'sem-retrato', ate: null });
       const pausa = await protecao.verificar(visao);
@@ -193,7 +199,8 @@ export function montarFrenteComercial(router: Router, deps: DepsDaFrente) {
         leadId, lead, frente, leads: visao.leads, primeiros: dia.primeiros, mensagemAprovada: Boolean(gate && !gate.bloqueia), agora: agora(),
       }));
       const r = deps.rodada && lead ? await deps.rodada.reservar(lead,visao.leads,reservar) : await reservar();
-      if (r.ok === false) return void res.json({ reservado: false, motivo: r.motivo, ate: r.ate === null ? null : new Date(r.ate).toISOString() });
+      if (r.ok === false) return void res.json({ reservado: false, motivo: r.motivo, ate: r.ate === null ? null : new Date(r.ate).toISOString(),
+        ...(r.motivo === 'mensagem-barrada' && gate ? { detalhe: resumoDosProblemas(gate.problemas) } : {}) });
       res.json({ reservado: true, texto });
     } catch (error) {
       console.error('[frente] reserva não gravou:', error instanceof Error ? error.message : String(error));

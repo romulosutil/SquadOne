@@ -71,13 +71,13 @@ export interface LinhaBi {
   humanos: number; interesse: number; robos: number; recusas: number; semArquivo: number; taxa: number | null
 }
 export interface EscolhaBi {
-  id: string; empresa: string; produto: string; estado: string; nota: number; motivo?: string; mensagem?: string
+  id: string; empresa: string; produto: string; estado: string; nota: number | null; motivo?: string; mensagem?: string
   enviadoEm?: string; avaliacoes?: { agente: string; nota: number; motivo: string }[]
 }
 export interface FrenteBi {
-  estado: string; atualizadoEm: string | null; limite?: number; intervaloMinutos?: number; porHora?: number
+  estado: string; atualizadoEm: string | null; limite?: number | null; intervaloMinutos?: number; porHora?: number | null
   avaliados?: number; selecionados?: number; enviados?: number; fila: EscolhaBi[]
-  rodada?: { inicio: string | null; limite: number; pendentes: number; bloqueado: boolean; motivo: string; clientes: { leadId: string; reservadoEm: string }[] } | null
+  rodada?: { inicio: string | null; limite: number | null; pendentes: number; bloqueado: boolean; motivo: string; clientes: { leadId: string; reservadoEm: string }[] } | null
   rodadaIndisponivel?: boolean
 }
 export function classeBi(lead: CrmLead): ClasseDaResposta {
@@ -110,7 +110,7 @@ export function auditarEscolhas(frente: FrenteBi | null, leads: readonly CrmLead
     const avaliacoes = escolha.avaliacoes ?? []
     const notas = avaliacoes.map(a => a.nota).filter(Number.isFinite)
     const alertas: string[] = []
-    if (new Set(avaliacoes.map(a => a.agente)).size < 3) alertas.push('Avaliação incompleta no retrato')
+    if (escolha.nota !== null && new Set(avaliacoes.map(a => a.agente)).size < 3) alertas.push('Avaliação incompleta no retrato')
     if (notas.length > 1 && Math.max(...notas)-Math.min(...notas) >= 20) alertas.push('Divergência de 20 pontos ou mais')
     if (escolha.nota >= 70 && /falt|sem (?:confirm|evid[eê]ncia)|n[aã]o confirm/i.test([escolha.motivo, ...avaliacoes.map(a => a.motivo)].join(' '))) alertas.push('Nota alta com lacuna declarada no motivo')
     if (!lead) alertas.push('Cliente ausente da leitura de Vendas')

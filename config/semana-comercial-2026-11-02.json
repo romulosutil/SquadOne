@@ -28,7 +28,12 @@
       "acao": "Disparar até 15 primeiros contatos de Site/Encontrado entre os aprovados; conferir todos os envios reais; atender respostas e próximos passos aceitos; identificar refinamentos para amanhã, leads de qualidade, perdas confirmadas e pendências. Revisar a rodada antes de liberar novas vagas, preservando os limites e o histórico.",
       "entrega": "Meta acumulada de 15/60 contatos confirmados. Revisão do lote com próximos passos e responsáveis; propostas e fechamentos separados da carteira anterior.",
       "metaContatos": 15,
-      "metaAcumulada": 15
+      "metaAcumulada": 15,
+      "resultadoReal": {
+        "contatosConfirmados": 15,
+        "acumuladoCampanha": 15,
+        "fechamentosComprovados": 0
+      }
     },
     {
       "data": "2026-11-04",
@@ -40,7 +45,12 @@
       "acao": "Disparar até 15 primeiros contatos de Site/Encontrado entre os aprovados; conferir todos os envios reais; atender respostas e próximos passos aceitos; identificar refinamentos para amanhã, leads de qualidade, perdas confirmadas e pendências. Revisar a rodada antes de liberar novas vagas, preservando os limites e o histórico.",
       "entrega": "Meta acumulada de 30/60 contatos confirmados. Revisão do lote com próximos passos e responsáveis; propostas e fechamentos separados da carteira anterior.",
       "metaContatos": 15,
-      "metaAcumulada": 30
+      "metaAcumulada": 30,
+      "resultadoReal": {
+        "contatosConfirmados": 14,
+        "acumuladoCampanha": 29,
+        "fechamentosComprovados": 0
+      }
     },
     {
       "data": "2026-11-05",
@@ -52,7 +62,12 @@
       "acao": "Disparar até 15 primeiros contatos de Site/Encontrado entre os aprovados; conferir todos os envios reais; atender respostas e próximos passos aceitos; identificar refinamentos para amanhã, leads de qualidade, perdas confirmadas e pendências. Revisar a rodada antes de liberar novas vagas, preservando os limites e o histórico.",
       "entrega": "Meta acumulada de 45/60 contatos confirmados. Revisão do lote com próximos passos e responsáveis; propostas e fechamentos separados da carteira anterior.",
       "metaContatos": 15,
-      "metaAcumulada": 45
+      "metaAcumulada": 45,
+      "resultadoReal": {
+        "contatosConfirmados": 10,
+        "acumuladoCampanha": 39,
+        "fechamentosComprovados": 0
+      }
     },
     {
       "data": "2026-11-06",
@@ -64,7 +79,12 @@
       "acao": "Disparar até 15 primeiros contatos de Site/Encontrado entre os aprovados; conferir todos os envios reais; atender respostas e próximos passos aceitos; identificar refinamentos para amanhã, leads de qualidade, perdas confirmadas e pendências. Revisar a rodada antes de liberar novas vagas, preservando os limites e o histórico.",
       "entrega": "Fechamento da semana: confirmados/60, fechamentos dessa coorte/3, conversão, propostas, perdas com motivo e pendências. Consolidar refinamentos da próxima semana; acompanhar conversão tardia sem confundi-la com o resultado até sexta.",
       "metaContatos": 15,
-      "metaAcumulada": 60
+      "metaAcumulada": 60,
+      "resultadoReal": {
+        "contatosConfirmados": 5,
+        "acumuladoCampanha": 44,
+        "fechamentosComprovados": 0
+      }
     }
   ],
   "mercado": [
@@ -165,22 +185,147 @@
     "novasConsultasAPIPaga": 0
   },
   "ultimaConferencia": {
-    "verificadoEm": "2026-11-01T21:42:15.131396+00:00",
-    "principaisConferidos": 60,
-    "destinosValidos": 60,
-    "destinosUnicos": 60,
-    "historicoAnteriorEmQualquerOferta": 0,
-    "tresPareceres65": 60,
-    "enviadosConfirmadosCampanha": 0,
-    "reservasAprovadas": 0,
-    "adiados": 11,
+    "verificadoEm": "2026-11-06T21:48:00.796283+00:00",
+    "etapa": "encerramento-real-campanha-06nov",
+    "campanhaEncerrada": true,
+    "contatosConfirmadosCampanha": 44,
+    "metaContatos": 60,
+    "deficitContatos": 16,
+    "porDia": {
+      "2026-11-03": 15,
+      "2026-11-04": 14,
+      "2026-11-05": 10,
+      "2026-11-06": 5
+    },
+    "fechamentosConfirmados": 0,
+    "metaFechamentos": 3,
+    "propostasEstruturadasCRM": 0,
+    "negociacaoComPrecoNoWhatsApp": [
+      "AV. Serviços"
+    ],
+    "novosEventosDesdeBalanco": 0,
+    "mensagensNasConversas": 116,
+    "primeirosContatosReconciliados": 44,
+    "crmGeradoEm": "2026-11-06T21:40:47.390Z",
+    "conta": "open",
+    "servicos": {
+      "squadone-operations": "active",
+      "evolution-adaptador": "active",
+      "whatsapp-observador-prumo": "active",
+      "frente-comercial.timer": "active",
+      "curadoria-leads.timer": "active",
+      "revisao-comercial-diaria.timer": "active"
+    },
     "incertos": 0,
     "pendenciasRegistroCRM": 0,
-    "crmGeradoEm": "2026-11-01T21:40:46.563Z",
-    "conexao": "open",
-    "manifestoSha256": "90689132d9c1bf7c5b75e2520dfcfaff97871e56be97d2dd749210e6457feef8",
-    "evidenciaPrivadaMel": "~/.cache/mel-work/semana-site-20261102/conferencias/20261101T214203Z.json",
-    "proximaAcao": "02/11: preparar pelo menos cinco reservas por pesquisa gratuita, identidade e destino verificados, evidência estruturada e três pareceres reais. Sem envios no feriado."
+    "rodada": {
+      "inicio": "2026-11-06T18:16:54.407Z",
+      "pendentes": 5,
+      "limite": 10,
+      "bloqueado": false
+    },
+    "estadoExecutor": "fora-do-horario",
+    "guardSegundaPermite": false,
+    "fimAutorizacaoCampanha": "2026-11-06",
+    "autorizacaoNaoProrrogada": true,
+    "manifestoPreservadoAtivoComDataFinal": true,
+    "curadoria": {
+      "geradoEm": "2026-11-06T21:46:22.811626+00:00",
+      "hash": "02ed48b6fe6c319db6fc95ce27d635043e16ae7f084f20cc5272612b3c4b86f2",
+      "maturacaoHoras": 48,
+      "minimoCasos": 10,
+      "padroesAtivos": 0
+    },
+    "revisaoDiaria": {
+      "versao": 2,
+      "diaAnalisado": "2026-11-06",
+      "geradoEm": "2026-11-06T21:46:23.099699+00:00",
+      "fonteGeradaEm": "2026-11-06T21:40:47.390Z",
+      "estado": "ok",
+      "conversasRevisadas": 5,
+      "primeirosContatos": 5,
+      "resultadosPrimeiros": {
+        "silencio": 4,
+        "pendente": 1
+      },
+      "tentativas": {
+        "enviado": 5
+      },
+      "enviosComRecibo": 5,
+      "nichosPrimeiros": {
+        "advocacia": 5
+      },
+      "entregasAcimaDe30Min": 0,
+      "permissoesSemLink": 0,
+      "coorteDasEntregas": "Permissões recebidas no dia analisado, com entregas observadas até a geração; classes antigas não viram pendência nova.",
+      "limites": "Observação descritiva até agora, não resultado final de D+1. Permissão não confirma compra. Nenhuma rodada, recusa, preço, nota mínima ou envio é alterado por este relatório."
+    },
+    "automacao": {
+      "id": "revisar-mensagens-e-qualidade-dos-leads",
+      "restaurada": true,
+      "horario": "08h30",
+      "fuso": "America/Sao_Paulo",
+      "proposito": "Jornada diária de revisão e melhoria comercial anterior à campanha",
+      "referencia": "output/semana-site-2026-11-02/automation-anterior.toml"
+    },
+    "conversaoTardia": {
+      "acompanharAte": "2026-12-06",
+      "coorteFixada": 44,
+      "naoReescreverResultadoSemanal": true,
+      "naoAutorizaRecontato": true
+    },
+    "ressalvas": [
+      "Serviço Fácil: provável recusa com erro de digitação, excluído do pipeline positivo do balanço; CRM ainda registra interesse e exige revisão contextual.",
+      "AV. Serviços: houve preços e negociação no WhatsApp; zero propostas estruturadas não significa ausência de oferta.",
+      "Locforte: permissão não é qualificação. Garcia: recebimento e encaminhamento não confirmam interesse.",
+      "Recomendações de nova copy e seleção no balanço não foram publicadas."
+    ],
+    "proximosTestes": [
+      {
+        "responsavel": "Operação e Rômulo",
+        "fato": "Interrupções técnicas conhecidas atravessaram a preparação do dia seguinte.",
+        "hipotese": "Fechar a revisão e escalar bloqueios antes do expediente recupera capacidade sem elevar limites.",
+        "teste": "Pré-checagem antes das 08h de cobertura, conta, CRM e pareceres; revisão agendada antes do 11º contato; bloqueio precisa de responsável e ação concreta. Não reiniciar rodada automaticamente.",
+        "observar": "Primeiro e segundo contatos reais no horário, duração de bloqueios, slots perdidos e cumprimento dos limites."
+      },
+      {
+        "responsavel": "Diego",
+        "fato": "27/44 tinham achado sem-site, mas isso não valida necessidade de compra.",
+        "hipotese": "Priorizar falha específica, atual e relevante melhora a aderência.",
+        "teste": "Num lote futuro autorizado, preservar diversidade e três notas >=65; exigir fato com fonte/data, motivo comercial, canal verificado e explicitar desconhecidos. Confirmar necessidade e decisor na conversa, sem exigir certeza inventada na pesquisa.",
+        "observar": "Problema confirmado, acesso ao responsável, próximo passo aceito e propostas por contato."
+      },
+      {
+        "responsavel": "Carla",
+        "fato": "31/44 aberturas giraram em torno de demonstração; rótulos perderam contexto de negativa e negociação.",
+        "hipotese": "Uma observação verificável e uma pergunta sobre a rotina produzem conversas mais úteis que curiosidade pela demo.",
+        "teste": "Próximo lote autorizado: uma mudança principal na abertura, mesma oferta e segmentos comparáveis; leitura integral antes de classificar recusa/recepção/interesse.",
+        "observar": "Necessidade e próximo passo confirmados; autoaviso, permissão e saudação separados de interesse."
+      },
+      {
+        "responsavel": "Elisa",
+        "fato": "Locforte aguardou cerca de 1h58 entre permissão e link; AV negociou condições pelo WhatsApp sem proposta estruturada.",
+        "hipotese": "Entregar material autorizado com objetivo e condições claras reduz atrito no avanço.",
+        "teste": "Preparar material da oferta e registrar tempo; após autorização, enviar só o material pertinente com pergunta de avaliação e próximo passo. Negociação humana usa condições oficiais e fica registrada.",
+        "observar": "Tempo até material, avaliação efetiva, objeções resolvidas, proposta e aceite."
+      },
+      {
+        "responsavel": "Marina",
+        "fato": "29 contatos passaram de 48h; 15 ainda não. Sem volume de resultados positivos para eleger nicho/texto vencedor.",
+        "hipotese": "Aprendizado por estágio real evita otimização por robôs e permissões.",
+        "teste": "Acompanhar a mesma coorte por 30 dias, manter mínimos estatísticos vigentes e controles; não reescrever o resultado semanal com conversões tardias.",
+        "observar": "Qualificação, proposta, aceite e pagamento por coorte, oferta e versão."
+      }
+    ],
+    "evidenciaPrivadaMel": "/home/romulo-sutil-corr-a/.cache/mel-work/semana-site-20261102/conferencias/encerramento-20261106T214554Z",
+    "balancoPrivadoMel": "/home/romulo-sutil-corr-a/.cache/mel-work/semana-site-20261102/conferencias/balanco-20261106T213818Z",
+    "acoes": {
+      "envios": 0,
+      "respostas": 0,
+      "novasRodadas": 0,
+      "alteracoesLimites": 0,
+      "recontatos": 0
+    }
   },
   "reservas": {
     "preparadasEm": "2026-11-01",
@@ -234,6 +379,554 @@
       "Respostas dos clientes",
       "Propostas e negociacao",
       "Aceite comercial e pagamento real"
-    ]
+    ],
+    "restauradaEm": "2026-11-06T21:48:00.796283+00:00",
+    "frequenciaAtual": "Diária às 08h30 America/Sao_Paulo",
+    "campanhaEncerrada": true
+  },
+  "viabilidadeAtual": {
+    "metaOriginalPreservada": 60,
+    "confirmadosAteQuinta": 39,
+    "diasRestantes": 1,
+    "capacidadeRestanteMaxima": 15,
+    "maximoPossivelAteSexta": 54,
+    "deficitMinimoParaMeta": 6,
+    "naoAlterouLimitesOuPrazo": true,
+    "observacao": "Máximo teórico condicionado à retomada segura e às proteções; não é promessa de envio nem extensão da autorização."
+  },
+  "revisaoEstrategicaAposFeedback": {
+    "estado": "diagnostico e proposta de teste, ainda sem alteração dos textos ou fila",
+    "base": "39 contatos e 28 aberturas em torno de demonstração; não foram encontrados problema, impacto e decisor confirmados na projeção consultada. Ausência de campo não demonstra ausência de necessidade real.",
+    "proposta": "Reconfirmar quatro fatos de site fora do ar e testar abertura com um fato verificado e uma pergunta de uso atual; manter autorizações, três pareceres e manifesto. Medir conversa qualificada, proposta e recebimento.",
+    "naoConfirmarCausalidade": true,
+    "naoPublicouNovaMensagem": true
+  },
+  "revisoesContextuaisVigentes": {
+    "site:ChIJVVVRCIdFxwcRz6AIWqd3PCY": {
+      "empresa": "Vicente Quesado",
+      "revistoEm": "2026-11-06T18:37:39.403065+00:00",
+      "fonteSha256": "8039699acc78b2f051081a4c558440dcd60801c7fb240f80033afabf0fcb63b2",
+      "ultimaEntrada": "2026-11-05T11:37:14Z",
+      "classeRevisada": "aviso_padronizado_de_recepcao_ou_expediente",
+      "retornoComercialHumanoComprovado": false,
+      "autoriaTecnica": "comportamento compatível com automação; coletor não identifica autoria humana",
+      "interesseComercialComprovado": false,
+      "permissaoParaMaterial": false,
+      "responderAgora": false,
+      "motivoSemTranscricao": "Aviso de recepção repetido literalmente nas duas ocasiões; segunda repetição dois segundos após a saída. Não responde à oferta de site nem à menção de automação.",
+      "proximoPasso": "Aguardar resposta humana ligada à abordagem; não repetir apresentação, enviar análise ou propor demo com base nesses avisos.",
+      "respostaSugeridaAgora": null,
+      "vigencia": "Somente enquanto o hash da conversa e a última entrada forem os mesmos; nova mensagem exige outra revisão.",
+      "aplicadoNoCRM": true,
+      "classeAtual": "robo",
+      "houveRespostaHumana": false,
+      "versao": "respostas-2026-11-06-avisos"
+    },
+    "site:ChIJixGf8pzlhpQRb0niwnMZ6JI": {
+      "empresa": "Limpa fossa Celião",
+      "revistoEm": "2026-11-06T18:37:39.403065+00:00",
+      "fonteSha256": "d6fd2ee9da7dd5efb30dde87bb7cc1308ba554b381b2dca9e677eda13e2fa457",
+      "ultimaEntrada": "2026-11-05T14:34:38Z",
+      "classeRevisada": "aviso_padronizado_de_recepcao_ou_expediente",
+      "retornoComercialHumanoComprovado": false,
+      "autoriaTecnica": "comportamento compatível com automação; coletor não identifica autoria humana",
+      "interesseComercialComprovado": false,
+      "permissaoParaMaterial": false,
+      "responderAgora": false,
+      "motivoSemTranscricao": "Duas entradas no mesmo segundo: recepção/agradecimento e aviso de indisponibilidade. A conclusão não depende de presumir a ordem entre elas.",
+      "proximoPasso": "Aguardar resposta humana ligada à abordagem; não repetir apresentação, enviar análise ou propor demo com base nesses avisos.",
+      "respostaSugeridaAgora": null,
+      "vigencia": "Somente enquanto o hash da conversa e a última entrada forem os mesmos; nova mensagem exige outra revisão.",
+      "aplicadoNoCRM": true,
+      "classeAtual": "robo",
+      "houveRespostaHumana": false,
+      "versao": "respostas-2026-11-06-avisos"
+    },
+    "site:ChIJJTpGDiRJxwcRc_mNbQVRxRg": {
+      "empresa": "Oswaldo Cardoso",
+      "revistoEm": "2026-11-06T18:37:39.403065+00:00",
+      "fonteSha256": "0cd08f8e5ebddcdb468cf51e23a0c0ba3b24be40b0a94abdb0e1ffd327f34f8b",
+      "ultimaEntrada": "2026-11-04T16:33:37Z",
+      "classeRevisada": "aviso_padronizado_de_recepcao_ou_expediente",
+      "retornoComercialHumanoComprovado": false,
+      "autoriaTecnica": "comportamento compatível com automação; coletor não identifica autoria humana",
+      "interesseComercialComprovado": false,
+      "permissaoParaMaterial": false,
+      "responderAgora": false,
+      "motivoSemTranscricao": "Aviso de expediente, fila por ordem de contato e atendimento de urgência; chegou dois segundos após a abordagem. Não é uma resposta ao pedido de enviar a análise.",
+      "proximoPasso": "Aguardar resposta humana ligada à abordagem; não repetir apresentação, enviar análise ou propor demo com base nesses avisos.",
+      "respostaSugeridaAgora": null,
+      "vigencia": "Somente enquanto o hash da conversa e a última entrada forem os mesmos; nova mensagem exige outra revisão.",
+      "aplicadoNoCRM": true,
+      "classeAtual": "robo",
+      "houveRespostaHumana": false,
+      "versao": "respostas-2026-11-06-avisos"
+    }
+  },
+  "correcaoClassificacaoAvisos06Nov": {
+    "verificadoEm": "2026-11-06T19:00:06.931265+00:00",
+    "etapa": "correcao-classificacao-avisos-vicente-celiao-oswaldo",
+    "versao": "respostas-2026-11-06-avisos",
+    "casos": [
+      {
+        "id": "site:ChIJVVVRCIdFxwcRz6AIWqd3PCY",
+        "empresa": "Advogado Revisional Fortaleza (Dr. Vicente Quesado)",
+        "classe": "robo",
+        "humana": false,
+        "revisar": false,
+        "materialSolicitado": false,
+        "versao": "respostas-2026-11-06-avisos",
+        "tipoRespostaEfetiva": null,
+        "tipoRespostaFonte": null
+      },
+      {
+        "id": "site:ChIJJTpGDiRJxwcRc_mNbQVRxRg",
+        "empresa": "Oswaldo Cardoso Advogado - Advocacia Especializada",
+        "classe": "robo",
+        "humana": false,
+        "revisar": false,
+        "materialSolicitado": false,
+        "versao": "respostas-2026-11-06-avisos",
+        "tipoRespostaEfetiva": null,
+        "tipoRespostaFonte": null
+      },
+      {
+        "id": "site:ChIJixGf8pzlhpQRb0niwnMZ6JI",
+        "empresa": "Limpa fossa Celião",
+        "classe": "robo",
+        "humana": false,
+        "revisar": false,
+        "materialSolicitado": false,
+        "versao": "respostas-2026-11-06-avisos",
+        "tipoRespostaEfetiva": null,
+        "tipoRespostaFonte": null
+      }
+    ],
+    "mudanca": "Detector compartilhado reconhece moldes completos de recepção, ausência e expediente. Conteúdo humano adicional não entra nesses moldes; nova entrada humana é reavaliada com o contexto.",
+    "crmPublicado": true,
+    "frontendPublicado": true,
+    "revisaoDiariaConferida": {
+      "2026-11-04": [
+        "Oswaldo",
+        "Vicente"
+      ],
+      "2026-11-05": [
+        "Vicente",
+        "Celião"
+      ],
+      "resultado": "Todos classe robo, humanaConfirmada false e revisarClassificacao false."
+    },
+    "testesProducao": 139,
+    "testesRevisaoPython": 5,
+    "testesLocais": 78,
+    "typecheck": "passou",
+    "build": "frontend e servidor passaram",
+    "conversasOriginaisIntactas": true,
+    "historicosAnterioresPreservados": true,
+    "mensagensEnviadasPorEstaCorrecao": 0,
+    "limitesEPausasAlterados": false,
+    "pendenciasTecnicas": "Handoff interno de captura/projeção não comprova que o cliente respondeu humanamente; restrições técnicas reais continuam preservadas.",
+    "evidenciaPrivadaMel": "/home/romulo-sutil-corr-a/.cache/mel-work/classificacao-avisos-20261106/184941Z",
+    "hashesFonte": {
+      "src/operations/mensagem-automatica.ts": "8e6fab9ac2e434a89e76fcb702006c2db0af28fb172f5a0571a8ebb9ca7198f1",
+      "src/operations/classificacao-resposta.ts": "7629118302a65117de6582404b81b2033fceb57bc62d8a9641e974a85b7892c4"
+    }
+  },
+  "continuidadeAposLucimar06Nov": {
+    "verificadoEm": "2026-11-06T21:21:35.282990+00:00",
+    "etapa": "continuidade-apos-lucimar",
+    "continuidadeConfirmada": true,
+    "enviosConfirmadosHoje": [
+      {
+        "empresa": "Ciro Costa - Advogado",
+        "emRegistro": "2026-11-06T18:21:44.637324+00:00",
+        "observadoEm": "2026-11-06T18:21:53Z",
+        "destinatarioReciboIdTextoConfirmados": true
+      },
+      {
+        "empresa": "Lucimar Felipe Advogada",
+        "emRegistro": "2026-11-06T18:52:59.373763+00:00",
+        "observadoEm": "2026-11-06T18:53:08Z",
+        "destinatarioReciboIdTextoConfirmados": true
+      },
+      {
+        "empresa": "Mariele Abreu Nigelski Advocacia - Advogada Previdenciária em Ponta Grossa",
+        "emRegistro": "2026-11-06T19:23:31.854890+00:00",
+        "observadoEm": "2026-11-06T19:23:39Z",
+        "destinatarioReciboIdTextoConfirmados": true
+      },
+      {
+        "empresa": "Dr. Adalex Borges - Advogado",
+        "emRegistro": "2026-11-06T19:54:21.976674+00:00",
+        "observadoEm": "2026-11-06T19:54:30Z",
+        "destinatarioReciboIdTextoConfirmados": true
+      },
+      {
+        "empresa": "️ Advogado no Riacho Fundo 1 em Brasília I Garcia Braga Advogados",
+        "emRegistro": "2026-11-06T20:24:38.405510+00:00",
+        "observadoEm": "2026-11-06T20:24:51Z",
+        "destinatarioReciboIdTextoConfirmados": true
+      }
+    ],
+    "contatosConfirmadosHoje": 5,
+    "contatosConfirmadosCampanha": 44,
+    "novosAposLucimar": 3,
+    "menorIntervaloSegundos": 1821.0,
+    "maximoEmUmaHora": 2,
+    "ativo": true,
+    "estadoExecutor": "fora-do-horario",
+    "pausaAutomatica": null,
+    "conta": "open",
+    "servicos": {
+      "squadone-operations": "active",
+      "evolution-adaptador": "active",
+      "whatsapp-observador-prumo": "active",
+      "frente-comercial.timer": "active"
+    },
+    "crmGeradoEm": "2026-11-06T21:20:46.996Z",
+    "incertos": 0,
+    "pendenciasRegistroCRM": 0,
+    "rodada": {
+      "inicio": "2026-11-06T18:16:54.407Z",
+      "pendentes": 5,
+      "limite": 10,
+      "bloqueado": false
+    },
+    "limites": {
+      "diario": 15,
+      "porHora": 2,
+      "intervaloMinutos": 30,
+      "pendenciasPorRodada": 10,
+      "campanha": 60
+    },
+    "novoRetorno": {
+      "empresa": "Garcia Braga Advogados",
+      "ultimaEntrada": "2026-11-06T20:25:05Z",
+      "classe": "recebimento e encaminhamento interno",
+      "autoria": "Humana ou automática não confirmada",
+      "interesseConfirmado": false,
+      "permissaoMaterialConfirmada": false,
+      "saidaPosterior": false,
+      "proximoPasso": "Aguardar a análise da equipe. Sem material adicional ou cobrança agora; só retomar se houver resposta concreta.",
+      "necessitaRespostaAgora": false
+    },
+    "atencaoRomuloNova": [],
+    "emEspera": [
+      "Serviço Fácil: interesse humano já respondido em 05/11 às 09h10; aguardar retorno.",
+      "AV/Locforte/Detone: sem entrada nova após saída posterior.",
+      "Vicente/Celião/Oswaldo: avisos automáticos, sem nova ação de resposta."
+    ],
+    "expedienteEncerrado": true,
+    "campanhaTerminaHoje": true,
+    "guardEnvioSegundaPermite": false,
+    "avisoPrevisaoExecutor": "A API projeta 09/11 às 08h por seu calendário genérico; o guard final da campanha nega esse envio. Não há autorização para prorrogação.",
+    "acoesNestaConferencia": {
+      "envios": 0,
+      "respostas": 0,
+      "novasRodadas": 0,
+      "alteracoesProtecoes": 0
+    },
+    "evidenciaPrivadaMel": "/home/romulo-sutil-corr-a/.cache/mel-work/semana-site-20261102/conferencias/apos-lucimar-20261106T212129Z",
+    "status": "Continuidade confirmada após Lucimar: Mariele 16h23, Adalex 16h54 e Garcia Braga 17h24. Cinco contatos hoje e 44 na campanha. Garcia respondeu 17h25 com recebimento/encaminhamento à equipe, sem autoria humana ou interesse confirmados; aguardar. Expediente encerrado, limites mantidos; campanha não prorrogada."
+  },
+  "balancoComercial06Nov": {
+    "verificadoEm": "2026-11-06T21:42:54.438643+00:00",
+    "coorte": "Site/Encontrado, primeiros contatos de 03 a 06/11/2026",
+    "contatosConfirmados": 44,
+    "metaContatos": 60,
+    "atingimentoPercentual": 73.3,
+    "deficit": 16,
+    "fechamentosComprovados": 0,
+    "metaFechamentos": 3,
+    "fonte": "SQLite, recibos e conversas completas; 44 IDs e textos de saída rechecados; CRM gerado em 06/11 às 21:30:47Z.",
+    "porDia": [
+      {
+        "dia": "2026-11-03",
+        "meta": 15,
+        "real": 15,
+        "deficit": 0,
+        "causa": "Houve interrupção de 12h36 a 15h02 para revisão/capturas de AV/Atual, mas os 15 foram recuperados no próprio dia."
+      },
+      {
+        "dia": "2026-11-04",
+        "meta": 15,
+        "real": 14,
+        "deficit": 1,
+        "causa": "Interrupção entre 10h13 e 13h02, revisão de rodada e captura de Vs Obras. Último às 17h09; o próximo intervalo levaria a 17h39, após o expediente. Duas falhas de WhatsApp foram substituídas e não contam como contatos."
+      },
+      {
+        "dia": "2026-11-05",
+        "meta": 15,
+        "real": 10,
+        "deficit": 5,
+        "causa": "Último às 12h34. Conflitos Ninja/Renan e revisão da rodada impediram a continuidade; permaneceram sem resolução na consolidação da noite."
+      },
+      {
+        "dia": "2026-11-06",
+        "meta": 15,
+        "real": 5,
+        "deficit": 10,
+        "causa": "Conflitos herdados e pausa histórica de desconexão exigiram revisão. Conta já conectada na checagem da tarde; retomada autorizada e revalidada só produziu primeiro contato às 15h21. Até 17h30 cabiam cinco respeitando 30 minutos."
+      }
+    ],
+    "raizOperacional": "Meta de 15 em cada um de quatro dias, sem margem diária de recuperação. Falhas recorrentes de captura e revisões concluídas tarde consumiram capacidade; os limites foram mantidos. Havia 65 candidatos preparados e 24 elegíveis no fim de quinta; ausência de nomes não explica o déficit.",
+    "conversas": {
+      "semEntrada": 25,
+      "comAlgumaEntrada": 19,
+      "negociacaoConcreta": 1,
+      "permissaoSemQualificacao": 1,
+      "recusaClara": 1,
+      "provavelRecusaComErroDigitacao": 1,
+      "automaticasOuPadronizadasSemSinalComercial": 14,
+      "recebimentoEncaminhamentoSemInteresse": 1,
+      "nota": "Partição contextual para este balanço, não atualização automática do CRM. Saudações e autoria incerta não viram interesse."
+    },
+    "oportunidades": [
+      {
+        "empresa": "AV. Serviços",
+        "estagio": "Negociação concreta; sem fechamento comprovado",
+        "evidencia": "Avaliou demonstração, questionou preço, expôs objeção ao desembolso inicial e discutiu alternativa recorrente, início do pagamento e domínio existente.",
+        "proximoPasso": "Em retomada conduzida por Rômulo, consolidar escopo e condições oficiais sem inventar novas condições; confirmar o próximo passo. Já existem saídas posteriores, portanto não repetir cobrança automática.",
+        "ressalva": "Classe neutra e zero propostas estruturadas no CRM ocultam preços e negociação efetivamente presentes no WhatsApp."
+      },
+      {
+        "empresa": "Locforte",
+        "estagio": "Permissão para demonstração; não qualificado",
+        "evidencia": "Autorizou demonstração, link entregue; sem necessidade, decisor e compromisso de avaliação confirmados.",
+        "proximoPasso": "Se houver retomada pertinente por Rômulo, entender o objetivo comercial e combinar avaliação concreta; evitar apenas perguntar se gostou.",
+        "tempoPermissaoAteLinkMinutos": 118.4
+      },
+      {
+        "empresa": "Serviço Fácil Manaus",
+        "estagio": "Provável desinteresse; não contar como oportunidade positiva",
+        "evidencia": "Leitura integral revela provável negação com erro de digitação. O classificador capturou expressão afirmativa dentro de uma frase contextual de provável recusa.",
+        "proximoPasso": "Retirar do pipeline positivo da análise e preservar a incerteza; não insistir nem tratar como interesse. Correção do classificador/CRM proposta, não publicada neste balanço.",
+        "correcaoAnaliseAnterior": true
+      },
+      {
+        "empresa": "Garcia Braga",
+        "estagio": "Recebimento/encaminhamento, autoria não confirmada",
+        "evidencia": "Entrada confirma encaminhamento à equipe, sem autorização de material nem interesse explícito.",
+        "proximoPasso": "Aguardar retorno; não criar oportunidade qualificada ou nova cobrança."
+      }
+    ],
+    "evidenciaMensagensSelecao": {
+      "aberturasComDemo": 31,
+      "contatos": 44,
+      "leadsComAchadoSemSite": 27,
+      "leadsComAchadoRedeSocial": 14,
+      "leadsComAchadoSiteForaDoAr": 2,
+      "advocacia": 16,
+      "dedetizacao": 9,
+      "nota": "Achados sobrepostos e públicos, não prova de demanda ou urgência; ausência de link no perfil não demonstra ausência de site.",
+      "propostasEstruturadasCRM": 0,
+      "pagamentosRegistradosCRM": 0,
+      "ressalva": "Não registrar proposta estruturada não significa que ninguém recebeu preço: AV negociou pelo WhatsApp."
+    },
+    "melhoriasPropostas": [
+      {
+        "responsavel": "Operação e Rômulo",
+        "fato": "Interrupções técnicas conhecidas atravessaram a preparação do dia seguinte.",
+        "hipotese": "Fechar a revisão e escalar bloqueios antes do expediente recupera capacidade sem elevar limites.",
+        "teste": "Pré-checagem antes das 08h de cobertura, conta, CRM e pareceres; revisão agendada antes do 11º contato; bloqueio precisa de responsável e ação concreta. Não reiniciar rodada automaticamente.",
+        "observar": "Primeiro e segundo contatos reais no horário, duração de bloqueios, slots perdidos e cumprimento dos limites."
+      },
+      {
+        "responsavel": "Diego",
+        "fato": "27/44 tinham achado sem-site, mas isso não valida necessidade de compra.",
+        "hipotese": "Priorizar falha específica, atual e relevante melhora a aderência.",
+        "teste": "Num lote futuro autorizado, preservar diversidade e três notas >=65; exigir fato com fonte/data, motivo comercial, canal verificado e explicitar desconhecidos. Confirmar necessidade e decisor na conversa, sem exigir certeza inventada na pesquisa.",
+        "observar": "Problema confirmado, acesso ao responsável, próximo passo aceito e propostas por contato."
+      },
+      {
+        "responsavel": "Carla",
+        "fato": "31/44 aberturas giraram em torno de demonstração; rótulos perderam contexto de negativa e negociação.",
+        "hipotese": "Uma observação verificável e uma pergunta sobre a rotina produzem conversas mais úteis que curiosidade pela demo.",
+        "teste": "Próximo lote autorizado: uma mudança principal na abertura, mesma oferta e segmentos comparáveis; leitura integral antes de classificar recusa/recepção/interesse.",
+        "observar": "Necessidade e próximo passo confirmados; autoaviso, permissão e saudação separados de interesse."
+      },
+      {
+        "responsavel": "Elisa",
+        "fato": "Locforte aguardou cerca de 1h58 entre permissão e link; AV negociou condições pelo WhatsApp sem proposta estruturada.",
+        "hipotese": "Entregar material autorizado com objetivo e condições claras reduz atrito no avanço.",
+        "teste": "Preparar material da oferta e registrar tempo; após autorização, enviar só o material pertinente com pergunta de avaliação e próximo passo. Negociação humana usa condições oficiais e fica registrada.",
+        "observar": "Tempo até material, avaliação efetiva, objeções resolvidas, proposta e aceite."
+      },
+      {
+        "responsavel": "Marina",
+        "fato": "29 contatos passaram de 48h; 15 ainda não. Sem volume de resultados positivos para eleger nicho/texto vencedor.",
+        "hipotese": "Aprendizado por estágio real evita otimização por robôs e permissões.",
+        "teste": "Acompanhar a mesma coorte por 30 dias, manter mínimos estatísticos vigentes e controles; não reescrever o resultado semanal com conversões tardias.",
+        "observar": "Qualificação, proposta, aceite e pagamento por coorte, oferta e versão."
+      }
+    ],
+    "prioridade": "Primeiro estabilizar a preparação e a captura; depois validar a abertura baseada em fato e pergunta, com seleção aderente. Propostas de texto e régua não foram publicadas.",
+    "limitesPreservados": true,
+    "autorizaNovosContatos": false,
+    "enviosNestaRevisao": 0,
+    "alteracoesCRMouCopyNestaRevisao": 0,
+    "evidenciaPrivadaMel": "/home/romulo-sutil-corr-a/.cache/mel-work/semana-site-20261102/conferencias/balanco-20261106T213818Z"
+  },
+  "encerramentoCampanha06Nov": {
+    "verificadoEm": "2026-11-06T21:48:00.796283+00:00",
+    "etapa": "encerramento-real-campanha-06nov",
+    "campanhaEncerrada": true,
+    "contatosConfirmadosCampanha": 44,
+    "metaContatos": 60,
+    "deficitContatos": 16,
+    "porDia": {
+      "2026-11-03": 15,
+      "2026-11-04": 14,
+      "2026-11-05": 10,
+      "2026-11-06": 5
+    },
+    "fechamentosConfirmados": 0,
+    "metaFechamentos": 3,
+    "propostasEstruturadasCRM": 0,
+    "negociacaoComPrecoNoWhatsApp": [
+      "AV. Serviços"
+    ],
+    "novosEventosDesdeBalanco": 0,
+    "mensagensNasConversas": 116,
+    "primeirosContatosReconciliados": 44,
+    "crmGeradoEm": "2026-11-06T21:40:47.390Z",
+    "conta": "open",
+    "servicos": {
+      "squadone-operations": "active",
+      "evolution-adaptador": "active",
+      "whatsapp-observador-prumo": "active",
+      "frente-comercial.timer": "active",
+      "curadoria-leads.timer": "active",
+      "revisao-comercial-diaria.timer": "active"
+    },
+    "incertos": 0,
+    "pendenciasRegistroCRM": 0,
+    "rodada": {
+      "inicio": "2026-11-06T18:16:54.407Z",
+      "pendentes": 5,
+      "limite": 10,
+      "bloqueado": false
+    },
+    "estadoExecutor": "fora-do-horario",
+    "guardSegundaPermite": false,
+    "fimAutorizacaoCampanha": "2026-11-06",
+    "autorizacaoNaoProrrogada": true,
+    "manifestoPreservadoAtivoComDataFinal": true,
+    "curadoria": {
+      "geradoEm": "2026-11-06T21:46:22.811626+00:00",
+      "hash": "02ed48b6fe6c319db6fc95ce27d635043e16ae7f084f20cc5272612b3c4b86f2",
+      "maturacaoHoras": 48,
+      "minimoCasos": 10,
+      "padroesAtivos": 0
+    },
+    "revisaoDiaria": {
+      "versao": 2,
+      "diaAnalisado": "2026-11-06",
+      "geradoEm": "2026-11-06T21:46:23.099699+00:00",
+      "fonteGeradaEm": "2026-11-06T21:40:47.390Z",
+      "estado": "ok",
+      "conversasRevisadas": 5,
+      "primeirosContatos": 5,
+      "resultadosPrimeiros": {
+        "silencio": 4,
+        "pendente": 1
+      },
+      "tentativas": {
+        "enviado": 5
+      },
+      "enviosComRecibo": 5,
+      "nichosPrimeiros": {
+        "advocacia": 5
+      },
+      "entregasAcimaDe30Min": 0,
+      "permissoesSemLink": 0,
+      "coorteDasEntregas": "Permissões recebidas no dia analisado, com entregas observadas até a geração; classes antigas não viram pendência nova.",
+      "limites": "Observação descritiva até agora, não resultado final de D+1. Permissão não confirma compra. Nenhuma rodada, recusa, preço, nota mínima ou envio é alterado por este relatório."
+    },
+    "automacao": {
+      "id": "revisar-mensagens-e-qualidade-dos-leads",
+      "restaurada": true,
+      "horario": "08h30",
+      "fuso": "America/Sao_Paulo",
+      "proposito": "Jornada diária de revisão e melhoria comercial anterior à campanha",
+      "referencia": "output/semana-site-2026-11-02/automation-anterior.toml"
+    },
+    "conversaoTardia": {
+      "acompanharAte": "2026-12-06",
+      "coorteFixada": 44,
+      "naoReescreverResultadoSemanal": true,
+      "naoAutorizaRecontato": true
+    },
+    "ressalvas": [
+      "Serviço Fácil: provável recusa com erro de digitação, excluído do pipeline positivo do balanço; CRM ainda registra interesse e exige revisão contextual.",
+      "AV. Serviços: houve preços e negociação no WhatsApp; zero propostas estruturadas não significa ausência de oferta.",
+      "Locforte: permissão não é qualificação. Garcia: recebimento e encaminhamento não confirmam interesse.",
+      "Recomendações de nova copy e seleção no balanço não foram publicadas."
+    ],
+    "proximosTestes": [
+      {
+        "responsavel": "Operação e Rômulo",
+        "fato": "Interrupções técnicas conhecidas atravessaram a preparação do dia seguinte.",
+        "hipotese": "Fechar a revisão e escalar bloqueios antes do expediente recupera capacidade sem elevar limites.",
+        "teste": "Pré-checagem antes das 08h de cobertura, conta, CRM e pareceres; revisão agendada antes do 11º contato; bloqueio precisa de responsável e ação concreta. Não reiniciar rodada automaticamente.",
+        "observar": "Primeiro e segundo contatos reais no horário, duração de bloqueios, slots perdidos e cumprimento dos limites."
+      },
+      {
+        "responsavel": "Diego",
+        "fato": "27/44 tinham achado sem-site, mas isso não valida necessidade de compra.",
+        "hipotese": "Priorizar falha específica, atual e relevante melhora a aderência.",
+        "teste": "Num lote futuro autorizado, preservar diversidade e três notas >=65; exigir fato com fonte/data, motivo comercial, canal verificado e explicitar desconhecidos. Confirmar necessidade e decisor na conversa, sem exigir certeza inventada na pesquisa.",
+        "observar": "Problema confirmado, acesso ao responsável, próximo passo aceito e propostas por contato."
+      },
+      {
+        "responsavel": "Carla",
+        "fato": "31/44 aberturas giraram em torno de demonstração; rótulos perderam contexto de negativa e negociação.",
+        "hipotese": "Uma observação verificável e uma pergunta sobre a rotina produzem conversas mais úteis que curiosidade pela demo.",
+        "teste": "Próximo lote autorizado: uma mudança principal na abertura, mesma oferta e segmentos comparáveis; leitura integral antes de classificar recusa/recepção/interesse.",
+        "observar": "Necessidade e próximo passo confirmados; autoaviso, permissão e saudação separados de interesse."
+      },
+      {
+        "responsavel": "Elisa",
+        "fato": "Locforte aguardou cerca de 1h58 entre permissão e link; AV negociou condições pelo WhatsApp sem proposta estruturada.",
+        "hipotese": "Entregar material autorizado com objetivo e condições claras reduz atrito no avanço.",
+        "teste": "Preparar material da oferta e registrar tempo; após autorização, enviar só o material pertinente com pergunta de avaliação e próximo passo. Negociação humana usa condições oficiais e fica registrada.",
+        "observar": "Tempo até material, avaliação efetiva, objeções resolvidas, proposta e aceite."
+      },
+      {
+        "responsavel": "Marina",
+        "fato": "29 contatos passaram de 48h; 15 ainda não. Sem volume de resultados positivos para eleger nicho/texto vencedor.",
+        "hipotese": "Aprendizado por estágio real evita otimização por robôs e permissões.",
+        "teste": "Acompanhar a mesma coorte por 30 dias, manter mínimos estatísticos vigentes e controles; não reescrever o resultado semanal com conversões tardias.",
+        "observar": "Qualificação, proposta, aceite e pagamento por coorte, oferta e versão."
+      }
+    ],
+    "evidenciaPrivadaMel": "/home/romulo-sutil-corr-a/.cache/mel-work/semana-site-20261102/conferencias/encerramento-20261106T214554Z",
+    "balancoPrivadoMel": "/home/romulo-sutil-corr-a/.cache/mel-work/semana-site-20261102/conferencias/balanco-20261106T213818Z",
+    "acoes": {
+      "envios": 0,
+      "respostas": 0,
+      "novasRodadas": 0,
+      "alteracoesLimites": 0,
+      "recontatos": 0
+    }
+  },
+  "correcaoServicoFacil06Nov": {
+    "aplicadoEm": "2026-11-06T22:25:26.777506+00:00",
+    "classe": "recusa",
+    "revisar": true,
+    "interpretacao": "Provável negação truncada, sem interesse confirmado; incerteza preservada.",
+    "mensagemOriginalPreservada": true,
+    "versao": "respostas-2026-11-06-contexto",
+    "aplicadoNoCRM": true,
+    "revisaoDiariaRegenerada": true,
+    "semEnvio": true,
+    "evidenciaPrivadaMel": "/home/romulo-sutil-corr-a/.cache/mel-work/proxima-campanha-20261109/20261106T220135Z"
+  },
+  "preparacaoProximaCampanha": {
+    "arquivo": "config/campanha-site-2026-11-09.preparacao.json",
+    "executorAtivo": false,
+    "principais": 10,
+    "reservas": 2,
+    "enviosAutorizados": false
   }
 }

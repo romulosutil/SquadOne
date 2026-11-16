@@ -33,13 +33,14 @@ describe('paleta: abas e dicas (AC-23)', () => {
     assert.equal(href('aba:central-escritorio'), '/?abrir=escritorio')
     // A Entrada não é da SPA: o App.vue navega de verdade (window.location).
     assert.equal(href('ir:entrada'), '/entrada/')
+    assert.equal(href('aba:linear-pessoal'), 'http://127.0.0.1:8787/')
   })
 
   it('nenhuma dica é um caminho cru', () => {
     for (const c of [...comandosDaPaleta(DELL, [], null), ...comandosDaPaleta({ perfil: 'operations', agentes: true }, [{ id: 'a', nome: 'A' }], null)]) {
       assert.ok(!c.dica.startsWith('/'), `${c.id}: ${c.dica}`)
     }
-    assert.equal(comandosDaPaleta(DELL, [], null).find((c) => c.id === 'aba:vendas-triagem')?.dica, 'Vendas › Primeiros contatos · avaliação do time e triagem')
+    assert.equal(comandosDaPaleta(DELL, [], null).find((c) => c.id === 'aba:vendas-triagem')?.dica, 'Vendas › Aquisição · avaliação do time e triagem')
   })
 })
 

@@ -75,4 +75,3 @@ describe('Iris: identidade da clínica e titularidade do contato', () => {
     assert.equal(row._tipo, 'prospect');
   });
 });
-

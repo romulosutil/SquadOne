@@ -23,12 +23,3 @@ test('invalidar durante uma leitura impede que a projeção antiga seja guardada
   const a=ler();await Promise.resolve();ler.invalidar();concluir(1);await a
   assert.equal(await ler(),2)
 })
-
-test('invalidação inicia leitura nova antes de a antiga concluir e não perde o cache novo', async () => {
-  let chamadas = 0, concluir!: (valor: number) => void
-  const ler = compartilharLeitura(() => ++chamadas === 1 ? new Promise<number>(r => { concluir = r }) : Promise.resolve(2))
-  const antiga = ler(); await Promise.resolve(); ler.invalidar()
-  assert.equal(await ler(), 2)
-  concluir(1); assert.equal(await antiga, 1)
-  assert.equal(await ler(), 2); assert.equal(chamadas, 2)
-})

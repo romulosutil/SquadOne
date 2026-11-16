@@ -28,7 +28,8 @@ export function resumirSinaisComerciais(mensagens:readonly MensagemParaSinalCome
     const audio=audioDaMensagem(m.texto)
     conteudoPendente=conteudoPendente||!!audio&&!audio.transcricao||leitura.classe==='pendente'
     if(leitura.classe==='recusa'||leitura.classe==='exclusao'){
-      restricao={tipo:leitura.classe,em};continue
+      const evidenciaEm=leitura.evidencia?.em,instante=Date.parse(evidenciaEm??'')
+      restricao={tipo:leitura.classe,em:Number.isFinite(instante)&&instante<=Date.parse(em)?new Date(instante).toISOString():em};continue
     }
     // Só uma nova evidência comercial pode substituir a negativa antiga para revisão interna.
     // "ok", saudação e silêncio não desfazem uma restrição.

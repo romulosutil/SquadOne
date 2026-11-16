@@ -180,3 +180,107 @@ os caçadores já estão pausados e não devem ser reativados pela recuperação
 Evidências locais: `output/higienizacao-2026-11-01/`. Fontes e instruções de
 execução estão versionáveis; segredos, resultados empresariais e backups ficam
 fora do Git. Não foi criado commit nem substituída a árvore de trabalho existente.
+
+## Execução autorizada de Site/Encontrado — complemento de 1/11
+
+Esta seção atualiza os estados anteriores deste documento. A restrição de custo
+zero abrange somente pesquisa e enriquecimento. Os fluxos de produção e DEV do
+Silmer estão ativos com modelo OpenAI e transcrição restaurados; a configuração
+foi novamente conferida sem chamada paga de teste.
+
+As nove pendências tiveram recibos e conversas conferidos: cinco silêncios e
+quatro respostas automáticas ou padronizadas, sem interesse comercial confirmado.
+Uma revisão concorrente já havia aberto corretamente a nova rodada. Ela foi
+adotada, sem segunda abertura nem exclusão do histórico. O estado histórico dos
+nove destinatários continua protegido contra recontato.
+
+Os 23 complementos e candidatos de reserva receberam pesquisa gratuita. Foram
+reaproveitados dados públicos com a data original, lidos sites institucionais e
+conferidos perfis pela interface pública do Google Maps, sem API Places. Link
+ausente no perfil não prova ausência de site na internet. Uma contradição de
+site atual retirou o candidato correspondente do manifesto; uma divergência
+geográfica permanece em revisão, sem aprovação inventada.
+
+A Central aceita um arquivo privado de achados de pesquisa, com identidade,
+origem, validade e tipos de achado limitados. Isso não fabrica `publicado.json`,
+demo ou relatório público. As avaliações recebem a evidência pública pertinente,
+sem telefone ou conversa privada. Nos dois relatórios que prometem três pontos,
+as três observações existentes e a disponibilidade pública foram conferidas e
+expostas ao parecer, sem transformar comparação de busca em intenção de compra.
+
+Foi encontrado e bloqueado também o caminho de Places do Raio-X local, além
+dos bloqueios da pesquisa no n8n. Os caçadores pagos continuam pausados. A
+pesquisa agendada agora seleciona somente Site dentro do manifesto autorizado.
+Nenhuma nova consulta paga foi feita para completar os candidatos.
+
+Tarefas antigas de curadoria interna só são concluídas após revisão real e três
+aprovações, por eventos normais do CRM. Nenhuma recusa ou compromisso de cliente
+é apagado. Pareceres adiados continuam adiados. Lotes menores de cinco e uma
+instrução de motivo curto corrigem saídas inválidas do avaliador; os três papéis,
+nota mínima 65, validador e limite diário de inferências foram preservados.
+
+O executor tem lista nominal e trava final para enviar somente de 3 a 6/11.
+O timer foi retomado após a preparação serial. A automação existente foi
+atualizada para revisão às 07h40, 12h40 e 18h40. Novas rodadas exigem conferência
+dos recibos e conversas e comparação de `inicioAnterior`; não há reset cego.
+Após 6/11 ela deve voltar ao propósito e horário anteriores, sem estender esta
+autorização para outra semana.
+
+Preparação interna em 2/11; até 15 contatos únicos confirmados por dia de 3 a
+6/11, meta 60 e três fechamentos da nova coorte. Entrega, leitura, proposta e
+interesse não contam como fechamento. Silêncio ou robô não contam como perda.
+Os fechamentos da carteira anterior e a conversão tardia têm indicadores
+separados. A meta de 5% permanece uma hipótese comercial a medir.
+
+Validação deste complemento: 103 testes do executor, quatro do escopo da
+campanha, 74 do Raio-X, 30 da pesquisa e sete do leitor de evidências da Central.
+O teste existente de contagem parcial foi atualizado para conferir progressão
+em rodadas menores e preservação de envio confirmado. Evidências empresariais
+e recibos ficam em `~/.cache/mel-work/semana-site-20261102/` na Mel; o resumo
+agregado e o relatório revisável ficam em `output/semana-site-2026-11-02/`.
+
+Conferência final: 60 candidatos aprovados, 11 adiados e nenhuma reserva
+adicional já aprovada. A fila publicada contém somente os 60 Site, com zero
+envios da campanha e próximo início em 3/11 às 8h. Em CRM fresco foram
+conferidos 60 destinos distintos sem contato anterior, 180 pareceres válidos
+e os hashes atuais. Executor, Central, adaptador e observador estão ativos.
+O plano v4 e a automação priorizam pelo menos cinco reservas gratuitas na
+segunda, sem contar adiamentos como aprovados nem ampliar a meta de contatos.
+
+## Cinco reservas concluídas no domingo
+
+Rômulo pediu antecipar também as reservas para 1/11. A preparação foi concluída:
+os 60 principais foram preservados e cinco reservas receberam pesquisa gratuita
+e três pareceres reais >=65. Seis candidatos continuam adiados. Não houve
+redução de critério, recontato ou envio antecipado.
+
+Reservas: DC.Reforma Total e Construções (menor nota 72), ALFA Reformas Campinas
+(68), Silva & Santos (70), BS Construção e Reforma (72) e Pinturas e Reformas
+(68). Os relatos públicos de serviços foram distinguidos de necessidade
+confirmada; a coleta original do Google foi preservada. Diretórios públicos
+com nome, cidade e contato coincidentes e uma consulta gratuita a Minha Receita
+complementaram a pesquisa. GT Engenharia permaneceu adiada, apesar da identidade
+cadastral confirmada. Sites saudáveis de outros candidatos foram excluídos da
+reposição. Nenhuma API paga foi usada.
+
+O executor agora preserva a prioridade dos principais ao ordenar a fila.
+Reservas aprovadas ficam ao final e podem substituir principais indisponíveis
+pelos mesmos gates. O guard final de envio restringe aos IDs nas listas
+`principais` e `reservas`; um candidato apenas autorizado para pesquisa não
+ganha envio por aparecer no conjunto maior. Os limites diários e a janela de
+3 a 6/11 conservam o máximo de 60 contatos. Há 65 candidatos preparados, não
+uma nova meta de 65 contatos.
+
+Em CRM fresco foram verificados 65 destinos distintos, 195 pareceres reais,
+hashes atuais, ausência de histórico e proteção entre todas as ofertas. A fila
+publicada mantém os 60 principais antes das cinco reservas, zero envios e
+próximo início em 3/11 às 8h. O timer foi retomado e está ativo e habilitado.
+Os 103 testes do executor e sete da campanha passaram, incluindo prioridade,
+substituição, autorização do manifesto, validade e privacidade do complemento.
+
+Pesquisa/higiene no n8n segue ativa às 07h10, 12h10 e 18h10 de segunda a sexta;
+revisões do agente às 07h40, 12h40 e 18h40. O plano v5 e a automação foram
+atualizados: segunda é conferência, sem tarefa pendente para criar as reservas.
+Atendimento às respostas, propostas e negociação permanecem com Rômulo. O
+executor automatiza o primeiro contato, não a venda de ponta a ponta. A evidência
+privada deste complemento está em `reservas-20261101/` dentro da pasta da semana.

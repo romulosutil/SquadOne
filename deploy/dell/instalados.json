@@ -14,106 +14,482 @@
     "~/licitacoes-automation não é checkout git: só compose, scripts e fluxo versionados; o .env nunca entra. Mudar compose/scripts pede 'docker compose up -d' (ou restart do collector) depois do install."
   ],
   "arquivos": [
-    {"repo": "deploy/dell/lib/qualidade_prumo.py", "instalado": "~/.local/lib/mel/", "modo": "644"},
-    {"repo": "deploy/dell/frente-comercial.py", "instalado": "~/.local/bin/frente-comercial"},
-    {"repo": "deploy/dell/filtro_leads.py", "instalado": "~/.local/bin/", "modo": "600"},
-    {"repo": "deploy/dell/curadoria-leads.py", "instalado": "~/.local/bin/curadoria-leads"},
-    {"repo": "deploy/dell/disparo-conversa.py", "instalado": "~/.local/bin/disparo-conversa", "modo": "700"},
-    {"repo": "deploy/dell/revisao-comercial-diaria.py", "instalado": "~/.local/bin/revisao-comercial-diaria", "modo": "700"},
-    {"repo": "deploy/dell/falha-pelo-telegram.py", "instalado": "~/.local/bin/falha-pelo-telegram"},
-    {"repo": "deploy/dell/aquisicao-guarda.py", "instalado": "~/.local/bin/aquisicao-guarda", "modo": "700", "reiniciar": "aquisicao-guarda"},
-    {"repo": "deploy/dell/dell-status.py", "instalado": "~/.local/bin/dell-status"},
-    {"repo": "deploy/dell/socorro.py", "instalado": "~/.local/bin/socorro"},
-    {"repo": "deploy/dell/atualizar-central.sh", "instalado": "~/.local/bin/atualizar-central"},
-    {"repo": "deploy/dell/lib/aviso.py", "instalado": "~/.local/lib/mel/"},
-    {"repo": "deploy/dell/auto-entrada.py", "instalado": "~/.local/bin/auto-entrada"},
-    {"repo": "deploy/dell/backup/backup-dell.py", "instalado": "~/.local/bin/backup-dell"},
-    {"repo": "deploy/dell/backup/estrutura-coletar.py", "instalado": "~/.local/bin/estrutura-coletar"},
-    {"repo": "deploy/dell/backup/fontes.toml", "instalado": "~/.config/backup-dell/fontes.toml", "modo": "600"},
-    {"repo": "deploy/dell/site-demos-limpeza.py", "instalado": "~/.local/bin/site-demos-limpeza"},
-    {"repo": "deploy/dell/site-pastas.py", "instalado": "~/.local/bin/site-pastas"},
-    {"repo": "deploy/dell/gerador-de-sites.py", "instalado": "~/.local/bin/gerador-de-sites"},
-    {"repo": "deploy/dell/seo-do-site.py", "instalado": "~/.local/bin/seo-do-site"},
-    {"repo": "deploy/dell/refero-aprender.py", "instalado": "~/.local/bin/refero-aprender"},
-    {"repo": "deploy/dell/folha-de-contato.py", "instalado": "~/.local/bin/folha-de-contato"},
-    {"repo": "deploy/dell/dribbble.py", "instalado": "~/.local/bin/dribbble"},
-    {"repo": "deploy/dell/landbook.py", "instalado": "~/.local/bin/landbook"},
-    {"repo": "deploy/dell/qa-numerico.py", "instalado": "~/.local/bin/qa-numerico"},
-    {"repo": "deploy/dell/lote-continuo.py", "instalado": "~/.local/bin/lote-continuo"},
-    {"repo": "deploy/dell/raio-x.py", "instalado": "~/.local/bin/raio-x"},
-    {"repo": "deploy/dell/raio-x-ia.py", "instalado": "~/.local/bin/raio-x-ia"},
-    {"repo": "deploy/dell/auto-site/auto-site-CLAUDE.md", "instalado": "~/auto-site/CLAUDE.md", "modo": "444"},
-    {"repo": "deploy/dell/auto-site/lead-novo.md", "instalado": "~/auto-site/.claude/commands/lead-novo.md", "modo": "444"},
-    {"repo": "deploy/dell/auto-site/FONTES.md", "instalado": "~/auto-site/FONTES.md", "modo": "444"},
-    {"repo": "deploy/dell/auto-site/_exemplos/jessica-barbosa-advocacia-advo/index.html", "instalado": "~/auto-site/_exemplos/jessica-barbosa-advocacia-advo/index.html", "modo": "444"},
-    {"repo": "deploy/dell/auto-site/_exemplos/jessica-barbosa-advocacia-advo/CONCEITO.md", "instalado": "~/auto-site/_exemplos/jessica-barbosa-advocacia-advo/CONCEITO.md", "modo": "444"},
-    {"repo": "deploy/dell/whatsapp-observador/observador.py", "instalado": "~/.local/bin/whatsapp-observador",
-     "reiniciar": "whatsapp-observador whatsapp-observador-prumo"},
-    {"repo": "deploy/dell/whatsapp-observador/eventos_comerciais.py", "instalado": "~/.local/bin/", "modo": "644",
-     "reiniciar": "whatsapp-observador whatsapp-observador-prumo"},
-    {"repo": "deploy/dell/whatsapp-observador/identidade_captura.py", "instalado": "~/.local/bin/", "modo": "644", "reiniciar": "evolution-adaptador"},
-    {"repo": "deploy/dell/whatsapp-observador/evolution-adaptador.p?", "instalado": "~/.local/bin/",
-     "reiniciar": "evolution-adaptador"},
-    {"repo": "deploy/dell/evolution/docker-compose.yml", "instalado": "~/workspace/evolution/"},
-    {"repo": "deploy/dell/dell-worker-healthwatch.sh", "instalado": "~/.local/bin/dell-worker-healthwatch.sh",
-     "reiniciar": "dell-worker-healthwatch"},
-    {"repo": "deploy/dell/prumo-mapa/*.py", "instalado": "~/.local/share/prumo-mapa/"},
-    {"repo": "deploy/dell/prumo-mapa/archivo.woff2", "instalado": "~/.local/share/prumo-mapa/"},
-    {"repo": "deploy/dell/prumo-mapa/precos.json", "instalado": "~/.local/share/prumo-mapa/"},
-    {"repo": "deploy/dell/prumo-mapa/exemplo-raio-x.json", "instalado": "~/.local/share/prumo-mapa/"},
-    {"repo": "deploy/dell/funil-aprendizado.py", "instalado": "~/.local/bin/funil-aprendizado"},
-    {"repo": "deploy/dell/hermes-uso-skills.py", "instalado": "~/.local/bin/hermes-uso-skills"},
-    {"repo": "deploy/dell/prumo-fonte/bases/*.json", "instalado": "~/.local/share/prumo-fonte/bases/"},
-    {"repo": "deploy/dell/claude-ops/fonte_luna.py", "instalado": "~/.local/share/claude-ops/", "reiniciar": "luna-workflows"},
-    {"repo": "deploy/dell/claude-ops/prumo-metricas.py", "instalado": "~/.local/share/claude-ops/", "reiniciar": "prumo-metricas"},
-    {"repo": "deploy/dell/claude-ops/luna_workflows.py", "instalado": "~/.local/share/claude-ops/", "reiniciar": "luna-workflows"},
-    {"repo": "deploy/dell/claude-ops/workflow_comercial.py", "instalado": "~/.local/share/claude-ops/", "modo": "644"},
-    {"repo": "deploy/dell/publicador-crm.py", "instalado": "~/.local/bin/publicador-crm"},
-    {"repo": "deploy/dell/claude-ops/workflow_publicacao_crm.py", "instalado": "~/.local/share/claude-ops/", "modo": "644"},
-    {"repo": "deploy/dell/claude-ops/workflow_contexto_lote.py", "instalado": "~/.local/share/claude-ops/", "modo": "644"},
-    {"repo": "deploy/dell/claude-ops/workflow_operacao.py", "instalado": "~/.local/share/claude-ops/", "modo": "644"},
-    {"repo": "deploy/dell/claude-ops/*.py", "instalado": "~/.local/share/claude-ops/"},
-    {"repo": "deploy/dell/claude-ops/*.js", "instalado": "~/.local/share/claude-ops/"},
-    {"repo": "deploy/dell/claude-ops/prumo-ofertas.json", "instalado": "~/.local/share/claude-ops/"},
-    {"repo": "deploy/dell/entrada/*.py", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},
-    {"repo": "deploy/dell/entrada/pagina.html", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},
-    {"repo": "src/estilos/fontes/inter-latin-wght-normal.woff2", "instalado": "~/.local/lib/mel-entrada/", "reiniciar": "entrada"},
-    {"repo": "deploy/dell/entrada/bin/cofre", "instalado": "~/.local/bin/cofre"},
-    {"repo": "deploy/dell/**/*.service", "instalado": "~/.config/systemd/user/"},
-    {"repo": "deploy/dell/**/*.timer", "instalado": "~/.config/systemd/user/"},
-    {"repo": "deploy/dell/**/*.path", "instalado": "~/.config/systemd/user/"},
-    {"repo": "deploy/dell/silmer/silmer-drive-sync.sh", "instalado": "~/.local/bin/silmer-drive-sync"},
-    {"repo": "deploy/dell/licitacoes-automation/docker-compose.yml", "instalado": "~/licitacoes-automation/docker-compose.yml"},
-    {"repo": "deploy/dell/licitacoes-automation/scripts/*.mjs", "instalado": "~/licitacoes-automation/scripts/"},
-    {"repo": "deploy/dell/licitacoes-automation/workflows/radar-pncp.json", "instalado": "~/licitacoes-automation/workflows/"},
-    {"repo": "deploy/hermes/units/hermes-gateway.service", "instalado": "~/.config/systemd/user/"},
-    {"repo": "deploy/hermes/units/hermes-dashboard.service", "instalado": "~/.config/systemd/user/"},
-    {"repo": "deploy/hermes/units/hermes-google-browser.service", "instalado": "~/.config/systemd/user/"},
-    {"repo": "deploy/hermes/SOUL.md", "instalado": "~/.hermes/SOUL.md", "via": "aplicar-hermes"},
-    {"repo": "deploy/hermes/skills/dell-operations-manager/SKILL.md",
-     "instalado": "~/.hermes/skills/dell-operations-manager/SKILL.md", "via": "aplicar-hermes"},
-    {"repo": "deploy/hermes/skills/mapa-do-ecossistema/SKILL.md",
-     "instalado": "~/.hermes/skills/mapa-do-ecossistema/SKILL.md", "via": "aplicar-hermes"},
-    {"repo": "deploy/hermes/skills/conversa-do-lead/SKILL.md",
-     "instalado": "~/.hermes/skills/conversa-do-lead/SKILL.md", "via": "aplicar-hermes"},
-    {"repo": "deploy/hermes/scripts/ler_comercial.py", "instalado": "~/.hermes/scripts/", "modo": "644"},
-    {"repo": "deploy/hermes/scripts/graphify_projetos.py", "instalado": "~/.local/bin/graphify-projetos"},
-    {"repo": "deploy/hermes/scripts/validate-dell-operations.sh", "instalado": "~/.local/bin/dell-validate"},
-    {"repo": "deploy/hermes/scripts/squadone-historico-arquivar.py", "instalado": "~/.local/bin/squadone-historico-arquivar", "modo": "700"},
-    {"repo": "deploy/hermes/scripts/identidade_captura.mjs", "instalado": "~/.hermes/hermes-agent/scripts/whatsapp-bridge/identidade_captura.mjs", "via": "aplicar-hermes", "reiniciar": "hermes-gateway.service"},
-    {"repo": "deploy/hermes/scripts/squadone_history.mjs", "instalado": "~/.hermes/hermes-agent/scripts/whatsapp-bridge/squadone_history.mjs", "via": "aplicar-hermes", "reiniciar": "hermes-gateway.service"},
-    {"repo": "deploy/hermes/scripts/asmr_coleta_gate.py", "instalado": "~/.hermes/scripts/", "via": "aplicar-hermes"},
-    {"repo": "deploy/hermes/scripts/sites_e_pendencias.py", "instalado": "~/.local/bin/sites-e-pendencias"},
-    {"repo": "config/feriados-nacionais.json", "instalado": "~/.local/bin/feriados-nacionais.json"},
-    {"repo": "deploy/dell/calendario_comercial.py", "instalado": "~/.local/bin/calendario_comercial.py"},
-    {"repo": "deploy/dell/campanha_site.py", "instalado": "~/.local/bin/campanha_site.py"},
-    {"repo": "deploy/dell/campanha_site.py", "instalado": "~/.local/share/claude-ops/campanha_site.py"},
-    {"repo": "deploy/dell/pesquisa_leads.py", "instalado": "~/.local/bin/pesquisa_leads.py"},
-    {"repo": "deploy/dell/pesquisa_leads.py", "instalado": "~/.local/share/claude-ops/pesquisa_leads.py"},
-    {"repo": "deploy/dell/claude-ops/classificador-gratuito-adaptador.js", "instalado": "~/.local/share/claude-ops/classificador-gratuito-adaptador.js"},
-    {"repo": "deploy/dell/claude-ops/classificador-gratuito.bundle.js", "instalado": "~/.local/share/claude-ops/classificador-gratuito.bundle.js"},
-    {"repo": "deploy/dell/claude-ops/custo_zero_n8n.py", "instalado": "~/.local/share/claude-ops/custo_zero_n8n.py"},
-    {"repo": "deploy/dell/claude-ops/custo_zero_silmer.py", "instalado": "~/.local/share/claude-ops/custo_zero_silmer.py"},
-    {"repo": "deploy/dell/claude-ops/pesquisa_fluxos.py", "instalado": "~/.local/share/claude-ops/pesquisa_fluxos.py"}
+    {
+      "repo": "deploy/dell/whatsapp-observador/envelopes_audio.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644",
+      "reiniciar": "whatsapp-observador.service whatsapp-observador-prumo.service"
+    },
+    {
+      "repo": "config/foco-comercial.json",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/foco_comercial.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/captura_pronta.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/lib/qualidade_prumo.py",
+      "instalado": "~/.local/lib/mel/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/frente-comercial.py",
+      "instalado": "~/.local/bin/frente-comercial"
+    },
+    {
+      "repo": "deploy/dell/filtro_leads.py",
+      "instalado": "~/.local/bin/",
+      "modo": "600"
+    },
+    {
+      "repo": "deploy/dell/curadoria-leads.py",
+      "instalado": "~/.local/bin/curadoria-leads"
+    },
+    {
+      "repo": "deploy/dell/disparo-conversa.py",
+      "instalado": "~/.local/bin/disparo-conversa",
+      "modo": "700"
+    },
+    {
+      "repo": "deploy/dell/revisao-comercial-diaria.py",
+      "instalado": "~/.local/bin/revisao-comercial-diaria",
+      "modo": "700"
+    },
+    {
+      "repo": "deploy/dell/falha-pelo-telegram.py",
+      "instalado": "~/.local/bin/falha-pelo-telegram"
+    },
+    {
+      "repo": "deploy/dell/aquisicao-guarda.py",
+      "instalado": "~/.local/bin/aquisicao-guarda",
+      "modo": "700",
+      "reiniciar": "aquisicao-guarda"
+    },
+    {
+      "repo": "deploy/dell/dell-status.py",
+      "instalado": "~/.local/bin/dell-status"
+    },
+    {
+      "repo": "deploy/dell/socorro.py",
+      "instalado": "~/.local/bin/socorro"
+    },
+    {
+      "repo": "deploy/dell/atualizar-central.sh",
+      "instalado": "~/.local/bin/atualizar-central"
+    },
+    {
+      "repo": "deploy/dell/lib/aviso.py",
+      "instalado": "~/.local/lib/mel/"
+    },
+    {
+      "repo": "deploy/dell/auto-entrada.py",
+      "instalado": "~/.local/bin/auto-entrada"
+    },
+    {
+      "repo": "deploy/dell/backup/backup-dell.py",
+      "instalado": "~/.local/bin/backup-dell"
+    },
+    {
+      "repo": "deploy/dell/backup/estrutura-coletar.py",
+      "instalado": "~/.local/bin/estrutura-coletar"
+    },
+    {
+      "repo": "deploy/dell/backup/fontes.toml",
+      "instalado": "~/.config/backup-dell/fontes.toml",
+      "modo": "600"
+    },
+    {
+      "repo": "deploy/dell/site-demos-limpeza.py",
+      "instalado": "~/.local/bin/site-demos-limpeza"
+    },
+    {
+      "repo": "deploy/dell/site-pastas.py",
+      "instalado": "~/.local/bin/site-pastas"
+    },
+    {
+      "repo": "deploy/dell/gerador-de-sites.py",
+      "instalado": "~/.local/bin/gerador-de-sites"
+    },
+    {
+      "repo": "deploy/dell/seo-do-site.py",
+      "instalado": "~/.local/bin/seo-do-site"
+    },
+    {
+      "repo": "deploy/dell/refero-aprender.py",
+      "instalado": "~/.local/bin/refero-aprender"
+    },
+    {
+      "repo": "deploy/dell/folha-de-contato.py",
+      "instalado": "~/.local/bin/folha-de-contato"
+    },
+    {
+      "repo": "deploy/dell/dribbble.py",
+      "instalado": "~/.local/bin/dribbble"
+    },
+    {
+      "repo": "deploy/dell/landbook.py",
+      "instalado": "~/.local/bin/landbook"
+    },
+    {
+      "repo": "deploy/dell/qa-numerico.py",
+      "instalado": "~/.local/bin/qa-numerico"
+    },
+    {
+      "repo": "deploy/dell/lote-continuo.py",
+      "instalado": "~/.local/bin/lote-continuo"
+    },
+    {
+      "repo": "deploy/dell/raio-x.py",
+      "instalado": "~/.local/bin/raio-x"
+    },
+    {
+      "repo": "deploy/dell/raio-x-ia.py",
+      "instalado": "~/.local/bin/raio-x-ia"
+    },
+    {
+      "repo": "deploy/dell/auto-site/auto-site-CLAUDE.md",
+      "instalado": "~/auto-site/CLAUDE.md",
+      "modo": "444"
+    },
+    {
+      "repo": "deploy/dell/auto-site/lead-novo.md",
+      "instalado": "~/auto-site/.claude/commands/lead-novo.md",
+      "modo": "444"
+    },
+    {
+      "repo": "deploy/dell/auto-site/FONTES.md",
+      "instalado": "~/auto-site/FONTES.md",
+      "modo": "444"
+    },
+    {
+      "repo": "deploy/dell/auto-site/_exemplos/jessica-barbosa-advocacia-advo/index.html",
+      "instalado": "~/auto-site/_exemplos/jessica-barbosa-advocacia-advo/index.html",
+      "modo": "444"
+    },
+    {
+      "repo": "deploy/dell/auto-site/_exemplos/jessica-barbosa-advocacia-advo/CONCEITO.md",
+      "instalado": "~/auto-site/_exemplos/jessica-barbosa-advocacia-advo/CONCEITO.md",
+      "modo": "444"
+    },
+    {
+      "repo": "deploy/dell/whatsapp-observador/observador.py",
+      "instalado": "~/.local/bin/whatsapp-observador",
+      "reiniciar": "whatsapp-observador whatsapp-observador-prumo"
+    },
+    {
+      "repo": "deploy/dell/whatsapp-observador/eventos_comerciais.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644",
+      "reiniciar": "whatsapp-observador whatsapp-observador-prumo"
+    },
+    {
+      "repo": "deploy/dell/whatsapp-observador/identidade_captura.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644",
+      "reiniciar": "evolution-adaptador"
+    },
+    {
+      "repo": "deploy/dell/whatsapp-observador/evolution-adaptador.p?",
+      "instalado": "~/.local/bin/",
+      "reiniciar": "evolution-adaptador"
+    },
+    {
+      "repo": "deploy/dell/evolution/docker-compose.yml",
+      "instalado": "~/workspace/evolution/"
+    },
+    {
+      "repo": "deploy/dell/dell-worker-healthwatch.sh",
+      "instalado": "~/.local/bin/dell-worker-healthwatch.sh",
+      "reiniciar": "dell-worker-healthwatch"
+    },
+    {
+      "repo": "deploy/dell/prumo-mapa/*.py",
+      "instalado": "~/.local/share/prumo-mapa/"
+    },
+    {
+      "repo": "deploy/dell/prumo-mapa/archivo.woff2",
+      "instalado": "~/.local/share/prumo-mapa/"
+    },
+    {
+      "repo": "deploy/dell/prumo-mapa/precos.json",
+      "instalado": "~/.local/share/prumo-mapa/"
+    },
+    {
+      "repo": "deploy/dell/prumo-mapa/exemplo-raio-x.json",
+      "instalado": "~/.local/share/prumo-mapa/"
+    },
+    {
+      "repo": "deploy/dell/funil-aprendizado.py",
+      "instalado": "~/.local/bin/funil-aprendizado"
+    },
+    {
+      "repo": "deploy/dell/hermes-uso-skills.py",
+      "instalado": "~/.local/bin/hermes-uso-skills"
+    },
+    {
+      "repo": "deploy/dell/prumo-fonte/bases/*.json",
+      "instalado": "~/.local/share/prumo-fonte/bases/"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/fonte_luna.py",
+      "instalado": "~/.local/share/claude-ops/",
+      "reiniciar": "luna-workflows"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/prumo-metricas.py",
+      "instalado": "~/.local/share/claude-ops/",
+      "reiniciar": "prumo-metricas"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/luna_workflows.py",
+      "instalado": "~/.local/share/claude-ops/",
+      "reiniciar": "luna-workflows"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/workflow_comercial.py",
+      "instalado": "~/.local/share/claude-ops/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/publicador-crm.py",
+      "instalado": "~/.local/bin/publicador-crm"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/workflow_publicacao_crm.py",
+      "instalado": "~/.local/share/claude-ops/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/workflow_contexto_lote.py",
+      "instalado": "~/.local/share/claude-ops/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/workflow_operacao.py",
+      "instalado": "~/.local/share/claude-ops/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/*.py",
+      "instalado": "~/.local/share/claude-ops/"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/*.js",
+      "instalado": "~/.local/share/claude-ops/"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/prumo-ofertas.json",
+      "instalado": "~/.local/share/claude-ops/"
+    },
+    {
+      "repo": "deploy/dell/entrada/*.py",
+      "instalado": "~/.local/lib/mel-entrada/",
+      "reiniciar": "entrada"
+    },
+    {
+      "repo": "deploy/dell/entrada/pagina.html",
+      "instalado": "~/.local/lib/mel-entrada/",
+      "reiniciar": "entrada"
+    },
+    {
+      "repo": "src/estilos/fontes/inter-latin-wght-normal.woff2",
+      "instalado": "~/.local/lib/mel-entrada/",
+      "reiniciar": "entrada"
+    },
+    {
+      "repo": "deploy/dell/entrada/bin/cofre",
+      "instalado": "~/.local/bin/cofre"
+    },
+    {
+      "repo": "deploy/dell/**/*.service",
+      "instalado": "~/.config/systemd/user/"
+    },
+    {
+      "repo": "deploy/dell/**/*.timer",
+      "instalado": "~/.config/systemd/user/"
+    },
+    {
+      "repo": "deploy/dell/**/*.path",
+      "instalado": "~/.config/systemd/user/"
+    },
+    {
+      "repo": "deploy/dell/silmer/silmer-drive-sync.sh",
+      "instalado": "~/.local/bin/silmer-drive-sync"
+    },
+    {
+      "repo": "deploy/dell/licitacoes-automation/docker-compose.yml",
+      "instalado": "~/licitacoes-automation/docker-compose.yml"
+    },
+    {
+      "repo": "deploy/dell/licitacoes-automation/scripts/*.mjs",
+      "instalado": "~/licitacoes-automation/scripts/"
+    },
+    {
+      "repo": "deploy/dell/licitacoes-automation/workflows/radar-pncp.json",
+      "instalado": "~/licitacoes-automation/workflows/"
+    },
+    {
+      "repo": "deploy/hermes/units/hermes-gateway.service",
+      "instalado": "~/.config/systemd/user/"
+    },
+    {
+      "repo": "deploy/hermes/units/hermes-dashboard.service",
+      "instalado": "~/.config/systemd/user/"
+    },
+    {
+      "repo": "deploy/hermes/units/hermes-google-browser.service",
+      "instalado": "~/.config/systemd/user/"
+    },
+    {
+      "repo": "deploy/hermes/SOUL.md",
+      "instalado": "~/.hermes/SOUL.md",
+      "via": "aplicar-hermes"
+    },
+    {
+      "repo": "deploy/hermes/skills/dell-operations-manager/SKILL.md",
+      "instalado": "~/.hermes/skills/dell-operations-manager/SKILL.md",
+      "via": "aplicar-hermes"
+    },
+    {
+      "repo": "deploy/hermes/skills/mapa-do-ecossistema/SKILL.md",
+      "instalado": "~/.hermes/skills/mapa-do-ecossistema/SKILL.md",
+      "via": "aplicar-hermes"
+    },
+    {
+      "repo": "deploy/hermes/skills/conversa-do-lead/SKILL.md",
+      "instalado": "~/.hermes/skills/conversa-do-lead/SKILL.md",
+      "via": "aplicar-hermes"
+    },
+    {
+      "repo": "deploy/hermes/scripts/ler_comercial.py",
+      "instalado": "~/.hermes/scripts/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/hermes/scripts/graphify_projetos.py",
+      "instalado": "~/.local/bin/graphify-projetos"
+    },
+    {
+      "repo": "deploy/hermes/scripts/validate-dell-operations.sh",
+      "instalado": "~/.local/bin/dell-validate"
+    },
+    {
+      "repo": "deploy/hermes/scripts/squadone-historico-arquivar.py",
+      "instalado": "~/.local/bin/squadone-historico-arquivar",
+      "modo": "700"
+    },
+    {
+      "repo": "deploy/hermes/scripts/identidade_captura.mjs",
+      "instalado": "~/.hermes/hermes-agent/scripts/whatsapp-bridge/identidade_captura.mjs",
+      "via": "aplicar-hermes",
+      "reiniciar": "hermes-gateway.service"
+    },
+    {
+      "repo": "deploy/hermes/scripts/squadone_history.mjs",
+      "instalado": "~/.hermes/hermes-agent/scripts/whatsapp-bridge/squadone_history.mjs",
+      "via": "aplicar-hermes",
+      "reiniciar": "hermes-gateway.service"
+    },
+    {
+      "repo": "deploy/hermes/scripts/asmr_coleta_gate.py",
+      "instalado": "~/.hermes/scripts/",
+      "via": "aplicar-hermes"
+    },
+    {
+      "repo": "deploy/hermes/scripts/sites_e_pendencias.py",
+      "instalado": "~/.local/bin/sites-e-pendencias"
+    },
+    {
+      "repo": "config/feriados-nacionais.json",
+      "instalado": "~/.local/bin/feriados-nacionais.json"
+    },
+    {
+      "repo": "deploy/dell/calendario_comercial.py",
+      "instalado": "~/.local/bin/calendario_comercial.py"
+    },
+    {
+      "repo": "deploy/dell/campanha_site.py",
+      "instalado": "~/.local/bin/campanha_site.py"
+    },
+    {
+      "repo": "deploy/dell/campanha_site.py",
+      "instalado": "~/.local/share/claude-ops/campanha_site.py"
+    },
+    {
+      "repo": "deploy/dell/pesquisa_leads.py",
+      "instalado": "~/.local/bin/pesquisa_leads.py"
+    },
+    {
+      "repo": "deploy/dell/pesquisa_leads.py",
+      "instalado": "~/.local/share/claude-ops/pesquisa_leads.py"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/classificador-gratuito-adaptador.js",
+      "instalado": "~/.local/share/claude-ops/classificador-gratuito-adaptador.js"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/classificador-gratuito.bundle.js",
+      "instalado": "~/.local/share/claude-ops/classificador-gratuito.bundle.js"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/custo_zero_n8n.py",
+      "instalado": "~/.local/share/claude-ops/custo_zero_n8n.py"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/custo_zero_silmer.py",
+      "instalado": "~/.local/share/claude-ops/custo_zero_silmer.py"
+    },
+    {
+      "repo": "deploy/dell/claude-ops/pesquisa_fluxos.py",
+      "instalado": "~/.local/share/claude-ops/pesquisa_fluxos.py"
+    },
+    {
+      "repo": "deploy/dell/continuidade_comercial.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/prospeccao_diaria.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/politica_envios.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/politica_envios.py",
+      "instalado": "~/.local/share/claude-ops/",
+      "modo": "644"
+    },
+    {
+      "repo": "config/politica-envios.json",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    },
+    {
+      "repo": "config/politica-envios.json",
+      "instalado": "~/.local/share/claude-ops/",
+      "modo": "644"
+    },
+    {
+      "repo": "deploy/dell/aquisicao_comercial.py",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    },
+    {
+      "repo": "config/aquisicao-comercial.json",
+      "instalado": "~/.local/bin/",
+      "modo": "644"
+    }
   ]
 }

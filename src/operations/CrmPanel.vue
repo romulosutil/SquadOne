@@ -5,6 +5,7 @@ import { navegar } from '../casca/rota'
 import Sheet from '../components/Sheet.vue'
 import AtendimentoCliente from './AtendimentoCliente.vue'
 import CrmFunil from './CrmFunil.vue'
+import CarteiraComercial from './CarteiraComercial.vue'
 import FrenteComercial from './FrenteComercial.vue'
 import '../estilos/operacao.css'
 import CrmHoje from './CrmHoje.vue'
@@ -450,7 +451,7 @@ function abrirColinha() {
       <!-- Entender: as três seções num segmentado (BP-SEGMENTADO) e o Roteiro de venda, que mora no Mais. -->
 
       <!-- As ofertas num "Filtros" fechado, com a escolhida no resumo: filtrar é ajuste, não a decisão. -->
-      <details v-if="temFiltroDeOferta" class="dobra crm-filtros-da-aba">
+      <details v-if="temFiltroDeOferta && vista !== 'funil'" class="dobra crm-filtros-da-aba">
         <summary>{{ resumoDosFiltros }}</summary>
         <div class="crm-produtos" role="group" aria-label="Ofertas do PRUMO">
           <button v-for="p in FILTROS" :key="p.id" type="button" :aria-pressed="produto === p.id" @click="trocarProduto(p.id)">{{ p.rotulo }}</button>
@@ -485,10 +486,17 @@ function abrirColinha() {
         <CrmResultados parte="numeros" :leads="leads" :todos-leads="visao.leads" :agora="agora" />
       </template>
       <CrmResultados v-else-if="vista === 'resultados'" parte="resultados" :leads="leads" :todos-leads="visao.leads" :agora="agora" />
-      <CrmFunil
-        v-else-if="vista === 'funil'" :leads="leads" :visao="visao" :agora="agora" :etapa-em-foco="etapaEmFoco" :produto="produto" :passo="passo"
-        @abrir="abrirFicha" @passo="trocarPasso"
-      />
+      <template v-else-if="vista === 'funil'">
+        <CarteiraComercial :carteira="visao.carteira" :disponivel="visao.estado === 'ok' && !erro && !velho" @abrir="abrirFicha" />
+        <details class="dobra crm-historico-ofertas" :open="!!passo || !!etapaEmFoco">
+          <summary>Histórico por oferta e etapas anteriores</summary>
+          <p class="crm-nota-pequena">Conserva os estados anteriores das fontes. Expiração e descarte não comprovam perda de venda; cadastro não é oportunidade qualificada.</p>
+          <div class="crm-produtos" role="group" aria-label="Filtrar o histórico por oferta">
+            <button v-for="p in FILTROS" :key="p.id" type="button" :aria-pressed="produto === p.id" @click="trocarProduto(p.id)">{{ p.rotulo }}</button>
+          </div>
+          <CrmFunil :leads="leads" :visao="visao" :agora="agora" :etapa-em-foco="etapaEmFoco" :produto="produto" :passo="passo" @abrir="abrirFicha" @passo="trocarPasso" />
+        </details>
+      </template>
 
 
 

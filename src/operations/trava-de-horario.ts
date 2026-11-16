@@ -26,17 +26,19 @@
  */
 import type { CrmLead } from './types'
 import calendario from '../../config/feriados-nacionais.json'
-const FERIADOS_NACIONAIS = new Set(calendario.datas)
+import politica from '../../config/politica-envios.json'
 
+const FERIADOS_NACIONAIS = new Set(calendario.datas)
+const dataSP = (agora: number) => new Date(agora - 3 * 3600_000).toISOString().slice(0, 10)
 
 /**
- * Seg a sex, 08:00 às 17:30 de São Paulo (pedido de 16/10/2026). O aviso do Telegram só sai
+ * Seg a sex, 08:00 às 18:00 de São Paulo (ampliado por Rômulo em 10/11/2026). O aviso do Telegram só sai
  * dentro dele; fora, o primeiro contato espera o "Liberar" daquele lead, em toda tela.
  */
-export const EXPEDIENTE_DE_VENDA = { dias: [1, 2, 3, 4, 5], inicioMin: 8 * 60, fimMin: 17 * 60 + 30 } as const
+export const EXPEDIENTE_DE_VENDA = { dias: [1, 2, 3, 4, 5], inicioMin: 8 * 60, fimMin: 18 * 60 } as const
 
 /** Texto do expediente, para o aviso nunca discordar da regra. */
-export const TEXTO_DO_EXPEDIENTE = 'de segunda a sexta, das 8h às 17h30'
+export const TEXTO_DO_EXPEDIENTE = 'de segunda a sexta, das 8h às 18h'
 
 /** São Paulo é UTC−3 o ano todo desde 2019 (o mesmo atalho de server/crm.ts). */
 function relogioSP(agora: number): { dia: number; minutos: number } {
@@ -46,8 +48,33 @@ function relogioSP(agora: number): { dia: number; minutos: number } {
 
 export function noExpedienteDeVenda(agora: number): boolean {
   if (!Number.isFinite(agora)) return false
+  if (!politica.limitesOperacionais) return true
   const { dia, minutos } = relogioSP(agora)
-  return !FERIADOS_NACIONAIS.has(new Date(agora - 3 * 3600_000).toISOString().slice(0, 10)) && (EXPEDIENTE_DE_VENDA.dias as readonly number[]).includes(dia) && minutos >= EXPEDIENTE_DE_VENDA.inicioMin && minutos < EXPEDIENTE_DE_VENDA.fimMin
+  return !FERIADOS_NACIONAIS.has(dataSP(agora)) && (EXPEDIENTE_DE_VENDA.dias as readonly number[]).includes(dia) && minutos >= EXPEDIENTE_DE_VENDA.inicioMin && minutos < EXPEDIENTE_DE_VENDA.fimMin
+}
+
+/** Minutos até fechar o expediente (18h de SP); null fora dele. Para o plano do dia dizer quanto tempo sobra. */
+export function minutosAteFecharOExpediente(agora: number): number | null {
+  if (!politica.limitesOperacionais) return null
+  if (!noExpedienteDeVenda(agora)) return null
+  return EXPEDIENTE_DE_VENDA.fimMin - relogioSP(agora).minutos
+}
+
+const NOME_DO_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado']
+
+/** Quando o expediente abre de novo, para quem olha fora dele: "hoje às 8h", "amanhã às 8h", "segunda às 8h". */
+export function proximaAberturaDoExpediente(agora: number): string {
+  if (!politica.limitesOperacionais) return 'agora'
+  if (!Number.isFinite(agora)) return 'no próximo expediente'
+  const { dia, minutos } = relogioSP(agora)
+  const dias = EXPEDIENTE_DE_VENDA.dias as readonly number[]
+  const abre = `às ${EXPEDIENTE_DE_VENDA.inicioMin / 60}h`
+  if (dias.includes(dia) && !FERIADOS_NACIONAIS.has(dataSP(agora)) && minutos < EXPEDIENTE_DE_VENDA.inicioMin) return `hoje ${abre}`
+  for (let passo = 1; passo <= 7; passo++) {
+    const d = (dia + passo) % 7
+    if (dias.includes(d) && !FERIADOS_NACIONAIS.has(dataSP(agora + passo * 86400_000))) return `${passo === 1 ? 'amanhã' : NOME_DO_DIA[d]} ${abre}`
+  }
+  return `na próxima segunda ${abre}`
 }
 
 /**
@@ -55,6 +82,7 @@ export function noExpedienteDeVenda(agora: number): boolean {
  * e sempre com o ritmo livre (o ritmo protege o número e não tem "Liberar").
  */
 export function podeMandarPrimeiroContato(p: { noExpediente: boolean; liberado: boolean; ritmoLivre: boolean }): boolean {
+  if (!politica.limitesOperacionais) return true
   return p.ritmoLivre && (p.noExpediente || p.liberado)
 }
 
@@ -84,5 +112,10 @@ export function ehPrimeiroContato(lead: LeadDaTrava | undefined, url: string): b
 
 /** O envio deste lead está travado? Só fora do expediente (`aviso` presente) e enquanto não liberado. */
 export function envioTravado(aviso: string | null | undefined, liberados: EnviosLiberados, leadId: string): boolean {
+  if (!politica.limitesOperacionais) return false
   return Boolean(aviso) && !liberados.has(leadId)
+}
+
+export function liberarEnvio(liberados: EnviosLiberados, leadId: string): Set<string> {
+  return new Set([...liberados, leadId])
 }

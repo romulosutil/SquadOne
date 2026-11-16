@@ -8,6 +8,7 @@ import { parse, compileScript } from '@vue/compiler-sfc'
 import { build } from 'esbuild'
 import { acaoDoLead } from './operations/proxima-venda.ts'
 import { opcoesDeterministicasDeReceita, textoDoRegistroReceita } from './operations/aarr.ts'
+import { lerRegistroFollowup, VERSAO_DO_FOLLOWUP } from './operations/followup-experimento.ts'
 
 // Renderizador Vue em memória: sem navegador, disco de cliente ou serviço real.
 const arquivo = fileURLToPath(new URL('./operations/CrmConfirmarPasso.vue', import.meta.url))
@@ -57,7 +58,7 @@ describe('Ficha real: confirmação da cadência', () => {
   const acao=acaoDoLead(v,l.id,Date.now())!;assert.equal(acao.anota,'followup_enviado');assert.ok(acao.textoDoRegistro)
   const posts:any[]=[];globalThis.fetch=(async(_u,op)=>{if(op?.method){posts.push(JSON.parse(String(op.body)));return new Response('{}',{status:201})}return new Response(JSON.stringify(v))}) as typeof fetch
   const{raiz,app}=montar(l,acao)
-  try{assert.equal(posts.length,0);todos(raiz).find(n=>n.tagName==='INPUT').props['onUpdate:modelValue'](true);await runtime.nextTick();await todos(raiz).find(n=>n.type==='button').props.onClick();assert.equal(posts.length,1);assert.match(posts[0].texto,/followup-2026-10-29/);assert.match(posts[0].texto,/"braco":"A"/)}finally{app.unmount();Date.now=relogio;globalThis.fetch=anterior}
+  try{assert.equal(posts.length,0);todos(raiz).find(n=>n.tagName==='INPUT').props['onUpdate:modelValue'](true);await runtime.nextTick();await todos(raiz).find(n=>n.type==='button').props.onClick();assert.equal(posts.length,1);assert.deepEqual(lerRegistroFollowup(posts[0].texto),{braco:'A',versao:VERSAO_DO_FOLLOWUP});assert.equal(posts[0].texto,acao.textoDoRegistro)}finally{app.unmount();Date.now=relogio;globalThis.fetch=anterior}
  })
  it('dia zero sem cobrança; abertura não grava; confirmação grava degrau, reload conserva e o 4º dia útil libera', async () => {
   const relogio = Date.now, fetchAnterior=globalThis.fetch

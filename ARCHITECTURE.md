@@ -1,16 +1,50 @@
 # Arquitetura
 
-## Vendedor do Telegram: só o que vale o toque (28/10/2026)
+> Direção vigente de 16/11/2026: primeiros contatos automáticos bloqueados. Os fluxos de aquisição e cadências descritos por data abaixo são histórico técnico, não liberação de envio. A Prumo define negócio, catálogo e qualidade; o SquadOne sustenta sua operação sem transformar cadastro, resposta ou ganho marcado em recebimento.
 
-Decisão do PM com autoridade delegada pelo Rômulo (`docs/PRUMO-DECISOES-PM-2026-10-28.md`):
-em 7 dias foram 276 avisos, 20 "Enviei" e 239 expirados. O `server/vendedor.ts` continua lendo
-a mesma fila de venda da Central, mas `vaiAoTelegram` (PURO) só deixa sair o que pede um envio
-do Rômulo a quem escreveu ou está fechando: `responder` de gente (sem robô nem recepção),
-`mandar-proposta`, o "o que achou?" (`|depois-do-link`), o "quanto custa"
-(`|negociacao-humana`) e o urgente (`avisoUrgente`). Teto de 8 avisos que saíram por dia
-(`MAX_AVISOS_POR_DIA`) e 1 por lead por dia (`leadsAvisados`); o urgente passa pelos dois.
-Primeiro contato, follow-up, cadência, desfecho, revisões e internos ficam só na Central. Os
-atendimentos do Encontrado e da Estamparia conduzidos pelo time não entram na fila.
+## Estoque comercial conforme o consumo (12/11/2026)
+
+`prospeccao_diaria.demanda` cruza a fila publicada com o CRM e as tentativas/pareceres
+do SQLite. A cada dois minutos após a execução, pesquisa se houver menos de seis
+aprovados ou cadastros próprios ainda em avaliação. Tentativas e reprovados ficam
+fora do estoque. Calendário, pausa, vinte/dia e rodada continuam governando.
+
+O orçamento das leituras públicas gratuitas é de 480/dia, mantendo o contador já
+consumido. O cadastro confirmado gera `sincronizacao-pendente.json`; o webhook
+autenticado `crm-atualizar` solicita a leitura, e a presença dos IDs no CRM confirma
+o consumo dessa pendência. Nenhum workflow é clonado para sincronizar. Falhas são
+publicadas sem payload privado em `prospeccao-diaria.json`. O executor projeta a
+fila consumida como espera por reposição e detecta uma reposição sem atualização.
+
+O parser reconhece o componente atual `pane.openhours` e o marcador legado `oh`.
+Não depende de classes visuais ou do texto genérico “Aberto”. A categoria do
+botão específico do perfil é registrada como pesquisa complementar, com URL e
+data na prova privada. O pacote dos agentes recebe essa observação pelo contrato
+existente; mudar a evidência invalida os pareceres anteriores pelo fingerprint.
+
+
+A regra compartilhada passa a 10 minutos e seis contatos por hora móvel, com vinte por dia. A fila aprovada é publicada antes da reserva; fila vazia não exibe previsão fictícia de envio. Aprovações, pausas e histórico permanecem conferidos.
+
+## Continuidade comercial (12/11/2026)
+
+A atualização de cadência no mesmo dia usa dez minutos e seis por hora, com vinte
+por dia. A regra compartilhada de `trava-de-ritmo.ts` serve a API e a interface;
+`operations-cadencia-dez-minutos.test.ts` cobre a fronteira de dez minutos, a hora
+móvel, o dia seguinte, a soma entre superfícies e a precedência da pausa.
+
+`campanha_site.py` conserva os manifestos finitos e acrescenta o opt-in de novos
+Sites nos dias úteis. O teto de recibos desse modo usa o dia de São Paulo, sem
+herdar a contagem da véspera. Horário, feriados e ritmo continuam na Central.
+`continuidade_comercial.py` confere pausa, prazo e recibos antes de CRM/IA/reserva,
+publica a causa e grava um aviso por ocorrência, com nova tentativa se falhar.
+
+`prospeccao_diaria.py`, a cada dois minutos após cada rodada dentro do expediente, consulta
+perfis públicos gratuitos. Usa no máximo 480 leituras por dia, isolamento do
+navegador, dedupe por Place ID/destino e append pela credencial existente do n8n.
+Guarda evidências privadas e arquivos de pesquisa, sem fabricar `publicado.json`.
+O cadastro entra na fonte comercial existente; três pareceres atuais continuam
+obrigatórios antes de qualquer primeiro contato. A pesquisa/enriquecimento usa o
+manifesto ativo e conserva a política de custo zero e o orçamento existente.
 
 ## Camadas do escritório e laboratório PixiJS (26/10/2026)
 
@@ -80,51 +114,57 @@ maior custo de processamento. São amostras exploratórias com GPU por software,
 não evidência de ganho em dispositivos reais. A decisão atual é conservar DOM
 como padrão e manter o protótipo para avaliação posterior no hardware alvo.
 
-## Encontrado — proposta e Autentique (terceiro lote, 25/10/2026)
+## Continuidade automática de Estamparia (26/10/2026)
 
-O modelo comercial tem versão, hash e aprovação global explícita da operação.
-Propostas são artefatos privados imutáveis, com catálogo, condições e referências
-das mensagens que sustentam os dados das partes. Não são novas notas humanas do
-CRM. O cadastro da Prumo e a credencial Autentique ficam fora do Git e dos prompts.
+`src/operations/estamparia-atendimento.ts` define textos e perguntas versionados da
+oferta. `server/estamparia-automatico.ts` responde somente a entradas naturais
+posteriores à ativação, com conversa única, captura verificada, fonte recente,
+trava compartilhada e reserva durável antes do transporte existente da Prumo.
+Confirmações e observações não gravam SPICED nem fatos comerciais humanos.
+Preço, demonstração, contratação e escopo específico geram encaminhamento para o
+Rômulo. Uma resposta sem recibo permanece em conferência, sem repetição automática.
 
-A criação remota é reservada antes do efeito. Uma tentativa ambígua é conciliada
-pela referência única e pelos dados exatos, sem recriar documento por timeout.
-Consultas autenticadas periódicas acompanham os signatários; dispensam webhook
-público. Somente o aceite comprovado da versão vinculada alimenta a projeção
-comercial da ficha. Documento, convite, assinatura, entrega vista e pagamento
-continuam fatos distintos. A operação nunca chama assinatura em nome das partes.
+O host com `AtendimentoComercial` recebe a extensão por
+`deploy/dell/integrar-estamparia.mjs`, que verifica suas âncoras e preserva o
+executor do Encontrado. A política privada `estamparia-automacao.json` nasce
+ausente/pausada, com versão, hash e data de início explícitos. GET de resumo e
+projeção de estados não enviam mensagens; o executor entra no ciclo existente.
+Uma retomada autorizada guarda a data da autorização e as chaves das últimas
+entradas anteriores, sem fabricar eventos nem mudar o início da ativação. Uma
+saída já conferida fica em `aguardando-cliente`; apenas o que permanece sem
+resposta passa novamente pelos mesmos vetos, mutex e journal durável.
+O escritório lê o resumo em `/api/operations/crm/estamparia/automacao` e o próximo
+passo de cada cliente pelo campo existente `atendimentoComercial` do CRM.
 
-## Encontrado — qualificação e materiais (segundo lote, 25/10/2026)
+O leitor `squadone_history.mjs` correlaciona o retorno com o pedido, o socket e a
+conta da sessão e registra a prova com o horário original, sem retroagir a captura.
+Janelas recentes preservam o LID conferido; releitura individual usa somente IDs
+das âncoras reais, sem mensagem a cliente. O conciliador de relógio só corrige um
+segundo comprovado, preservando IDs, texto e recibos, com backup da fonte e inbox.
+O legado já respondido pode produzir espera sem comprovação retroativa; jamais
+obtém transporte por esse caminho. A lista de atendimentos do escritório mostra
+cada responsável e próximo passo, inclusive recusas e decisões comerciais.
+Na projeção do escritório, `estados(visao)` reutiliza a visão já lida pela rota.
+O parâmetro opcional de `contextoDaEntrada` só é fornecido na leitura. O executor
+continua relendo a fonte a cada revalidação, sem reaproveitar o snapshot da tela.
 
-A qualificação observada é uma projeção reconstruível das mensagens comprovadas,
-separada da confirmação humana do CRM. Um leitor local de padrões e respostas às
-perguntas originais prepara observações e pedidos com referências; o código escolhe
-perguntas, aplica restrições e conserva preço/escopo no catálogo. A projeção é
-persistida somente pelo executor; GETs leem e validam resultados. Nenhuma conversa
-é enviada a um novo modelo ou serviço externo para essa leitura.
+## BI e controle de rodada (23/10/2026)
 
-Pedidos de material têm registro operacional durável, identidade da mensagem de
-origem e execução restrita aos geradores existentes. O worker técnico recebe
-autorização atual da Central antes de reservar o trabalho. Resultado técnico não
-é envio, proposta ou aceite; a entrega pelo canal revalida contexto, identidade e
-recibo de qualidade dos bytes finais. Não há novo CRM editável, permissão de
-prospecção ou aprovação da própria qualidade pelo gerador.
+`src/operations/bi-operacao.ts` interpreta o retrato existente em funções puras:
+ação por cliente, classes atuais, cobertura, marcos, público, variantes por oferta
+e regime, sequências recentes e auditoria das escolhas atuais. `CrmBi.vue` abre em
+`/crm?ver=bi`; `FilaAcaoBi.vue` orienta a fila, e Agir usa o mesmo plano explicável.
+Nenhum classificador ou modelo ganha ferramenta de envio por causa do BI.
 
-## Automação restrita do Encontrado (25/10/2026)
-
-A Central decide a política por oferta e os executores aplicam seu resultado.
-O primeiro lote reutiliza a inbox e a prova de identidade do atendimento para
-responder perguntas padronizadas do Encontrado a novas entradas, com política
-privada explícita, corte temporal, catálogo versionado, reserva durável anterior
-ao transporte e trava compartilhada com a tomada humana da conversa. n8n não
-ganha outro parser de condições. A fila humana recebe exceções; execução e
-esperas técnicas ficam com o time. Recibo de envio não cria qualificação humana,
-proposta, aceite, cobrança nem recebimento. As integrações futuras de Asaas e
-Autentique permanecem separadas da execução de mensagens.
-
-## BI e rodada comercial (23/10/2026)
-
-Por decisão do Rômulo: BI investigável de público, mensagem, sequência e escolhas dos agentes; ação por cliente com evidência, responsável e resultado esperado. Até 15 primeiros contatos/dia, 2/h e 30 min. Até dez sem resposta humana desde o início da rodada; sem expiração automática. Resposta humana posterior libera vaga; revisão humana com motivo inicia outra rodada e conserva auditoria. Substitui a pausa proporcional por silêncio; preserva restrições, desconexão, pausas e gates. Reservas persistidas antes de liberar executor; falha fecha a rodada. Vendas e as conversas existentes continuam fontes comerciais.
+`server/rodada-comercial.ts` guarda somente reservas e revisões operacionais em
+`rodada-comercial.json` no diretório privado existente. Serializa reserva e revisão,
+persiste antes de liberar o executor e junta envios observados ao controle por
+destino (hash privado). Falha de leitura fecha o controle. Resposta humana precisa
+ter data posterior ao contato; robô e leitura não liberam. O GET da frente expõe
+o contador e os clientes pendentes; revisão humana usa POST da mesma origem,
+motivo e referência à rodada anterior para impedir confirmação desatualizada.
+Sem revisão inicial não há nova reserva automática. O teto diário é 15, 2/h e
+30 minutos; dez pendentes acumulados param novos contatos até resposta/revisão.
 
 ## Qualidade da Prumo (21/10/2026)
 
@@ -165,13 +205,14 @@ Conclusão e reagendamento na sala (18/10/2026): revisão explícita vinculada a
 
 Retomadas na sala (18/10/2026): próximos passos datados da fonte existente destacam hoje e atrasados, sem duplicar fila ou inferir envio pendente por silêncio. Interação posterior ao plano exige conferência. Preparar retomada relê lead e valida contexto e vencimento no servidor; propõe mensagem e revisão do plano, sem envio ou gravação automáticos. Desktop limita a coluna da sala à altura disponível com rolagem própria; celular mantém rolagem única.
 
-## Teto operacional de primeiros contatos (18/10/2026)
+## Teto operacional de primeiros contatos (19/10/2026, Fase 0)
 
-Pedido do Rômulo: até 100 por dia. A regra única em
+Pedido do Rômulo no diagnóstico de vendas: até 30 por dia. A regra única em
 `src/operations/trava-de-ritmo.ts`, já consumida pela Central e pelo vendedor,
-passa a 100 por dia de São Paulo, 12 por hora móvel e 5 minutos entre contatos.
-Isso permite 100 aberturas distribuídas entre 8h e 16h15, sem alterar o expediente
-ou automatizar o envio. O teto diário substitui a rampa semanal 10/20/30.
+passa a 30 por dia de São Paulo, 12 por hora móvel e 5 minutos entre contatos.
+As cinco linhas dividem o limite sem cota; o Plus é conduzido pelo Rômulo,
+fora dos envios automáticos do time. Os caçadores pausados continuam pausados.
+O teto diário único substitui os 100 de 18/10 e a rampa semanal anterior.
 Pausa por restrição continua prioritária e não é liberada pelo botão de horário.
 Mantém retrato, memória compartilhada e reforço local para a contagem existente.
 Abrir um link é uma tentativa contada de forma conservadora, não prova de envio.
@@ -1143,3 +1184,88 @@ em `127.0.0.1` e só o Serve chega de fora. Qualquer processo que já roda no
 Dell consegue falar com o loopback e forjar o header. Aceito: quem roda no Dell
 já lê as credenciais direto do disco, e uma trava contra ele aqui seria
 aparência, pelo mesmo motivo do disco acima.
+
+
+## Registros complementares preservados do Dell
+
+As decisões datadas abaixo preservam o histórico. Autorizações de aquisição e cadência conflitantes estão substituídas pela direção de 16/11/2026; contratos, suporte e proteções de captura permanecem nos respectivos escopos.
+
+## Cadência de dez minutos (12/11/2026)
+
+## Vendedor do Telegram: só o que vale o toque (28/10/2026)
+
+Decisão do PM com autoridade delegada pelo Rômulo (`docs/PRUMO-DECISOES-PM-2026-10-28.md`):
+em 7 dias foram 276 avisos, 20 "Enviei" e 239 expirados. O `server/vendedor.ts` continua lendo
+a mesma fila de venda da Central, mas `vaiAoTelegram` (PURO) só deixa sair o que pede um envio
+do Rômulo a quem escreveu ou está fechando: `responder` de gente (sem robô nem recepção),
+`mandar-proposta`, o "o que achou?" (`|depois-do-link`), o "quanto custa"
+(`|negociacao-humana`) e o urgente (`avisoUrgente`). Teto de 8 avisos que saíram por dia
+(`MAX_AVISOS_POR_DIA`) e 1 por lead por dia (`leadsAvisados`); o urgente passa pelos dois.
+Primeiro contato, follow-up, cadência, desfecho, revisões e internos ficam só na Central. Os
+atendimentos do Encontrado e da Estamparia conduzidos pelo time não entram na fila.
+
+## Encontrado — proposta e Autentique (terceiro lote, 25/10/2026)
+
+O modelo comercial tem versão, hash e aprovação global explícita da operação.
+Propostas são artefatos privados imutáveis, com catálogo, condições e referências
+das mensagens que sustentam os dados das partes. Não são novas notas humanas do
+CRM. O cadastro da Prumo e a credencial Autentique ficam fora do Git e dos prompts.
+
+A criação remota é reservada antes do efeito. Uma tentativa ambígua é conciliada
+pela referência única e pelos dados exatos, sem recriar documento por timeout.
+Consultas autenticadas periódicas acompanham os signatários; dispensam webhook
+público. Somente o aceite comprovado da versão vinculada alimenta a projeção
+comercial da ficha. Documento, convite, assinatura, entrega vista e pagamento
+continuam fatos distintos. A operação nunca chama assinatura em nome das partes.
+
+## Encontrado — qualificação e materiais (segundo lote, 25/10/2026)
+
+A qualificação observada é uma projeção reconstruível das mensagens comprovadas,
+separada da confirmação humana do CRM. Um leitor local de padrões e respostas às
+perguntas originais prepara observações e pedidos com referências; o código escolhe
+perguntas, aplica restrições e conserva preço/escopo no catálogo. A projeção é
+persistida somente pelo executor; GETs leem e validam resultados. Nenhuma conversa
+é enviada a um novo modelo ou serviço externo para essa leitura.
+
+Pedidos de material têm registro operacional durável, identidade da mensagem de
+origem e execução restrita aos geradores existentes. O worker técnico recebe
+autorização atual da Central antes de reservar o trabalho. Resultado técnico não
+é envio, proposta ou aceite; a entrega pelo canal revalida contexto, identidade e
+recibo de qualidade dos bytes finais. Não há novo CRM editável, permissão de
+prospecção ou aprovação da própria qualidade pelo gerador.
+
+## Automação restrita do Encontrado (25/10/2026)
+
+A Central decide a política por oferta e os executores aplicam seu resultado.
+O primeiro lote reutiliza a inbox e a prova de identidade do atendimento para
+responder perguntas padronizadas do Encontrado a novas entradas, com política
+privada explícita, corte temporal, catálogo versionado, reserva durável anterior
+ao transporte e trava compartilhada com a tomada humana da conversa. n8n não
+ganha outro parser de condições. A fila humana recebe exceções; execução e
+esperas técnicas ficam com o time. Recibo de envio não cria qualificação humana,
+proposta, aceite, cobrança nem recebimento. As integrações futuras de Asaas e
+Autentique permanecem separadas da execução de mensagens.
+
+## BI e rodada comercial (23/10/2026)
+
+Por decisão do Rômulo: BI investigável de público, mensagem, sequência e escolhas dos agentes; ação por cliente com evidência, responsável e resultado esperado. Até 15 primeiros contatos/dia, 2/h e 30 min. Até dez sem resposta humana desde o início da rodada; sem expiração automática. Resposta humana posterior libera vaga; revisão humana com motivo inicia outra rodada e conserva auditoria. Substitui a pausa proporcional por silêncio; preserva restrições, desconexão, pausas e gates. Reservas persistidas antes de liberar executor; falha fecha a rodada. Vendas e as conversas existentes continuam fontes comerciais.
+
+## Teto operacional de primeiros contatos (18/10/2026)
+
+Pedido do Rômulo: até 100 por dia. A regra única em
+`src/operations/trava-de-ritmo.ts`, já consumida pela Central e pelo vendedor,
+passa a 100 por dia de São Paulo, 12 por hora móvel e 5 minutos entre contatos.
+Isso permite 100 aberturas distribuídas entre 8h e 16h15, sem alterar o expediente
+ou automatizar o envio. O teto diário substitui a rampa semanal 10/20/30.
+Pausa por restrição continua prioritária e não é liberada pelo botão de horário.
+Mantém retrato, memória compartilhada e reforço local para a contagem existente.
+Abrir um link é uma tentativa contada de forma conservadora, não prova de envio.
+Envios feitos diretamente no celular podem não aparecer nessa contagem.
+Os números são escolhas operacionais, não limites antispam publicados pela Meta.
+A interface deixa explícito que não garantem ausência de bloqueio e que o
+destinatário precisa ter autorizado o contato. Esta alteração não migra para a
+Cloud API e não realiza envios.
+
+Retorno como base da resposta (18/10/2026): o agente usa a nota humana identificada de retorno relida da fonte existente, sem copiar texto no comando. A sala espera a nota aparecer; o servidor valida o hash do contexto e a presença do retorno antes de gerar. Retornos e mensagens são dados, nunca instruções. Próximo passo e abertura no WhatsApp continuam propostas revisadas e confirmadas separadamente. A navegação entre registro e conversa compartilha uma âncora estável; no celular há uma só rolagem da página, sem abas sobrepostas ou saltos por atualização assíncrona.
+
+Confirmações na sala (18/10/2026): envio e retorno são fatos informados explicitamente pelo operador, registrados como notas identificadas pela rota de registro existente. Próximo passo exige texto e data confirmados, sem mudar etapa ou enviar mensagens. A abertura do WhatsApp não registra envio. Erro de transporte não autoriza repetir automaticamente a gravação. Formulários ficam vinculados ao produto e lead, com prévia antes de confirmar.

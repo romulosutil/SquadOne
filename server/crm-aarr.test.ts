@@ -37,7 +37,7 @@ it('CRM lê confirmações válidas na fonte e mostra resumo legível, preserva9
 
 it('pagamento confirmado pela Receita encerra a cadência da proposta: quem pagou não vira Perdido no D+10 (29/10/2026)', () => {
   // Proposta registrada em 19/10 (o "Proposta enviada" da Ficha) e, no dia seguinte, a implantação paga.
-  const proposta = { ...entrada(), tipo: 'proposta', texto: '', data: '2026-10-19', em: '2026-10-19T14:00:00Z' }
+  const proposta = { ...entrada(), tipo: 'proposta', texto: 'Condição histórica confirmada: site por R$ 90/mês.', data: '2026-10-19', em: '2026-10-19T14:00:00Z' }
   const pago = { ...entrada(textoDoRegistroReceita('pagamento_confirmado', condicao, 'PIX-TESTE-001', '2026-10-20')), em: '2026-10-20T14:00:00Z' }
   const depois = new Date('2026-10-29T15:00:00Z')
   const semPagamento = montarCrm(validarRetrato(retrato([proposta])), { agora: depois }).leads[0]!

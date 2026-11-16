@@ -1,3 +1,4 @@
+import '../src/testes/politica-historica.ts'
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -162,13 +163,13 @@ describe("ritmo somando a Central e o Telegram", () => {
     }
   });
 
-  it("14 da Central + 1 do Telegram: o teto do dia (15) segura nas duas superfícies", () => {
+  it("19 da Central + 1 do Telegram: o teto do dia (20) segura nas duas superfícies", () => {
     const inicio = Date.parse("2026-10-19T08:00:00-03:00");
-    const agora = Date.parse("2026-10-19T17:00:00-03:00");
-    const daCentral = Object.fromEntries(Array.from({ length: 14 }, (_, i) => [`site:${i}`, { em: inicio + i * 30 * min }]));
+    const agora = Date.parse("2026-10-19T18:00:00-03:00");
+    const daCentral = Object.fromEntries(Array.from({ length: 19 }, (_, i) => [`site:${i}`, { em: inicio + i * 30 * min }]));
     // Separadas, as duas superfícies ainda teriam cota; a soma barra o próximo contato.
     assert.equal(ritmoDoEnvio(instantesDePrimeiroContato([], somarPrimeiros(daCentral)), agora).motivo, null);
-    assert.equal(ritmoDoEnvio(instantesDePrimeiroContato([], somarPrimeiros(daCentral, { "site:tg": inicio + 14 * 30 * min })), agora).motivo, "dia");
+    assert.equal(ritmoDoEnvio(instantesDePrimeiroContato([], somarPrimeiros(daCentral, { "site:tg": inicio + 19 * 30 * min })), agora).motivo, "dia");
   });
 });
 

@@ -40,6 +40,7 @@ const DECLARACOES_DE_LEITURA: FunctionDeclaration[] = [
   { name: "ler_filtro_leads", description: "Curadoria diária da Marina: cobertura dos contatos de hoje, recusas, acesso, robôs, silêncio, avanços confirmados e padrões maduros que orientam a seleção. Sem envio ou escrita." },
   { name: "ler_hoje", description: "O que precisa do Rômulo hoje em Vendas: os grupos da Hoje do CRM (responder, follow-up, combinados, propostas), com os primeiros de cada." },
   { name: "ler_funil", description: "Quantos leads há em cada etapa do funil (novo, contato, proposta, ganho, perdido), por oferta, e as perdas." },
+  { name: "ler_filtro_leads", description: "Curadoria diária da Marina: cobertura dos contatos de hoje, recusas, acesso, robôs, silêncio, avanços confirmados e padrões maduros que orientam a seleção. Sem envio ou escrita." },
   { name: "ler_proxima_venda", description: "As 5 primeiras ações da fila de venda, na ordem de quem está mais perto de comprar, com o porquê e a tática." },
   {
     name: "buscar_lead",

@@ -5,14 +5,16 @@ import type { Pessoa } from '../types'
 import type { CrmVisao } from '../operations/types'
 import type { AcaoDeVenda } from '../operations/proxima-venda'
 import type { recomendacoesDoTime } from '../operations/recomendacoes-do-time'
-import { decisoesDoEscritorio, novaRespostaEnviada, respostaJaAtendida, proximaDecisaoPorPrioridade, nomesDasOfertas, type Decisao, type EstadoDaDecisao } from './decisoes'
+import { novaRespostaEnviada, respostaJaAtendida, proximaDecisaoPorPrioridade, nomesDasOfertas, type Decisao, type EstadoDaDecisao } from './decisoes'
+import { decisoesHumanasDoEscritorio } from './minha-vez'
 import MissaoDaConversa from './MissaoDaConversa.vue'
 import { avisosPorPrioridade, lerNovasRespostas, type LeituraDasRespostas, type RespostaParaAviso } from './avisos-de-resposta'
+import { pendenciasDaJornada } from './jornada-do-escritorio'
 import PainelOperacional from '../components/PainelOperacional.vue'
 import { orientacaoDoAtendimento } from '../operations/atendimento-cliente'
 
-const props = defineProps<{ visao: CrmVisao | null; erro: string; acoes: AcaoDeVenda[]; conversas?: readonly { lead: import('../operations/types').CrmLead; rotulo: string; prioridade?: number }[]; agora: number; agente?: Pessoa; alertas: ReturnType<typeof recomendacoesDoTime>; atualizando: boolean; conferidoEm: number | null }>()
-const emit = defineEmits<{ ficha: [id: string]; registrado: []; ocupado: [valor: boolean]; atualizar: []; agentes: [] }>()
+const props = defineProps<{ visao: CrmVisao | null; erro: string; acoes: AcaoDeVenda[]; conversas?: readonly { lead: import('../operations/types').CrmLead; rotulo: string; prioridade?: number }[]; agora: number; agente?: Pessoa; alertas: ReturnType<typeof recomendacoesDoTime>; atualizando: boolean; conferidoEm: number | null; leadInicial?: string; compacto?: boolean }>()
+const emit = defineEmits<{ ficha: [id: string]; registrado: []; ocupado: [valor: boolean]; atualizar: []; agentes: []; fila: [] }>()
 const filtro = ref<EstadoDaDecisao>('agora'), busca = ref(''), oferta = ref(''), pagina = ref(1)
 const selecionada = ref<Decisao | null>(null), ocupado = ref(false)
 const interacaoRegistrada = ref(false)
@@ -21,7 +23,14 @@ const avisoDoAvanco = ref('')
 const respostasParaAvisar = ref<RespostaParaAviso[]>([])
 let leituraDasRespostas: LeituraDasRespostas | null = null
 const topo = ref<HTMLElement | null>(null)
-const decisoes = computed(() => decisoesDoEscritorio(props.visao?.leads ?? [], props.acoes, props.agora, props.conversas))
+const decisoes = computed(() => decisoesHumanasDoEscritorio(props.visao?.leads ?? [], props.acoes, props.agora, props.conversas))
+watch([() => props.leadInicial, () => props.visao], ([id]) => {
+  if (!id || selecionada.value) return
+  const decisao = decisoes.value.find(d => d.lead.id === id)
+  const lead = props.visao?.leads.find(l => l.id === id)
+  if (decisao) selecionada.value = decisao
+  else if (lead) selecionada.value = { lead, estado: 'acompanhando', motivo: 'Acompanhar a jornada', acao: null }
+}, { immediate: true })
 const preparacoes = computed(() => destaquesComerciais(props.visao?.leads ?? [],props.agora).flatMap(item=>{
   const decisao=decisoes.value.find(d=>d.lead.id===item.leadId&&d.lead.produto===item.produto)
   return decisao?[{...item,decisao,adiada:props.conversas?.some(c=>c.lead.id===item.leadId&&(c.prioridade??0)>=10)??false}]:[]
@@ -48,10 +57,17 @@ const filtradas = computed(() => decisoes.value.filter(d => d.estado === filtro.
 const paginas = computed(() => Math.max(1, Math.ceil(filtradas.value.length / 8)))
 const visiveis = computed(() => filtradas.value.slice((pagina.value - 1) * 8, pagina.value * 8))
 const clienteNaLeitura = computed(() => props.visao?.leads.some(l => l.id === selecionada.value?.lead.id) ?? false)
-const atual = computed<Decisao | null>(() => selecionada.value ? decisoes.value.find(d => d.lead.id === selecionada.value!.lead.id) ?? { ...selecionada.value, acao: null, estado: 'acompanhando', motivo: 'Cliente ausente da leitura atual' } : null)
+const atual = computed<Decisao | null>(() => {
+  if (!selecionada.value) return null
+  const decisao = decisoes.value.find(d => d.lead.id === selecionada.value!.lead.id)
+  if (decisao) return decisao
+  const lead = props.visao?.leads.find(l => l.id === selecionada.value!.lead.id)
+  return { ...selecionada.value, lead: lead ?? selecionada.value.lead, acao: null, estado: 'acompanhando', motivo: lead ? 'Acompanhar a jornada' : 'Cliente ausente da leitura atual' }
+})
 const atendimentoAtual = computed(() => atual.value ? orientacaoDoAtendimento(atual.value.lead, props.visao?.leads ?? [], props.agora) : undefined)
 const indice = computed(() => filtradas.value.findIndex(d => d.lead.id === atual.value?.lead.id))
-const proxima = computed(() => proximaDecisaoPorPrioridade(decisoes.value, atual.value?.lead.id))
+const filaDePrioridade = computed(() => props.compacto ? pendenciasDaJornada(props.visao?.leads ?? [], props.acoes, props.agora) : decisoes.value)
+const proxima = computed(() => proximaDecisaoPorPrioridade(filaDePrioridade.value, atual.value?.lead.id))
 watch(() => atual.value?.estado, (estado, anterior) => {
   if (anterior === 'agora' && estado && estado !== 'agora') interacaoRegistrada.value = true
   if (estado === 'agora' && anterior !== 'agora') interacaoRegistrada.value = false
@@ -60,7 +76,7 @@ watch([filtro, busca, oferta], () => { pagina.value = 1 })
 watch(paginas, valor => { pagina.value = Math.min(pagina.value, valor) })
 async function focarTopo() { await nextTick(); topo.value?.focus(); topo.value?.scrollIntoView({ block: 'start' }) }
 function abrir(d: Decisao) { if (ocupado.value) return; avancoPendente.value = null; avisoDoAvanco.value = ''; selecionada.value = d; interacaoRegistrada.value = false; void focarTopo() }
-function voltar() { if (ocupado.value) return; avancoPendente.value = null; avisoDoAvanco.value = ''; selecionada.value = null; void focarTopo() }
+function voltar() { if (ocupado.value) return; avancoPendente.value = null; avisoDoAvanco.value = ''; selecionada.value = null; emit('fila'); void focarTopo() }
 function mudarOcupado(valor: boolean) { ocupado.value = valor; emit('ocupado', valor) }
 function confirmarInteracao() {
   interacaoRegistrada.value = true
@@ -78,7 +94,7 @@ watch([() => props.visao, () => props.atualizando, () => props.erro, ocupado, av
   avancoPendente.value = null
   if (atual.value?.lead.id !== pendente.id) return
   if (pendente.observado && !respostaJaAtendida(atual.value.lead)) { interacaoRegistrada.value = false; return }
-  const destino = proximaDecisaoPorPrioridade(decisoes.value, pendente.id)
+  const destino = proximaDecisaoPorPrioridade(filaDePrioridade.value, pendente.id)
   if (destino) { abrir(destino); avisoDoAvanco.value = pendente.observado ? 'Resposta detectada no WhatsApp. Próximo cliente aberto por prioridade.' : 'Interação registrada. Próximo cliente aberto por prioridade.' }
 }, { flush: 'post' })
 const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferidoEm).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '')
@@ -99,19 +115,19 @@ const dataDaLeitura = computed(() => props.conferidoEm ? new Date(props.conferid
 
     <template v-if="atual">
       <nav class="minhas-decisoes__navegacao" aria-label="Navegação entre decisões">
-        <button type="button" class="botao botao--leve" :disabled="ocupado" @click="voltar">← Voltar à fila</button>
-        <span class="texto-2 texto-pequeno">{{ indice >= 0 ? `${indice + 1} de ${filtradas.length} nesta fila` : 'Situação atualizada' }}</span>
-        <button v-if="proxima" class="botao botao--leve" type="button" :disabled="ocupado || atualizando" @click="abrir(proxima)">Próxima por prioridade →</button>
+        <button type="button" class="botao botao--leve" :disabled="ocupado" @click="voltar">{{ compacto ? '← Jornada' : '← Voltar à fila' }}</button>
+        <span v-if="!compacto" class="texto-2 texto-pequeno">{{ indice >= 0 ? `${indice + 1} de ${filtradas.length} nesta fila` : 'Situação atualizada' }}</span>
+        <button v-if="proxima" class="botao botao--leve" type="button" :disabled="ocupado || atualizando" @click="abrir(proxima)">{{ compacto ? 'Próxima →' : 'Próxima por prioridade →' }}</button>
       </nav>
       <p v-if="avisoDoAvanco" class="recado recado--ok" role="status">{{ avisoDoAvanco }}</p>
       <p v-if="avancoPendente && !erro" class="texto-2 texto-pequeno" role="status">{{ avancoPendente.observado ? 'Resposta detectada no WhatsApp. Abrindo o próximo cliente…' : 'Interação registrada. Atualizando a fila para abrir o próximo cliente…' }}</p>
       <div v-if="interacaoRegistrada && !avancoPendente" class="minhas-decisoes__proxima" role="status"><div><span class="sobretitulo">{{ atualizando ? 'Atualizando prioridades…' : 'Interação registrada' }}</span><template v-if="proxima"><h3>Próxima: {{ proxima.lead.empresa }}</h3><p>{{ proxima.motivo }}</p></template><template v-else><h3>Nenhuma outra decisão pendente agora.</h3><p>Você pode terminar o acompanhamento deste cliente ou voltar à fila.</p></template></div><button v-if="proxima" class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
-      <MissaoDaConversa :key="atual.lead.id" :lead="atual.lead" :orientacao="atendimentoAtual?.plano" :procedimento-inicial="atendimentoAtual?.procedimento" :agente="agente" :disponivel="clienteNaLeitura && !erro && visao?.estado === 'ok'" :registro-disponivel="visao?.registro.disponivel" :motivo="atual.motivo" :acao="atual.acao" :estado="atual.estado" @ficha="emit('ficha', $event)" @interagiu="confirmarInteracao" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fila="voltar" />
+      <MissaoDaConversa :key="atual.lead.id" :compacto="compacto" :lead="atual.lead" :orientacao="atendimentoAtual?.plano" :procedimento-inicial="atendimentoAtual?.procedimento" :agente="agente" :disponivel="clienteNaLeitura && !erro && visao?.estado === 'ok'" :registro-disponivel="visao?.registro.disponivel" :motivo="atual.motivo" :acao="atual.acao" :estado="atual.estado" @ficha="emit('ficha', $event)" @interagiu="confirmarInteracao" @registrado="emit('registrado')" @ocupado="mudarOcupado" @fila="voltar" />
       <div v-if="interacaoRegistrada && !avancoPendente && proxima" class="minhas-decisoes__continuar"><p class="texto-2 texto-pequeno">A seguir · {{ proxima.lead.empresa }} · {{ proxima.motivo }}</p><button class="botao botao--primario" type="button" :disabled="ocupado || atualizando || !!erro || visao?.estado !== 'ok'" @click="abrir(proxima)">Conduzir próxima decisão →</button></div>
     </template>
     <template v-else-if="visao?.estado === 'ok' || visao?.leads.length">
-      <div class="minhas-decisoes__introducao"><h3>Quem precisa de você agora?</h3><p>Abra um cliente para ver o próximo passo, quando agir e como conduzir a conversa.</p></div>
-      <aside v-if="preparacoes.length && !erro && visao?.estado === 'ok'" class="minhas-decisoes__preparacao" aria-label="Preparação para a primeira venda">
+      <div class="minhas-decisoes__introducao"><h3>Quem precisa de você agora?</h3><p>Decisões comerciais e respostas humanas pendentes. Preparo, conferências técnicas e esperas ficam em Acompanhar.</p></div>
+      <aside v-if="filtro === 'acompanhando' && preparacoes.length && !erro && visao?.estado === 'ok'" class="minhas-decisoes__preparacao" aria-label="Preparação para a primeira venda">
         <h3>Preparação para a primeira venda</h3>
         <p class="texto-2 texto-pequeno">Prioridades de revisão interna. O histórico orienta a preparação; qualquer envio depende da sua decisão e das restrições da conversa.</p>
         <ol><li v-for="item in preparacoes" :key="`${item.produto}:${item.leadId}`">

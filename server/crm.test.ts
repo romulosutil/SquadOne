@@ -112,8 +112,8 @@ function retrato(): CrmRetrato {
       registros: {
         aba: "CRM", colunas: ["em", "produto", "id", "empresa", "tipo", "texto", "data"],
         linhas: [
-          { em: dias(3), produto: "site", id: "com-proposta", tipo: "proposta", texto: "", data: "2026-09-29" },
-          { em: dias(4), produto: "site", id: "proposta-desfeita", tipo: "proposta", texto: "", data: "2026-09-28" },
+          { em: dias(3), produto: "site", id: "com-proposta", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês.", data: "2026-09-29" },
+          { em: dias(4), produto: "site", id: "proposta-desfeita", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês.", data: "2026-09-28" },
           { em: dias(3.5), produto: "site", id: "proposta-desfeita", tipo: "proposta_desfeita", texto: "", data: "" },
           { em: dias(2), produto: "site", id: "respondeu", tipo: "nota", texto: "Pediu preço do plano mensal", data: "" },
           { em: dias(1), produto: "prumo", id: "diagnostico", tipo: "proximo_passo", texto: "Ligar para marcar a conversa", data: "2026-10-02" },
@@ -427,7 +427,7 @@ describe("CRM: resposta classificada (05/10/2026)", () => {
     assert.equal(pronto.subEtapa, "Pronto, não enviado · sem demo (gere quando ele pedir)");
     assert.equal(pronto.mensagemPronta, "Oi, tudo bem? Aqui é o Rômulo.");
     const enviar = v.hoje.find((g) => g.id === "enviar")!;
-    assert.equal(enviar.titulo, "Primeiro contato para enviar");
+    assert.equal(enviar.titulo, "Fila histórica de primeiros contatos");
     const item = enviar.itens.find((i) => i.leadId === "site:a-sem-demo")!;
     assert.equal(item.acao, "Mandar a primeira mensagem");
     assert.ok(item.detalhe.endsWith("Ainda sem demo: gere quando ele pedir."), item.detalhe);
@@ -834,7 +834,7 @@ describe("CRM: Em contato e a regra dos 7 dias (08/10/2026)", () => {
     const { leads } = comPrazo([
       linhaSite("recusou-velho", { status: "recusado", enviado_em: dias(20), recusado_em: dias(15) }),
       linhaSite("proposta-velha", { status: "enviado", enviado_em: dias(30), respondeu_em: dias(29) }),
-    ], [], [{ em: dias(20), produto: "site", id: "proposta-velha", tipo: "proposta", texto: "", data: "2026-09-12" }]);
+    ], [], [{ em: dias(20), produto: "site", id: "proposta-velha", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês.", data: "2026-09-12" }]);
     assert.equal(estado(lead(leads, "site:recusou-velho")), "perdido/recusou/recusou");
     assert.equal(estado(lead(leads, "site:proposta-velha")), "perdido/esfriou/proposta-sem-retorno");
   });
@@ -897,14 +897,14 @@ describe("CRM: o loop fechado — 2ª mensagem e follow-up anotados (14/10/2026)
     assert.ok(!resposta(v).some((i) => i.leadId === "site:mandado"));
   });
 
-  it("ultima_saida_em depois da resposta também conta como a 2ª mensagem", () => {
+  it("ultima_saida_em comprova saída, sem encerrar o material pendente", () => {
     const v = com([quer("saiu", 5, { ultima_saida_em: dias(4) })]);
-    assert.equal(lead(v.leads, "site:saiu").interesseParado, undefined);
+    assert.deepEqual(lead(v.leads, "site:saiu").interesseParado, { desde: dias(5) });
   });
 
   it("7 dias sem retorno exigem revisão; proposta tira o interesse parado", () => {
     const v = com([quer("velho", 8), quer("com-proposta-nova", 5)], [], [
-      { em: dias(1), produto: "site", id: "com-proposta-nova", tipo: "proposta", texto: "", data: "2026-10-01" },
+      { em: dias(1), produto: "site", id: "com-proposta-nova", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês.", data: "2026-10-01" },
     ]);
     assert.equal(`${lead(v.leads, "site:velho").etapa}/${lead(v.leads, "site:velho").respostaNova}`, "contato/false");
     assert.ok(lead(v.leads, "site:velho").revisaoComercial);
@@ -1219,7 +1219,7 @@ describe("CRM: retrato e registro", () => {
     assert.throws(() => validarRegistro({ produto: "site", id: "abc", tipo: "proximo_passo", texto: "Ligar" }, AGORA), /data/);
     assert.throws(() => validarRegistro({ produto: "site", id: "abc", tipo: "apagar", texto: "" }, AGORA), /Tipo/);
     assert.equal(validarRegistro({ produto: "site", id: "abc", tipo: "nota", texto: " linha 1\r\nlinha 2 " }, AGORA).texto, "linha 1\nlinha 2");
-    assert.equal(validarRegistro({ produto: "prumo", id: "abc", tipo: "proposta", texto: "" }, AGORA).data, "2026-10-02");
+    assert.equal(validarRegistro({ produto: "prumo", id: "abc", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês." }, AGORA).data, "2026-10-02");
     assert.throws(() => configDoCrm({ registroUrl: "https://dell.exemplo.ts.net/webhook/crm-registro" }), /loopback/);
   });
 
@@ -1245,14 +1245,14 @@ describe("CRM: retrato e registro", () => {
       linhaSite("proposta-velha", { status: "enviado", enviado_em: dias(30), respondeu_em: dias(29) }),
       linhaSite("recusou-velho", { status: "recusado", enviado_em: dias(20), recusado_em: dias(15) }),
     );
-    base.fontes.registros.linhas.push({ em: dias(20), produto: "site", id: "proposta-velha", tipo: "proposta", texto: "", data: "2026-09-12" });
+    base.fontes.registros.linhas.push({ em: dias(20), produto: "site", id: "proposta-velha", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês.", data: "2026-09-12" });
     const fetcher = (async () => new Response(JSON.stringify({ ok: true, em: "2026-10-02T15:00:01Z" }), { status: 200 })) as unknown as typeof fetch;
     const store = await loja(base, true, fetcher);
     const visao = await store.visao(AGORA);
     assert.equal(lead(visao.leads, "site:proposta-velha").motivoPerda, "proposta-sem-retorno", "pré-condição: saiu pela cadência");
     // Saiu pelo tempo, sem desfecho de ninguém: a nova proposta o traz de volta (antes: "desfaça o desfecho").
-    await store.registrar({ produto: "site", id: "proposta-velha", tipo: "proposta", texto: "Proposta nova" }, AGORA);
-    await assert.rejects(store.registrar({ produto: "site", id: "recusou-velho", tipo: "proposta", texto: "" }, AGORA), /desfaça o desfecho/);
+    await store.registrar({ produto: "site", id: "proposta-velha", tipo: "proposta", texto: "Nova condição histórica confirmada: site por R$ 90/mês." }, AGORA);
+    await assert.rejects(store.registrar({ produto: "site", id: "recusou-velho", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês." }, AGORA), /desfaça o desfecho/);
   });
 
   it("classifica as falhas do registro", async () => {
@@ -1261,9 +1261,9 @@ describe("CRM: retrato e registro", () => {
       (e: unknown) => e instanceof RegistroFalhou && e.status === 403);
     await assert.rejects((await loja(retrato(), false)).registrar({ produto: "site", id: "respondeu", tipo: "nota", texto: "a" }, AGORA), RegistroIndisponivel);
     await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "nao-existe", tipo: "nota", texto: "a" }, AGORA), /não encontrado/);
-    await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "com-proposta", tipo: "proposta", texto: "" }, AGORA), /já está em Proposta/);
+    await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "com-proposta", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês." }, AGORA), /já está em Proposta/);
     await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "respondeu", tipo: "proposta_desfeita", texto: "" }, AGORA), /não está em Proposta/);
-    await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "recusou", tipo: "proposta", texto: "" }, AGORA), /Lead já encerrado/);
+    await assert.rejects((await loja(retrato())).registrar({ produto: "site", id: "recusou", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês." }, AGORA), /Lead já encerrado/);
   });
 
   it("envio anotado é idempotente por 2 min: clique duplo, toques simultâneos e o retrato já refeito", async () => {
@@ -1323,7 +1323,7 @@ describe("CRM: retrato e registro", () => {
       return new Response(JSON.stringify({ ok: true, em: "2026-10-02T15:00:01Z" }), { status: 200 });
     }) as unknown as typeof fetch;
     // "acervo" (enviado em 20/09, sem resposta) está em Perdido por expirou.
-    await (await loja(retrato(), true, fetcher)).registrar({ produto: "site", id: "acervo", tipo: "proposta", texto: "" }, AGORA);
+    await (await loja(retrato(), true, fetcher)).registrar({ produto: "site", id: "acervo", tipo: "proposta", texto: "Condição histórica confirmada: site por R$ 90/mês." }, AGORA);
     assert.equal(JSON.parse(chamadas[0]).tipo, "proposta");
   });
 });

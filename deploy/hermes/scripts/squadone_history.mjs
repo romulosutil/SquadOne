@@ -1,7 +1,8 @@
 /** Leitura dirigida na sessão existente. Nenhum sendMessage/readMessages/typing. */
 import fs from 'node:fs'
 import path from 'node:path'
-import { timingSafeEqual } from 'node:crypto'
+import { timingSafeEqual, createHash } from 'node:crypto'
+import { DatabaseSync } from 'node:sqlite'
 import { spawnSync } from 'node:child_process'
 import { jidCanonico, registrarProvaHermes } from './identidade_captura.mjs'
 
@@ -11,13 +12,19 @@ export function chaveDoNumero(valor) {
   return d.length >= 10 && d.length <= 11 ? d.slice(0, 2) + d.slice(-8) : ''
 }
 
-export function createSquadoneHistory({ home, session, getSocket, getContent, baixarAudio, agora = Date.now, arquivar }) {
+export function createSquadoneHistory({ home, session, getSocket, getContent, baixarAudio, agora = Date.now, arquivar, lerRecibosConfirmados }) {
   const pedidos = new Map()
   // squadone:identidade-historico-v1 — a correlação com o socket nunca vai à resposta HTTP.
   const socketsDosPedidos = new Map()
   const pedidosOriginais = new Map()
   const validadeDoPedido = 10 * 60_000
   const diagnostico = { eventos: 0, mensagens: 0, solicitadas: 0, semCorrelacao: 0, foraDaJanela: 0, semTexto: 0, semTextoPorFormato: {}, falhasAncoras: 0 }
+  const recibosConfirmados = lerRecibosConfirmados || (chave => {
+    const db = new DatabaseSync(path.join(home, '.local/share/frente-comercial/registro.sqlite'), { readOnly: true })
+    try {
+      return db.prepare("SELECT recibo AS id FROM contatos WHERE chave=? AND estado='enviado' AND recibo<>'' ORDER BY em DESC LIMIT 10").all(chave)
+    } finally { db.close() }
+  })
   const audios = new Map()
   const pasta = path.join(home, '.local/state/whatsapp-observador')
   const segredo = path.join(home, '.config/claude-ops/whatsapp-observador-segredo')
@@ -79,10 +86,13 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
     for (const nome of fs.readdirSync(session).filter(n => /^lid-mapping-\d+_reverse\.json$/.test(n)).slice(0, 5000)) {
       try {
         const numero = String(JSON.parse(fs.readFileSync(path.join(session, nome), 'utf8'))).split('@')[0]
-        if (/^55\d{10,11}$/.test(numero) && chaveDoNumero(numero) === chave) encontrados.add(numero)
+        if (/^55\d{10,11}$/.test(numero) && chaveDoNumero(numero) === chave) {
+          const lid = nome.match(/^lid-mapping-(\d+)_reverse\.json$/)?.[1]
+          if (lid) encontrados.add(`${lid}@lid`)
+        }
       } catch { /* Arquivo da sessão em atualização. */ }
     }
-    return encontrados.size === 1 ? `${[...encontrados][0]}@s.whatsapp.net` : null
+    return encontrados.size === 1 ? [...encontrados][0] : null
   }
   function textoDoHistorico(c) {
     const direto = c.conversation ?? c.extendedTextMessage?.text
@@ -194,6 +204,32 @@ export function createSquadoneHistory({ home, session, getSocket, getContent, ba
       }
       const numero = String(req.body?.numero || '')
       const numeroConferido = /^55\d{10,11}$/.test(numero) && chaveDoNumero(numero) === chave
+      if (req.body?.recuperarRecibos === true) {
+        if (!numeroConferido) return res.status(409).json({ error: 'Número completo não conferido.' })
+        const sock = getSocket(), owner = jidCanonico(sock?.user?.id)
+        const config = JSON.parse(fs.readFileSync(path.join(home, '.local/share/whatsapp-identidades/config.json'), 'utf8'))
+        if (!owner || createHash('sha256').update(owner).digest('hex') !== config.identidadePrumoHash)
+          return res.status(409).json({ error: 'Sessão não corresponde à conta do PRUMO.' })
+        if (!sock?.requestPlaceholderResend) return res.status(503).json({ error: 'Sessão sem releitura de original.' })
+        const anteriores = pedidosOriginais.get('recibo:' + chave)
+        if (anteriores && agora() - anteriores.iniciadoEm < validadeDoPedido) return res.json({ ...anteriores, cobertura: 'parcial' })
+        // IDs vêm somente do SQLite confirmado, nunca do corpo HTTP ou de uma
+        // âncora fabricada. Não se fornece conteúdo ou timestamp ao protocolo.
+        const ids = [...new Set(recibosConfirmados(chave).map(r => r.id))]
+          .filter(id => typeof id === 'string' && /^[A-Za-z0-9_-]{3,200}$/.test(id)).slice(0, 10)
+        if (!ids.length) return res.status(409).json({ error: 'Sem recibo confirmado nesta conversa.' })
+        const jid = jidDaSessao(chave) || numero + '@s.whatsapp.net'
+        const estado = { iniciadoEm: agora(), solicitadas: 0, concluidas: 0, erros: 0 }
+        socketsDosPedidos.set(chave, sock)
+        pedidos.set(chave, { solicitadoEm: agora(), recebidas: 0, gravadas: 0, metodo: 'recibo-confirmado', janelaRecente: true })
+        pedidosOriginais.set('recibo:' + chave, estado)
+        for (const id of ids) {
+          if (getSocket() !== sock) { estado.erros++; break }
+          try { await sock.requestPlaceholderResend({ remoteJid: jid, id, fromMe: true }); estado.solicitadas++; estado.concluidas++ }
+          catch { estado.erros++ }
+        }
+        return res.json({ ...estado, cobertura: 'parcial', aviso: 'Original solicitado ao aparelho; nenhum histórico ou prova foi criado por este pedido.' })
+      }
       // Uma âncora antiga pagina para trás e perde respostas posteriores à queda.
       const janelaRecente = numeroConferido && req.body?.anteriores !== true
       const anterior = pedidos.get(chave)

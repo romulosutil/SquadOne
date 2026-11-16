@@ -38,6 +38,13 @@ def validar(s, produto='site', texto=None, tipo='spiced'):
 
 
 class SpicedDoRegistro(unittest.TestCase):
+    def test_proposta_exige_conteudo_real_sem_template(self):
+        for conteudo in ['', 'Proposta enviada', 'Enviei a proposta',
+                         'A proposta fica em [preencher o valor].', 'Entrego no [dia combinado] para você.']:
+            self.assertFalse(validar({},tipo='proposta',texto=conteudo)['ok'],conteudo)
+        real = 'Site funcionando: implantação R$ 690, mensalidade R$ 39; pagamento após ver no ar.'
+        self.assertTrue(validar({},tipo='proposta',texto=real)['ok'])
+
     def test_aarr_catalogo_iris_e_oferta_proibem_valor_livre(self):
         base = {'versao': 1, 'oferta': 'encontrado', 'componente': 'implantacao', 'referencia': 'recibo', 'data': '2026-10-19'}
         r = validar(base, tipo='pagamento_confirmado')

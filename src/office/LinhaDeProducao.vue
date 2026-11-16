@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { EstacaoDaProducao } from './linha-de-producao'
 import type { FaseDoEscritorio, MovimentoDoEscritorio } from './jornada-do-escritorio'
-import type { ResumoAtendimentoEstamparia } from './modelo'
+import type { ResumoAtendimentoEstamparia } from '../operations/estamparia-atendimento'
 const props = defineProps<{ estacoes: readonly EstacaoDaProducao[]; selecionada: FaseDoEscritorio | null; disponivel: boolean; erro: string; ultimo?: MovimentoDoEscritorio; entrega?: string; leadEmPassagem?: string; agrupadas?: number; animar: boolean; atendimentoEstamparia?: ResumoAtendimentoEstamparia | null }>()
 const emit = defineEmits<{ selecionar:[fase:FaseDoEscritorio]; cliente:[id:string]; etapa:[fase:FaseDoEscritorio]; historico:[]; movimento:[]; acompanhamentos:[] }>()
 const atual = computed(() => props.estacoes.find(e => e.id === props.selecionada))

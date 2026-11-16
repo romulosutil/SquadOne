@@ -1,3 +1,4 @@
+import './testes/politica-historica.ts'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { describe, it } from 'node:test'
@@ -82,180 +83,140 @@ describe('jornada: o estado de cada passo', () => {
   })
 })
 
-describe('jornada: o próximo passo', () => {
-  it('o salvo à mão manda', () => {
+describe('jornada: próximo passo orientado à necessidade', () => {
+  it('o salvo à mão prevalece em conversa aberta', () => {
     const p = proximoDaJornada(lead({ etapa: 'contato', sinal: 'respondeu', proximoPasso: { texto: 'Ligar às 10h', data: '2026-10-16', registradoEm: '' } }))
     assert.equal(p.acao, 'Ligar às 10h')
     assert.equal(p.marcadoAMao, true)
   })
-  it('interesse: a 2ª mensagem em até 2 h', () => {
-    const p = proximoDaJornada(lead({ etapa: 'contato', sinal: 'respondeu', resposta: { tipo: 'interesse', trecho: 'manda' } }))
-    assert.match(p.acao, /2ª mensagem/)
+  it('interesse recebe resposta útil, sem proposta obrigatória após gostei', () => {
+    const p = proximoDaJornada(lead({ etapa: 'contato', sinal: 'respondeu', resposta: { tipo: 'interesse', trecho: 'gostei' } }))
+    assert.match(p.acao, /contexto suficiente/)
+    assert.doesNotMatch(p.acao, /2ª mensagem|24 h/)
     assert.equal(p.quando, 'em até 2 h')
   })
-  it('PRUMO que viu o Raio-X: o Mapa e, se quiser, o site (o caso de 15/10/2026)', () => {
-    const p = proximoDaJornada(lead({ produto: 'prumo', etapa: 'contato', sinal: 'respondeu-prumo', marcos: { segundaEnviada: '2026-10-15T12:00:00Z' } }))
-    assert.match(p.acao, /Mapa/)
-    assert.match(p.acao, /site/)
+  it('pedido de preço tem resposta direta, mesmo classificado como licença', () => {
+    for (const tipo of ['interesse', 'licenca'] as const) for (const etapa of ['novo', 'contato'] as const) {
+      const p = proximoDaJornada(lead({ etapa, sinal: 'respondeu', resposta: { tipo, trecho: 'Quanto custa?' } }))
+      assert.match(p.acao, /Responder diretamente/)
+      assert.match(p.acao, /sem exigir Raio-X, Mapa ou reunião/)
+    }
   })
-  it('Site que viu o Raio-X: a conversa, sem Mapa', () => {
-    const p = proximoDaJornada(lead({ etapa: 'contato', sinal: 'respondeu', marcos: { segundaEnviada: '2026-10-15T12:00:00Z' } }))
-    assert.doesNotMatch(p.acao, /Mapa/)
+  it('licença autoriza só o material, não infere necessidade nem compra', () => {
+    const p = proximoDaJornada(lead({ etapa: 'contato', sinal: 'respondeu', resposta: { tipo: 'licenca', trecho: 'Pode enviar' } }))
+    assert.match(p.acao, /somente o material solicitado/)
+    assert.match(p.acao, /não confirma necessidade nem compra/)
   })
-  it('publicado sem o Balcão: quem faz é o robô', () => {
-    assert.equal(proximoDaJornada(lead({ sinal: 'publicado' })).quem, 'robô')
+  it('após material não obriga Mapa, reunião ou prazo universal de proposta', () => {
+    for (const produto of ['site', 'prumo'] as const) {
+      const p = proximoDaJornada(lead({ produto, etapa: 'contato', sinal: 'respondeu', equipe: true, marcos: { segundaEnviada: '2026-10-15T12:00:00Z' } }))
+      assert.match(p.acao, /necessidade, processo de decisão e escopo/)
+      assert.match(p.acao, /não exigir diagnóstico ou reunião/)
+      assert.equal(p.quando, undefined)
+    }
+  })
+  it('cadastro novo e demo publicada não recomendam disparo', () => {
+    for (const sinal of ['na-fila', 'publicado', 'pronto'] as const) {
+      const p = proximoDaJornada(lead({ sinal }))
+      assert.match(p.acao, /Primeiros contatos automáticos bloqueados/)
+      assert.equal(p.quem, 'você')
+    }
+  })
+  it('recusa e exclusão prevalecem sobre próximo passo manual e oferta', () => {
+    for (const tipo of ['negativa', 'exclusao'] as const) {
+      const l = lead({ etapa: 'contato', sinal: 'respondeu', resposta: { tipo, trecho: 'Não contate' }, proximoPasso: { texto: 'Mandar oferta', data: '2026-11-17', registradoEm: '' } })
+      const p = proximoDaJornada(l)
+      assert.doesNotMatch(p.acao, /Mandar oferta/)
+      assert.equal(p.marcadoAMao, undefined)
+      assert.deepEqual(ofertaDoLead(l).agora, [])
+      assert.deepEqual(ofertaDoLead(l).depois, [])
+    }
+  })
+  it('silêncio não agenda follow-up automático nem expiração comercial', () => {
+    const p = proximoDaJornada(lead({ etapa: 'contato', sinal: 'enviado', followupHoje: true, diasParaSair: 1 }))
+    assert.match(p.acao, /Aguardar resposta ou o próximo passo combinado/)
+    assert.equal(p.quando, undefined)
   })
 })
 
-describe('jornada: o que oferecer', () => {
+describe('jornada: oferta cadastrada é hipótese, não diagnóstico automático', () => {
   const viuRaioX = { etapa: 'contato', sinal: 'respondeu-prumo', marcos: { segundaEnviada: '2026-10-15T12:00:00Z' } } as const
-
-  it('antes do Raio-X, só o Raio-X agora', () => {
-    const o = ofertaDoLead(lead({ sinal: 'pronto' }))
-    assert.deepEqual(ids(o.agora), ['raio-x'])
-    assert.ok(ids(o.depois).includes('encontrado'))
+  it('Site antes e depois do Raio-X preserva hipótese sem impor diagnóstico', () => {
+    for (const l of [lead({ sinal: 'pronto' }), lead({ ...viuRaioX })]) {
+      const o = ofertaDoLead(l)
+      assert.deepEqual(o.agora, [])
+      assert.deepEqual(ids(o.depois), ['encontrado'])
+      assert.match(o.depois[0].porque, /Hipótese.*Não exige Raio-X/)
+      assert.ok(o.aConfirmar.some(t => t.startsWith('Necessidade')))
+      assert.ok(o.aConfirmar.some(t => t.startsWith('Decisão')))
+      assert.ok(o.aConfirmar.some(t => t.startsWith('Escopo')))
+    }
   })
-  it('sem site, depois do Raio-X: o Encontrado agora, o Respondido depois, sem Mapa', () => {
-    const o = ofertaDoLead(lead({ ...viuRaioX, produto: 'site', sinal: 'respondeu' }))
-    assert.deepEqual(ids(o.agora), ['encontrado'])
-    assert.ok(ids(o.depois).includes('respondido'))
-    assert.ok(ids(o.naoAgora).includes('mapa'))
+  it('PRUMO com equipe ou porte a confirmar não recebe Mapa/Fonte automaticamente', () => {
+    for (const equipe of [true, undefined]) {
+      const o = ofertaDoLead(lead({ ...viuRaioX, produto: 'prumo', equipe, porte: 'EPP' }))
+      assert.deepEqual(o.agora, [])
+      assert.deepEqual(ids(o.depois), ['respondido'])
+      assert.ok(o.aConfirmar.some(t => t.startsWith('Mapa opcional')))
+      assert.match(o.depois[0].porque, /Já ter site não comprova/)
+    }
   })
-  it('PRUMO com equipe, depois do Raio-X: o Respondido e o Mapa agora; o site pode entrar também', () => {
-    const o = ofertaDoLead(lead({ ...viuRaioX, produto: 'prumo', equipe: true }))
-    assert.deepEqual(ids(o.agora), ['respondido', 'mapa'])
-    assert.ok(ids(o.depois).includes('encontrado'))
-    assert.ok(ids(o.depois).includes('fonte'))
-  })
-  it('PRUMO com o porte a confirmar: o Mapa fica depois e a pergunta aparece', () => {
-    const o = ofertaDoLead(lead({ ...viuRaioX, produto: 'prumo' }))
-    assert.ok(ids(o.depois).includes('mapa'))
-    assert.ok(o.aConfirmar.some((t) => t.startsWith('Porte')))
-  })
-  it('Mapa respondido: a Fonte agora, a Manutenção depois', () => {
+  it('Mapa respondido mantém Fonte como avaliação e manutenção condicionada', () => {
     const o = ofertaDoLead(lead({ produto: 'prumo', etapa: 'contato', sinal: 'diagnostico' }))
-    assert.ok(ids(o.agora).includes('fonte'))
-    assert.ok(ids(o.depois).includes('fonte-em-dia'))
+    assert.deepEqual(o.agora, [])
+    assert.match(o.depois.find(x => x.id === 'fonte')!.porque, /somente se a necessidade justificar/)
+    assert.match(o.depois.find(x => x.id === 'fonte-em-dia')!.porque, /após Fonte contratada e os 30 dias/)
   })
-  it('"já temos site": não insiste no Encontrado', () => {
-    const o = ofertaDoLead(lead({ ...viuRaioX, produto: 'site', sinal: 'respondeu', resposta: { tipo: 'negativa', trecho: 'Obrigado, mas já temos site' } }))
-    assert.ok(!ids(o.agora).includes('encontrado'))
-    assert.ok(ids(o.agora).includes('respondido'))
+  it('já temos site não provoca upsell de automação', () => {
+    const o = ofertaDoLead(lead({ ...viuRaioX, resposta: { tipo: 'neutra', trecho: 'Já temos site' } }))
+    assert.deepEqual(o.agora, [])
+    assert.ok(!ids(o.depois).includes('respondido'))
   })
-  it('o porte pelo CNPJ põe o Mapa agora e diz de onde veio', () => {
-    const o = ofertaDoLead(lead({ ...viuRaioX, produto: 'prumo', porte: 'EPP', equipe: true }))
-    assert.ok(ids(o.agora).includes('mapa'))
-    assert.match(o.agora.find((x) => x.id === 'mapa')!.porque, /porte EPP pelo CNPJ/)
-    assert.ok(!o.aConfirmar.some((t) => t.startsWith('Porte')))
+  it('Íris e estamparia preservam contexto de nicho e estados, sem abordagem automática', () => {
+    for (const produto of ['iris', 'estampa'] as const) {
+      const o = ofertaDoLead(lead({ produto }))
+      assert.deepEqual(o.agora, [])
+      assert.deepEqual(ids(o.depois), [produto === 'iris' ? 'iris' : 'crm-estamparia'])
+      assert.match(o.depois[0].porque, produto === 'iris' ? /em uso/ : /em implantação/)
+      assert.ok(o.aConfirmar.some(t => t.startsWith('Qualidade e operação')))
+    }
   })
-  it('Iris e estamparias: a oferta própria, sem Raio-X', () => {
-    assert.deepEqual(ids(ofertaDoLead(lead({ produto: 'iris' })).agora), ['iris'])
-    assert.deepEqual(ids(ofertaDoLead(lead({ produto: 'estampa' })).agora), ['crm-estamparia'])
+  it('Plus sem oferta não vira Site por padrão; com oferta mantém hipótese', () => {
+    assert.deepEqual(ofertaDoLead(lead({ produto: 'plus' })).depois, [])
+    assert.deepEqual(ids(ofertaDoLead(lead({ produto: 'plus', plus: { oferta: 'prumo', fixo: false, descricao: '' } })).depois), ['respondido'])
   })
-  it('perdido: nada agora', () => {
-    assert.deepEqual(ofertaDoLead(lead({ etapa: 'perdido', sinal: 'recusou' })).agora, [])
+  it('encerramento e ganho não recebem nova oferta', () => {
+    for (const etapa of ['perdido', 'ganho'] as const) {
+      const o = ofertaDoLead(lead({ etapa }))
+      assert.deepEqual(o.agora, [])
+      assert.deepEqual(o.depois, [])
+    }
   })
 })
 
-describe('jornada: a oferta sob medida, pelo que o Raio-X achou', () => {
-  const viu = { etapa: 'contato', sinal: 'respondeu-prumo', marcos: { segundaEnviada: '2026-10-15T12:00:00Z' } } as const
+describe('jornada: achados públicos preservam fatos, sem inferir compra', () => {
   const busca = 'dentista em Anápolis'
-  const A = {
-    fora: { id: 'posicao-na-busca', consulta: busca, lidos: 20 },
-    setimo: { id: 'posicao-na-busca', consulta: busca, posicao: 7, lidos: 20 },
-    semSite: { id: 'sem-site', consulta: busca, topoLidos: 3, topoComSite: 2 },
-    siteFora: { id: 'site-fora-do-ar', dominio: 'clinica.com.br' },
-    rede: { id: 'site-e-rede-social', rede: 'o Instagram' },
-    nota: { id: 'nota-baixa', nota: 4.1, consulta: busca, notasDoTopo: [4.8, 4.9, 5] },
-    avaliacoes: { id: 'poucas-avaliacoes', avaliacoes: 12, consulta: busca, medianaDaBusca: 80, avaliacoesDoTopo: [60, 80, 120] },
-    horario: { id: 'sem-horario' },
-  } satisfies Record<string, AchadoDoRaioX>
-
-  const CASOS: {
-    nome: string
-    lead: LeadDaJornada
-    agora: IdDaOferta[]
-    /** O começo da lista `depois` (o resto não importa ao caso). */
-    depois?: IdDaOferta[]
-    /** Trechos que o porquê da oferta tem de citar. */
-    cita?: Partial<Record<IdDaOferta, RegExp>>
-  }[] = [
-    {
-      nome: 'Site, sem site no perfil e poucas avaliações: Encontrado agora; Respondido o primeiro depois, com o número',
-      lead: lead({ ...viu, produto: 'site', sinal: 'respondeu', achados: [A.semSite, A.avaliacoes] }),
-      agora: ['encontrado'],
-      depois: ['respondido', 'anuncios', 'redes'],
-      cita: {
-        encontrado: /Raio-X: o perfil do Google não tem site, e 2 dos 3 primeiros de “dentista em Anápolis” mostram site próprio\./,
-        respondido: /Com o site no ar\. Raio-X: 12 avaliações contra 80 no meio dos primeiros de “dentista em Anápolis”\./,
-      },
-    },
-    {
-      nome: 'Site fora do topo e com o botão “Site” na rede: Anúncios esperam o Encontrado',
-      lead: lead({ ...viu, produto: 'site', sinal: 'respondeu', achados: [A.fora, A.rede] }),
-      agora: ['encontrado'],
-      depois: ['anuncios', 'respondido', 'redes'],
-      cita: { encontrado: /leva para o Instagram/, anuncios: /^Depois do site e do perfil em dia\. Raio-X: fora dos 20 primeiros em “dentista em Anápolis”\./ },
-    },
-    {
-      nome: 'PRUMO com site no ar, nota baixa: Respondido agora com a nota; nada de pergunta sobre o site',
-      lead: lead({ ...viu, produto: 'prumo', achados: [A.nota] }),
-      agora: ['respondido'],
-      cita: { respondido: /Raio-X: nota 4,1 no Google, contra 4,8, 4,9 e 5 dos 3 primeiros/ },
-    },
-    {
-      nome: 'PRUMO no 7º lugar e com o site fora do ar: o Encontrado entra agora e passa à frente do Respondido',
-      lead: lead({ ...viu, produto: 'prumo', achados: [A.setimo, A.siteFora, A.avaliacoes] }),
-      agora: ['encontrado', 'respondido'],
-      depois: ['anuncios'],
-      cita: { encontrado: /o site do perfil \(clinica\.com\.br\) não abre/, anuncios: /7º lugar em “dentista em Anápolis”/ },
-    },
-    {
-      nome: 'PRUMO só fora do topo (site e perfil em dia): Anúncios agora, à frente do Respondido',
-      lead: lead({ ...viu, produto: 'prumo', achados: [A.fora] }),
-      agora: ['anuncios', 'respondido'],
-      cita: { anuncios: /^Raio-X: fora dos 20 primeiros/ },
-    },
-    {
-      nome: 'PRUMO com equipe pelo CNPJ e ponto de perfil: o Encontrado, o Respondido e o Mapa juntos',
-      lead: lead({ ...viu, produto: 'prumo', porte: 'DEMAIS', equipe: true, achados: [A.horario] }),
-      agora: ['encontrado', 'respondido', 'mapa'],
-      cita: { encontrado: /o horário de funcionamento não aparece no Google/, mapa: /porte DEMAIS pelo CNPJ/ },
-    },
-    {
-      nome: '"já temos site", mas o Raio-X achou o site fora do ar: mostra o ponto, sem insistir no Encontrado',
-      lead: lead({ ...viu, produto: 'site', sinal: 'respondeu', resposta: { tipo: 'negativa', trecho: 'Obrigado, mas já temos site' }, achados: [A.siteFora] }),
-      agora: ['respondido'],
-      depois: ['encontrado'],
-      cita: { encontrado: /^Disse que já tem site, mas o Raio-X achou um ponto nele\. Raio-X: o site do perfil \(clinica\.com\.br\) não abre/ },
-    },
-    {
-      nome: 'antes de ver o Raio-X: só ele agora, e o depois já vem na ordem do que ele achou',
-      lead: lead({ produto: 'prumo', etapa: 'contato', sinal: 'respondeu-prumo', achados: [A.fora, A.avaliacoes] }),
-      agora: ['raio-x'],
-      depois: ['anuncios', 'respondido'],
-      cita: { respondido: /^Depois do Raio-X\. Raio-X: 12 avaliações/ },
-    },
+  const achados: AchadoDoRaioX[] = [
+    { id: 'sem-site', consulta: busca, topoLidos: 3, topoComSite: 2 },
+    { id: 'site-fora-do-ar', dominio: 'clinica.com.br' },
+    { id: 'site-e-rede-social', rede: 'o Instagram' },
+    { id: 'nota-baixa', nota: 4.1, consulta: busca, notasDoTopo: [4.8, 4.9, 5] },
+    { id: 'poucas-avaliacoes', avaliacoes: 12, consulta: busca, medianaDaBusca: 80 },
+    { id: 'sem-horario' },
+    { id: 'posicao-na-busca', consulta: busca, lidos: 20 },
+    { id: 'posicao-na-busca', consulta: busca, posicao: 7, lidos: 20 },
   ]
-  for (const c of CASOS) {
-    it(c.nome, () => {
-      const o = ofertaDoLead(c.lead)
-      assert.deepEqual(ids(o.agora), c.agora)
-      if (c.depois) assert.deepEqual(ids(o.depois).slice(0, c.depois.length), c.depois)
-      for (const [id, padrao] of Object.entries(c.cita ?? {})) {
-        const oferta = [...o.agora, ...o.depois].find((x) => x.id === id)
-        assert.ok(oferta, `${id} não está na oferta`)
-        assert.match(oferta.porque, padrao!)
-      }
-    })
-  }
-
-  it('com os achados no CRM, não pergunta se o site aparece no Google; sem eles, manda abrir o Raio-X', () => {
-    const com = ofertaDoLead(lead({ ...viu, produto: 'prumo', links: { raioX: 'https://raio-x-prumo.vercel.app/x' }, achados: [A.nota] }))
-    assert.deepEqual(com.aConfirmar.filter((t) => !t.startsWith('Porte')), [])
-    const sem = ofertaDoLead(lead({ ...viu, produto: 'prumo', links: { raioX: 'https://raio-x-prumo.vercel.app/x' } }))
-    assert.ok(sem.aConfirmar.some((t) => t.includes('abra o Raio-X')))
-    assert.ok(sem.aConfirmar.some((t) => t.startsWith('O site atual aparece')))
+  for (const achado of achados) it(`${achado.id}: não seleciona automaticamente serviço`, () => {
+    const o = ofertaDoLead(lead({ produto: 'prumo', achados: [achado] }))
+    assert.deepEqual(o.agora, [])
+    assert.deepEqual(ids(o.depois), ['respondido']) // Origem do cadastro, independente do achado.
+    assert.ok(o.aConfirmar.some(t => t.includes(fraseDoAchado(achado)) && t.includes('não demonstra necessidade')))
+    assert.doesNotMatch(o.depois[0].porque, /vira avaliação|Anúncios põem|O Encontrado resolve/)
+  })
+  it('Raio-X sem achados é consulta opcional, não gate comercial', () => {
+    const o = ofertaDoLead(lead({ produto: 'prumo', links: { raioX: 'https://exemplo.test/raio-x' } }))
+    assert.ok(o.aConfirmar.some(t => t.includes('consultar apenas se ajudar')))
+    assert.deepEqual(o.agora, [])
   })
 
   it('a frase de cada ponto só diz o número que veio', () => {
@@ -309,9 +270,10 @@ describe('jornada: integridade', () => {
 })
 
 
-it('regressão: Site com equipe confirmada também recebe Mapa e Fonte', () => {
+it('regressão: Site com equipe mantém caminho histórico, sem impor Mapa e Fonte', () => {
   const l=lead({ produto:'site', equipe:true, etapa:'contato', sinal:'respondeu', marcos:{segundaEnviada:'2026-10-18T12:00:00Z'} })
   assert.ok(caminhoDoLead(l).includes('mapa'))
-  assert.ok(ofertaDoLead(l).agora.some(o=>o.id==='mapa'))
-  assert.match(proximoDaJornada(l).acao,/Mapa/)
+  assert.ok(!ofertaDoLead(l).agora.some(o=>o.id==='mapa'))
+  assert.ok(ofertaDoLead(l).aConfirmar.some(t=>t.startsWith('Mapa opcional')))
+  assert.match(proximoDaJornada(l).acao,/não exigir diagnóstico/)
 })

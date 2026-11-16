@@ -33,6 +33,8 @@ export interface OpcaoReceita {
 export interface RegistroReceita {
   versao: 1; oferta: OfertaReceita; componente: ComponenteReceita; quantidade?: number
   valor_centavos: number; referencia: string; data: string
+  /** Projeção de nota da mesma aba CRM; correção é feita pelo evento de ciclo, não pelo legado. */
+  eventoCiclo?: string
 }
 export interface RegistroRetencao { versao: 1; referencia: string; inicio: string; data: string; ativa: boolean }
 export interface RegistroIndicacao { versao: 1; referencia: string; data: string }

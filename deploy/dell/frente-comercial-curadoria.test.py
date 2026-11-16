@@ -13,7 +13,7 @@ f = importlib.util.module_from_spec(spec); spec.loader.exec_module(f)
 
 def lead():
     return {'id': 'site:teste', 'produto': 'site', 'empresa': 'Empresa teste', 'nicho': 'dedetizadora',
-            'etapa': 'novo', 'sinal': 'pronto', 'marcos': {}, 'achados': [{'id': 'sem-site'}],
+            'etapa': 'novo', 'sinal': 'pronto', 'marcos': {}, 'achados': [{'id': 'sem-site'}], 'abordagem': {'mensagem': 'E'},
             'mensagemPronta': 'Posso preparar uma demonstração para vocês?',
             'links': {'whatsapp': 'https://wa.me/5511998887766', 'enviar': 'https://example.org/enviar'}}
 
@@ -22,6 +22,16 @@ class IntegracaoCuradoria(unittest.TestCase):
     def setUp(self):
         f._MODELO_CURADORIA = None
         self.addCleanup(setattr, f, '_MODELO_CURADORIA', None)
+        # A campanha e as fontes reais do host não são fixtures desta suíte.
+        # A descoberta tem testes próprios; aqui são pré-condições válidas da curadoria.
+        fonte = {'fontePublicaIdentificavel': True, 'identidadeDoNomeConfere': True,
+                 'contatoCorrespondeAoPublicadoNaFicha': True,
+                 'conferenciaAtualDoPerfil': {'contatoAtualCorrespondeAFicha': True,
+                    'campoSiteDoPerfilDaPropriaEmpresa': 'sem-link-de-site-no-perfil', 'em': '2026-11-12T12:00:00Z'}}
+        for duble in (patch('campanha_site.ler', return_value=None),
+                      patch('campanha_site.evidencia_site', return_value=fonte),
+                      patch.object(f.lib_curadoria(), 'gate_pesquisa_leads', side_effect=lambda _lead: [])):
+            duble.start(); self.addCleanup(duble.stop)
 
     def test_site_descoberta_sem_demo_continua_elegivel(self):
         self.assertTrue(f.elegivel(lead()))

@@ -5,9 +5,9 @@ import { papelDaMensagem, textoParaATela } from '../operations/marcadores-da-con
 const props = defineProps<{ lead: CrmLead }>()
 const mensagens = computed(() => props.lead.conversa?.recentes?.length ? props.lead.conversa.recentes : props.lead.conversa ? [props.lead.conversa.ultima] : [])
 function autor(m: typeof mensagens.value[number]) {
-  if (m.direcao === 'saida') return 'Você enviou'
+  if (m.direcao === 'saida') return 'Mensagem enviada'
   const papel = papelDaMensagem(m.trecho, m.papel)
-  return papel === 'robo' ? 'Atendimento automático' : papel === 'recepcao' ? 'Recepção respondeu' : 'Cliente respondeu'
+  return papel === 'robo' ? 'Atendimento automático' : papel === 'recepcao' ? 'Recepção respondeu' : 'Mensagem recebida'
 }
 function data(em: string) {
   return Number.isFinite(Date.parse(em)) ? new Date(em).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Data não informada'

@@ -119,3 +119,27 @@ export function autoridadeDaConversa(atual: ProjecaoResponsavel, contexto: Conte
     : atual.estado !== 'definido' || atual.registro?.responsavel !== 'time' ? atual.motivo : ''
   return { permitido: !motivo, motivo: motivo || 'Autoridade confirmada; ainda exige os demais gates de ação.', ...(atual.registro ? { revisao: atual.registro.id } : {}) }
 }
+/** Adaptador de leitura das filas: só expõe revisões v2 que passam pela projeção de autoridade. */
+export function telefoneDaConversa(lead: Pick<LeadComResponsavel, 'links'>): string | null {
+  return identidadeDaConversa(lead)?.conversa ?? null
+}
+export function indexarResponsaveisDaConversa(leads: readonly (Pick<LeadComResponsavel, 'eventos'> & Partial<Pick<LeadComResponsavel, 'links'>>)[], agora = Date.now()): Map<string, ResponsavelConversa> {
+  // Materializa cada histórico uma vez; a projeção continua rejeitando colisões e sucessões inválidas.
+  const materializados = leads.map((lead, i) => ({ id: `leitura-${i}`, links: lead.links ?? {}, eventos: lead.eventos }))
+  const conversas = new Set<string>()
+  for (const lead of materializados) for (const e of lead.eventos) {
+    const r = lerResponsavelConversa(e.registroTexto ?? e.texto, agora)
+    if (r) conversas.add(r.conversa)
+  }
+  const indice = new Map<string, ResponsavelConversa>()
+  for (const conversa of conversas) {
+    const alvo = { id: `conversa-${conversa}`, links: { whatsapp: `https://wa.me/55${conversa}` }, eventos: [] }
+    const projetado = projetarResponsavelConversa(alvo, materializados, agora)
+    if (projetado.estado === 'definido' && projetado.registro) indice.set(conversa, projetado.registro)
+  }
+  return indice
+}
+export function responsavelDaConversa(lead: Pick<LeadComResponsavel, 'links'>, leads: readonly (Pick<LeadComResponsavel, 'eventos'> & Partial<Pick<LeadComResponsavel, 'links'>>)[], agora = Date.now(), indice?: ReadonlyMap<string, ResponsavelConversa>): ResponsavelConversa | null {
+  const conversa = telefoneDaConversa(lead)
+  return conversa ? (indice ?? indexarResponsaveisDaConversa(leads, agora)).get(conversa) ?? null : null
+}
