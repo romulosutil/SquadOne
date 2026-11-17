@@ -388,6 +388,65 @@ class CorrelacaoHermesEvolution(unittest.TestCase):
             (pasta/f'lid-mapping-{lid}_reverse.json').write_text(json.dumps('invalido'))
             self.assertEqual(mapas.da_sessao(lid),'')
 
+    def test_sessao_prevalece_sobre_cache_e_hint_para_chat_pessoal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta = Path(tmp)
+            (pasta / f'lid-mapping-{LID}_reverse.json').write_text(json.dumps(OUTRO))
+            mapas = ev.Mapas(sessao_hermes=pasta)
+            mapas.guardar(LID, 'SAIDA', LEAD + '@s.whatsapp.net')
+            corpos = [upsert_lid(LEAD, 'SAIDA', alt=False),
+                      upsert_lid(LEAD, 'SAIDA', alt=True), recibo_lid('SAIDA')]
+            for corpo in corpos:
+                with self.subTest(evento=corpo['event'], alt=corpo['data'].get('key', {}).get('remoteJidAlt')):
+                    t = ev.traduzir(corpo, LEADS, T0, ev.Recentes(), '', mapas)
+                    self.assertEqual((t.linhas, t.respostas, t.enviadas), ([], [], ()))
+                    self.assertEqual(t.ignorados, {'nao_e_lead': 1})
+
+    def test_sessao_corrige_lead_errado_inclusive_apos_reinicio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta = Path(tmp)
+            (pasta / f'lid-mapping-{LID}_reverse.json').write_text(json.dumps(LEAD2))
+            arquivo = pasta / 'mapa.json'
+            mapas = ev.Mapas(arquivo=arquivo, sessao_hermes=pasta)
+            mapas.guardar(LID, 'SAIDA', LEAD + '@s.whatsapp.net')
+            t = ev.traduzir(upsert_lid(LEAD, 'SAIDA'), LEADS, T0, ev.Recentes(), '', mapas)
+            self.assertEqual(t.enviadas[0]['chave'], CHAVE2)
+            reaberto = ev.Mapas(arquivo=arquivo, sessao_hermes=pasta)
+            self.assertEqual(reaberto.lid[LID], LEAD2 + '@s.whatsapp.net')
+            self.assertEqual(reaberto.msg['SAIDA'], LEAD2 + '@s.whatsapp.net')
+            t = ev.traduzir(recibo_lid('SAIDA'), LEADS, T0, ev.Recentes(), '', reaberto)
+            self.assertEqual(t.linhas[0]['chatId'], LEAD2 + '@s.whatsapp.net')
+
+    def test_remetente_e_participante_nao_identificam_chat_lid(self):
+        for campo in ('senderPn', 'participantAlt'):
+            for local in ('key', 'data'):
+                for de_mim in (True, False):
+                    corpo = upsert_lid(LEAD, 'SEM-CHAT', de_mim=de_mim, alt=False)
+                    onde = corpo['data']['key'] if local == 'key' else corpo['data']
+                    onde[campo] = LEAD + '@s.whatsapp.net'
+                    mapas = ev.Mapas()
+                    t = ev.traduzir(corpo, LEADS, T0, ev.Recentes(), '', mapas)
+                    self.assertEqual((t.linhas, t.respostas, t.enviadas), ([], [], ()))
+                    self.assertEqual(t.ignorados, {'lid_sem_telefone': 1})
+                    self.assertEqual((mapas.lid, mapas.msg), ({}, {}))
+
+    def test_remotejid_telefone_nao_aprende_lid_alternativo_contraditorio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta = Path(tmp)
+            (pasta / f'lid-mapping-{LID}_reverse.json').write_text(json.dumps(OUTRO))
+            mapas = ev.Mapas(sessao_hermes=pasta)
+            t = ev.traduzir(upsert(LEAD, remoteJidAlt=LID + '@lid'), LEADS, T0, ev.Recentes(), '', mapas)
+            self.assertEqual(t.respostas[0]['chave'], CHAVE)
+            self.assertFalse(mapas.lid)
+
+    def test_caches_contraditorios_sem_sessao_aguardam_confirmacao(self):
+        mapas = ev.Mapas()
+        mapas.guardar(LID, '', LEAD + '@s.whatsapp.net')
+        mapas.guardar('', 'SAIDA', LEAD2 + '@s.whatsapp.net')
+        t = ev.traduzir(recibo_lid('SAIDA'), LEADS, T0, ev.Recentes(), '', mapas)
+        self.assertEqual(t.ignorados, {'lid_conflitante': 1})
+        self.assertFalse(t.linhas)
+
 
 class RecibosEmLid(unittest.TestCase):
     """O recibo de leitura da Evolution não traz telefone: o adaptador lembra, só de lead, de onde veio o id."""

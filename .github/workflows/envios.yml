@@ -17,3 +17,9 @@ jobs:
       - run: npm run test:envios
       - run: npm run test:aquisicao
       - run: python3 deploy/dell/atualizar_central.test.py
+      - name: Regressões resgatadas do RevOps
+        run: |
+          python3 deploy/dell/whatsapp-observador/evolution-adaptador.test.py
+          python3 deploy/dell/whatsapp-observador/entrada-duravel.test.py
+          python3 deploy/dell/claude-ops/workflow_confiabilidade.test.py
+          python3 deploy/dell/prumo-mapa/modelo_mapa.test.py
