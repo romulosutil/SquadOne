@@ -198,3 +198,20 @@ workflow, mais auditoria estrutural somente leitura dos três exports privados.
 Os testes usam configuração e contatos inteiramente fictícios, sem snapshots de
 produção. Nenhum gerador runtime existente mudou; retirar o auditor/testes/doc
 reverte esta entrega sem tocar aquisição ou histórico.
+
+
+## Atualização de 24/10 — proteção local da captura
+
+O patch local acrescenta três proteções, sem ativar caçadores ou modificar critérios:
+
+- Leituras usadas no dedupe falham fechado; falha ao consultar uma fonte interrompe a triagem antes de produzir gravações.
+- Íris/Estamparia passam a usar `appendOrUpdate` pela coluna `ID`, com repetição automática desligada. O contrato auditor exige essa chave e recusa configuração diferente.
+- O Site continua no workflow e adaptador legados. O preparador normal do workflow aplica leitura estrita e `appendOrUpdate` por `place_id` aos dois destinos de planilha; raio, telefone, avaliações, franquia, Portão, site e pontuação permanecem intactos.
+
+A operação de upsert do Google Sheets não fornece unicidade atômica entre duas execuções concorrentes. A proteção reduz repetição sequencial e falha de fonte, mas não prova exclusão mútua. O risco de concorrência permanece e impede qualquer expansão até existir um único escritor comprovado ou uma proteção durável equivalente.
+
+Validação local offline: seis testes de `prospeccao_contrato.test.py` e 17 testes de `workflow_confiabilidade.test.py` aprovados. O segundo usa o export sanitizado do Site, preserva critérios e estado ativo, e verifica que a transformação é idempotente. Não foi possível publicar ou conferir o estado atual da produção: a tentativa SSH por `mel` não resolveu o hostname. Nenhuma execução n8n, planilha, cliente ou caçador foi acionado nesta atualização.
+
+## Publicação conferida no Dell — 24/10/2026, 22h BRT
+
+As proteções locais da seção anterior foram publicadas nos três workflows e verificadas por releitura da API. Snapshot e plano aplicado em `~/.cache/mel-work/retomada-acesso-20261024/`, privados no Dell. Mantidos 21 workflows/16 ativos; estados individuais e critérios por oferta preservados, sem execução manual. O risco residual de concorrência do Sheets permanece explícito e impede tratar o upsert como garantia de unicidade concorrente. A frente comercial continua pausada; não houve expansão. Ver evidências, correção LID/SOS, limites e reversão no registro de encerramento técnico.

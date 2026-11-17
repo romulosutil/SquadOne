@@ -341,5 +341,36 @@ class EntradaDuravel(unittest.TestCase):
             if p.exists(): self.assertEqual(p.stat().st_mode & 0o777, 0o600, nome)
         self.assertEqual(self.dir.stat().st_mode & 0o777, 0o700)
 
+    def test_sessao_impede_aviso_pessoal_de_entrar_no_historico_do_lead(self):
+        sessao = self.dir / 'sessao'
+        sessao.mkdir()
+        (sessao / f'lid-mapping-{fx.LID}_reverse.json').write_text(json.dumps(fx.OUTRO))
+        self.a.mapas.sessao_hermes = sessao
+        self.a.mapas.guardar(fx.LID, 'AVISO-0', fx.LEAD + '@s.whatsapp.net')
+        for i in range(4):
+            msg = fx.upsert_lid(fx.LEAD, f'AVISO-{i}', texto='Aviso de encerramento', alt=False)
+            msg['data']['senderPn'] = fx.LEAD + '@s.whatsapp.net'
+            self.a.receber(msg)
+        self.assertEqual(self.pendentes(), {})
+        self.assertEqual(self.linhas('enviadas.jsonl'), [])
+        self.assertEqual(self.linhas('evolution.log'), [])
+        obs = self.observador()
+        obs.ler_capturas_adaptador()
+        self.assertEqual(obs.conversa.linhas_de(fx.CHAVE), [])
+
+    def test_sender_sozinho_permanece_pendente_sem_contaminar_mapa_apos_reinicio(self):
+        msg = fx.upsert_lid(fx.LEAD, 'REMETENTE', alt=False)
+        msg['data']['key']['senderPn'] = fx.LEAD + '@s.whatsapp.net'
+        msg['data']['participantAlt'] = fx.LEAD2 + '@s.whatsapp.net'
+        self.a.receber(msg)
+        self.assertEqual(len(self.pendentes()), 1)
+        self.assertEqual(self.linhas('enviadas.jsonl'), [])
+        self.assertFalse(self.a.mapas.lid)
+        self.assertNotIn('senderPn', self.a.spool.read_text())
+        self.assertNotIn('participantAlt', self.a.spool.read_text())
+        self.adaptador().drenar()
+        self.assertEqual(self.linhas('enviadas.jsonl'), [])
+        self.assertFalse(self.adaptador().mapas.lid)
+
 
 if __name__ == '__main__': unittest.main(verbosity=2)
