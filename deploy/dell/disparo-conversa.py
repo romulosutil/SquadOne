@@ -82,6 +82,9 @@ def motivo_para_nao_enviar(lead, lido_ate):
     return None
 
 def enviar(n, texto, auth):
+    from mensagem_inicial import configuracao
+    if configuracao('aquisicao-comercial.json').get('respostasAutomaticas') is not True:
+        raise RuntimeError('Retomadas automáticas aposentadas; Rômulo conduz a conversa')
     r = http(EVOLUTION + '/message/sendText/prumo', {'number': n, 'text': texto, 'linkPreview': False}, auth, timeout=40)
     k = r.get('key', {})
     if k.get('fromMe') is not True or not k.get('id') or chave(k.get('remoteJid', '').split('@')[0]) != chave(n):

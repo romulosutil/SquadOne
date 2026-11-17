@@ -23,7 +23,6 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import FrenteComercial from '../operations/FrenteComercial.vue'
-import EncontradoPropostaConfig from '../operations/EncontradoPropostaConfig.vue'
 import '../estilos/operacao.css'
 import AccessPanel from '../operations/AccessPanel.vue'
 import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
@@ -142,7 +141,6 @@ const equipe = computed(() => ag?.roster.value?.squads.flatMap(s => s.dominios.m
     </details>
 
     <section v-if="ops" id="primeiros-contatos"><FrenteComercial configurar /></section>
-    <EncontradoPropostaConfig v-if="ops" />
 
     <!-- O link do robô do Escritório (?fluxo=&passo=) abre direto no fluxo dele. -->
     <details v-if="ops" class="mais__bloco mais__dobra" :open="pedeFluxo || pedeRoteiro">

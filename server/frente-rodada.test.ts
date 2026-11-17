@@ -16,7 +16,7 @@ test('rota da rodada: revisão explícita preservada e reservas bloqueadas pela 
   await fs.writeFile(path.join(dir,'frente-comercial-config.json'),JSON.stringify({ativo:true}))
   await fs.writeFile(path.join(dir,'frente-comercial.json'),JSON.stringify({ estado:'pronto',atualizadoEm:new Date(agora).toISOString(),fila:leads.map(l=>({ id:l.id,estado:'pronto' })) }))
   const app=express(),router=express.Router()
-  montarFrenteComercial(router,{ dataDir:dir,agora:()=>agora,visao:async()=>({estado:'ok',leads}),rodada:criarRodadaComercial(path.join(dir,'rodada.json'),()=>agora),memoriaDaVenda:{ reservarPrimeiro:async()=>({ok:true}) } as unknown as MemoriaDaVenda }); app.use(router)
+  montarFrenteComercial(router,{ dataDir:dir,politicaAquisicao:path.resolve('src/testes/aquisicao-bloqueada.json'),agora:()=>agora,visao:async()=>({estado:'ok',leads}),rodada:criarRodadaComercial(path.join(dir,'rodada.json'),()=>agora),memoriaDaVenda:{ reservarPrimeiro:async()=>({ok:true}) } as unknown as MemoriaDaVenda }); app.use(router)
   const server=app.listen(0,'127.0.0.1'); await new Promise<void>(r=>server.once('listening',r))
   const base=`http://127.0.0.1:${(server.address() as {port:number}).port}`
   const post=(rota:string,corpo:unknown,origem=base)=>fetch(base+rota,{method:'POST',headers:{'Content-Type':'application/json',Origin:origem},body:JSON.stringify(corpo)})

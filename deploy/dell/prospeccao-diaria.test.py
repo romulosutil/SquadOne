@@ -26,7 +26,7 @@ class Diaria(unittest.TestCase):
     def test_perfil_completo_sem_site_produz_so_hipotese(self):
         perfil = p.extrair(DOM, ID, URL)
         self.assertEqual(perfil['achados'], [{'id': 'sem-site'}])
-        self.assertIn('Vocês já têm um site', p.mensagem(perfil['tipoSite']))
+        self.assertIn('Hoje, tem alguma dificuldade', p.mensagem(perfil['tipoSite']))
         self.assertNotIn('não tem site', p.mensagem(perfil['tipoSite']))
 
     def test_site_proprio_perfil_parcial_id_diferente_ou_fechado_nao_entram(self):
@@ -39,6 +39,19 @@ class Diaria(unittest.TestCase):
     def test_destino_ambiguo_nao_entra(self):
         dom = DOM+'<button data-item-id="phone:tel:11988882222" aria-label="Telefone: 11 98888-2222"></button>'
         self.assertIsNone(p.extrair(dom, ID, URL))
+
+    def test_pesquisa_minima_aceita_site_sem_inventar_ausencia_ou_necessidade(self):
+        dom = DOM+'<a data-item-id="authority" href="https://empresa.example">Site</a>'
+        perfil = p.extrair(dom, ID, URL, aceitar_site_proprio=True)
+        self.assertEqual(perfil['tipoSite'], 'site-proprio-no-perfil')
+        self.assertEqual(perfil['achados'], [{'id': 'site-proprio-publicado'}])
+        self.assertEqual(p.mensagem(perfil['tipoSite']), p.mensagem('sem-link-de-site-no-perfil'))
+
+    def test_pesquisa_independente_nao_exige_campanha_ativa(self):
+        config = {'ativo':True,'versao':1,'estoqueAlvo':6,'aceitarSiteProprio':True}
+        with patch('mensagem_inicial.pesquisa',return_value=config), patch('campanha_site.ler',return_value={'ativo':False}), patch('calendario_comercial.proximo_expediente',side_effect=RuntimeError('chegou-a-pesquisa')):
+            with self.assertRaisesRegex(RuntimeError,'chegou-a-pesquisa'):
+                p._executar(somente_pesquisa=True)
 
     def test_layout_atual_de_horarios_sem_item_oh_e_aceito(self):
         dom = DOM.replace('<button data-item-id="oh" aria-label="Aberto"></button>',
@@ -68,7 +81,8 @@ class Diaria(unittest.TestCase):
         dom = DOM+'<a data-item-id="authority" href="https://wa.me/5511999991111">Site</a>'
         perfil = p.extrair(dom, ID, URL)
         self.assertEqual(perfil['achados'], [{'id': 'site-e-rede-social'}])
-        self.assertIn('levava ao WhatsApp', p.mensagem(perfil['tipoSite']))
+        self.assertIn('organização do atendimento', p.mensagem(perfil['tipoSite']))
+        self.assertNotIn('levava ao WhatsApp', p.mensagem(perfil['tipoSite']))
 
     def test_materializa_sem_demo_ou_publicacao_inventada_e_preserva_data(self):
         perfil = p.extrair(DOM, ID, URL); now = dt.datetime.fromisoformat('2026-11-12T12:00:00-03:00')

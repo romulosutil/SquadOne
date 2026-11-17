@@ -429,7 +429,7 @@ def selecionar(crm, dossiers, novos, limite, campanha=None):
     return out
 
 
-def executar(limite=5):
+def executar(limite=5, somente_pesquisa=False):
     if type(limite)!=int or not 0<=limite<=55:raise ValueError('limite-invalido')
     BASE.mkdir(mode=0o700,parents=True,exist_ok=True)
     with (BASE/'pesquisa.lock').open('a') as lock:
@@ -443,7 +443,16 @@ def executar(limite=5):
         limite=min(limite,max(0,60-uso['reservados']))
         from campanha_site import ler as ler_campanha
         campanha=ler_campanha()
-        targets=selecionar(crm,dossiers,novos,limite,campanha)
+        if somente_pesquisa:
+            from mensagem_inicial import pesquisa
+            from campanha_site import da_nova_pesquisa
+            config_pesquisa=pesquisa()
+            targets=[l for l in crm['leads'] if l.get('produto')=='site' and not protegido(l)
+                and da_nova_pesquisa(l,config_pesquisa) and (not dossiers.get(l['id'])
+                or dossiers[l['id']].get('assinatura')!=assinatura(l)
+                or now.timestamp()-(timestamp(dossiers[l['id']].get('em')) or 0)>=7*86400)][:limite] if config_pesquisa['ativo'] else []
+        else:
+            targets=selecionar(crm,dossiers,novos,limite,campanha)
         # Reserva antes das chamadas; crash não libera orçamento nem repete automaticamente.
         uso['reservados']+=len(targets);salvar(BASE/'uso.json',uso)
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:

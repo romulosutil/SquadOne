@@ -1,5 +1,11 @@
 # Catálogo do n8n da Mel
 
+> **Substituído operacionalmente em 16/11/2026:** o inventário abaixo é histórico.
+> O núcleo, os contratos de compatibilidade e a fonte do publicador vigente estão
+> no [README](README.md#operação-mínima-preparada-e-pausada--16112026).
+> Não executar geradores antigos para restaurar campanhas ou fases aposentadas.
+> A operação está preparada e os disparos continuam pausados por instrução humana.
+
 Fonte de verdade para quem (pessoa ou IA) vai mexer nos fluxos do n8n sem contexto. Retrato de
 **28/10/2026**: 21 workflows, 16 ativos. Feito a partir do export dos 21 fluxos vivos e da leitura
 da `main`. Nada aqui foi publicado nem alterado no n8n.

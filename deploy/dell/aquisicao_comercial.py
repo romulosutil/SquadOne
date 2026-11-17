@@ -1,4 +1,4 @@
-"""Trava de aquisição: não existe liberação por configuração nesta versão."""
+"""O agente envia apenas a abertura; Rômulo assume qualquer resposta."""
 import json
 from pathlib import Path
 
@@ -10,6 +10,10 @@ _MOTIVO = 'restricao-apos-envios-em-massa-2026-11-13'
 def bloqueio_aquisicao(arquivo=None):
     try:
         p = json.loads(Path(arquivo or _padrao).read_text(encoding='utf-8'))
+        if isinstance(p, dict) and type(p.get('versao')) is int and p.get('versao') == 2 and p.get('estado') == 'preparado-pausado' and p.get('respostasAutomaticas') is False:
+            return {'bloqueado': True, 'motivo': 'operacao-preparada-aguardando-retomada'}
+        if isinstance(p, dict) and type(p.get('versao')) is int and p.get('versao') == 2 and p.get('estado') == 'primeiro-contato' and p.get('respostasAutomaticas') is False:
+            return {'bloqueado': False, 'motivo': 'primeiro-contato-depois-romulo'}
         if isinstance(p, dict) and type(p.get('versao')) is int and p.get('versao') == 1 and p.get('estado') == 'bloqueado' and p.get('motivo') == _MOTIVO:
             return {'bloqueado': True, 'motivo': _MOTIVO}
     except (OSError, ValueError, TypeError):

@@ -7,7 +7,7 @@ function executar(programa, args) {
 }
 
 executar(process.execPath, ['--import', 'tsx', '--test',
-  'server/frente-comercial.test.ts', 'server/frente-rodada.test.ts',
+  'server/primeiro-contato-humano.test.ts', 'server/frente-comercial.test.ts', 'server/frente-rodada.test.ts',
   'server/envios-sem-travas.test.ts', 'server/aquisicao-comercial.test.ts',
   'src/operations-primeiro-contato.test.ts']);
 executar(process.platform === 'win32' ? 'python' : 'python3', ['deploy/dell/aquisicao-comercial.test.py']);

@@ -91,19 +91,19 @@ def analisar(crm, registros, conversas, dia, agora):
                       'registroComRecibo': any(r['id'] == ident and r.get('estado') == 'enviado' and r.get('recibo') for r in tentativas)})
     novos = [c for c in casos if c['primeiroContatoNoDia']]
     melhorias = [
-        {'responsavel': 'Marina', 'acao': 'Atualizar a curadoria antes de selecionar; manter ajustes estatísticos zerados sem amostra madura suficiente.',
-         'evidencia': 'Resultados do dia anterior têm menos de 48h; silêncio e robô são inconclusivos.'},
-        {'responsavel': 'Carla', 'acao': 'Comparar o texto efetivamente enviado e sua versão, com a pergunta anterior; registrar hipótese e resultado antes de alterar mensagens.',
+        {'responsavel': 'Rômulo', 'acao': 'Conferir respostas recebidas e registrar o próximo passo; silêncio e robô não comprovam interesse ou recusa.',
+         'evidencia': 'O agente envia apenas a abertura; qualquer continuação depende do operador.'},
+        {'responsavel': 'Rômulo', 'acao': 'Comparar o texto efetivamente enviado e sua versão antes de alterar a abertura.',
          'evidencia': f'{len(set(c["textoEnviadoHash"] for c in novos))} textos distintos nos primeiros contatos; versões e nichos não são um experimento controlado.'},
     ]
     lentos = [c for c in casos if c['minutosPermissaoAteLink'] is not None and c['minutosPermissaoAteLink'] > 30]
     pendentes = [c for c in casos if c['permissaoSemLink']]
     if lentos or pendentes:
-        melhorias.append({'responsavel': 'Elisa', 'acao': 'Priorizar material autorizado pendente e revisar a demora de entrega antes de ampliar a prospecção; não enviar automaticamente pela revisão.',
+        melhorias.append({'responsavel': 'Rômulo', 'acao': 'Conferir os compromissos de material nas conversas existentes; gerar e enviar somente quando solicitado pelo operador.',
                            'evidencia': f'{len(lentos)} entregas acima de 30 min e {len(pendentes)} permissões sem link observado. É sinal operacional, não promessa de SLA.'})
     nichos = Counter(c['nicho'] or 'não informado' for c in novos)
     if novos and max(nichos.values())/len(novos) >= .7:
-        melhorias.append({'responsavel': 'Diego', 'acao': 'Conferir diversidade entre candidatos já aprovados e a evidência específica de cada empresa; manter três notas mínimas de 65.',
+        melhorias.append({'responsavel': 'Rômulo', 'acao': 'Conferir se o público pesquisado continua adequado; não exigir notas de modelos para a abertura.',
                            'evidencia': f'O maior nicho reúne {max(nichos.values())}/{len(novos)} primeiros contatos. Isso não prova qualidade inferior do nicho.'})
     resumo = {'versao': 2, 'diaAnalisado': dia, 'geradoEm': agora.isoformat(), 'fonteGeradaEm': crm['geradoEm'],
               'estado': 'ok', 'conversasRevisadas': len(casos), 'primeirosContatos': len(novos),

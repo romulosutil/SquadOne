@@ -12,6 +12,8 @@ def main():
     ap.add_argument("--aplicar", action="store_true")
     args = ap.parse_args()
     from n8n import api, put
+    minimo = Path.home() / '.config/claude-ops/workflow-minimo.json'
+    retirados = set(json.loads(minimo.read_text())['retirados']) if minimo.exists() else set()
     contexto = carregar()
     if args.aplicar:
         espelho = Path.home() / ".local/share/prumo-contexto"
@@ -26,7 +28,7 @@ def main():
     while caminho:
         pagina = api("GET", caminho)
         for resumo in pagina["data"]:
-            if not do_escopo(resumo):
+            if resumo['id'] in retirados or resumo.get('isArchived') or not do_escopo(resumo):
                 continue
             wf = api("GET", "/workflows/" + resumo["id"])
             preparado = preparar(wf, contexto)

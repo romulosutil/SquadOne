@@ -17,6 +17,7 @@ export interface SetorDaFrente { setor: string; avaliados: number; selecionados:
 export interface FunilDaFrente { produto: string; novo: number; contato: number; proposta: number; ganho: number; perdido: number; elegiveis: number; contatosObservados: number; respostasWhatsapp: number; taxaResposta: number | null }
 export interface FrenteLida {
   ativo: boolean
+  aquisicao?: { estado: string; primeirosContatosAutomaticos: boolean; respostasAutomaticas: boolean }
   estado: string
   limite: number
   rodada?: { inicio: string | null; pendentes: number; limite: number; motivo: string; bloqueado: boolean } | null

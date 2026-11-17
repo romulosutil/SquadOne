@@ -1,5 +1,20 @@
 # Arquitetura
 
+## Operação comercial vigente — decisão posterior de 16/11/2026
+
+O executor Python envia a abertura já existente da fonte. A Central valida o
+cadastro atual, reserva o contato e mantém recibos/deduplicação. A política v2
+permite apenas primeiro contato; pausa manual e restrições do provedor seguem
+vigentes. O cadastro com resposta ou contato anterior não volta à fila.
+
+A captura de mensagens e o histórico permanecem; a resposta é encaminhada a
+Rômulo. O servidor não instancia executores de resposta, qualificação ou
+proposta automática. Os módulos de atendimento automático de Site e Estamparia,
+seus scripts de reativação e as respectivas telas sem uso foram removidos.
+Propostas e documentos existentes continuam disponíveis para consulta humana.
+As seções antigas abaixo descrevem o histórico técnico e não ativam serviços.
+
+
 > Direção vigente de 16/11/2026: primeiros contatos automáticos bloqueados. Os fluxos de aquisição e cadências descritos por data abaixo são histórico técnico, não liberação de envio. A Prumo define negócio, catálogo e qualidade; o SquadOne sustenta sua operação sem transformar cadastro, resposta ou ganho marcado em recebimento.
 
 ## Estoque comercial conforme o consumo (12/11/2026)
@@ -117,7 +132,7 @@ como padrão e manter o protótipo para avaliação posterior no hardware alvo.
 ## Continuidade automática de Estamparia (26/10/2026)
 
 `src/operations/estamparia-atendimento.ts` define textos e perguntas versionados da
-oferta. `server/estamparia-automatico.ts` responde somente a entradas naturais
+oferta. O executor de Estamparia, retirado em 16/11, respondia somente a entradas naturais
 posteriores à ativação, com conversa única, captura verificada, fonte recente,
 trava compartilhada e reserva durável antes do transporte existente da Prumo.
 Confirmações e observações não gravam SPICED nem fatos comerciais humanos.

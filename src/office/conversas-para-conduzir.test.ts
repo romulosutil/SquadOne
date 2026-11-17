@@ -23,6 +23,19 @@ test('espera combinada e compromisso futuro ficam com o time, sem cobrar uma aç
   assert.equal(conversasParaConduzir([lead('data-invalida', { proximoPasso: { texto: 'Enviar material', data: '2026-02-30' } })], agora).length, 0);
 });
 
+test('captura pendente aparece para conferência antes da classificação e sai após resposta do operador', () => {
+  const campos = { atendimentoComercial: { id: 'entrada', tipo: 'handoff', alvo: 'operador', titulo: 'Sua vez', motivo: 'Resposta recebida', estado: 'pendente', ocorridoEm: '2026-10-18T12:00:00Z' } };
+  const pendente = lead('capturada', campos);
+  const fila = conversasParaConduzir([pendente], agora);
+  assert.equal(fila.length, 1);
+  assert.equal(fila[0].rotulo, 'Conferir resposta recebida');
+  assert.equal(fila[0].resposta, false, 'não inventa classificação humana');
+  const recepcao = lead('recepcao', { ...campos, resposta: {tipo:'bot',trecho:'Recebemos sua mensagem'} });
+  assert.equal(conversasParaConduzir([recepcao], agora)[0].rotulo, 'Recepção automática — conferir');
+  const atendida = lead('atendida', { ...campos, conversa: { ultima: { direcao: 'saida', em: '2026-10-18T12:10:00Z' }, ultimaSaida: '2026-10-18T12:10:00Z' } });
+  assert.equal(conversasParaConduzir([atendida], agora).length, 0);
+});
+
 // 19/10/2026: a lista também traz os passos da fila de venda (follow-up, "o que achou?"...), sem primeiro contato.
 import { conversasParaVoce } from '../operations/conversas-para-conduzir.ts';
 import type { CrmVisao } from '../operations/types.ts';

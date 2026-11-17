@@ -14,6 +14,13 @@ spec.loader.exec_module(m)
 
 
 class DoDiaTest(unittest.TestCase):
+    def test_politica_manual_bloqueia_transporte_mesmo_com_lista_antiga(self):
+        from unittest.mock import patch
+        with patch('mensagem_inicial.configuracao',return_value={'respostasAutomaticas':False}),patch.object(m,'http') as http:
+            with self.assertRaisesRegex(RuntimeError,'aposentadas'):
+                m.enviar('5511999998888','mensagem de teste',{})
+            http.assert_not_called()
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         m.LOG = Path(self.tmp.name)

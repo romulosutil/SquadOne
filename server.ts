@@ -1,13 +1,5 @@
-import { EstampariaAutomatico, leitorPoliticaEstamparia } from './server/estamparia-automatico.ts';
-import { identidadeDaConversa } from './src/operations/responsavel-conversa.ts';
-import { mensagemDaCaptura, conferirIdentidadeCaptura } from './server/identidade-captura.ts';
 import { montarGarantiasAgenda } from './server/rotas-garantias-agenda.ts';
-import { EncontradoAutomatico, leitorPoliticaEncontrado } from './server/encontrado-automatico.ts';
-import { SaidasEncontrado } from './server/encontrado-saidas.ts';
-import { transporteEncontradoEvolution } from './server/encontrado-evolution.ts';
-import { QualificadorEncontrado } from './server/encontrado-qualificacao.ts';
-import { MateriaisEncontrado, verificadorMaterialEncontrado } from './server/encontrado-materiais.ts';
-import { ConfiguracaoPropostaEncontrado, gravarPrivadoEncontrado } from './server/encontrado-proposta-config.ts';
+import { ConfiguracaoPropostaEncontrado } from './server/encontrado-proposta-config.ts';
 import { ContratacaoEncontrado } from './server/encontrado-contratacao.ts';
 import { montarRotasPropostaEncontrado } from './server/rotas-encontrado-proposta.ts';
 import { GarantiasAgenda, DemandasAgendaDuraveis } from './server/garantias-agenda.ts';
@@ -369,11 +361,9 @@ async function startServer() {
 
   let crmDoAtendimento: CrmStore | undefined;
   let receberAtendimento: ((valor: unknown) => Promise<{novo:boolean;registro:{chave:string}}>) | undefined;
-  let autorizarMaterialEncontrado:((id:string)=>Promise<unknown|null>)|undefined;
   if (squadOneMode === 'operations') app.use(entradaTecnicaAtendimento({
     autenticar: valor => crmDoAtendimento?.autenticarAtendimento(valor) ?? Promise.resolve(false),
     receber: valor => receberAtendimento?.(valor) ?? Promise.resolve(null),
-    autorizarMaterial:id=>autorizarMaterialEncontrado?.(id)??Promise.resolve(null),
   }));
 
   // Antes de tudo — inclusive dos estaticos: um 403 aqui custa nada e nao
@@ -438,44 +428,17 @@ async function startServer() {
       lerFonte:criarLeitorFonteAtendimento(pastaCapturas,lerIdentidadeCaptura),lerIdentidade:lerIdentidadeCaptura,
       inventariarCapturas:criarInventarioCapturasAtendimento(pastaCapturas,lerIdentidadeCaptura),visao:()=>crm.visao(new Date())});
     receberAtendimento = valor => atendimento.receber(valor);
-    const politicaEncontrado=leitorPoliticaEncontrado(path.join(operationsDataDir,'encontrado-automacao.json'));
     const configuracaoPropostaEncontrado=new ConfiguracaoPropostaEncontrado(operationsDataDir);
     const contratacaoEncontrado=new ContratacaoEncontrado(path.join(operationsDataDir,'encontrado-propostas'),configuracaoPropostaEncontrado);
-    const encontradoAutomatico = new EncontradoAutomatico({atendimento,
-      saidas:new SaidasEncontrado(path.join(operationsDataDir,'encontrado-saidas')),
-      politica:politicaEncontrado,
-      transporte:transporteEncontradoEvolution(),
-      qualificador:new QualificadorEncontrado(path.join(operationsDataDir,'encontrado-qualificacao')),
-      materiais:new MateriaisEncontrado(path.join(operationsDataDir,'encontrado-materiais'),verificadorMaterialEncontrado(operationsDataDir)),
-      contratacao:contratacaoEncontrado,
-      comConversa:(conversa,acao)=>crm.comConversaExclusiva(conversa,acao),
-      bloqueio:(lead,leads)=>crm.bloqueioDaConversa(lead,leads)});
-    // atendimento-estamparia-v1
-    const estampariaAutomatico = new EstampariaAutomatico({atendimento,
-      saidas:new SaidasEncontrado(path.join(operationsDataDir,'estamparia-saidas')),
-      politica:leitorPoliticaEstamparia(path.join(operationsDataDir,'estamparia-automacao.json')),
-      transporte:transporteEncontradoEvolution(),
-      comConversa:(conversa,acao)=>crm.comConversaExclusiva(conversa,acao),
-      identidadeLead:lead=>identidadeDaConversa(lead)?.conversa??null,
-      verificarMensagem:(m,identidade,agora)=>{
-        const tuple=mensagemDaCaptura(m)
-        return tuple&&conferirIdentidadeCaptura(tuple,identidade as Parameters<typeof conferirIdentidadeCaptura>[1],agora).estado==='verificada'?tuple:null
-      },
-      bloqueio:(lead,leads)=>crm.bloqueioDaConversa(lead,leads)});
-    autorizarMaterialEncontrado=id=>encontradoAutomatico.autorizarMaterial(id);
     montarRotasPropostaEncontrado(app,{config:configuracaoPropostaEncontrado,contratacao:contratacaoEncontrado,
       operador:req=>{const login=req.get('Tailscale-User-Login')?.trim().toLowerCase();return identidadeLigada&&login&&loginsDoTailscale.has(login)?login:null},
-      ativar:async(modeloHash,politicaHash)=>{
-        const p=await politicaEncontrado();if(!p||p.modo!=='respostas'||!await configuracaoPropostaEncontrado.aprovada(modeloHash))throw new Error('Preservar pausa ou configuração ainda não aprovada.');
-        if(p.proposta?.modeloHash===modeloHash&&p.proposta.politicaHash===politicaHash)return;
-        await gravarPrivadoEncontrado(path.join(operationsDataDir,'encontrado-automacao.json'),{...p,proposta:{v:1,desde:new Date().toISOString(),politicaHash,modeloHash}});
-      }});
+      ativar:async()=>{throw new Error('O agente só envia a primeira mensagem. Propostas e negociação ficam com Rômulo.');}});
     let atendimentoEmCurso = false;
     const conferirAtendimento = async () => {
       if(atendimentoEmCurso) return;
       atendimentoEmCurso=true;
       atendimentoComercialOcupado=true;
-      try { await atendimento.reconciliarCapturas(); await atendimento.atualizar(); const visaoDoCiclo=await crm.visao(new Date()); const ofertas=await Promise.allSettled([encontradoAutomatico.executar(visaoDoCiclo),estampariaAutomatico.executar(visaoDoCiclo)]);if(ofertas.some(r=>r.status==='rejected'))console.warn('[atendimento] Uma oferta aguarda conferência; as demais continuam independentes.'); } catch { console.warn('[atendimento] etapa pendente; preservar reservas e conferir a automação do Encontrado.'); }
+      try { await atendimento.reconciliarCapturas(); await atendimento.atualizar(); } catch { console.warn('[atendimento] Captura pendente; conferir a mensagem original. O atendimento é de Rômulo.'); }
       finally {atendimentoEmCurso=false;atendimentoComercialOcupado=false;}
     };
     const relogioAtendimento = setInterval(()=>{void conferirAtendimento()},30000);relogioAtendimento.unref();
@@ -484,30 +447,20 @@ async function startServer() {
     const visaoAtendimento = async () => {
       const v = await crm.visao();
       const pendencias = await atendimento.listarPendencias(v);
-      const automaticos = await encontradoAutomatico.estados(v).catch(()=>new Map());
-      const automaticosEstamparia = await estampariaAutomatico.estados(v).catch(()=>new Map()); // leitura-estamparia-v1
-      const observacoes = await encontradoAutomatico.observacoes(v).catch(()=>new Map());
       const propostas = await contratacaoEncontrado.visoes().catch(()=>new Map());
       return {...v,leads:await Promise.all(v.leads.map(async l=>{
-        l={...l,...(observacoes.has(l.id)?{encontradoObservado:observacoes.get(l.id)}:{})};
         if(propostas.has(l.id))l={...l,encontradoContratacao:propostas.get(l.id)};
-        const auto=automaticos.get(l.id)??automaticosEstamparia.get(l.id);
-        if(auto) return {...l,atendimentoComercial:{id:`${l.produto==='estampa'?'estampa':'encontrado'}-${l.id}`,tipo:auto.acao==='time'?'automatico':'handoff',titulo:auto.acao==='time'?`Time conduz o atendimento de ${l.produto==='estampa'?'Estamparia':'Site/Encontrado'}`:`Decisão necessária em ${l.produto==='estampa'?'Estamparia':'Site/Encontrado'}`,motivo:auto.motivo,texto:'proximoPasso' in auto?auto.proximoPasso:undefined,alvo:auto.acao==='time'?'time':'operador',estado:auto.estado,identidade:auto.identidade,ocorridoEm:auto.ocorridoEm}};
         const p=pendencias.find(p=>p.leadIds.includes(l.id));if(!p)return l;
         const bloqueio=await crm.bloqueioDaConversa(l,v.leads);
-        return {...l,atendimentoComercial:bloqueio ? {id:p.id,tipo:'handoff',titulo:'Conferir atendimento com Rômulo',motivo:bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm} : {id:p.id,tipo:p.tipo,titulo:p.titulo,motivo:p.motivo,alvo:p.alvo,texto:p.texto ?? p.orientacao,estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm}};
+        return {...l,atendimentoComercial:{id:p.id,tipo:'handoff',titulo:'Resposta recebida — sua vez',motivo:bloqueio ?? 'O agente encerrou sua parte na primeira mensagem. Rômulo conduz a conversa.',alvo:'operador',estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm}};
       }))};
     };
     montarLeituraComercial(app, {visao:visaoAtendimento,
       bloqueioConversa:(lead,leads)=>crm.bloqueioDaConversa(lead,leads),
       origemCentral:(process.env.SQUADONE_ORIGEM_CENTRAL ?? '').trim() || undefined});
-    app.get('/api/operations/crm/estamparia/automacao',async(_req,res)=>{
-      res.set('Cache-Control','no-store');
-      try{res.json(await estampariaAutomatico.resumo())}catch{res.status(503).json({oferta:'estampa',estado:'indisponivel',error:'Conferir a política e o journal de Estamparia.'})}
-    });
-    app.get('/api/operations/crm/encontrado/automacao',async(_req,res)=>{
-      res.set('Cache-Control','no-store');
-      try{res.json(await encontradoAutomatico.resumo())}catch{res.status(503).json({oferta:'encontrado',estado:'indisponivel',error:'Conferir a configuração e as reservas; nenhum reenvio foi liberado.'})}
+    // URLs antigas continuam legíveis, mas não instanciam executores de resposta.
+    for (const oferta of ['estamparia','encontrado']) app.get(`/api/operations/crm/${oferta}/automacao`,(_req,res)=>{
+      res.set('Cache-Control','no-store').json({oferta,estado:'manual',respostasAutomaticas:false,responsavel:'Rômulo'});
     });
     // Só leitura sob o mesmo porteiro das APIs da Central; sem identidade/contatos na resposta.
     app.get('/api/operations/crm/atendimento/cobertura', async (_req,res) => {

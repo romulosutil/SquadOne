@@ -282,7 +282,7 @@ class Servidor(BaseHTTPRequestHandler):
                 # Contrato fechado: sem URL, comando, modelo ou dados de leads do cliente.
                 if not isinstance(dado, dict) or set(dado) != {'limite'} or type(dado['limite']) is not int or not 0 <= dado['limite'] <= 10:
                     return self.responder(400, {'erro': 'Pedido inválido'})
-                from pesquisa_leads import executar
+                from pesquisa_operacao_minima import executar
                 resposta = executar(dado['limite'])
             elif self.path == '/fonte':
                 from fonte_luna import responder

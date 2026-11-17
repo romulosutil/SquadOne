@@ -44,6 +44,14 @@ class Updater(unittest.TestCase):
             if previsao != 'ausente': f['proximoEnvioEm']=previsao
             with patch.object(u,'cmd',side_effect=self.fake_cmd),patch.object(u,'ler_api',return_value=f):
                 with self.assertRaises(u.Bloqueado):u.guardas()
+    def test_primeiro_contato_nao_exige_bloqueio_total_mas_proibe_resposta_automatica(self):
+        good={'aquisicao':{'estado':'primeiro-contato','primeirosContatosAutomaticos':True,'respostasAutomaticas':False}}
+        with patch.object(u,'cmd',side_effect=self.fake_cmd),patch.object(u,'ler_api',return_value=good):
+            u.guardas()
+        for valor in (True,None,'false'):
+            bad={'aquisicao':{**good['aquisicao'],'respostasAutomaticas':valor}}
+            with patch.object(u,'cmd',side_effect=self.fake_cmd),patch.object(u,'ler_api',return_value=bad):
+                with self.assertRaises(u.Bloqueado):u.guardas()
     def test_so_false_literal_autoriza_reinicio(self):
         for x in ({},{'ocupado':True},{'ocupado':None},{'ocupado':0},{'ocupado':'false'}):
             with self.subTest(x=x),patch.object(u,'ler_api',return_value=x):

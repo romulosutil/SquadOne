@@ -1,5 +1,27 @@
 # n8n da Mel
 
+## Operação mínima preparada e pausada — 16/11/2026
+
+Estado publicado: **22 workflows, 6 ativos, 15 arquivados e a Fonte pausada**.
+Quatro funções centrais: Pesquisa de empresas (`pwNiZI1rBGzMJ2dP`), CRM
+(`AsjxktRCqRJSmj9P`), Entrada WhatsApp e passagem para Rômulo
+(`fd8gz4uDQkJtEd9W`) e Falhas (`5FlXnne7lTMihLic`). Medição e falha privada
+da Fonte continuam como apoio. Os webhooks anteriores de conversa, resposta,
+números, registros e ações foram preservados dentro dos consolidados. Convites
+aposentados levam à Central.
+
+A geração do núcleo é `deploy/dell/claude-ops/workflow_minimo.py`. As fontes
+auditadas e seus hashes ficam privadas em `~/.local/share/operacao-minima/` no
+Dell. Conferir com `python3 ~/.local/share/claude-ops/operacao-minima-publicar.py`;
+`--aplicar` regenera somente o núcleo e não retoma disparos. A guarda
+`workflow-minimo.json`, a política operacional e o sincronizador impedem que os
+publicadores antigos recriem os aposentados ou substituam o núcleo.
+
+A abertura aprovada está em `config/mensagem-inicial.json`. A política v2 está
+em `preparado-pausado`; campanha e timers de envio continuam desligados.
+Pesquisa tem uma agenda própria, sem autorizar envio. Geração de Site, Raio-X
+e Mapa exige pedido humano. O histórico de 03/11 abaixo permanece como auditoria.
+
 ## Estado conferido em 03/11/2026
 
 O n8n do Dell lista 22 workflows: 15 ativos e 7 inativos, incluindo o Radar PNCP

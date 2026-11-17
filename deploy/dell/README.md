@@ -1,4 +1,19 @@
-## Integração e política vigente (16/11/2026)
+## Simplificação publicada e pausada (16/11/2026)
+
+O núcleo comercial usa Pesquisa, CRM, Entrada WhatsApp e Falhas. Quinze fluxos
+legados ficaram arquivados, com fontes privadas para reversão. Medição e erro
+privado da Fonte permanecem como apoio; a Fonte continua pausada. O mapa atual
+está em `ops/n8n/README.md`.
+
+Abertura padrão em `config/mensagem-inicial.json`; política de aquisição v2
+em `preparado-pausado`. Reserva e transporte não liberam primeiros contatos.
+Campanha e timers de disparo/reposição continuam desativados. Pesquisa gratuita
+tem agenda independente, sem enviar. Geração agendada de sites, Raio-X, Mapa,
+retomadas e revisões legadas foi desligada; a revisão diária descritiva permanece.
+Qualquer continuação de conversa cabe a Rômulo. Não reconectar nem retomar fila
+antiga como parte de manutenção ou regeneração.
+
+## Integração anterior e política (16/11/2026)
 
 O atualizador automático usa o bootstrap `atualizar-central.sh`, instalado em
 `~/.local/bin/atualizar-central`, e executa o módulo versionado
