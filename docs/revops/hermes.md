@@ -1,6 +1,47 @@
 # Hermes na operação de RevOps e Sales Ops
 
-Revisão: 25/10/2026. O Hermes é o secretário de leitura, diagnóstico e explicação; não é outra base comercial ou fechador. A disponibilidade qualitativa do Rômulo está confirmada e não foi convertida em horas, prazos ou permissão de envio.
+O [Estado atual](../../ESTADO-ATUAL.md#hermes) reúne as decisões operacionais.
+
+## Uso e custo por função — 18/11/2026
+
+Janela de 12/11 às 00h até 18/11 por volta de 17h45, no fuso de São Paulo.
+A conferência usou contagens agregadas de sessões, registros de rodadas,
+estado do systemd e consultas GET de saúde. O custo dos modelos aparece como
+incluído na assinatura, com estimativa de US$ 0,00 e sem valor faturado
+registrado por sessão. A memória é uma amostra das units no Dell.
+
+| Função | Uso e resultado | Custo observado e decisão |
+| --- | --- | --- |
+| LinkedIn | 42 rodadas: 38 sem candidato, 3 bloqueadas e 1 aguardando login. Zero contatos confirmados no ledger. | 38 sessões de modelo, 275 chamadas, 863.323 tokens de entrada e 13.055 de saída. 41 logs somaram cerca de 26 minutos entre criação e última escrita. Runtime mantido para o executor dedicado. |
+| Assistente da Central | O GET confirmou a integração Hermes habilitada e zero solicitações no dia. A pasta efetiva da Central não tinha contador de consultas Hermes nem arquivo de último uso. | Sem custo de modelo registrado para a integração. A flag é lida na inicialização da Central. A conferência manteve a disponibilidade do serviço. |
+| Gateway de WhatsApp | A ponte respondeu `connected` e sustenta a captura do observador. O banco tinha 84 registros com papel `assistant` em uma sessão WhatsApp na janela. | Cerca de 342 MiB na amostra, sem custo de modelo isolado disponível. Gateway mantido. |
+| Dashboard | A rota de saúde respondeu HTTP 200 e é consultada pelo monitor do Dell. Uso humano da interface sem contagem. | Cerca de 208 MiB na amostra. Mantido com a dependência de monitoramento. |
+| Navegador Google | O CDP respondeu com uma página vazia na sondagem. O monitor acompanha este navegador. O LinkedIn usa outro. | Cerca de 11 MiB na amostra. Uso histórico de coletas sem contagem. Serviço mantido com a dependência de monitoramento. |
+| Visão semanal de receita | Um turno na janela e cinco relatórios locais desde 19/10. O relatório de 16/11 foi gravado, com última entrega pelo WhatsApp em `delivery_failed`. | 7 chamadas, 53.289 tokens de entrada e 2.033 de saída. Rotina mantida pela produção do relatório. |
+| Socorro | Duas sessões associadas ao diretório do Socorro. O medidor registrou uso em 16/11. | 2 chamadas, 39.307 tokens de entrada e 935 de saída. Mantido para diagnóstico de falhas. |
+| Fonte com IA | Fluxo n8n já pausado. Último arquivo de uso datado de 22/10. | Sem chamada recente comprovada. |
+| Foto mensal de skills | Duas fotos preservadas. A auditoria das fontes e das unidades instaladas não encontrou leitor automatizado das fotos. O runtime mantém o contador nativo. | Coleta local, sem modelo ou rede. Timer desabilitado às 17h47. |
+
+O perfil principal também registrou nove sessões avulsas com 47 chamadas
+e uma sessão desktop com três chamadas. A auditoria não atribuiu a finalidade
+individual dessas sessões.
+
+A conferência após a pausa mostrou o timer `hermes-uso-skills.timer` desabilitado,
+as duas fotos preservadas e gateway, painel, navegadores e Central em operação.
+As unidades e o recibo estão em
+`~/.local/state/squadone-hermes-pausas/20261118T204723-738807Z/` no Dell.
+Às 18h01, o código de retirada do atualizador moveu o executável e as duas
+unidades para `~/.local/state/atualizar-central/retiradas/hermes-uso-skills/`.
+O monitor reconhece o recibo para evitar cobrar a cópia retirada durante a
+transição do manifesto. As fotos permanecem no diretório histórico. Para
+reverter, restaurar os três arquivos a partir do backup, remover o marcador
+`concluido`, alinhar a reversão no repositório e então recarregar o systemd
+do usuário e habilitar o timer. A verificação ocorreu sem iniciar turnos ou
+disparar mensagens de teste.
+
+## Contrato de leitura — revisão de 25/10/2026
+
+O Hermes é o secretário de leitura, diagnóstico e explicação; não é outra base comercial ou fechador. A disponibilidade qualitativa do Rômulo está confirmada e não foi convertida em horas, prazos ou permissão de envio.
 
 ## Como usar
 

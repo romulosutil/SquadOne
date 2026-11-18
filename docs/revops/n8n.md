@@ -1,6 +1,22 @@
 # n8n na operação da Prumo
 
+O [Estado atual](../../ESTADO-ATUAL.md#n8n) contém a conferência de 18/11.
+O [guia da Mel](../../ops/n8n/README.md) registra as agendas atuais, os
+consumidores e as fontes de manutenção. A revisão de 25/10 e os procedimentos
+dos três caçadores abaixo são históricos.
+
 Revisão: 25/10/2026. O n8n executa rotinas determinísticas e integrações autorizadas; a Central/CRM conserva os fatos comerciais e Rômulo decide qualificação, negociação, aceite e recebimento. Esta entrega não envia mensagens nem libera prospecção.
+
+## Pesquisa Google sob demanda no Mel
+
+O fluxo **PRUMO · Pesquisa de empresas** (`pwNiZI1rBGzMJ2dP`) tem uma entrada autenticada `POST /webhook/prumo-pesquisa-google` no n8n do Mel (`127.0.0.1:5679` via SSH). O corpo `{}` consulta os três nichos em 45 dias. Para restringir a rodada, envie por exemplo `{"nicho":"servicos-tecnicos","dias":30}`. Os outros nichos são `escritorios` e `agencias`. A janela aceita de 7 a 60 dias. A entrada usa a credencial de cabeçalho da revisão existente.
+
+O fluxo consulta o RSS do Google Notícias e retorna JSON com o estado de cada consulta, data, veículo, link e checagens que faltam. Para buscas complementares, retorna links do Google Web, inclusive consultas sobre contratação de fornecedores em publicações públicas. Uma notícia de mudança ou inauguração entra como sinal. Antes de passar para proposta, confirme na fonte original um pedido ainda aberto ou uma lacuna verificável até o orçamento, além do encaixe no Encontrado e do canal empresarial. A execução sob demanda tem custo zero e termina no relatório de pesquisa.
+
+O relatório de WhatsApp usa a mesma triagem de RSS. Cada consulta mantém seu
+lugar mesmo quando a busca ou o XML falha. A execução diária grava o relatório
+para revisão humana. A rodada agendada de pesquisa e higiene emite seu
+próprio retrato e uma leitura para a Central.
 
 ## Responsabilidade e passagem
 

@@ -1,6 +1,98 @@
 # n8n da Mel
 
-## Operação mínima preparada e pausada — 16/11/2026
+O [Estado atual](../../ESTADO-ATUAL.md#n8n) reúne o inventário conferido pela
+API e a evidência mais recente dos fluxos. As autorizações ficam nas
+[regras do repositório](../../RULES.md).
+
+## Primeiros contatos diários — 18/11/2026
+
+- **WhatsApp** (`TunkKi3HnYLXJati`). A agenda entrega um pedido a cada dois
+  minutos. `whatsapp-agenda.path` aciona a reposição e a frente comercial no
+  Dell. A frente registra até dez primeiros contatos por dia de São Paulo.
+  Reservas existentes e fichas rejeitadas ficam fora do estoque disponível.
+- **LinkedIn** (`Sk4A9PMCD35y6rrJ`). A agenda entrega um pedido a cada dez
+  minutos. `linkedin-agente` executa a rodada com o perfil Hermes
+  `prumo-linkedin`, o navegador dedicado e o ledger de até dez contatos por dia.
+
+As agendas rodam todos os dias. O n8n registra a entrega do pedido. O registro
+local de cada canal confirma os envios. O WhatsApp usa o recibo da Evolution e
+o LinkedIn usa a saída observada na conversa, registrada no ledger. Os timers
+antigos de frente e reposição do WhatsApp foram substituídos pela agenda do n8n.
+
+## LinkedIn no Dell
+
+O workflow `Sk4A9PMCD35y6rrJ` coloca pedidos na fila local. O timer
+`linkedin-agente.timer` chama o worker do Dell, que usa o perfil
+`prumo-linkedin` do Hermes e o navegador dedicado. A página da Central
+`/linkedin.html` mostra o acompanhamento. O ledger privado
+`~/.local/share/squadone-operations/linkedin/linkedin.sqlite` guarda
+reservas e confirmações. A cota, a elegibilidade e a passagem das respostas
+para Rômulo estão nas [regras vigentes](../../RULES.md).
+
+Para conferir sem rodar uma campanha, leia as execuções do n8n, o estado do
+timer e do `linkedin-browser.service`, e os totais do ledger. O login inicial
+foi confirmado em 17/11. Em caso de perda de sessão, Rômulo confirma a conta
+no navegador do Dell antes que uma nova rodada possa enviar.
+
+## Auditoria de consumidores — 18/11/2026
+
+Foram conferidos os 25 workflows da Mel, incluindo subworkflows embutidos, e
+os consumidores no código instalado e nos registros locais.
+
+| Workflow | Quem usa a saída | Decisão |
+| --- | --- | --- |
+| Pesquisa de empresas (`pwNiZI1rBGzMJ2dP`) | A agenda chama a pesquisa e higiene pelo serviço local. O executor publica o retrato de pesquisa, o arquivo de critérios para o filtro de leads e uma leitura para a Central. O retrato foi gerado às 18h10. A entrada RSS sob demanda devolve evidências ao solicitante autenticado. | Mantido ativo. |
+| Pesquisa diária para WhatsApp (`OhFg51gIIWnmIF6r`) | O relatório atende à revisão humana e o próprio workflow lê os relatórios anteriores para datar a primeira observação dos sinais. A busca RSS é embutida no grafo. O relatório das 17h00 registrou dois sinais novos. A leitura humana segue sem confirmação; a busca de consumidores não encontrou outro leitor automatizado nem ligação com a agenda de envio. | Mantido ativo para revisão. |
+| Medição de eventos (`qA5R9UXZj4UgIjFi`) | O serviço público recebe a lista de origens autorizadas. O painel privado `/prumo/metricas` lê o retrato. A lista tinha 312 origens na última publicação conferida, às 16h48, e o painel respondeu HTTP 200 com dados atualizados. O painel não registra acessos individuais. | Mantido ativo. |
+| Fonte — falha sem dados (`9wCjxg7rcPRLONDe`) | Único chamador encontrado: a Fonte com IA (`yNLwUy5bdEmC4Qss`), inativa e protegida pela política de pausa. O aviso tem somente um gatilho de erro. | Pausado às 17h07 e arquivado às 18h01, com grafo e vínculo sanitizado preservados. |
+
+A pausa está em `~/.config/claude-ops/workflow-operacao.json`, que bloqueia
+reativação pelos publicadores e protege o ID. Os exports e o recibo estão no
+Dell em `~/.local/state/squadone-n8n-pausas/20261118T200711-759664Z/`. O
+arquivamento tem backup e recibo em
+`~/.local/state/squadone-limpeza-etapa4/lote-qtojuPiz/`. O instalador
+`prumo-publico.py` publica apenas a Medição e preserva o workflow de falhas
+configurado nela. Se a Fonte for retomada, desarquivar o aviso, conferir o
+grafo sanitizado, retirar somente a pausa do aviso e ativá-lo antes da Fonte.
+
+## Histórico da agenda inicial do LinkedIn — 17/11/2026
+
+> Consulte a [execução atual](#linkedin-no-dell). A agenda e o teto desta
+> seção foram substituídos em 18/11.
+
+Workflow adicional **PRUMO · LinkedIn — prospectar e primeiro contato**
+(`Sk4A9PMCD35y6rrJ`), gerado por `linkedin-n8n.py` no Dell.
+A agenda inicial era seg–sex às 9h, 11h, 13h, 15h
+e 17h, em São Paulo. O n8n entrega metadados da rodada pelo bind mount de
+estado já existente; `linkedin-agente` executa no Dell com Chromium exclusivo,
+ledger de cinco primeiros contatos/dia e passagem de respostas para Rômulo.
+Não executa no PC nem neste chat. O agendamento anterior do Codex foi removido.
+
+A primeira verificação registrou a entrega do pedido à fila e o consumo pelo
+worker. O login humano foi concluído mais tarde no mesmo dia.
+
+## Retomada conferida — 17/11/2026
+
+> Registro da retomada. Em 18/11, o n8n assumiu a agenda dos timers de frente e
+> reposição do WhatsApp.
+
+Hermes e Evolution conectados por pedido explícito de Rômulo. Núcleo, pesquisa,
+campanha e timers de primeiro contato ativos; mensagens confirmadas por recibos
+e captura nas conversas, com passagem das respostas para Rômulo. Os quinze
+aposentados e a Fonte com IA permanecem sem reativação. Pesquisa nova mantém o
+corte de 16/11 às 20h UTC e não drena a carteira histórica.
+
+O `/enviar` do CRM teve sua cadeia reconectada e a montagem de endereço corrigida
+para o sandbox do n8n. A política operacional fica em
+`~/.local/bin/aquisicao-comercial.json`; a Central a lê pelo espelho de caminhos
+de `preparar-central-runtime` e `operacao-runtime.conf`, mantendo a política
+de produção fora dos arquivos rastreados.
+Backups e roteiro de reversão em `~/.local/state/retomada-20261117/` na Mel.
+
+## Histórico da operação mínima preparada e pausada — 16/11/2026
+
+> A retomada de 17/11 substituiu a pausa operacional descrita abaixo. Os
+> contratos do núcleo e a proteção dos fluxos arquivados continuam aplicáveis.
 
 Estado publicado: **22 workflows, 6 ativos, 15 arquivados e a Fonte pausada**.
 Quatro funções centrais: Pesquisa de empresas (`pwNiZI1rBGzMJ2dP`), CRM
@@ -22,7 +114,7 @@ em `preparado-pausado`; campanha e timers de envio continuam desligados.
 Pesquisa tem uma agenda própria, sem autorizar envio. Geração de Site, Raio-X
 e Mapa exige pedido humano. O histórico de 03/11 abaixo permanece como auditoria.
 
-## Estado conferido em 03/11/2026
+## Inventário histórico de 03/11/2026
 
 O n8n do Dell lista 22 workflows: 15 ativos e 7 inativos, incluindo o Radar PNCP
 arquivado. Caçadores de Site, Íris e Estamparia, Acompanhamento, Funil semanal,
@@ -38,22 +130,33 @@ esses arquivos como parte da limpeza.
 Jev quando todos estão desabilitados, isolados e sem referências externas. Não
 remove workflows, tabelas ou amostras da sombra, nem altera os estados de pausa.
 
-Esta pasta **não é a fonte** dos fluxos. Cada fluxo é montado e publicado por um gerador em
-`deploy/dell/claude-ops/`, pela API local do n8n da Mel; editar no editor do n8n sem mudar o gerador
-se perde na próxima regeneração.
+Os fluxos publicados vêm dos geradores em `deploy/dell/claude-ops/` e das
+configurações privadas da Mel. Uma mudança apenas no editor se perde na próxima
+regeneração.
+
+## Fontes de manutenção
+
+| Função | Workflow | Fonte |
+| --- | --- | --- |
+| CRM, entrada, pesquisa de empresas e falhas | `AsjxktRCqRJSmj9P`, `fd8gz4uDQkJtEd9W`, `pwNiZI1rBGzMJ2dP`, `5FlXnne7lTMihLic` | [Composição do núcleo](../../deploy/dell/claude-ops/workflow_minimo.py) e fontes privadas da Mel |
+| Pesquisa RSS e relatório diário | `pwNiZI1rBGzMJ2dP`, `OhFg51gIIWnmIF6r` | Cópias `pesquisa_google.py` e `pesquisa_whatsapp_n8n.py` em `~/.local/share/claude-ops/` no Dell |
+| Agenda WhatsApp | `TunkKi3HnYLXJati` | Cópia `whatsapp-n8n.py` em `~/.local/share/claude-ops/` no Dell |
+| Agenda LinkedIn | `Sk4A9PMCD35y6rrJ` | Cópia `linkedin-n8n.py` em `~/.local/share/claude-ops/` no Dell |
+| Medição | `qA5R9UXZj4UgIjFi` | [Instalador da Medição](../../deploy/dell/claude-ops/prumo-publico.py) |
+| Falha sanitizada da Fonte | `9wCjxg7rcPRLONDe` | Grafo arquivado e backup privado da Mel |
 
 ## O que há aqui
 
 | Arquivo | Para quê |
 |---|---|
-| [`CATALOGO.md`](CATALOGO.md) | Fonte de verdade sobre o n8n: como se publica, a cadeia de ganchos do `n8n.py`, os 21 fluxos (id, gatilho, gerador, o que lê e grava, decisões), por que alguns não foram juntados, pendências e o mapa de scripts. Leia antes de mexer em qualquer fluxo. |
-| [`NOVA-OFERTA.md`](NOVA-OFERTA.md) | Como criar uma oferta nova do PRUMO: regras da Prumo, decisões que o molde preserva, o passo a passo com arquivo:linha, o modelo do bloco em `prumo-ofertas.json` e a proposta para deixar barato. |
+| [`CATALOGO.md`](CATALOGO.md) | Catálogo histórico de 28/10 para localizar IDs, contratos legados, fontes e chamadores. |
+| [`NOVA-OFERTA.md`](NOVA-OFERTA.md) | Guia histórico das ofertas no funil anterior à operação mínima. |
 | [`workflows/01-Cacador.sanitizado.json`](workflows/01-Cacador.sanitizado.json) | Captura de auditoria do 01 · Caçador (ver abaixo). |
 | [`workflows/01-Cacador.schema.json`](workflows/01-Cacador.schema.json) | Esquema dessa captura. |
 
 ## Arquivo do 01 · Caçador da Mel — somente auditoria
 
-[`workflows/01-Cacador.sanitizado.json`](workflows/01-Cacador.sanitizado.json) foi obtido por GET da API local da Mel em **19/10/2026, 21:24:16 SP**. Fonte: workflow `oow8TkxrAf4fVvTj`, nome `01 · Caçador`. **A fonte estava ativa na captura; em 03/11/2026 está pausada.** O arquivo e seu subfluxo embutido estão com `active: false` para importação segura. A captura não registra a pausa posterior do Caçador de Site. Os estados atuais estão na seção acima.
+[`workflows/01-Cacador.sanitizado.json`](workflows/01-Cacador.sanitizado.json) foi obtido por GET da API local da Mel em **19/10/2026, 21:24:16 SP**. Fonte: workflow `oow8TkxrAf4fVvTj`, nome `01 · Caçador`. A fonte estava ativa na captura e foi pausada antes da conferência de 03/11. O arquivo e seu subfluxo embutido estão com `active: false`.
 
 A sanitização ocorreu **na própria Mel, antes de qualquer cópia**; o export bruto ficou somente em memória. Foram preservados o grafo principal de 7 nós e o `workflowJson` embutido de 32 nós, inclusive a leitura de leads existentes e o dedupe por `place_id`. Foram retirados estado de execução, `pinData`, `staticData`, compartilhamentos, metadados de versão e IDs de webhook. As nove referências de credencial e cinco referências de planilha foram substituídas por placeholders; nenhum dado de lead, paciente ou execução foi incluído. O código fonte próprio permanece auditável.
 

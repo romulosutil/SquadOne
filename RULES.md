@@ -1,6 +1,82 @@
 # Regras do repositório
 
-## Operação preparada e pausada — simplificação de 16/11/2026
+O [Estado atual](ESTADO-ATUAL.md) registra o que foi observado no Dell e o plano
+operacional. Atualize a regra datada e o retrato do Dell quando a autorização,
+a agenda ou o responsável por um fluxo mudar.
+
+## Primeiros contatos diários no Dell — 18/11/2026
+
+Rômulo autorizou até dez primeiros contatos automáticos por dia em cada canal,
+inclusive fins de semana, e pediu iniciar imediatamente. O n8n agenda o
+WhatsApp a cada dois minutos e o LinkedIn a cada dez. O Dell executa o envio
+somente para contatos comerciais elegíveis e registra a confirmação de cada
+canal. As cotas usam o dia de São Paulo e são independentes.
+
+Reservas anteriores ficam preservadas. O WhatsApp deixa de contá-las como
+estoque disponível e repõe os cadastros barrados. No LinkedIn, continuam valendo
+o navegador dedicado, a confirmação do perfil, o limite de uma abordagem por
+rodada e o destino Outros para as conversas comerciais. Rômulo assume as
+respostas em ambos os canais.
+
+## Retiradas confirmadas no Dell — 18/11/2026
+
+A Fonte com IA continua pausada e seu aviso privado está arquivado. O
+instalador de Medição preserva o alerta geral configurado e publica somente
+a Medição. Em eventual retomada autorizada da Fonte, restaurar primeiro o
+aviso sanitizado. O coletor mensal de fotos de skills do Hermes foi retirado.
+O contador nativo e as fotos históricas continuam disponíveis. A
+[conferência da implantação](ESTADO-ATUAL.md#implantação-da-retirada) registra
+o commit e os serviços observados.
+
+## LinkedIn no Dell — 17/11/2026
+
+> A decisão de 18/11 substituiu o teto de cinco contatos e a agenda inicial.
+> O contrato de execução e passagem humana desta seção continua aplicável.
+
+Rômulo autorizou o navegador, ciente do risco, com até cinco contatos novos por
+dia de São Paulo, somente primeira mensagem, comerciais em Outros e nenhuma
+alteração nas conversas de vagas. Depois pediu migrar a execução para o agente
+do SquadOne no Dell e n8n, sem PC ou chat. A automação anterior do Codex foi
+excluída. O novo workflow agenda pedidos locais; `linkedin-agente` os consome
+e executa Diego no runtime Hermes com navegador exclusivo do Dell (9223).
+
+O ledger existente é preservado. Reservar antes do clique, autorização de uso
+único, nunca repetir resultado incerto, excluir qualquer conversa anterior ou
+de vagas e organizar somente threads comerciais exatas registradas. Respostas
+ficam com Rômulo. Login inicial é feito por ele na janela aberta no Dell, sem
+copiar cookies do PC; login ausente não dispara modelo nem consome cota.
+Os caminhos de execução e a conferência estão no
+[guia do LinkedIn no Dell](ops/n8n/README.md#linkedin-no-dell).
+
+## Retomada autorizada e conferida — 17/11/2026
+
+> Registro da retomada. Em 18/11, a agenda do n8n assumiu os disparos dos
+> timers antigos de frente e reposição do WhatsApp.
+
+Rômulo pediu neste chat reconectar Hermes e Evolution, liberar os fluxos,
+encontrar novos leads e iniciar os envios conforme a operação mínima vigente.
+Os dois canais foram pareados; a identidade anterior do Hermes foi preservada.
+Naquela data, pesquisa, campanha e timers de primeiro contato estavam ativos. A integração e
+as conversas capturadas confirmaram os primeiros envios; Rômulo assume respostas.
+Não há autorização para recontatar a carteira antiga nem reativar aposentados.
+
+A política operacional em `~/.local/bin/aquisicao-comercial.json` está em
+`primeiro-contato`, com `respostasAutomaticas: false`. O drop-in
+`operacao-runtime.conf` inicia a Central a partir de um espelho de caminhos,
+preparado por `preparar-central-runtime`; somente essa política vem da cópia
+operacional. A política de produção fica fora dos arquivos rastreados e o
+padrão versionado continua pausado. O atualizador foi conferido após essa separação. Uma reinstalação da
+política padrão pausa a aquisição e não autoriza reativação implícita.
+
+Correções publicadas: ciclo sem referências à avaliação por modelos removida,
+versão única de seleção, cadeia completa do webhook `/enviar` até sua resposta e
+redirecionamento compatível com o sandbox do n8n. Oito testes de regressão
+passaram na Mel. Backups e reversão: `~/.local/state/retomada-20261117/`.
+
+## Histórico da pausa — simplificação de 16/11/2026
+
+> A retomada de 17/11 substituiu esta pausa no Dell. O padrão de instalação
+> versionado conserva o estado `preparado-pausado`.
 
 Rômulo autorizou aplicar a simplificação no Dell e a abertura padrão do Prumo,
 sem retomar disparos. A política v2 fica em `preparado-pausado`: reserva e transporte
@@ -14,7 +90,7 @@ pesquisa nova preserva a carteira e as mensagens históricas. Os workflows
 aposentados ficam arquivados, com fontes privadas e backup para reversão.
 Geradores antigos não podem substituir o núcleo nem reativar os aposentados.
 
-## Operação mínima vigente — 16/11/2026, decisão posterior
+## Modelo de primeiro contato — 16/11/2026
 
 Rômulo pediu: o agente envia a primeira mensagem atual e ele assume quando o
 cliente responder. Retirar o que não serve a esse fluxo. Esta decisão substitui
@@ -39,10 +115,14 @@ Código local e testes não comprovam publicação ou envio. A implantação no 
 precisa conferir serviço, campanha, timer, conta e recibo; a política não liga
 sozinha um executor que foi desativado. Não drenar automaticamente fila antiga.
 
-## Histórico das decisões substituídas
+## Histórico de decisões comerciais
 
+As cotas, pausas de aquisição e autorizações de envio abaixo registram seus
+respectivos períodos. A retomada de 17/11 e a decisão de 18/11 substituem
+as instruções conflitantes. As regras de identidade, captura e proteção da
+carteira continuam aplicáveis em seus escopos.
 
-## Reconstrução comercial vigente (16/11/2026)
+### Reconstrução comercial e bloqueio inicial (16/11/2026)
 
 Rômulo confirmou softban do WhatsApp por spam após os disparos de 13/11 e
 autorizou reconstruir a operação da Prumo e o CRM que a atende. Esta direção

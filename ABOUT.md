@@ -4,6 +4,9 @@ SquadOne é uma aplicação pessoal para operar squads, agenda e agentes. A
 interface atual materializa cada squad como um escritório com domínios, pessoas
 e trabalho agendado.
 
+Comece pelo [Estado atual](ESTADO-ATUAL.md) para ver o que está em operação,
+como conferir cada fluxo e onde manter a documentação operacional.
+
 Este repositório também pode conter protótipos isolados em `prototypes/`. Eles
 servem para validar linguagem visual e interação sem alterar fluxos produtivos
 ou representar integrações como concluídas.

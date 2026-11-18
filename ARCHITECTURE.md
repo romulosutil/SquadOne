@@ -1,23 +1,27 @@
 # Arquitetura
 
-## Operação comercial vigente — decisão posterior de 16/11/2026
+Consulte o [Estado atual](ESTADO-ATUAL.md) para configuração em produção,
+saúde dos fluxos e evidências de implantação.
 
-O executor Python envia a abertura já existente da fonte. A Central valida o
-cadastro atual, reserva o contato e mantém recibos/deduplicação. A política v2
-permite apenas primeiro contato; pausa manual e restrições do provedor seguem
-vigentes. O cadastro com resposta ou contato anterior não volta à fila.
+## Operação comercial — arquitetura atual
+
+O n8n agenda as rodadas. No WhatsApp, o executor Python usa a abertura da
+fonte, a Central valida e reserva o contato e a Evolution fornece o recibo.
+No LinkedIn, o worker do Dell usa o runtime Hermes e guarda reservas e
+confirmações no ledger próprio. A política permite apenas primeiro contato.
+Pausa manual, deduplicação, identidade e restrições do provedor seguem
+vigentes.
 
 A captura de mensagens e o histórico permanecem; a resposta é encaminhada a
 Rômulo. O servidor não instancia executores de resposta, qualificação ou
 proposta automática. Os módulos de atendimento automático de Site e Estamparia,
 seus scripts de reativação e as respectivas telas sem uso foram removidos.
 Propostas e documentos existentes continuam disponíveis para consulta humana.
-As seções antigas abaixo descrevem o histórico técnico e não ativam serviços.
+Em 17/11, a retomada autorizada substituiu o bloqueio operacional de 16/11.
+Em 18/11, a agenda e as cotas por canal substituíram as cadências comerciais
+anteriores. O padrão de instalação permanece pausado.
 
-
-> Direção vigente de 16/11/2026: primeiros contatos automáticos bloqueados. Os fluxos de aquisição e cadências descritos por data abaixo são histórico técnico, não liberação de envio. A Prumo define negócio, catálogo e qualidade; o SquadOne sustenta sua operação sem transformar cadastro, resposta ou ganho marcado em recebimento.
-
-## Estoque comercial conforme o consumo (12/11/2026)
+## Histórico do estoque comercial conforme o consumo (12/11/2026)
 
 `prospeccao_diaria.demanda` cruza a fila publicada com o CRM e as tentativas/pareceres
 do SQLite. A cada dois minutos após a execução, pesquisa se houver menos de seis
@@ -40,7 +44,7 @@ existente; mudar a evidência invalida os pareceres anteriores pelo fingerprint.
 
 A regra compartilhada passa a 10 minutos e seis contatos por hora móvel, com vinte por dia. A fila aprovada é publicada antes da reserva; fila vazia não exibe previsão fictícia de envio. Aprovações, pausas e histórico permanecem conferidos.
 
-## Continuidade comercial (12/11/2026)
+## Histórico da continuidade comercial (12/11/2026)
 
 A atualização de cadência no mesmo dia usa dez minutos e seis por hora, com vinte
 por dia. A regra compartilhada de `trava-de-ritmo.ts` serve a API e a interface;
@@ -129,7 +133,7 @@ maior custo de processamento. São amostras exploratórias com GPU por software,
 não evidência de ganho em dispositivos reais. A decisão atual é conservar DOM
 como padrão e manter o protótipo para avaliação posterior no hardware alvo.
 
-## Continuidade automática de Estamparia (26/10/2026)
+## Histórico da continuidade automática de Estamparia (26/10/2026)
 
 `src/operations/estamparia-atendimento.ts` define textos e perguntas versionados da
 oferta. O executor de Estamparia, retirado em 16/11, respondia somente a entradas naturais
@@ -1118,7 +1122,10 @@ O modelo de orquestração, as conexões pendentes e a separação entre credenc
 humanas, OAuth e segredos técnicos estão em
 `docs/OPERATIONS-SECRETS-AND-ORCHESTRATION.md`.
 
-## Workflows PRUMO no n8n
+## Histórico dos workflows PRUMO no n8n
+
+O [inventário operacional do n8n](ops/n8n/README.md) cobre o núcleo consolidado
+e as agendas atuais. Os fluxos abaixo descrevem o desenho anterior.
 
 Desde 23/09/2026 o PRUMO é simples (decisão do Rômulo). A planilha "PRUMO — Fila
 de revisão" tem uma aba de trabalho, **Prospects**, com uma coluna **Etapa**:
@@ -1150,7 +1157,7 @@ um arquivo só, `prumo-nome.js`, embutido nos construtores e comparado com `nome
 `scripts/prepare-prumo-workflows.mjs` e o `prumo-ajuste-planilha.py` descreviam o desenho anterior a 23/09/2026 e foram apagados em 19/10/2026
 (`ops/n8n/README.md` explica); resta só a fixture `deploy/dell/claude-ops/testes/prumo-diagnostico.fixture.json`.
 
-## Radar PNCP
+## Radar PNCP — arquitetura da coleta pausada
 
 O radar PNCP é executado pelo Compose em `~/licitacoes-automation` no Dell, com
 fontes versionadas em `deploy/dell/licitacoes-automation/`. O n8n apenas inicia
@@ -1203,9 +1210,9 @@ aparência, pelo mesmo motivo do disco acima.
 
 ## Registros complementares preservados do Dell
 
-As decisões datadas abaixo preservam o histórico. Autorizações de aquisição e cadência conflitantes estão substituídas pela direção de 16/11/2026; contratos, suporte e proteções de captura permanecem nos respectivos escopos.
-
-## Cadência de dez minutos (12/11/2026)
+As decisões datadas abaixo preservam o histórico. As autorizações de aquisição
+e cadência conflitantes foram substituídas pelas decisões de 17 e 18/11/2026.
+Contratos, suporte e proteções de captura permanecem em seus escopos.
 
 ## Vendedor do Telegram: só o que vale o toque (28/10/2026)
 

@@ -1,5 +1,8 @@
 # Backlog — SquadOne
 
+> Registro da V1 de persistência e OAuth. Consulte o
+> [Estado atual](ESTADO-ATUAL.md) para as prioridades operacionais.
+
 Atualizado em 12/09/2026. App OAuth do Google revisto em 30/09/2026. Objetivo da V1 de persistência: **roster de agentes + conexão OAuth sobrevivem a reinício e deploy.** Nada além disso.
 
 ---

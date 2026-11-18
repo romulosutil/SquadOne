@@ -1,5 +1,8 @@
 # Oferta nova do PRUMO: como criar
 
+> Guia histórico do funil de 28/10, substituído pela operação mínima em 16/11.
+> A estrutura e as fontes atuais estão no [Estado atual](../../ESTADO-ATUAL.md#n8n).
+
 Guia para pôr uma oferta nova (um produto ou projeto) no funil do PRUMO, ao lado de Iris e CRM de
 estamparia. Escrito em 28/10/2026 sobre a `main`; os números de linha são dessa data e andam com o
 código: confira antes de editar. O dono vai criar mais três ofertas; este guia existe para que cada

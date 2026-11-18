@@ -1,5 +1,9 @@
 # Integração PC/Dell e atualizador — 16/11/2026
 
+> As restrições de aquisição abaixo se referem à janela de implantação de
+> 16/11. A retomada e a troca das agendas estão no
+> [Estado atual](../ESTADO-ATUAL.md).
+
 A integração parte da main e das fontes vigentes do Dell. Incorpora as melhorias
 compatíveis do PC e conserva as versões anteriores em snapshots e backups Git.
 Inclui a carteira comercial, o plano do dia, a distinção entre tarefas internas e
