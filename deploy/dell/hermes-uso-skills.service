@@ -1,9 +1,0 @@
-[Unit]
-Description=Hermes — foto mensal do uso das skills (só lê o .usage.json e grava uma foto datada)
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/python3 %h/.local/bin/hermes-uso-skills
-TimeoutStartSec=2min
-Nice=10
-UMask=0077

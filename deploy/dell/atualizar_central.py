@@ -3,6 +3,7 @@
 
 Nunca força reinício ocupado, nem produz avisos ou mensagens comerciais.
 """
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,11 @@ PAGINA_LINKEDIN = Path.home() / '.local/lib/squadone-linkedin/linkedin.html'
 API = 'http://127.0.0.1:9120'
 TIMERS = ('frente-comercial.timer', 'prospeccao-diaria.timer')
 SERVICES = ('frente-comercial.service', 'prospeccao-diaria.service')
+COLETOR_APOSENTADO = {
+    '.local/bin/hermes-uso-skills': '8db07fcc89b5fc062f0a95c635396ac7059e7729d653949da5b0fda0601186bf',
+    '.config/systemd/user/hermes-uso-skills.service': '081a80efa51a4f3944d1b771d60462489e538c4dae6a7ff6a5818d61d11fee2a',
+    '.config/systemd/user/hermes-uso-skills.timer': 'baa86167ffaddcf9ee7ddd9ba25cde4f2d0e59876cf8a7912a504593948f1aa0',
+}
 
 class Bloqueado(RuntimeError):
     pass
@@ -87,6 +93,38 @@ def ocioso(espera_s=0):
 
 def git(*args):
     return cmd('git', *args, cwd=ROOT)
+
+def retirar_coletor_skills(home, backup):
+    """Retira apenas as cópias conhecidas do coletor já pausado."""
+    arquivos = [(home / caminho, digest) for caminho, digest in COLETOR_APOSENTADO.items()
+                if os.path.lexists(home / caminho)]
+    concluido = backup / 'concluido'
+    if not arquivos and (not backup.exists() or concluido.is_file()):
+        return
+    if not backup.resolve().is_relative_to(home.resolve()):
+        raise Bloqueado('Backup da coleta aposentada fora do diretório do usuário')
+    for unit, permitidos in (('hermes-uso-skills.timer', ('disabled', '')),
+                             ('hermes-uso-skills.service', ('static', ''))):
+        estado = cmd('systemctl', '--user', 'show', unit, '-p', 'ActiveState', '--value')
+        habilitacao = cmd('systemctl', '--user', 'show', unit, '-p', 'UnitFileState', '--value')
+        if estado != 'inactive' or habilitacao not in permitidos:
+            raise Bloqueado('A coleta aposentada precisa estar pausada: ' + unit)
+    for arquivo, digest in arquivos:
+        destino = backup / arquivo.name
+        if (arquivo.is_symlink() or not arquivo.is_file()
+                or not arquivo.resolve().is_relative_to(home.resolve())
+                or hashlib.sha256(arquivo.read_bytes()).hexdigest() != digest
+                or destino.is_symlink()
+                or (destino.exists() and (not destino.is_file()
+                    or hashlib.sha256(destino.read_bytes()).hexdigest() != digest))):
+            raise Bloqueado('Cópia divergente da coleta aposentada: ' + arquivo.name)
+    backup.mkdir(parents=True, exist_ok=True, mode=0o700)
+    concluido.unlink(missing_ok=True)
+    for arquivo, _ in arquivos:
+        arquivo.replace(backup / arquivo.name)
+    cmd('systemctl', '--user', 'daemon-reload')
+    concluido.touch(mode=0o600)
+    print('Coletor aposentado retirado; cópias preservadas no backup.')
 
 def dependencias_mudaram(alterados, construido, alvo):
     locks={'package-lock.json','npm-shrinkwrap.json','bun.lock','bun.lockb'}
@@ -249,6 +287,8 @@ if __name__ == '__main__':
             try: fcntl.flock(lock,fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError: raise Bloqueado('Outra atualização está em andamento')
             main()
+            if not (ROOT / 'deploy/dell/hermes-uso-skills.py').exists():
+                retirar_coletor_skills(Path.home(), STATE / 'retiradas/hermes-uso-skills')
     except (Bloqueado, OSError, subprocess.SubprocessError) as e:
         print('Atualização interrompida:', str(e), file=sys.stderr)
         sys.exit(1)

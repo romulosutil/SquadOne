@@ -15,6 +15,34 @@ publico = modulo('prumo_publico','prumo-publico.py')
 cliente = modulo('prumo_fonte_cliente','prumo-fonte-cliente.py')
 
 class Homologacao(unittest.TestCase):
+    def test_instalador_atualiza_so_medicao_e_preserva_alerta(self):
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+
+        medicao = {'id': 'medicao', 'name': 'PRUMO · Medição de eventos',
+                   'settings': {'errorWorkflow': 'falhas'}}
+        fonte = {'id': 'fonte', 'name': publico.fonte('x', 'y')['name'], 'active': False}
+        falha = {'id': 'fonte-falha', 'name': publico.falha_fonte()['name'], 'isArchived': True}
+        api = Mock(side_effect=[{'data': [fonte, falha, medicao]}, medicao, {'active': True}])
+        put = Mock(return_value=medicao)
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            pasta = home / '.config/claude-ops'
+            pasta.mkdir(parents=True)
+            (pasta / 'prumo-publico-cred').write_text('fixture')
+            with patch.object(publico.Path, 'home', return_value=home), patch.dict(sys.modules, {'n8n': SimpleNamespace(api=api, put=put)}):
+                publico.instalar()
+        put.assert_called_once()
+        workflow = put.call_args.args[0]
+        self.assertEqual(workflow['id'], 'medicao')
+        self.assertEqual(workflow['settings']['errorWorkflow'], 'falhas')
+        self.assertEqual([call.args for call in api.call_args_list], [
+            ('GET', '/workflows?limit=250'),
+            ('GET', '/workflows/medicao'),
+            ('POST', '/workflows/medicao/activate'),
+        ])
+
     def test_privacidade_aplica_tambem_a_execucao_com_erro(self):
         arvore = ast.parse((PASTA/'n8n.py').read_text())
         fn = next(n for n in arvore.body if isinstance(n,ast.FunctionDef) and n.name=='garantir_erro_salvo')

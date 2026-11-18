@@ -240,10 +240,6 @@
       "instalado": "~/.local/bin/funil-aprendizado"
     },
     {
-      "repo": "deploy/dell/hermes-uso-skills.py",
-      "instalado": "~/.local/bin/hermes-uso-skills"
-    },
-    {
       "repo": "deploy/dell/prumo-fonte/bases/*.json",
       "instalado": "~/.local/share/prumo-fonte/bases/"
     },
