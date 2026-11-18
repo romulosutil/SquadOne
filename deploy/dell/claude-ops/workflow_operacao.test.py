@@ -139,6 +139,50 @@ class ClienteN8n(unittest.TestCase):
     def configurar(self, config=CONFIG):
         (self.cfg/'workflow-operacao.json').write_text(json.dumps(config),encoding='utf-8')
 
+    def test_contexto_usa_grafo_atual_preserva_settings_e_publica_so_se_ativo(self):
+        contexto = {'versao': 1, 'origem': 'fonte', 'organizacao_sha256': 'a' * 64}
+        original = {'id': ID, 'name': NOME, 'versionId': 'atual', 'settings': {'saveDataErrorExecution': 'none'},
+                    'nodes': [{'id': 'inicio', 'name': 'Inicio', 'type': 'n8n-nodes-base.webhook', 'parameters': {}},
+                              {'id': 'fim', 'name': 'Fim', 'type': 'n8n-nodes-base.code', 'parameters': {}}],
+                    'connections': {'Inicio': {'main': [[{'node': 'Fim', 'type': 'main', 'index': 0}]]}}}
+        real_contexto = carregar('prumo_contexto_sincronizacao_fixture', 'prumo_contexto.py')
+        regras_minimas = {'versao': 1, 'estado': 'preparado-pausado', 'retirados': [], 'nomesReservados': [NOME]}
+        (self.cfg/'workflow-minimo.json').write_text(json.dumps(regras_minimas), encoding='utf-8')
+        for ativo in (False, True):
+            with self.subTest(ativo=ativo), patch.dict(sys.modules, {'prumo_contexto': real_contexto}):
+                atual = {**original, 'active': ativo, 'activeVersionId': 'atual' if ativo else None}
+                requisicoes = []
+
+                def responder(req, **_):
+                    requisicoes.append(req)
+                    return RespostaHTTP(atual if req.method == 'GET' else {'versionId': 'novo'})
+
+                with patch.object(self.cli.urllib.request, 'urlopen', side_effect=responder):
+                    self.cli.put_contexto_prumo(atual, contexto)
+                    with self.assertRaisesRegex(ValueError, 'Gerador legado'):
+                        self.cli.put(atual)
+                self.assertEqual([r.method for r in requisicoes], ['GET', 'PUT'])
+                self.assertEqual(requisicoes[1].full_url.endswith('?publishIfActive=true'), ativo)
+                self.assertEqual(json.loads(requisicoes[1].data), self.cli.corpo_workflow(real_contexto.preparar(atual, contexto)))
+        self.preparar.assert_not_called()
+
+    def test_contexto_recusa_grafo_alterado_e_rascunho_preexistente(self):
+        original = {'id': ID, 'versionId': 'atual', 'active': True, 'activeVersionId': 'anterior'}
+        for atual, erro in ((original, 'rascunho pendente'), ({**original, 'versionId': 'novo'}, 'mudou')):
+            with patch.object(self.cli.urllib.request, 'urlopen', return_value=RespostaHTTP(atual)) as rede:
+                with self.assertRaisesRegex(ValueError, erro):
+                    self.cli.put_contexto_prumo(original, {})
+                self.assertEqual(rede.call_count, 1)
+                self.assertEqual(rede.call_args.args[0].method, 'GET')
+
+    def test_excecao_de_contexto_nao_permite_criar_nem_editar_aposentado(self):
+        minimo = carregar('workflow_minimo_contexto_fixture', 'workflow_minimo.py')
+        regras = {'versao': 1, 'estado': 'preparado-pausado', 'retirados': [ID], 'nomesReservados': [NOME]}
+        corpo = {'name': NOME, 'nodes': []}
+        for metodo, caminho in [('POST', '/workflows'), ('PUT', '/workflows/' + ID)]:
+            with self.assertRaises(ValueError):
+                minimo.conferir_mutacao(metodo, caminho, corpo, regras, somente_contexto=True)
+
     def test_06_bloqueado_no_cliente_antes_da_rede_e_pausa_nao_reescreve_outros(self):
         id06='workflow06-fixture';nome06='06 · Funil semanal (Site antes da venda)'
         cfg=copy.deepcopy(CONFIG);cfg['pausados'].append({'id':id06,'nome':nome06,'motivo':'Preservar ciclo e dono na Central.'})

@@ -55,6 +55,11 @@ class Continuidade(unittest.TestCase):
             self.assertEqual(estado['estado'], 'bloqueado')
 
     def setUp(self):
+        # Estes casos exercitam as regras da campanha com limites legados habilitados.
+        for modulo in (m, c):
+            politica = patch.object(modulo, 'LIMITES_OPERACIONAIS', True)
+            politica.start()
+            self.addCleanup(politica.stop)
         self.agora = dt.datetime.fromisoformat('2026-11-12T12:00:00-03:00')
         self.campanha = {'versao': 1, 'ativo': True, 'produto': 'site',
                          'inicioEnvios': '2026-11-10', 'fimEnvios': '2026-11-10',
@@ -204,6 +209,18 @@ class Continuidade(unittest.TestCase):
             self.assertEqual(len(abertas), 300)
             for connection in abertas:
                 with self.assertRaises(sqlite3.ProgrammingError): connection.execute('SELECT 1')
+
+
+class ContinuidadePrimeiroContato(unittest.TestCase):
+    def test_campanha_legada_nao_impoe_prazo_ou_dia_util_ao_primeiro_contato(self):
+        sabado = dt.datetime.fromisoformat('2026-11-21T12:00:00-03:00')
+        campanha = {'ativo': True, 'fimEnvios': '2026-11-10'}
+        novo = {'produto': 'site', 'etapa': 'novo'}
+        with patch.object(m, 'LIMITES_OPERACIONAIS', False), patch.object(c, 'LIMITES_OPERACIONAIS', False):
+            self.assertIsNone(m.diagnosticar({'ativo': True}, campanha, [], sabado))
+            self.assertTrue(c.autorizar(novo, campanha, sabado, envio=True))
+            self.assertFalse(c.autorizar(novo, {'ativo': False}, sabado, envio=True))
+            self.assertFalse(c.autorizar(novo | {'etapa': 'perdido'}, campanha, sabado, envio=True))
 
 
 if __name__ == '__main__':

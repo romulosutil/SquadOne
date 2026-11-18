@@ -172,7 +172,7 @@ def validar(w):
             raise ValueError('Persistência não aguardada')
     return True
 
-def conferir_mutacao(method, path, body, config):
+def conferir_mutacao(method, path, body, config, *, somente_contexto=False):
     """Guard do publicador: regeneração antiga não desfaz a migração."""
     if config.get('versao') != 1 or config.get('estado') != 'preparado-pausado': raise ValueError('Política mínima inválida')
     parts=path.strip('/').split('/')
@@ -180,6 +180,8 @@ def conferir_mutacao(method, path, body, config):
     if len(parts)>=2 and parts[1] in config['retirados'] and method in ('PUT','PATCH','DELETE'):
         raise ValueError('Workflow aposentado: usar o publicador da operação mínima')
     if method in ('PUT','POST') and isinstance(body,dict) and 'nodes' in body:
+        edicao_contexto = somente_contexto and method == 'PUT' and len(parts) == 2
         if any(n.get('id')==MARCA for n in body['nodes']): validar(body)
-        elif (len(parts)==2 and parts[1] in CORE) or body.get('name') in config['nomesReservados']:
+        elif (len(parts)==2 and parts[1] in CORE) or (
+                body.get('name') in config['nomesReservados'] and not edicao_contexto):
             raise ValueError('Gerador legado não substitui o núcleo mínimo')

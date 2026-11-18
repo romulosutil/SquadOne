@@ -8,6 +8,7 @@ ID/nome e histórico sem mudar o grafo. UI e API administrativa direta do n8n
 não passam por esta guarda; ela não é uma ACL universal.
 """
 import json
+import re
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -137,13 +138,39 @@ def preparar_publicacao_crm_se_configurado(body):
     return body
 
 
-def api(method, path, body=None):
+def api(method, path, body=None, *, _contexto_prumo=None):
     method = method.upper()
+    somente_contexto = _contexto_prumo is not None
+    publicar_contexto = False
+    if somente_contexto:
+        anterior, contexto = _contexto_prumo
+        if (method != 'PUT' or body is not None or not re.fullmatch(r'/workflows/[A-Za-z0-9_-]+', path)
+                or path != '/workflows/' + anterior['id']):
+            raise ValueError('Sincronização de contexto exige um workflow existente')
+        atual = api('GET', path)
+        chaves_versao = ('id', 'versionId', 'versionCounter', 'updatedAt', 'active', 'activeVersionId', 'isArchived')
+        if (not atual.get('versionId') or atual.get('isArchived')
+                or any(atual.get(k) != anterior.get(k) for k in chaves_versao)):
+            raise ValueError('Workflow mudou durante a sincronização: ' + anterior['id'])
+        publicar_contexto = atual['active'] is True
+        if publicar_contexto and atual.get('activeVersionId') != atual['versionId']:
+            raise ValueError('Workflow ativo tem rascunho pendente: ' + anterior['id'])
+        if publicar_contexto and atual['id'] in DESLIGADOS:
+            raise ValueError('Publicação de contexto bloqueada para workflow pausado: ' + atual['id'])
+        from prumo_contexto import preparar
+        preparado = preparar(atual, contexto)
+        if preparado == atual:
+            return atual
+        body = corpo_workflow(preparado)
     minimo = Path.home() / '.config/claude-ops/workflow-minimo.json'
     contrato_minimo = False
     if method in ('POST', 'PUT', 'PATCH', 'DELETE') and minimo.exists():
         from workflow_minimo import conferir_mutacao, MARCA
-        conferir_mutacao(method, path, body, json.loads(minimo.read_text(encoding='utf-8')))
+        regras_minimas = json.loads(minimo.read_text(encoding='utf-8'))
+        if somente_contexto:
+            conferir_mutacao(method, path, body, regras_minimas, somente_contexto=True)
+        else:
+            conferir_mutacao(method, path, body, regras_minimas)
         contrato_minimo = isinstance(body, dict) and any(n.get('id') == MARCA for n in body.get('nodes', []))
     # A política opt-in é relida antes de hooks e rede: configuração inválida
     # nunca permite uma mutação parcial. GET continua disponível para diagnóstico.
@@ -159,8 +186,10 @@ def api(method, path, body=None):
             if bloqueio is not None:
                 print('Ativação pausada pela política operacional:', bloqueio['motivo'])
                 return bloqueio
+            if publicar_contexto and conferir_pedido('POST', path + '/activate', config=config_operacao) is not None:
+                raise ValueError('Publicação de contexto bloqueada pela política operacional')
     partes = path.strip("/").split("/")
-    if not contrato_minimo and method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
+    if not (contrato_minimo or somente_contexto) and method in ("POST", "PUT") and partes[0] == "workflows" and len(partes) <= 2 and isinstance(body, dict) and "nodes" in body:
         from serializacao_aquisicao import desembrulhar as desembrulhar_aquisicao, protegido as aquisicao_protegida, preparar_se_configurado as preparar_aquisicao
         guarda_aquisicao_obrigatoria = aquisicao_protegida(body)
         body = desembrulhar_aquisicao(body)
@@ -189,7 +218,7 @@ def api(method, path, body=None):
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}
     req = urllib.request.Request(
-        URL + path, method=method,
+        URL + path + ('?publishIfActive=true' if publicar_contexto else ''), method=method,
         headers={"X-N8N-API-KEY": KEY, "Content-Type": "application/json"},
         data=json.dumps(body).encode() if body is not None else None,
     )
@@ -201,12 +230,20 @@ def api(method, path, body=None):
         raise SystemExit(f"{method} {path} -> {e.code}: {e.read().decode()[:400]}")
 
 
-def put(wf):
-    body = {
+def corpo_workflow(wf):
+    return {
         "name": wf["name"], "nodes": wf["nodes"], "connections": wf["connections"],
         "settings": {k: v for k, v in (wf.get("settings") or {}).items() if k in SETTINGS_OK},
     }
-    return api("PUT", f"/workflows/{wf['id']}", body)
+
+
+def put(wf):
+    return api("PUT", f"/workflows/{wf['id']}", corpo_workflow(wf))
+
+
+def put_contexto_prumo(wf, contexto):
+    """Deriva a atualização do grafo lido na API, sem reaplicar geradores."""
+    return api('PUT', f"/workflows/{wf['id']}", _contexto_prumo=(wf, contexto))
 
 
 def aviso_nodes(prefixo, x, y, texto_expr, titulo="🧭 Operação", agregado=False):
