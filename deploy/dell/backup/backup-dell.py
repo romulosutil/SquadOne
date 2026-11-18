@@ -184,8 +184,7 @@ def avisar(titulo: str, texto: str, chave: str | None = None, expira_em: str | N
     """Fila do dell-status (pela lib de aviso: atômico, validado, sem criar a pasta).
     BACKUP_DELL_SEM_AVISO=1 cala o aviso em testes com repositório local.
 
-    `chave` (a fila descarta a repetida por 24 h) e `expira_em` (ISO 8601; vencido, não sai) só entram no
-    arquivo quando dados: sem eles o aviso é byte a byte o de antes.
+    `chave` deduplica por 24 h. A lib descarta `expira_em` para os avisos exclusivos do Telegram.
 
     NUNCA levanta: o aviso é o último passo do ensaio (e sai de dentro do
     `except` dele), e o backup, o status.json e o código de saída não podem
@@ -676,6 +675,13 @@ def imagem_do_servico(compose: str, servico: str) -> str:
     return img
 
 
+def motivo_do_restore(stderr: str) -> str:
+    """Mostra o erro do item que falhou quando o Restic termina só com a contagem."""
+    linhas = [linha.strip() for linha in stderr.splitlines() if linha.strip()]
+    detalhes = [linha for linha in linhas if not re.fullmatch(r'Fatal: There (?:was|were) \d+ errors?\.?', linha, re.I)]
+    return ultima_linha('\n'.join(detalhes or linhas))
+
+
 def ensaio(m: dict, a: argparse.Namespace) -> int:
     c = m["cofre"]
     base = {"tipo": "ensaio", "nome": "Ensaio de restauração"}
@@ -688,11 +694,10 @@ def ensaio(m: dict, a: argparse.Namespace) -> int:
         return 1
     except Exception as e:  # noqa: BLE001
         registrar("ensaio", **base, estado="falha", ultima_tentativa=iso(t), detalhe=f"Ensaio falhou: {str(e)[:200]}")
-        # Sem chave, o ensaio que falha todo dia (cofre das 03:30) mandava um aviso por dia. Com ela, um por 24 h;
-        # o texto muda com a causa, mas o fato de o ensaio estar falhando é um só. Vencido, não vale mais.
+        # A chave identifica a mesma falha mesmo quando o detalhe muda.
         avisar("🗄️ Backup do Dell",
                f"O ensaio de restauração falhou: {str(e)[:200]}. O cofre existe, mas não provei que ele refaz o Dell.",
-               chave="backup-dell:ensaio-falhou", expira_em=iso(agora() + dt.timedelta(hours=20)))
+               chave="backup-dell:ensaio-falhou")
         log(f"ensaio: FALHA {e}")
         return 1
     registrar("ensaio", **base, estado="ok", ultima_tentativa=iso(t), ultimo_sucesso=iso(agora()), detalhe=det)
@@ -715,7 +720,7 @@ def _ensaio(c: dict) -> str:
         r = restic(["restore", "latest", "--host", HOST, "--target", str(alvo),
                     *[x for i in incluir for x in ("--include", i)]], c, timeout=3 * 3600)
         if r.returncode != 0:
-            raise RuntimeError(f"restore: {ultima_linha(r.stderr)}")
+            raise RuntimeError(f"restore: {motivo_do_restore(r.stderr)}")
         raiz = alvo / str(HOME).lstrip("/")
         prep = raiz / PREPARO.relative_to(HOME)
         # 1. SQLite do Hermes

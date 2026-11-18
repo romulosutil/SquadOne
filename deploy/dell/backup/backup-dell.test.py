@@ -44,6 +44,12 @@ def falha(rc=1, err="deu ruim"):
 
 
 class Helpers(unittest.TestCase):
+    def test_restore_mostra_causa_antes_da_contagem_do_restic(self):
+        resumo = 'Fatal: There were 1 errors'
+        causa = 'ignoring error for /preparo/n8n.sql: connection reset by peer'
+        self.assertEqual(bd.motivo_do_restore(f'{causa}\n{resumo}\n'), causa)
+        self.assertEqual(bd.motivo_do_restore(resumo), resumo)
+
     def test_no_remoto(self):
         self.assertEqual(bd.no_remoto("gdrive", "PRUMO/Sites antes da venda"), "gdrive:PRUMO/Sites antes da venda")
         self.assertEqual(bd.no_remoto("gdrive-estrutura", ""), "gdrive-estrutura:")          # raiz do remote
@@ -252,8 +258,7 @@ class AvisoPelaLib(unittest.TestCase):
         esperado = '{"titulo": "🗄️ Backup do Dell", "texto": "Ensaio de restauração ok: x.", "origem": "backup-dell"}'
         self.assertEqual(self.gravado_pela_lib(self.TITULO, "Ensaio de restauração ok: x."), esperado.encode("utf-8"))
 
-    def test_aviso_de_ensaio_que_falhou_leva_chave_e_validade(self):
-        # A chave (24 h) impede um aviso por dia enquanto o ensaio falhar; o dell-status tem de aceitar o formato.
+    def test_aviso_de_ensaio_que_falhou_leva_chave_sem_expirar_no_telegram(self):
         bd.FILA_AVISOS.mkdir()
         bd.PASTAS_DA_LIB = self.lib_do_repo
         saida = io.StringIO()
@@ -262,8 +267,7 @@ class AvisoPelaLib(unittest.TestCase):
                       expira_em=bd.iso(bd.agora() + bd.dt.timedelta(hours=20)))
         dados = json.loads(self.fila()[0].read_text(encoding="utf-8"))
         self.assertEqual(dados["chave"], "backup-dell:ensaio-falhou")
-        self.assertIn("expira_em", dados)
-        self.assertEqual(set(dados), {"titulo", "texto", "origem", "chave", "expira_em"})
+        self.assertEqual(set(dados), {"titulo", "texto", "origem", "chave"})
 
     def test_nome_e_atomicidade(self):
         bd.FILA_AVISOS.mkdir()

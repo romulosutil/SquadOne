@@ -35,7 +35,7 @@ Meu Drive/
   restaura o essencial numa pasta à parte e sobe um Postgres e um n8n
   descartáveis, sem rede, para provar que as credenciais do n8n decifram com a
   chave do cofre. O resultado chega pela fila de avisos do dell-status; o de falha leva a chave
-  `backup-dell:ensaio-falhou` (um por 24 h, vence em 20 h), para um ensaio que falha todo dia não
+  `backup-dell:ensaio-falhou` (um por 24 h), para um ensaio que falha todo dia não
   virar uma mensagem por dia.
 
 Tudo vem de `fontes.toml`. **Fonte nova = bloco novo no manifesto**; o runner

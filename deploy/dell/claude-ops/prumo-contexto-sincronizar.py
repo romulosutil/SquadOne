@@ -11,7 +11,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--aplicar", action="store_true")
     args = ap.parse_args()
-    from n8n import api, put
+    from n8n import api, put_contexto_prumo
     minimo = Path.home() / '.config/claude-ops/workflow-minimo.json'
     retirados = set(json.loads(minimo.read_text())['retirados']) if minimo.exists() else set()
     contexto = carregar()
@@ -39,14 +39,13 @@ def main():
                 backup = pasta / (wf["id"] + ".json")
                 backup.write_text(json.dumps(wf, ensure_ascii=False), encoding="utf-8")
                 backup.chmod(0o600)
-                # A chamada passa pelo guard permanente e preserva settings e credenciais.
-                put(preparado)
+                salvo = put_contexto_prumo(wf, contexto)
                 atual = api("GET", "/workflows/" + wf["id"])
                 if bool(atual["active"]) != bool(wf["active"]):
                     raise RuntimeError("Estado ativo mudou inesperadamente: " + wf["id"])
-                # PUT não deve depender de publicar a versão editada manualmente no editor.
-                if wf["active"]:
-                    api("POST", "/workflows/" + wf["id"] + "/activate")
+                if (atual.get('versionId') != salvo.get('versionId') or preparar(atual, contexto) != atual
+                        or (wf['active'] and atual.get('activeVersionId') != atual.get('versionId'))):
+                    raise RuntimeError('Contexto não confirmado na versão esperada: ' + wf['id'])
             modificados.append({"id": wf["id"], "nome": wf["name"], "ativo": wf["active"]})
         cursor = pagina.get("nextCursor")
         if cursor:
