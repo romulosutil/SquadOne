@@ -42,10 +42,10 @@ timer `linkedin-agente` consome pedidos da agenda do LinkedIn.
 | Workflow | Evidência e uso |
 | --- | --- |
 | CRM | A Central respondeu HTTP 200, com retrato das 19h00 e seis fontes exibidas sem erro. |
-| Entrada WhatsApp | Último sucesso salvo às 19h05. As 16 recusas de permissão ocorreram até 11h13 em um nó retirado do grafo ativo. A recuperação individual desses registros segue sem confirmação. |
+| Entrada WhatsApp | Último sucesso salvo às 19h05. As 16 recusas de permissão ocorreram até 11h13 em um nó retirado do grafo ativo. O relatório rastreou oito execuções ao mesmo registro de leitura e confirmou no CRM marcos iguais ou posteriores. As demais ficaram sem reconciliação individual. |
 | Agenda WhatsApp | Pedido entregue às 19h04. O registro do dia tinha dez envios confirmados. |
 | Agenda LinkedIn | Pedido entregue às 19h00. O ledger do dia ainda estava zerado. |
-| Pesquisa de empresas e Pesquisa diária para WhatsApp | A rodada agendada de pesquisa e higiene gerou retrato às 18h10. A pesquisa diária gerou em produção às 17h00 um relatório com estado `concluida`, zero mensagens e zero alterações comerciais. A correção RSS está ativa nos dois grafos. A entrada RSS sob demanda de Pesquisa de empresas segue sem evidência própria de execução em produção após a correção. |
+| Pesquisa de empresas e Pesquisa diária para WhatsApp | A rodada agendada de pesquisa e higiene gerou retrato às 18h10. O relatório da validação no Dell confirmou HTTP 200 na entrada RSS sob demanda, com duas consultas concluídas. Também confirmou a execução do relatório diário, com saída gravada, zero mensagens e zero alterações comerciais. |
 | Avisar falha pelo Hermes | Fluxo geral ativo. A fila estava vazia às 19h06 e o último aceite registrado do Telegram era das 17h29, sem falhas consecutivas. A via direta do n8n tem o registro de sucessos desabilitado. |
 | Medição de eventos | Painel privado respondeu HTTP 200 com dados das 19h05. A lista de origens autorizadas continua publicada pelo workflow. |
 | Fonte — falha sem dados | Arquivado às 18h01. A Fonte com IA, já pausada, era o único workflow que o referenciava. O aviso sanitizado e a referência foram preservados. |
@@ -53,6 +53,18 @@ timer `linkedin-agente` consome pedidos da agenda do LinkedIn.
 O sincronizador `prumo-contexto.service` registrou execução bem-sucedida às
 19h03. Os consumidores, os IDs, as fontes e a reversão da pausa ficam no
 [guia do n8n](ops/n8n/README.md#auditoria-de-consumidores--18112026).
+
+## Recuperação e pendências
+
+O ensaio isolado restaurou 48,6 GB e terminou às 17h09. Conferiu o PostgreSQL
+do n8n, a decifragem de suas credenciais e a integridade de bancos do Hermes.
+O snapshot registrou 12,01 GB novos antes da compactação e 1,03 GB
+compactado. O próximo cofre agendado é a primeira rodada prevista para
+registrar ambos os valores no monitor. O alerta de volume continua aberto.
+
+A entrega da Visão semanal segue por confirmar em 23/11 às 08h30. No
+Easypanel, a conexão real ao Google Calendar e a persistência após redeploy
+dependem de conferência pelo acesso autorizado.
 
 ## Hermes
 

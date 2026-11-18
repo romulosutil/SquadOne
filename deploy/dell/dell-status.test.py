@@ -2151,6 +2151,18 @@ class ServicosHttpEUnitsParadas(unittest.TestCase):
 
 
 class BackupEFilas(unittest.TestCase):
+    def test_alerta_de_volume_distingue_medicao_de_diagnostico(self):
+        t = br("2026-11-18T19:00").astimezone(timezone.utc)
+        for detalhe in ("12011 MB novos numa rodada (pasta grande nova sem regra?)",
+                        "Volume antes da compactação acima do limite de 500 MB"):
+            with self.subTest(detalhe=detalhe):
+                f = {"nome": "Cofre", "tipo": "cofre", "estado": "atencao",
+                     "ultimo_sucesso": ds.iso(t), "detalhe": detalhe}
+                c = ds._fonte_do_backup("cofre", f, t)
+                self.assertEqual(c["estado"], "atencao")
+                self.assertIn("tamanho compactado", c["o_que_fazer"])
+                self.assertNotIn("excluir", c["o_que_fazer"])
+
     def test_ensaio_com_ultima_rodada_falha_e_atencao_mesmo_com_sucesso_recente(self):
         t = br("2026-10-19T12:00").astimezone(timezone.utc)
         recente = ds.iso(t - timedelta(days=10))

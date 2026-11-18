@@ -76,6 +76,17 @@ def marcar(w):
     w.setdefault('settings', {}).update(saveDataSuccessExecution='none', saveDataErrorExecution='all')
     return w
 
+def codigo_abertura(mensagem):
+    # O sandbox do Code node não fornece a classe global URL.
+    return """const q=$('Clique (enviar)').first().json.query??{};
+const l=$input.first()?.json??{};const pid=String(q.place_id??'');
+const anterior=String(l.wa_me||'');let destino=""" + json.dumps(CENTRAL) + ";\n" + """const canal=new RegExp('^https://wa[.]me/(55[0-9]{10,11})(?:[?][^#]*)?$').exec(anterior);
+if(pid && l.place_id===pid && canal){
+const novo=['novo','pronto',''].includes(String(l.status??'')) && !['enviado_em','respondeu_em','resposta_em','ultima_entrada_em','ultima_saida_em','recusado_em','fechado_em'].some(k=>String(l[k]??'').trim());
+destino=anterior;
+if(novo && Date.parse(String(l.criado_em??''))>=Date.parse(""" + json.dumps(mensagem['desde']) + "))destino='https://wa.me/'+canal[1]+'?text='+encodeURIComponent(" + json.dumps(mensagem['texto'], ensure_ascii=False) + ");\n" + """}return [{json:{destino}}];"""
+
+
 def compor(fontes, mensagem):
     fontes = copy.deepcopy(fontes)
     entrada = fontes[ENTRADA]
@@ -111,12 +122,14 @@ def compor(fontes, mensagem):
     # Compatibilidade dos links de primeiro contato. Sem escrita de clique ou envio.
     clique = subset(fontes[CLIQUE], {'Clique (enviar)', 'Ler a linha', 'Decidir', 'Abrir o canal'})
     decidir = no(clique, 'Decidir')
-    decidir['parameters']['jsCode'] = """const q=$('Clique (enviar)').first().json.query??{};
-const l=$input.first()?.json??{};const pid=String(q.place_id??'');
-const anterior=String(l.wa_me||'');let destino=""" + json.dumps(CENTRAL) + ";\n" + """if(pid && l.place_id===pid){try{const u=new URL(anterior);if(u.protocol==='https:' && u.hostname==='wa.me' && /^55\\d{10,11}$/.test(u.pathname.slice(1))){
-const novo=['novo','pronto',''].includes(String(l.status??'')) && !['enviado_em','respondeu_em','resposta_em','ultima_entrada_em','ultima_saida_em','recusado_em','fechado_em'].some(k=>String(l[k]??'').trim());
-if(novo && Date.parse(String(l.criado_em??''))>=Date.parse(""" + json.dumps(mensagem['desde']) + "))u.searchParams.set('text'," + json.dumps(mensagem['texto'], ensure_ascii=False) + ");\n" + """destino=u.toString();}}catch{}}return [{json:{destino}}];"""
-    clique['connections']['Decidir'] = {'main': [[edge('Abrir o canal')]]}
+    decidir['parameters']['jsCode'] = codigo_abertura(mensagem)
+    # O subconjunto remove os passos antigos entre o webhook e a leitura.
+    # Reconectar a cadeia completa para o n8n encontrar a resposta do webhook.
+    clique['connections'] = {
+        'Clique (enviar)': {'main': [[edge('Ler a linha')]]},
+        'Ler a linha': {'main': [[edge('Decidir')]]},
+        'Decidir': {'main': [[edge('Abrir o canal')]]},
+    }
     anexar(crm, clique, 'Abrir · ')
 
     # Convites aposentados levam à Central, sem formar novas campanhas ou textos.
@@ -143,6 +156,8 @@ if(novo && Date.parse(String(l.criado_em??''))>=Date.parse(""" + json.dumps(mens
     pesquisa['name'] = 'PRUMO · Pesquisa de empresas'
     no(pesquisa, 'Conferir semana autorizada')['parameters']['jsCode'] = 'return [{json:{limite:5}}];'
     pesquisa.setdefault('settings', {})['errorWorkflow'] = FALHAS
+    from pesquisa_google import anexar_google
+    anexar_google(pesquisa)
     falhas = fontes[FALHAS]
     no(falhas,'Falha: montar aviso')['parameters']['jsCode'] = """return $input.all().map(item=>{
 const id=String(item.json.workflow?.id??'desconhecido').replace(/[^A-Za-z0-9_-]/g,'').slice(0,80);
@@ -170,6 +185,16 @@ def validar(w):
         if isinstance(p.get('workflowJson'),str): validar(json.loads(p['workflowJson']))
         if n['type'].endswith('executeWorkflow') and p.get('options',{}).get('waitForSubWorkflow') is False:
             raise ValueError('Persistência não aguardada')
+        if n['type'].endswith('webhook') and p.get('responseMode') == 'responseNode':
+            pendentes = [n['name']]; visitados = set()
+            while pendentes:
+                atual = pendentes.pop()
+                if atual in visitados: continue
+                visitados.add(atual)
+                pendentes.extend(d['node'] for outputs in w['connections'].get(atual, {}).values()
+                                 for links in outputs for d in links)
+            if not any(r['name'] in visitados and r['type'].endswith('respondToWebhook') and not r.get('disabled') for r in w['nodes']):
+                raise ValueError('Webhook sem resposta alcançável: ' + n['name'])
     return True
 
 def conferir_mutacao(method, path, body, config, *, somente_contexto=False):

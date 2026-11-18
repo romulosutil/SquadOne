@@ -1364,8 +1364,9 @@ def _fonte_do_backup(fid: str, f: dict, t: datetime) -> dict:
              "importantes, peça ao Claude; se não, peça para entrarem no \"excluir\" do fontes.toml.")
     elif "faltando:" in detalhe:
         o = "Um arquivo que refaz o Dell sumiu do cofre (veja o detalhe). Peça ao Claude conferir."
-    elif "MB novos numa rodada" in detalhe:
-        o = "Entrou uma pasta grande nova no cofre. Se ela não precisa de backup, peça ao Claude pô-la no \"excluir\"."
+    elif "MB novos numa rodada" in detalhe or "Volume antes da compactação acima do limite" in detalhe:
+        o = ("O cofre registrou volume novo acima do limite configurado. Compare o tamanho compactado e "
+             "os arquivos alterados entre os snapshots para localizar a origem.")
     elif estado == "falha":
         o = "O backup está parado além do limite. Veja o detalhe e peça ao Claude: \"o backup do Dell parou\"."
     elif f.get("tipo") == "ensaio" and f.get("estado") == "falha":
