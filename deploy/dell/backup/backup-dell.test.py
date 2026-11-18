@@ -19,6 +19,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 AQUI = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("backup_dell", AQUI / "backup-dell.py")
@@ -82,6 +83,36 @@ class Helpers(unittest.TestCase):
         self.assertTrue(bd.dentro_da_janela(["23:00", "02:00"], h("23:30")))   # atravessa a meia-noite
         self.assertTrue(bd.dentro_da_janela(["23:00", "02:00"], h("01:00")))
         self.assertFalse(bd.dentro_da_janela(["23:00", "02:00"], h("12:00")))
+
+
+class VolumeDoCofre(unittest.TestCase):
+    def test_distingue_volume_bruto_e_compactado_sem_mudar_o_limite(self):
+        recente = bd.iso(bd.agora() - dt.timedelta(hours=1))
+        status = {"fontes": {"cofre": {"ultima_leitura": recente, "ultima_manutencao": recente}}}
+        resumo = {"message_type": "summary", "snapshot_id": "777b84e8",
+                  "data_added": 12010894245, "total_bytes_processed": 57630848217}
+        for compactado in (1025184541, 0, None):
+            with self.subTest(compactado=compactado):
+                dados = dict(resumo)
+                if compactado is not None:
+                    dados["data_added_packed"] = compactado
+                registrar = mock.Mock()
+                with mock.patch.multiple(bd, preparar=lambda _: [],
+                                         restic=mock.Mock(return_value=ok(json.dumps(dados))),
+                                         registrar=registrar, ler_status=lambda: status, log=mock.Mock()):
+                    self.assertEqual(bd._cofre({}, {"alerta_mb": 500}, SimpleNamespace(dry_run=False), {}), 0)
+                registro = registrar.call_args.kwargs
+                self.assertEqual(registro["estado"], "atencao")
+                self.assertEqual(registro["novos_mb"], 12011)
+                self.assertIn("12011 MB novos antes da compactação", registro["detalhe"])
+                self.assertIn("acima do limite de 500 MB", registro["detalhe"])
+                if compactado is None:
+                    self.assertIsNone(registro["novos_compactados_mb"])
+                    self.assertNotIn("MB novos compactados", registro["detalhe"])
+                else:
+                    esperado = round(compactado / 1e6)
+                    self.assertEqual(registro["novos_compactados_mb"], esperado)
+                    self.assertIn(f"{esperado} MB novos compactados", registro["detalhe"])
 
 
 class Espelho(unittest.TestCase):

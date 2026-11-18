@@ -139,7 +139,7 @@ regeneração.
 | Função | Workflow | Fonte |
 | --- | --- | --- |
 | CRM, entrada, pesquisa de empresas e falhas | `AsjxktRCqRJSmj9P`, `fd8gz4uDQkJtEd9W`, `pwNiZI1rBGzMJ2dP`, `5FlXnne7lTMihLic` | [Composição do núcleo](../../deploy/dell/claude-ops/workflow_minimo.py) e fontes privadas da Mel |
-| Pesquisa RSS e relatório diário | `pwNiZI1rBGzMJ2dP`, `OhFg51gIIWnmIF6r` | Cópias `pesquisa_google.py` e `pesquisa_whatsapp_n8n.py` em `~/.local/share/claude-ops/` no Dell |
+| Pesquisa RSS e relatório diário | `pwNiZI1rBGzMJ2dP`, `OhFg51gIIWnmIF6r` | [Triagem RSS](../../deploy/dell/claude-ops/pesquisa_google.py) e [relatório diário](../../deploy/dell/claude-ops/pesquisa_whatsapp_n8n.py) |
 | Agenda WhatsApp | `TunkKi3HnYLXJati` | Cópia `whatsapp-n8n.py` em `~/.local/share/claude-ops/` no Dell |
 | Agenda LinkedIn | `Sk4A9PMCD35y6rrJ` | Cópia `linkedin-n8n.py` em `~/.local/share/claude-ops/` no Dell |
 | Medição | `qA5R9UXZj4UgIjFi` | [Instalador da Medição](../../deploy/dell/claude-ops/prumo-publico.py) |

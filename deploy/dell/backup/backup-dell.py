@@ -614,6 +614,8 @@ def _cofre(m: dict, c: dict, a: argparse.Namespace, base: dict) -> int:
         log(f"cofre: FALHA {ultima_linha(r.stderr)}")
         return 1
     mb = resumo.get("data_added", 0) / 1e6
+    bytes_compactados = resumo.get("data_added_packed")
+    mb_compactados = round(bytes_compactados / 1e6) if isinstance(bytes_compactados, int) else None
     avisos = []
     if r.returncode == 3:
         # Diz quais: sem isso a Central só sabe que "alguns" ficaram de fora.
@@ -626,10 +628,14 @@ def _cofre(m: dict, c: dict, a: argparse.Namespace, base: dict) -> int:
         avisos.append("preparo: " + "; ".join(problemas))
     if faltando:
         avisos.append("faltando: " + ", ".join(faltando))
-    if mb > c.get("alerta_mb", 500):
-        avisos.append(f"{mb:.0f} MB novos numa rodada (pasta grande nova sem regra?)")
+    limite_mb = c.get("alerta_mb", 500)
+    if mb > limite_mb:
+        avisos.append(f"Volume antes da compactação acima do limite de {limite_mb} MB")
     detalhe = (f"Snapshot {str(resumo.get('snapshot_id', ''))[:8]} às {agora():%H:%M}: "
-               f"{mb:.0f} MB novos de {resumo.get('total_bytes_processed', 0) / 1e9:.1f} GB lidos")
+               f"{mb:.0f} MB novos antes da compactação")
+    if mb_compactados is not None:
+        detalhe += f", {mb_compactados} MB novos compactados"
+    detalhe += f", {resumo.get('total_bytes_processed', 0) / 1e9:.1f} GB lidos"
     # Sem o dump de um banco (o do n8n refaz fluxos e credenciais; os dos
     # projetos, os dados deles) o cofre não refaz o Dell: falhou.
     critico = any(p.startswith(tuple(x["nome"] + ":" for x in c.get("preparo", []) if eh_critico(x)))
@@ -637,7 +643,8 @@ def _cofre(m: dict, c: dict, a: argparse.Namespace, base: dict) -> int:
     estado = "falha" if critico else "atencao" if avisos else "ok"
     campos = dict(**base, estado=estado, ultima_tentativa=iso(t),
                   detalhe=detalhe + (". Atenção: " + " · ".join(avisos) if avisos else ""),
-                  snapshot=str(resumo.get("snapshot_id", ""))[:8], novos_mb=round(mb))
+                  snapshot=str(resumo.get("snapshot_id", ""))[:8], novos_mb=round(mb),
+                  novos_compactados_mb=mb_compactados)
     if not critico:
         campos["ultimo_sucesso"] = iso(agora())
     registrar("cofre", **campos)
