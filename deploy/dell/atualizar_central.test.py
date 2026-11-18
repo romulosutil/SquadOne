@@ -20,7 +20,9 @@ class Updater(unittest.TestCase):
         self.state=self.home/'state';self.state.mkdir()
         for f in ('frente-comercial-config.json','campanha-site-ativa.json'):
             (self.data/f).write_text('{"ativo":false}',encoding='utf8')
-        self.patches=[patch.object(u,'DATA',self.data),patch.object(u,'ROOT',self.root),patch.object(u,'STATE',self.state)]
+        self.pagina_linkedin = self.home/'pagina-instalada.html'
+        self.patches=[patch.object(u,'DATA',self.data),patch.object(u,'ROOT',self.root),patch.object(u,'STATE',self.state),
+                      patch.object(u,'PAGINA_LINKEDIN',self.pagina_linkedin)]
         for p in self.patches:p.start();self.addCleanup(p.stop)
     def fake_cmd(self,*args,**kwargs):
         if 'UnitFileState' in args:return 'disabled'
@@ -79,6 +81,7 @@ class Updater(unittest.TestCase):
             u.main();g.assert_called_once();build.assert_not_called();command.assert_not_called()
     def test_sucesso_revalida_antes_e_depois_e_guarda_bundle(self):
         (self.root/'dist').mkdir();(self.root/'dist/server.cjs').write_text('antigo')
+        self.pagina_linkedin.write_bytes(b'pagina auxiliar instalada')
         def git(*a):return 'abc' if a[0]=='rev-parse' else ''
         def build(stage,target,*flags):
             (stage/'dist').mkdir();(stage/'dist/server.cjs').write_text('novo')
@@ -88,8 +91,24 @@ class Updater(unittest.TestCase):
         self.assertGreaterEqual(g.call_count,4);self.assertEqual(idle.call_count,3)
         self.assertEqual([x.args[2] for x in command.call_args_list],['stop','start'])
         self.assertEqual((self.root/'dist/server.cjs').read_text(),'novo')
+        self.assertEqual((self.root/'dist/linkedin.html').read_bytes(), b'pagina auxiliar instalada')
         self.assertEqual(next(self.state.glob('dist-backup-*')).joinpath('server.cjs').read_text(),'antigo')
         self.assertEqual((self.state/'construido').read_text().strip(),'abc')
+
+    def test_pagina_linkedin_do_proprio_build_tem_precedencia(self):
+        self.pagina_linkedin.write_bytes(b'instalada')
+        (self.root/'dist').mkdir()
+        (self.root/'dist/server.cjs').write_bytes(b'antigo')
+        def git(*a):return 'abc' if a[0]=='rev-parse' else ''
+        def build(stage, target, *flags):
+            (stage/'dist').mkdir()
+            (stage/'dist/server.cjs').write_bytes(b'bundle')
+            (stage/'dist/linkedin.html').write_bytes(b'versionada')
+            if flags[0]: (stage/'node_modules').mkdir()
+        with patch.object(u,'guardas'),patch.object(u,'ocioso'),patch.object(u,'git',side_effect=git), \
+             patch.object(u,'construir',side_effect=build),patch.object(u,'cmd'),patch('sys.argv',['updater']):
+            u.main()
+        self.assertEqual((self.root/'dist/linkedin.html').read_bytes(), b'versionada')
     def test_ocupado_apos_build_nao_mescla_troca_ou_reinicia(self):
         calls=[]
         def git(*a):
