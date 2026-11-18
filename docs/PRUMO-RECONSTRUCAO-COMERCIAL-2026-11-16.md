@@ -1,5 +1,9 @@
 # Reconstrução comercial da Prumo
 
+> A contenção de 16/11 é histórica. As decisões de 17 e 18/11 substituíram
+> o bloqueio operacional de primeiros contatos. Consulte o
+> [Estado atual](../ESTADO-ATUAL.md) e as [regras](../RULES.md).
+
 Decisão de trabalho de 16/11/2026. Responsável pelo negócio: Rômulo. Escopo: Prumo, operação comercial no SquadOne, portfólio, aquisição, entrega e recebimento. A [base de pesquisa](PRUMO-PESQUISA-CRM-2026-11-16.md) separa fatos, hipóteses e limites.
 
 **Direção:** transformar a capacidade técnica em contratos entregues, recebidos e economicamente sustentáveis. A Prumo começa com venda conduzida pelo fundador e ofertas delimitadas; o SquadOne organiza evidência e execução. Volume de cadastros, mensagens ou documentos deixa de representar progresso comercial.

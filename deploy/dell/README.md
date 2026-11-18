@@ -1,4 +1,26 @@
-## Simplificação publicada e pausada (16/11/2026)
+# Central de Operações no Dell
+
+O [Estado atual](../../ESTADO-ATUAL.md) registra a conferência em produção.
+Os registros datados deste guia documentam instalações e decisões anteriores.
+
+## Conferência operacional
+
+Compare o commit do checkout com o marcador em
+`~/.local/state/atualizar-central/construido`. A conclusão do atualizador
+fica no journal de `atualizar-central.service`. A Central responde no
+loopback `127.0.0.1:9120`. O retrato do CRM informa `geradoEm`, as fontes
+disponíveis e a última falha registrada.
+
+Para primeiro contato, confira `whatsapp-agenda.path` e
+`linkedin-agente.timer`, as execuções do n8n e os recibos dos canais.
+O padrão de instalação é pausado. A autorização de produção e o arquivo
+operacional têm precedência sobre os exemplos históricos deste guia.
+[Regras atuais](../../RULES.md) · [Guia do n8n](../../ops/n8n/README.md)
+
+## Histórico da simplificação e pausa (16/11/2026)
+
+> A retomada de 17/11 substituiu a pausa no Dell. A decisão de 18/11 migrou
+> os disparos da frente e da reposição para a agenda do n8n.
 
 O núcleo comercial usa Pesquisa, CRM, Entrada WhatsApp e Falhas. Quinze fluxos
 legados ficaram arquivados, com fontes privadas para reversão. Medição e erro
@@ -13,7 +35,10 @@ retomadas e revisões legadas foi desligada; a revisão diária descritiva perma
 Qualquer continuação de conversa cabe a Rômulo. Não reconectar nem retomar fila
 antiga como parte de manutenção ou regeneração.
 
-## Integração anterior e política (16/11/2026)
+## Histórico da integração e política (16/11/2026)
+
+> As restrições desta implantação descrevem a janela de 16/11. Consulte as
+> [regras atuais](../../RULES.md) para a política operacional posterior.
 
 O atualizador automático usa o bootstrap `atualizar-central.sh`, instalado em
 `~/.local/bin/atualizar-central`, e executa o módulo versionado
@@ -56,8 +81,6 @@ ficam no estado normal da frente; dedupe dos avisos fica em
 Publicação com backup e testes: `scripts/publicar-continuidade-comercial.py` na
 Mel, após preparar o stage descrito pelo script. `--testar` retorna antes de
 qualquer alteração dos serviços e da configuração produtiva.
-
-# Central de Operações no Dell
 
 ## Limpeza e pausas conferidas em 03/11/2026
 
@@ -137,6 +160,10 @@ foi preservada; a publicação e a revisão de 24h não reativam o executor.
 
 ## PRUMO: medição e Fonte com Luna (18/10/2026)
 
+> A Medição está ativa. A Fonte com IA está pausada e o aviso privado foi
+> arquivado. O instalador `prumo-publico.py` publica a Medição e preserva seu
+> workflow de falhas. A cadência antiga da Fonte é histórica.
+
 O site consulta uma fila pública persistente no serviço Easypanel
 `aladdin/prumo-automacoes`, nunca expõe o n8n ou o Hermes. O workflow
 `PRUMO · Fonte com IA (Luna do Hermes)` (`yNLwUy5bdEmC4Qss`) consulta a fila a cada
@@ -163,10 +190,10 @@ privado só em arquivo 600. Nunca versionar regras ou acessos reais de clientes.
 Guia completo, limites, retenção e validação: repositório PRUMO,
 `automacao-publica/README.md`.
 
-Após o push, reinstalar `luna_workflows.py`, `fonte_luna.py`, `prumo-publico.py`,
+Na implantação de 18/10, foram reinstalados `luna_workflows.py`, `fonte_luna.py`, `prumo-publico.py`,
 `prumo-fonte-cliente.py`, `prumo-metricas.py`, a base de exemplo, `raio-x` e
-`prumo-mapa/modelo_raio_x.py`, conforme `instalados.json`. Recarregar o systemd,
-reiniciar `luna-workflows` e `prumo-metricas`; executar o instalador dos workflows.
+`prumo-mapa/modelo_raio_x.py`, conforme `instalados.json`. A instalação recarregou o systemd,
+reiniciou `luna-workflows` e `prumo-metricas` e publicou os workflows daquele período.
 Testes: `fonte_luna.test.py`, `luna_workflows.test.py`,
 `workflow_confiabilidade.test.py` e `raio-x --testar`. Sem envio de mensagens.
 
@@ -389,7 +416,10 @@ Instale também `deploy/hermes/scripts/validate-dell-operations.sh` como
 `~/.local/bin/dell-validate`. O comando é somente leitura, não imprime segredos
 e valida systemd, Docker, n8n, credenciais OAuth, GitHub, Chromium e SquadOne.
 
-## Time de primeiros contatos (18–19/10/2026; ativo no config, timer parado)
+## Histórico do time de primeiros contatos (18–19/10/2026)
+
+> A agenda de 18/11 substituiu o timer antigo. Consulte o
+> [guia do n8n](../../ops/n8n/README.md#primeiros-contatos-diários--18112026).
 
 **Estado em 19/10/2026:** o `frente-comercial-config.json` diz `ativo: true` (autorizado em 18/10) e o
 `frente-comercial.timer` está parado na Mel, então nada roda nem é enviado; a tela mostra "ativo, mas o ciclo está
@@ -421,7 +451,11 @@ Instalação: o Python vai para `~/.local/bin/frente-comercial`; service/timer v
 `~/.config/systemd/user/`. Validar com `python3 deploy/dell/frente-comercial.test.py`. O timer não
 substitui o observador nem o n8n: os dois precisam estar no ar.
 
-## Rotinas comerciais agendadas (29/10/2026)
+## Histórico das rotinas comerciais agendadas (29/10/2026)
+
+> A retomada agendada descrita aqui pertence à operação anterior. O contrato
+> atual limita a automação à primeira mensagem e encaminha as respostas
+> para Rômulo.
 
 **Pausa dos primeiros contatos de 28/10/2026, 19:41.** Ninguém pausou à mão: a Evolution teve um `stream errored out`
 (503) às 19:41:53, a proteção automática da Central (`server/protecao-prospeccao.ts`, conferência a cada 60 s) viu a conta
