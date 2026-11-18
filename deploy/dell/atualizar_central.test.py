@@ -1,4 +1,5 @@
 import importlib.util
+import hashlib
 import json
 import io
 import tarfile
@@ -28,6 +29,46 @@ class Updater(unittest.TestCase):
         if 'UnitFileState' in args:return 'disabled'
         if 'show' in args:return 'inactive'
         return ''
+    def test_retira_coletor_pausado_com_backup_e_repeticao_segura(self):
+        exec_path = self.home / '.local/bin/hermes-uso-skills'
+        exec_path.parent.mkdir(parents=True)
+        exec_path.write_bytes(b'legado')
+        arquivos = {'.local/bin/hermes-uso-skills': hashlib.sha256(b'legado').hexdigest()}
+        backup = self.state / 'retiradas/hermes-uso-skills'
+
+        def systemctl(*args):
+            if 'UnitFileState' in args:
+                return 'disabled' if 'hermes-uso-skills.timer' in args else 'static'
+            if 'ActiveState' in args:
+                return 'inactive'
+            return ''
+
+        with patch.object(u, 'COLETOR_APOSENTADO', arquivos), patch.object(u, 'cmd', side_effect=systemctl) as command:
+            u.retirar_coletor_skills(self.home, backup)
+            self.assertFalse(exec_path.exists())
+            self.assertEqual((backup / exec_path.name).read_bytes(), b'legado')
+            self.assertTrue((backup / 'concluido').is_file())
+            command.reset_mock()
+            u.retirar_coletor_skills(self.home, backup)
+            command.assert_not_called()
+
+    def test_preserva_coletor_com_copia_divergente(self):
+        exec_path = self.home / '.local/bin/hermes-uso-skills'
+        exec_path.parent.mkdir(parents=True)
+        exec_path.write_bytes(b'alterado')
+        backup = self.state / 'retiradas/hermes-uso-skills'
+
+        def systemctl(*args):
+            if 'UnitFileState' in args:
+                return 'disabled' if 'hermes-uso-skills.timer' in args else 'static'
+            return 'inactive'
+
+        with patch.object(u, 'cmd', side_effect=systemctl):
+            with self.assertRaisesRegex(u.Bloqueado, 'Cópia divergente'):
+                u.retirar_coletor_skills(self.home, backup)
+        self.assertEqual(exec_path.read_bytes(), b'alterado')
+        self.assertFalse(backup.exists())
+
     def test_guardas_exigem_trava_timers_servicos_e_config(self):
         good={'aquisicao':{'estado':'bloqueada','primeirosContatosAutomaticos':False},'proximoEnvioEm':None}
         with patch.object(u,'cmd',side_effect=self.fake_cmd),patch.object(u,'ler_api',return_value=good):

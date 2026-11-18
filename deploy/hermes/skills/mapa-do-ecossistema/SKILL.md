@@ -163,7 +163,6 @@ Unidades `systemctl --user` (uma linha por unit versionada em `deploy/dell/` e
 | `entrada-organizar.timer` | a cada 5 min | organiza a fila da Entrada; o que mudou vira aviso na fila (entre 22h e 7h espera o silêncio acabar) |
 | `entrada.service` | contínuo | a página privada da Entrada da Mel (`127.0.0.1:9130`, pela tailnet): texto e arquivos para a Mel |
 | `graphify-projetos.timer` | 03:00, persistente | o Graphify sem modelo sobre `~/SquadOne`, `~/prumo`, `~/auto-site`, `~/crm-silmer` e os espelhos de `~/Mel/Repos`; teto de 1 h. Só falha vira aviso, pela fila |
-| `hermes-uso-skills.timer` | dia 1, 06:00, persistente | foto mensal do uso das skills (só lê `.usage.json`) |
 | `backup-dell-espelho.timer` | a cada hora, :05 | espelho só de leitura no Drive: `PRUMO/Sites antes da venda` (de `~/auto-site`), `PRUMO/Consultoria` (de `~/prumo`, 1x ao dia) e `PRUMO/Entregas` (de `~/prumo-entregas`, 1x ao dia) |
 | `backup-dell-cofre.timer` | 03:30, persistente | cofre restic cifrado em `Backups/dell-worker` (home, n8n e chave, Hermes); manutenção semanal e ensaio de restauração mensal, que avisa por você |
 | `estrutura-coletar.service` | sob demanda (preparo do backup) | coleta o mapa e as configurações da Mel para a pasta `Estrutura` |

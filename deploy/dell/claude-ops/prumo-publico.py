@@ -1,9 +1,7 @@
-"""Instala os dois workflows do serviço público do PRUMO, sem enviar mensagens.
+"""Instala a Medição do serviço público do PRUMO, sem enviar mensagens.
 
-Segredos são credenciais cifradas do n8n. Os nomes são estáveis para atualização
-idempotente. Perguntas e respostas da Fonte não ficam no histórico de execuções
-(nem nas com erro: por isso a Fonte guarda saveDataErrorExecution "none"; a Medição só
-conta eventos e guarda as execuções com erro, "all", para a falha deixar rastro).
+Os construtores da Fonte e do aviso sanitizado preservam o contrato de
+restauração. A Fonte pausada e o aviso arquivado ficam fora da instalação.
 
 Cadência (19/10/2026): a Fonte consulta a fila de perguntas a cada 30 s (era 5 s, 17.280
 execuções por dia para um trabalho raro; a demo responde em até 30 s). A Medição roda a
@@ -162,25 +160,19 @@ def instalar():
     from n8n import api, put
     pasta = Path.home() / '.config/claude-ops'
     credencial = (pasta / 'prumo-publico-cred').read_text().strip()
-    luna = (pasta / 'luna-workflows-cred').read_text().strip()
+    w = metricas(credencial)
     existentes = api('GET', '/workflows?limit=250')['data']
-    falha = falha_fonte()
-    antes_falha = next((e for e in existentes if e['name'] == falha['name']), None)
-    if antes_falha:
-        falha['id'] = antes_falha['id']
-        instalado = put(falha)
+    antes = next((e for e in existentes if e['name'] == w['name']), None)
+    if antes:
+        w['id'] = antes['id']
+        atual = api('GET', '/workflows/' + w['id'])
+        if 'errorWorkflow' in atual['settings']:
+            w['settings']['errorWorkflow'] = atual['settings']['errorWorkflow']
+        novo = put(w)
     else:
-        instalado = api('POST', '/workflows', falha)
-    api('POST', '/workflows/' + instalado['id'] + '/activate')
-    for w in [fonte(credencial, luna, instalado['id']), metricas(credencial)]:
-        antes = next((e for e in existentes if e['name'] == w['name']), None)
-        if antes:
-            w['id'] = antes['id']
-            novo = put(w)
-        else:
-            novo = api('POST', '/workflows', w)
-        api('POST', '/workflows/' + novo['id'] + '/activate')
-        print(w['name'], novo['id'], 'ativo')
+        novo = api('POST', '/workflows', w)
+    ativado = api('POST', '/workflows/' + novo['id'] + '/activate')
+    print(w['name'], novo['id'], 'ativo' if ativado.get('active') else 'inativo')
 
 
 if __name__ == '__main__':

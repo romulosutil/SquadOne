@@ -2242,7 +2242,12 @@ def avaliar_instalados(itens: list[dict]) -> dict:
 def ler_instalados() -> list[dict] | None:
     if not INSTALADOS.is_file():
         return None  # clone sem o manifesto (antes do merge): não há o que comparar
-    return comparar_instalados(json.loads(INSTALADOS.read_text())["arquivos"], REPO, HOME)
+    entradas = json.loads(INSTALADOS.read_text())["arquivos"]
+    retirada = HOME / ".local/state/atualizar-central/retiradas/hermes-uso-skills/concluido"
+    if retirada.is_file() and not (HOME / ".local/bin/hermes-uso-skills").exists():
+        # O atualizador pode ter retirado a cópia antes de o manifesto novo chegar.
+        entradas = [e for e in entradas if e["repo"] != "deploy/dell/hermes-uso-skills.py"]
+    return comparar_instalados(entradas, REPO, HOME)
 
 
 def instalados() -> list[dict]:
