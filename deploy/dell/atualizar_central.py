@@ -18,6 +18,7 @@ import urllib.request
 ROOT = Path.home() / 'SquadOne'
 DATA = Path.home() / '.local/share/squadone-operations'
 STATE = Path.home() / '.local/state/atualizar-central'
+PAGINA_LINKEDIN = Path.home() / '.local/lib/squadone-linkedin/linkedin.html'
 API = 'http://127.0.0.1:9120'
 TIMERS = ('frente-comercial.timer', 'prospeccao-diaria.timer')
 SERVICES = ('frente-comercial.service', 'prospeccao-diaria.service')
@@ -162,6 +163,11 @@ def main():
     with tempfile.TemporaryDirectory(prefix='squadone-updater-') as temp:
         stage=Path(temp)
         construir(stage,alvo,dependencias,somente_docs)
+        if not somente_docs:
+            pagina = stage/'dist/linkedin.html'
+            if not pagina.exists() and PAGINA_LINKEDIN.is_file() and not PAGINA_LINKEDIN.is_symlink():
+                shutil.copyfile(PAGINA_LINKEDIN, pagina)
+                pagina.chmod(0o644)
         guardas(); ocioso(45)
         if git('status','--porcelain','--untracked-files=no') or git('rev-parse','HEAD') != atual or git('rev-parse','origin/main') != alvo:
             raise Bloqueado('Checkout ou alvo mudou durante a validação')
