@@ -1,6 +1,8 @@
 # Estado atual do SquadOne
 
-Última conferência em 18/11/2026, às 19h06 de São Paulo, no Dell (Mel).
+Última conferência da Central e dos canais em 18/11/2026, às 22h04 de São Paulo,
+no Dell (Mel), com build `ca64d12`. As outras áreas abaixo refletem a
+conferência das 19h06, salvo indicação.
 Foram consultados a API do n8n, o systemd e os registros locais em modo de
 leitura. [RULES.md](RULES.md) registra as autorizações.
 
@@ -21,9 +23,9 @@ após a implantação usou consultas e registros existentes, sem disparos de tes
 | Área | Estado conferido | Onde confirmar |
 | --- | --- | --- |
 | App de squads e agenda | O app remoto tem perfil próprio. No Dell, o app completo fica em `/squadone`. | [Perfis no ABOUT](ABOUT.md#perfis-de-execução). A instância remota ficou fora desta conferência. |
-| Central no Dell | O serviço `squadone-operations` estava ativo. A Central abre em `/` e reúne operação e CRM. | Estado da unit e [guia do Dell](deploy/dell/README.md). |
-| WhatsApp comercial | Agenda do n8n a cada 2 minutos, todos os dias. O Dell executa a reposição e o primeiro contato, com transporte pela Evolution. O registro local confirmou **10 envios no dia**. A frente informou `limite-do-dia` e o workflow de entrada teve execuções bem-sucedidas. | Estado da frente, registro de envios e [n8n](ops/n8n/README.md). |
-| LinkedIn comercial | Agenda do n8n a cada 10 minutos, todos os dias. O último pedido salvo foi bem-sucedido às 19h00, a página respondeu HTTP 200 e o ledger do dia estava sem reservas ou envios. | Ledger e histórico do worker no Dell. [LinkedIn no Dell](ops/n8n/README.md#linkedin-no-dell). |
+| Central no Dell | O serviço `squadone-operations` estava ativo. No build observado às 22h04, `/` abre o Escritório e o CRM abre em uma folha em `/crm`. A atualização de carteira abaixo está validada em ambiente isolado. | Estado da unit e [guia do Dell](deploy/dell/README.md). |
+| WhatsApp comercial | Agenda do n8n a cada 2 minutos, todos os dias. O Dell executa a reposição e o primeiro contato, com transporte pela Evolution. O registro local confirmou **10 envios no dia**. A frente informou `limite-do-dia` e 10 recibos distintos coincidiram por ID com saídas capturadas e com fichas do CRM. | Estado da frente, registro de envios e [n8n](ops/n8n/README.md). |
+| LinkedIn comercial | Agenda do n8n a cada 10 minutos, todos os dias. A execução `136089`, das 19h20, confirmou duas consultas, sem candidato elegível e zero envios. A execução `136425`, das 22h00, entregou o pedido e o executor registrou pausa. O ledger estava sem reservas e envios. | Ledger e histórico do worker no Dell. [LinkedIn no Dell](ops/n8n/README.md#linkedin-no-dell). |
 | Respostas comerciais | Rômulo assume as respostas. A política operacional do Dell estava em `primeiro-contato`, com `respostasAutomaticas: false`. | Política privada do runtime e [regras atuais](RULES.md). O arquivo [versionado](config/aquisicao-comercial.json) é o padrão de instalação pausado. |
 
 O teto autorizado é de **até 10 primeiros contatos elegíveis por canal por dia de
@@ -102,12 +104,22 @@ diagnosticar. Considerar o núcleo recuperado quando, em um ciclo natural,
 o CRM atualizar, uma entrada aparecer na carteira certa, os registros do
 executor baterem com o painel e uma falha observada chegar ao responsável.
 
-**Visual dos agentes.** Recomendo deixar a interface direta da Central como
-entrada padrão para a Prumo e manter o Escritório como opção. Avaliar se ele
-ajuda alguém a encontrar um responsável, localizar uma tarefa ou entender um
-bloqueio. Se a visualização não melhorar essas tarefas em uso real, retirar
-animações do fluxo comercial primeiro. O [renderizador padrão do Escritório](ARCHITECTURE.md#camadas-do-escritório-e-laboratório-pixijs-26102026)
-e o protótipo Pixi são decisões independentes da recuperação do n8n.
+## Central da Prumo em revisão
+
+A implementação abre a carteira em `/` com o recorte **Precisa de atenção**.
+A ficha preserva a passagem humana, o histórico e os bloqueios. A aba Primeiros
+contatos distingue a agenda, os recibos e os resultados incertos. A retirada
+da tela imersiva vale para o percurso padrão da Prumo. O perfil app e a rota
+direta `/squadone` preservam a gestão de equipes.
+
+O retrato natural de WhatsApp confirmou os dez recibos do dia e a passagem
+de uma resposta humana à ficha única e à fila de Rômulo. O LinkedIn apresentou
+uma busca concluída com zero envios. A PR está validada em ambiente fictício.
+A implantação na Mel e a conferência de um ciclo natural na interface nova
+ficam para depois da revisão. O especialista do n8n confirmou os comprovantes
+novos às 22h18 no WhatsApp e às 22h20 no LinkedIn.
+
+[Fluxos, evidências e procedimento de reversão](docs/referencia/central-prumo.md).
 
 ## Manutenção deste documento
 

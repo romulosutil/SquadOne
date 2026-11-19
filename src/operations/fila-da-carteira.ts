@@ -36,11 +36,12 @@ export function resumirFicha(lead: CrmLead, agora: number, registro?: EventoWhat
     : incerto ? 1 : pendencia ? 2 : oportunidade?.situacao === 'revisar' ? 3 : null
   const proximo = incerto ? 'Conferir o recibo e a conversa antes de qualquer ação.'
     : pausa ? 'Aguardar a resposta prevista na pausa manual.'
-    : atendimento ? 'Conferir a conversa e o motivo do encaminhamento.'
+    : atendimento ? responsavel?.responsavel === 'romulo' ? 'Conferir a conversa e o motivo do encaminhamento.'
+      : 'Rômulo confere a conversa e assume o atendimento.'
     : lead.proximoPasso?.texto ?? oportunidade?.proximoPasso?.texto ?? pendencia?.rotulo
       ?? (oportunidade?.situacao === 'revisar' ? 'Revisar as evidências da oportunidade.' : 'A definir')
   const dono = responsavel?.responsavel === 'romulo' ? 'Rômulo · assumiu'
-    : atendimento || pendencia ? 'Rômulo · atendimento'
-    : responsavel?.responsavel === 'time' ? 'Time' : 'A definir'
+    : responsavel?.responsavel === 'time' ? 'Time · registrado'
+    : atendimento || pendencia ? 'Rômulo · atendimento' : 'A definir'
   return { ultimo, prioridade, proximo, dono, revisao }
 }
