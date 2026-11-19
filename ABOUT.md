@@ -1,8 +1,8 @@
 # SquadOne
 
-SquadOne é uma aplicação pessoal para operar squads, agenda e agentes. A
-interface atual materializa cada squad como um escritório com domínios, pessoas
-e trabalho agendado.
+SquadOne reúne a operação comercial da Prumo e uma aplicação de squads,
+agenda e agentes. Na Prumo, a Central abre na carteira com quem precisa de
+atenção, o último evento confirmado, o responsável e a próxima ação.
 
 Comece pelo [Estado atual](ESTADO-ATUAL.md) para ver o que está em operação,
 como conferir cada fluxo e onde manter a documentação operacional.
@@ -15,9 +15,13 @@ ou representar integrações como concluídas.
 
 - `SQUADONE_MODE=app`: aplicação remota normal. Não registra rotas, lê dados
   nem carrega configuração da Central de Operações.
-- `SQUADONE_MODE=operations`: perfil local do Dell. Serve a Central em `/`,
-  mantém o aplicativo completo em `/squadone` e força o servidor a escutar em
-  `127.0.0.1`.
+- `SQUADONE_MODE=operations`: perfil local do Dell. A carteira da Prumo abre em
+  `/`. Fichas e links de Vendas em `/crm` continuam válidos. Primeiros contatos
+  apresenta pedidos, envios confirmados e resultados incertos dos canais.
+  O Escritório fica disponível pelo endereço `/squadone` quando a agenda está
+  neste processo. O servidor escuta em `127.0.0.1`.
+
+[Contrato de eventos, evidências e reversão da Central da Prumo](docs/referencia/central-prumo.md).
 
 O perfil local usa um arquivo privado baseado em
 `config/operations.example.json` e grava projetos em

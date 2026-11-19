@@ -22,13 +22,13 @@
  * Finanças e o design system; e a conexão com o Google ganhou o Conectar e o Tasks.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
-import FrenteComercial from '../operations/FrenteComercial.vue'
 import '../estilos/operacao.css'
 import AccessPanel from '../operations/AccessPanel.vue'
 import ComoFuncionaPanel from '../operations/ComoFuncionaPanel.vue'
 import ModeloOperacionalPanel from '../operations/ModeloOperacionalPanel.vue'
 import CrmColinha from '../operations/CrmColinha.vue'
 import DellConferePanel from '../operations/DellConferePanel.vue'
+import { navegar } from '../casca/rota'
 import { useOverview } from '../casca/overview'
 import type { Capacidades } from '../casca/destinos'
 import { useAgentes } from '../agentes/estado'
@@ -45,7 +45,8 @@ const ops = computed(() => props.capacidades.perfil === 'operations')
 
 onMounted(() => {
   const alvo = new URLSearchParams(window.location.search).get('abrir') ?? window.location.hash.slice(1)
-  if (alvo === 'primeiros-contatos' || alvo === 'equipe' || alvo === 'encontrado-proposta') void nextTick(() => document.getElementById(alvo)?.scrollIntoView({ block: 'start' }))
+  if (alvo === 'primeiros-contatos' && ops.value) { navegar('/crm?ver=triagem', true); return }
+  if (alvo === 'equipe' || alvo === 'encontrado-proposta') void nextTick(() => document.getElementById(alvo)?.scrollIntoView({ block: 'start' }))
   // O "Ver em Manutenção" da Central e o "Roteiro" de Vendas: a navegação sobe a página
   // antes de montar esta rota, então rolar até a seção fica para depois de ela existir.
   if (pedeManutencao) void nextTick(() => document.getElementById('manutencao')?.scrollIntoView({ block: 'start' }))
@@ -58,9 +59,6 @@ onBeforeUnmount(() => window.clearTimeout(desarmar))
 const titulo = computed(() => 'Mais')
 /** O que só se abre para mexer: rotas que existem e saíram dos menus. */
 const atalhos = computed(() => [
-  ...(props.capacidades.agentes && ops.value
-    ? [{ href: '/squadone', rotulo: 'Escritório completo', dica: 'squads, salas e quem trabalha em cada uma: contratar, editar, arquivar e andar' }]
-    : []),
   ...(ops.value ? [{ href: '/financas/organizar', rotulo: 'Organizar Finanças', dica: 'categorias, orçamento e regras' }] : []),
   { href: '/design-system', rotulo: 'Design system', dica: 'tokens e peças do app, para quem mexe no visual' },
 ])
@@ -117,8 +115,8 @@ const equipe = computed(() => ag?.roster.value?.squads.flatMap(s => s.dominios.m
 <template>
   <div class="mais">
     <section class="mais__bloco" aria-labelledby="mais-titulo">
-      <header class="cabecalho-pagina"><div><span class="sobretitulo">Seu escritório</span><h1 id="mais-titulo">{{ titulo }}</h1><p>Agenda, finanças, entrada e configurações, a um toque.</p></div></header>
-      <nav v-if="ops" class="mais__acessos" aria-label="Áreas do escritório"><a v-if="capacidades.agentes" class="botao" href="/agenda">Agenda</a><a class="botao" href="/financas">Finanças</a><a class="botao" href="/entrada/">Entrada</a><a class="botao" href="#configuracoes">Configurações</a></nav>
+      <header class="cabecalho-pagina"><div><span v-if="!ops" class="sobretitulo">Seu escritório</span><h1 id="mais-titulo">{{ titulo }}</h1><p>Agenda, finanças, entrada e configurações, a um toque.</p></div></header>
+      <nav v-if="ops" class="mais__acessos" aria-label="Áreas da operação"><a class="botao" href="/crm?ver=triagem">Primeiros contatos</a><a v-if="capacidades.agentes" class="botao" href="/agenda">Agenda</a><a class="botao" href="/financas">Finanças</a><a class="botao" href="/entrada/">Entrada</a></nav>
       <h2 id="configuracoes">Configurações</h2>
       <!-- A aparência fica à vista: é a primeira coisa que o dono procura quando o escuro cansa. -->
       <h2 class="mais__grupo">Aparência</h2><SeletorDeTema />
@@ -129,7 +127,7 @@ const equipe = computed(() => ag?.roster.value?.squads.flatMap(s => s.dominios.m
       </ul>
     </section>
 
-    <section v-if="capacidades.agentes" id="equipe" class="mais__bloco configuracao-equipe">
+    <section v-if="capacidades.agentes && !ops" id="equipe" class="mais__bloco configuracao-equipe">
       <header class="cabecalho-bloco"><div><span class="sobretitulo">Seu time</span><h2>Equipe e responsabilidades</h2></div><a class="botao" href="/squadone">Gerenciar equipe</a></header>
       <p class="texto-2">As responsabilidades ficam aqui. Na Central, você acompanha as decisões e as conversas.</p>
       <details v-for="sala in equipe" :key="sala.id" class="dobra"><summary><strong>{{ sala.po.nome }}</strong> · {{ sala.po.papel }} <span class="etiqueta">{{ sala.squad }} · {{ sala.nome }}</span></summary><p>{{ sala.po.escopo }}</p><ul v-if="sala.integrantes.length"><li v-for="pessoa in sala.integrantes" :key="pessoa.id"><strong>{{ pessoa.nome }} · {{ pessoa.papel }}</strong><p>{{ pessoa.escopo }}</p></li></ul></details>
@@ -140,7 +138,7 @@ const equipe = computed(() => ag?.roster.value?.squads.flatMap(s => s.dominios.m
       <ModeloOperacionalPanel v-if="operacaoAberta" />
     </details>
 
-    <section v-if="ops" id="primeiros-contatos"><FrenteComercial configurar /></section>
+
 
     <!-- O link do robô do Escritório (?fluxo=&passo=) abre direto no fluxo dele. -->
     <details v-if="ops" class="mais__bloco mais__dobra" :open="pedeFluxo || pedeRoteiro">

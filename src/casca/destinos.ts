@@ -45,9 +45,8 @@ const HOJE: Destino = { id: 'hoje', rotulo: 'Hoje', href: '/', icone: '◉' }
  * A home do `operations` desde 17/10/2026: "os menus são Central de comando + Assistente + Vendas".
  * Mesma rota e mesmo id da Hoje (o `/`), outro nome e outra tela (rotas/CentralRota.vue).
  */
-const CENTRAL: Destino = { id: 'hoje', rotulo: 'Central de comando', href: '/', icone: '◉' }
+const CENTRAL: Destino = { id: 'hoje', rotulo: 'Central', href: '/', icone: '◉' }
 const AGENDA: Destino = { id: 'agenda', rotulo: 'Agenda', href: '/agenda', icone: '▦' }
-const FUNIL: Destino = { id: 'funil', rotulo: 'Vendas', href: '/crm', icone: '▤' }
 const ESCRITORIO: Destino = { id: 'escritorio', rotulo: 'Escritório', href: '/squadone', icone: '▣' }
 const MAIS: Destino = { id: 'mais', rotulo: 'Mais', href: '/mais', icone: '≡' }
 /** O Mais do `operations` encolheu para a Manutenção: some da barra e vira a engrenagem discreta. */
@@ -83,7 +82,7 @@ export function rotaDaCasca(caminhoCru: string, c: Capacidades): RotaId {
  * discreta (`destinoDiscreto`). No `app` (Easypanel, reserva fria) tudo fica como era.
  */
 export function destinosLaterais(c: Capacidades): Destino[] {
-  if (c.perfil === 'operations') return [CENTRAL, FUNIL, ...(c.agentes ? [AGENDA] : []), { id: 'financas', rotulo: 'Finanças', href: '/financas', icone: '◈' }, { id: 'entrada', rotulo: 'Entrada', href: '/entrada/', icone: '↧' }]
+  if (c.perfil === 'operations') return [CENTRAL, ...(c.agentes ? [AGENDA] : []), { id: 'financas', rotulo: 'Finanças', href: '/financas', icone: '◈' }, { id: 'entrada', rotulo: 'Entrada', href: '/entrada/', icone: '↧' }]
   return [HOJE, ...(c.agentes ? [AGENDA, ESCRITORIO] : []), MAIS]
 }
 
@@ -92,7 +91,7 @@ export function destinosLaterais(c: Capacidades): Destino[] {
  * (o ＋ no meio é o Assistente, o terceiro menu). No `app`, Hoje · Agenda · ＋ · Escritório · Mais.
  */
 export function destinosDaBarra(c: Capacidades): Destino[] {
-  if (c.perfil === 'operations') return [{ ...CENTRAL, rotulo: 'Escritório', icone: '▣' }, FUNIL, MAIS]
+  if (c.perfil === 'operations') return [CENTRAL, MANUTENCAO]
   return [HOJE, AGENDA, ESCRITORIO, MAIS]
 }
 
@@ -115,8 +114,8 @@ export function destinoAtual(caminhoCru: string, c: Capacidades): Destino['id'] 
   // O design system mora dentro do Mais (a Manutenção, no Dell): é ele que fica aceso.
   if (rota === 'design-system') return 'mais'
   if (c.perfil === 'operations') {
-    if (rota === 'agenda' || rota === 'financas') return 'mais'
-    if (rota === 'escritorio') return 'mais'
+    if (rota === 'funil') return 'hoje'
+    if (rota === 'escritorio') return null
   }
   return rota
 }
@@ -174,12 +173,12 @@ const DICA_DO_DESTINO: Record<Destino['id'], string> = {
 }
 /** No Dell a home e o Mais mudaram de papel (17/10/2026); a dica acompanha. */
 const DICA_NO_DELL: Partial<Record<Destino['id'], string>> = {
-  hoje: 'Conversas prioritárias e primeiros contatos pelo time',
-  mais: 'Equipe, Escritório completo, aparência, integrações e o Google',
+  hoje: 'Carteira e conversas que precisam de atenção',
+  mais: 'Aparência, integrações e manutenção',
   'design-system': 'Manutenção › Design system',
 }
 
-type Atalho = { id: string; rotulo: string; dica: string; href: string; soComAgentes?: boolean }
+type Atalho = { id: string; rotulo: string; dica: string; href: string }
 
 /**
  * Os atalhos do perfil `operations`. As abas de Vendas (17/10/2026, AC-23: buscar "triagem" dava
@@ -188,15 +187,11 @@ type Atalho = { id: string; rotulo: string; dica: string; href: string; soComAge
  * da tela; a dica diz onde ela mora. Lançamentos e Organizar seguem como caminhos de Finanças.
  */
 const ATALHOS_DO_DELL: Atalho[] = [
-  { id: 'vendas-afazer', rotulo: NOME_DAS_ABAS.afazer, dica: caminhoDaAba('afazer'), href: '/crm' },
   { id: 'vendas-triagem', rotulo: NOME_DAS_ABAS.triagem, dica: `${caminhoDaAba('triagem')} · avaliação do time e triagem`, href: '/crm?ver=triagem' },
-  { id: 'vendas-funil', rotulo: NOME_DAS_ABAS.funil, dica: caminhoDaAba('funil'), href: '/crm?ver=funil' },
   { id: 'vendas-numeros', rotulo: NOME_DAS_ABAS.numeros, dica: caminhoDaAba('numeros'), href: '/crm?ver=numeros' },
-  { id: 'central-escritorio', rotulo: 'Escritório', dica: 'Central de comando › o mapa das salas', href: '/?abrir=escritorio' },
   { id: 'financas-lancamentos', rotulo: 'Lançamentos', dica: 'Finanças › Lançamentos', href: '/financas/lancamentos' },
   { id: 'financas-organizar', rotulo: 'Organizar', dica: 'Finanças › Organizar', href: '/financas/organizar' },
   { id: 'mais-manutencao', rotulo: 'O que o Dell confere', dica: 'Manutenção › Dell', href: '/mais?abrir=manutencao' },
-  { id: 'mais-escritorio', rotulo: 'Escritório completo', dica: 'Manutenção › contratar, editar e arquivar', href: '/squadone', soComAgentes: true },
   { id: 'mais-roteiro', rotulo: 'Roteiro de venda', dica: 'Manutenção › Roteiro de venda', href: '/mais?abrir=roteiro' },
   { id: 'linear-pessoal', rotulo: 'Linear Pessoal', dica: 'Issues dos projetos Pessoal e do GitHub, no Dell', href: 'http://127.0.0.1:8787/' },
 ]
@@ -219,7 +214,7 @@ export function comandosDaPaleta(
   ir.push({ id: 'ir:design-system', rotulo: 'Ir para o Design system', dica: dica('design-system'), acao: { tipo: 'ir', href: '/design-system' } })
   if (ops) {
     ir.push(
-      ...ATALHOS_DO_DELL.filter((a) => !a.soComAgentes || c.agentes).map<Comando>((a) => ({
+      ...ATALHOS_DO_DELL.map<Comando>((a) => ({
         id: `aba:${a.id}`, rotulo: a.rotulo, dica: a.dica, acao: { tipo: 'ir', href: a.href },
       }))
     )
@@ -231,7 +226,7 @@ export function comandosDaPaleta(
     : c.agentes
       ? [{ id: 'pedir', rotulo: 'Fazer um pedido', dica: 'Abre a folha Pedir', acao: { tipo: 'pedir' } }]
       : []
-  if (!c.agentes) return [...primeiro, ...ir]
+  if (!c.agentes || ops) return [...primeiro, ...ir]
   return [
     ...primeiro,
     ...ir,

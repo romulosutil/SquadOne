@@ -7,7 +7,7 @@
  *  3. o time: uma linha por squad, com texto e só com fonte (a Mochila da ativa e o /api/time de
  *     todas).
  *
- * No `operations` a home é a Central de comando (rotas/CentralRota.vue, 17/10/2026): o estado do
+ * No `operations` a home é a carteira da Prumo. Esta visão usa o estado do
  * Dell, o Escritório animado e as faixas de Vendas, Agenda, Finanças e Entrada. A Próxima venda, o
  * "por que não vende", as finanças e a agenda do dia sem agentes saíram daqui com ela.
  */

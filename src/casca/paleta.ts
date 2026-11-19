@@ -83,5 +83,5 @@ export function reaberturaDepoisDeIr(atual: string, href: string): Reabertura {
   }
   const caminho = (u: URL) => u.pathname.replace(/\/+$/, '') || '/'
   if (caminho(de) !== caminho(para) || de.search === para.search) return 'nada'
-  return caminho(para) === '/crm' ? 'popstate' : 'remontar'
+  return ['/', '/crm'].includes(caminho(para)) ? 'popstate' : 'remontar'
 }

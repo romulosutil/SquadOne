@@ -10,14 +10,9 @@
  * primeiro: barra inferior com o ＋Pedir no meio; a partir de 1024 px, barra
  * lateral e Ctrl+K. No Dell com `assistente` no /api/runtime (RULES 28), o ＋, a
  * lateral e o Ctrl+K abrem o Assistente (casca/AssistentePainel.vue) no lugar do Pedir.
- *
- * Escritório imersivo: cenário permanente, menu flutuante e cards centrais.
- * No desktop o Assistente participa da tela à direita e pode ser recolhido;
- * no celular o mesmo conteúdo abre sob demanda.
  */
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import BarraInferior from './casca/BarraInferior.vue'
-import Sheet from './components/Sheet.vue'
 import BarraLateral from './casca/BarraLateral.vue'
 import CascaTopo from './casca/CascaTopo.vue'
 import { useAssistente } from './casca/assistente'
@@ -51,7 +46,6 @@ const Paleta = defineAsyncComponent(() => import('./casca/Paleta.vue'))
 const PedirFolha = defineAsyncComponent(() => import('./casca/PedirFolha.vue'))
 const AssistentePainel = defineAsyncComponent(() => import('./casca/AssistentePainel.vue'))
 const AgendaRota = defineAsyncComponent(() => import('./rotas/AgendaRota.vue'))
-const CentralRota = defineAsyncComponent(() => import('./rotas/CentralRota.vue'))
 const EscritorioRota = defineAsyncComponent(() => import('./rotas/EscritorioRota.vue'))
 const HojeRota = defineAsyncComponent(() => import('./rotas/HojeRota.vue'))
 const MaisRota = defineAsyncComponent(() => import('./rotas/MaisRota.vue'))
@@ -71,6 +65,13 @@ if (caminho.value === '/projetos/producao-auto') navegar('/crm', true)
 
 const rota = computed(() => rotaDaCasca(caminho.value, capacidades.value))
 const atual = computed(() => destinoAtual(caminho.value, capacidades.value))
+if (ops.value && caminho.value === '/') {
+  const abrir = new URLSearchParams(window.location.search).get('abrir')
+  if (abrir === 'financas') navegar('/financas', true)
+  if (abrir === 'agenda' && props.agentes) navegar('/agenda', true)
+  if (abrir === 'escritorio' && props.agentes) navegar('/squadone', true)
+}
+const crmAberto = computed(() => ops.value && (rota.value === 'hoje' || rota.value === 'funil'))
 
 const ag = useAgentes()
 const ov = useOverview()
@@ -88,10 +89,7 @@ const pedindo = computed(() =>
   ag.isLoading.value || (comAssistente.value && (!!conversa.pendente.value || !!conversa.enviando.value))
 )
 const abrirPedir = () => {
-  if (comAssistente.value) {
-    if (ops.value) try { localStorage.removeItem('squadone.assistente-recolhido') } catch { /* Preferência opcional. */ }
-    conversa.abrir()
-  }
+  if (comAssistente.value) conversa.abrir()
   else if (!pedirIndisponivel.value) ag.abrirPedir()
 }
 
@@ -158,12 +156,6 @@ onMounted(() => {
   window.addEventListener('keydown', aoTeclar)
   if (props.agentes) void ag.iniciar()
   if (ops.value) ov.iniciar()
-  // No desktop o Assistente participa do escritório desde a primeira visita.
-  if (ops.value && comAssistente.value && largo?.matches) {
-    let recolhido = false
-    try { recolhido = localStorage.getItem('squadone.assistente-recolhido') === 'sim' } catch { /* Preferência opcional. */ }
-    if (!recolhido) conversa.aberto.value = true
-  }
 })
 onBeforeUnmount(() => {
   pararHistorico?.()
@@ -175,13 +167,6 @@ const aoClicar = (e: MouseEvent) => interceptarLink(e, capacidades.value)
 
 const nome = computed(() => ov.overview.value?.displayName ?? '')
 const discreto = computed(() => destinoDiscreto(capacidades.value))
-const tituloDoPainel = computed(() => ({ agenda: 'Agenda', funil: 'Vendas', financas: 'Finanças', escritorio: 'Gerenciar equipe', mais: 'Mais', 'design-system': 'Design system', 'nao-encontrada': 'Página não encontrada', hoje: 'Escritório' }[rota.value]))
-const fecharPainel = () => navegar('/')
-function recolherAssistente() {
-  conversa.aberto.value = false
-  if (ops.value && largo?.matches) try { localStorage.setItem('squadone.assistente-recolhido', 'sim') } catch { /* Preferência opcional. */ }
-}
-
 const {
   roster,
   squadAtiva,
@@ -206,30 +191,27 @@ const {
 
 <template>
   <a class="pular" href="#conteudo">Pular para o conteúdo</a>
-  <div class="casca" :class="{ 'casca--escritorio': ops, 'casca--imersiva': ops }" @click="aoClicar">
-    <BarraLateral v-if="!ops"
+  <div class="casca" @click="aoClicar">
+    <BarraLateral
       :destinos="destinosLaterais(capacidades)"
       :discreto="discreto"
       :atual="atual"
       :pedir-indisponivel="pedirIndisponivel"
       :pedindo="pedindo"
       :rotulo="rotuloDoPedir"
-      :subtitulo="ops ? 'Central, Assistente e Vendas' : 'Hoje, agenda e agentes'"
+      :subtitulo="ops ? 'Prumo' : 'Hoje, agenda e agentes'"
       :atalho="ehMac ? '⌘K' : 'Ctrl+K'"
       @pedir="abrirPedir"
       @paleta="paletaAberta = true"
     />
 
     <div class="casca__principal">
-      <CascaTopo v-if="!ops" :nome="nome" :discreto="discreto" :atual="atual" :pedindo="isLoading" />
+      <CascaTopo :nome="nome" :discreto="discreto" :atual="atual" :pedindo="isLoading" />
 
-      <main id="conteudo" class="casca__conteudo" :class="{ 'casca__conteudo--escritorio': ops }" tabindex="-1">
-        <!-- :key: o salto do Ctrl+K para uma faixa (?abrir=) estando na Central remonta e abre a folha. -->
-        <CentralRota v-if="ops" :capacidades="capacidades" />
-        <template v-else>
-        <HojeRota v-if="rota === 'hoje'" :capacidades="capacidades" />
+      <main id="conteudo" class="casca__conteudo" tabindex="-1">
+        <CrmPanel v-if="crmAberto" :key="caminho" central />
+        <HojeRota v-else-if="rota === 'hoje'" :capacidades="capacidades" />
         <AgendaRota v-else-if="rota === 'agenda'" />
-        <CrmPanel v-else-if="rota === 'funil'" />
         <!-- :key pelo caminho: Visão e Lançamentos leem a aba ao montar. -->
         <FinancasPanel v-else-if="rota === 'financas'" :key="caminho" :caminho="caminho" />
         <EscritorioRota v-else-if="rota === 'escritorio'" />
@@ -240,11 +222,10 @@ const {
           <p>Este endereço não existe {{ ops ? 'no SquadOne do Dell' : 'neste SquadOne' }}.</p>
           <a class="botao botao--primario" href="/">Voltar para {{ ops ? 'a ' : '' }}{{ nomeDaHome(capacidades) }}</a>
         </section>
-        </template>
       </main>
     </div>
 
-    <BarraInferior :imersiva="ops" :assistente-aberto="conversa.aberto.value"
+    <BarraInferior
       :destinos="destinosDaBarra(capacidades)"
       :atual="atual"
       :pedir-indisponivel="pedirIndisponivel"
@@ -254,21 +235,9 @@ const {
     />
   </div>
 
-  <Sheet v-if="ops && rota !== 'hoje'" :key="`${caminho}:${remontagens}`" flutuante :titulo="tituloDoPainel" @fechar="fecharPainel">
-    <div class="painel-do-escritorio" @click="aoClicar">
-      <CrmPanel v-if="rota === 'funil'" />
-      <AgendaRota v-else-if="rota === 'agenda'" />
-      <FinancasPanel v-else-if="rota === 'financas'" :key="caminho" :caminho="caminho" />
-      <EscritorioRota v-else-if="rota === 'escritorio'" />
-      <MaisRota v-else-if="rota === 'mais'" :key="remontagens" :capacidades="capacidades" />
-      <DesignSystemRota v-else-if="rota === 'design-system'" />
-      <section v-else><h1>Página não encontrada</h1><a href="/">Voltar ao escritório</a></section>
-    </div>
-  </Sheet>
-
   <PedirFolha v-if="agentes && pedirAberto && !comAssistente" @fechar="pedirAberto = false" />
   <!-- Fora do .casca e com Teleport por dentro: o #app fica inerte com a Ficha aberta. -->
-  <AssistentePainel v-if="comAssistente && conversa.aberto.value" :agentes="agentes" :flutuante="ops" :integrado="ops" @fechar="recolherAssistente" />
+  <AssistentePainel v-if="comAssistente && conversa.aberto.value" :agentes="agentes" @fechar="conversa.aberto.value = false" />
   <Paleta v-if="paletaAberta" :comandos="comandos" :perfil="perfil" @fechar="paletaAberta = false" @executar="executar" />
 
   <ContratarFolha

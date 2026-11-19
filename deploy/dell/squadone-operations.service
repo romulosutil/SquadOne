@@ -30,7 +30,10 @@ ProtectHome=read-only
 # não existem. %h/SquadOne/data fica até o runbook mover a credencial do Google.
 # .codex: o `codex exec` da Luna em sombra grava as sessões lá (risco aceito do
 # disco sem cifra, ARCHITECTURE "Luna em modo sombra"); sem isto ele falha.
-ReadWritePaths=%h/.local/share/squadone-operations %h/SquadOne/data -%h/.local/share/squadone -%h/.local/share/avisos/fila -%h/.codex
+ReadWritePaths=%h/.local/share/squadone-operations %h/SquadOne/data -%h/.local/share/squadone -%h/.local/share/avisos/fila -%h/.codex -%h/.local/share/frente-comercial
+# O SQLite em WAL precisa dos arquivos auxiliares ao lado do registro.
+# O arquivo principal é montado somente para leitura e a Central usa uma conexão readOnly.
+ReadOnlyPaths=-%h/.local/share/frente-comercial/registro.sqlite
 
 [Install]
 WantedBy=default.target

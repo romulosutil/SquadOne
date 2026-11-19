@@ -319,42 +319,4 @@ body { margin: 0; background: var(--fundo); color: var(--texto); font-family: va
 }
 
 
-/* O escritório usa a largura disponível; as demais rotas mantêm seu respiro. */
-.casca__conteudo.casca__conteudo--escritorio { padding: var(--esp-2); }
-.casca--escritorio .topo__dia { display: none; }
-@media (min-width: 64rem) {
-  .casca--escritorio .topo:not(:has(.topo__chip)) { display: none; }
-}
-
-/* A sala acompanha a página; o cenário continua visível sem criar outra rolagem. */
-@media (min-width: 80rem) {
-  .casca--escritorio .escritorio-vivo__mapa { position: sticky; top: var(--esp-3); align-self: start; }
-}
-.casca__conteudo--escritorio { min-height: calc(100dvh - var(--esp-4)); align-content: start; background: var(--superficie); }
-
-/* Escritório permanente: a navegação flutua sobre a cena, sem reservar uma faixa. */
-.casca.casca--imersiva { display: block; height: 100dvh; min-height: 0; padding: 0; overflow: hidden; background: #1b2730; }
-.casca--imersiva .casca__principal { height: 100dvh; width: 100%; }
-.casca--imersiva .casca__conteudo.casca__conteudo--escritorio { display: block; height: 100%; min-height: 0; padding: 0; background: #1b2730; }
-.casca--imersiva .barra-inferior--flutuante { position: fixed; z-index: 50; inset: auto auto calc(var(--esp-3) + env(safe-area-inset-bottom, 0px)) 50%; transform: translateX(-50%); display: flex; align-items: center; gap: var(--esp-3); width: max-content; max-width: calc(100% - var(--esp-6)); padding: 0; min-height: 0; border: 0; background: transparent; font-family: var(--fonte); }
-.barra-inferior__destinos { display: flex; align-items: center; padding: var(--esp-1); border: 1px solid #607489; border-radius: var(--raio-pilula); background: #172130ed; box-shadow: var(--sombra-pequena); }
-.casca--imersiva .barra-inferior a, .casca--imersiva .barra-inferior button { display: flex; justify-content: center; align-items: center; min-width: 0; min-height: var(--toque); gap: var(--esp-2); border: 0; padding: var(--esp-2) var(--esp-4); border-radius: var(--raio-pilula); background: transparent; color: var(--barra-texto); font: inherit; font-size: var(--tam-mini); font-weight: var(--peso-forte); text-decoration: none; cursor: pointer; }
-.casca--imersiva .barra-inferior a[aria-current="page"] { background: var(--barra-ativo); color: var(--barra-ativo-texto); }
-.casca--imersiva .barra-inferior .barra-inferior__assistente { padding: var(--esp-3) var(--esp-4); background: var(--cor-menta); color: var(--cor-tinta); border: 1px solid #336956; box-shadow: var(--sombra-pequena); }
-.barra-inferior__assistente small { display: block; font-size: var(--tam-mini); font-weight: var(--peso-texto); }
-.casca--imersiva .barra-inferior__icone { font-size: var(--tam-nome); line-height: 1; }
-.casca--imersiva .barra-inferior :focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
-.painel-do-escritorio { display: grid; min-width: 0; gap: var(--esp-4); }
 .mais__acessos { display: flex; flex-wrap: wrap; gap: var(--esp-3); }
-@media(max-width:47.99rem) {
-  .casca--imersiva .barra-inferior--flutuante { gap: var(--esp-2); max-width: calc(100% - var(--esp-4)); }
-  .casca--imersiva .barra-inferior a { flex-direction: column; gap: var(--esp-0); padding: var(--esp-1) var(--esp-3); }
-  .casca--imersiva .barra-inferior .barra-inferior__assistente { flex-direction: column; gap: var(--esp-0); padding: var(--esp-2) var(--esp-3); }
-}
-@media(min-width:64rem) {
-  html.com-assistente-integrado { --assistente-largura: clamp(20rem, 28vw, 26rem); --escritorio-largura: calc(100% - var(--assistente-largura) - var(--esp-6)); }
-  html.com-assistente .casca--imersiva { padding-right: 0; }
-  html.com-assistente-integrado .casca--imersiva .casca__principal { width: var(--escritorio-largura); }
-  html.com-assistente-integrado .casca--imersiva .barra-inferior { left: calc(var(--escritorio-largura) / 2); }
-  html.com-assistente-integrado .folha-fundo { right: calc(var(--assistente-largura) + var(--esp-6)); }
-}

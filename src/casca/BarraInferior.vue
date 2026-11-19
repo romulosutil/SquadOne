@@ -18,8 +18,6 @@ const props = withDefaults(
     /** "Pedir", ou "Assistente" no Dell com a flag (RULES 28): o mesmo ＋ abre o painel dele. */
     rotulo?: string
     apos?: number
-    imersiva?: boolean
-    assistenteAberto?: boolean
   }>(),
   { rotulo: 'Pedir' }
 )
@@ -32,17 +30,7 @@ const depois = computed(() => props.destinos.slice(meio.value))
 </script>
 
 <template>
-  <nav v-if="imersiva" class="barra-inferior barra-inferior--flutuante" aria-label="Navegação principal">
-    <div class="barra-inferior__destinos">
-      <a v-for="d in destinos" :key="d.id" :href="d.href" :aria-current="atual === d.id ? 'page' : undefined">
-        <span class="barra-inferior__icone" aria-hidden="true">{{ d.icone }}</span>{{ d.rotulo }}
-      </a>
-    </div>
-    <button type="button" class="barra-inferior__assistente" :aria-expanded="assistenteAberto" :disabled="!!pedirIndisponivel" @click="$emit('pedir')">
-      <span class="barra-inferior__icone" aria-hidden="true">✦</span><span>{{ rotulo }}<small v-if="pedindo">respondendo</small></span>
-    </button>
-  </nav>
-  <nav v-else class="barra-inferior" aria-label="Navegação principal">
+  <nav class="barra-inferior" aria-label="Navegação principal">
     <a v-for="d in antes" :key="d.id" :href="d.href" :aria-current="atual === d.id ? 'page' : undefined">
       <span class="barra-inferior__icone" aria-hidden="true">{{ d.icone }}</span>{{ d.rotulo }}
     </a>

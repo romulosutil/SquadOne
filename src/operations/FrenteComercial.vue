@@ -22,18 +22,18 @@ async function alterarConfiguracao() {
 </script>
 <template>
   <section class="frente-comercial painel-venda" aria-labelledby="frente-titulo">
-    <header class="cabecalho-bloco"><h2 id="frente-titulo">Primeiros contatos</h2><span class="etiqueta" role="status">{{ status }}</span></header>
+    <header class="cabecalho-bloco"><h2 id="frente-titulo">{{ configurar ? 'Controle da fila do WhatsApp' : 'Primeiros contatos' }}</h2><span class="etiqueta" role="status">{{ status }}</span></header>
     <p>O agente envia a primeira mensagem atual. Quando o cliente responder, você assume a conversa.</p>
     <p v-if="erro" class="recado recado--atencao" role="status">{{ erro }}</p>
     <p v-if="frente?.pausaAutomatica" class="recado recado--atencao" role="status">{{ frente.pausaAutomatica.detalhe }}</p>
     <p v-else-if="frente?.cicloParado" class="recado recado--atencao" role="status">A fila está ligada, mas o executor não está rodando. Nenhum próximo envio foi confirmado.</p>
     <p v-else-if="frente?.detalhe" class="texto-2">{{ frente.detalhe }}</p>
-    <div v-if="frente?.respostasHoje" class="metricas-venda">
+    <div v-if="!configurar && frente?.respostasHoje" class="metricas-venda">
       <div><strong>{{ frente.respostasHoje.enviados }}</strong><span>primeiros contatos hoje</span></div>
       <div><strong>{{ frente.respostasHoje.humanas }}</strong><span>respostas humanas hoje</span></div>
     </div>
     <div class="frente-comercial__acoes">
-      <a class="botao botao--primario" href="/crm">Ver respostas para atender</a>
+      <a v-if="!configurar" class="botao botao--primario" href="/crm">Ver respostas para atender</a>
       <button v-if="props.configurar" class="botao botao--leve" type="button" :disabled="salvando || !frente || (frente.aquisicao?.primeirosContatosAutomaticos !== true && !frente.ativo)" @click="alterarConfiguracao">{{ salvando ? 'Salvando…' : frente?.ativo ? 'Pausar primeiros contatos' : 'Ativar fila de primeiros contatos' }}</button>
     </div>
     <details v-if="frente?.fila.length" class="dobra">

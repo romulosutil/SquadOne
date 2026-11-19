@@ -81,7 +81,7 @@ describe('glossário: nenhum nome proibido no texto visível de src/', () => {
   const arquivos = fontes()
 
   it('a varredura acha os arquivos de tela', () => {
-    for (const a of ['operations/CrmPanel.vue', 'operations/fluxos.ts', 'operations/jornada.ts', 'rotas/HojeRota.vue', 'rotas/CentralRota.vue']) {
+    for (const a of ['operations/CrmPanel.vue', 'operations/fluxos.ts', 'operations/jornada.ts', 'rotas/HojeRota.vue']) {
       assert.ok(arquivos.some((f) => f.arquivo === a), a)
     }
   })
@@ -91,7 +91,6 @@ describe('glossário: nenhum nome proibido no texto visível de src/', () => {
     assert.ok(de('operations/CrmPanel.vue').includes('Atualização automática'))
     assert.ok(de('operations/fluxos.ts').includes('Vendas'))
     assert.ok(de('rotas/HojeRota.vue').some((s) => s.startsWith('Ver o escritório')))
-    assert.ok(de('rotas/CentralRota.vue').some(s => s.includes('Escritório de agentes')))
   })
 
   it('um nome por coisa', () => {

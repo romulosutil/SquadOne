@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
-import MissaoDaConversa from '../office/MissaoDaConversa.vue'
+import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue'
 import CrmFicha from './CrmFicha.vue'
 import { orientacaoDoAtendimento } from './atendimento-cliente'
 import type { AcaoDeVenda } from './proxima-venda'
@@ -8,20 +7,24 @@ import type { CrmLead, CrmVisao } from './types'
 import type { EnviosLiberados } from './trava-de-horario'
 import type { EstadoDoRitmo } from './trava-de-ritmo'
 import type { DetalheDoCliente } from './vendas-abas'
+import type { EventoWhatsApp } from './canais-comerciais'
+
+const MissaoDaConversa = defineAsyncComponent(() => import('../office/MissaoDaConversa.vue'))
 
 const props = defineProps<{
   lead: CrmLead; visao: CrmVisao; disponivel: boolean; inicial: DetalheDoCliente
   agora: number; acao?: AcaoDeVenda | null; aviso?: string | null
   liberados: EnviosLiberados; ritmo: EstadoDoRitmo
+  fichaDireta?: boolean; eventoWhatsApp?: EventoWhatsApp
 }>()
 const emit = defineEmits<{
   fechar: []; registrado: []; colinha: []; ocupado: [valor: boolean]; detalhe: [modo: DetalheDoCliente]
   liberar: [id: string]; primeiro: [id: string]
 }>()
-const modo = ref(props.inicial), ocupado = ref(false)
-const visitouOrientacao = ref(props.inicial === 'orientacao'), visitouFicha = ref(props.inicial === 'ficha')
+const modo = ref(props.fichaDireta ? 'ficha' : props.inicial), ocupado = ref(false)
+const visitouOrientacao = ref(!props.fichaDireta && props.inicial === 'orientacao'), visitouFicha = ref(props.fichaDireta || props.inicial === 'ficha')
 const conteudo = ref<HTMLElement | null>(null)
-watch(() => props.inicial, valor => { modo.value = valor })
+watch(() => props.inicial, valor => { modo.value = props.fichaDireta ? 'ficha' : valor })
 watch(modo, async valor => {
   if (valor === 'orientacao') visitouOrientacao.value = true
   else visitouFicha.value = true
@@ -46,7 +49,7 @@ const visaoDaFicha = computed(() => props.disponivel ? props.visao : {
 
 <template>
   <div ref="conteudo" class="atendimento-cliente" tabindex="-1">
-    <nav class="atendimento-cliente__navegacao" aria-label="Visão deste cliente">
+    <nav v-if="!fichaDireta" class="atendimento-cliente__navegacao" aria-label="Visão deste cliente">
       <button class="botao botao--leve" type="button" :aria-pressed="modo === 'orientacao'" :disabled="ocupado" @click="mudar('orientacao')">Orientação de atendimento</button>
       <button class="botao botao--leve" type="button" :aria-pressed="modo === 'ficha'" :disabled="ocupado" @click="mudar('ficha')">Ficha completa e registros</button>
     </nav>
@@ -55,7 +58,7 @@ const visaoDaFicha = computed(() => props.disponivel ? props.visao : {
         @ficha="mudar('ficha')" @fila="emit('fechar')" @ocupado="mudarOcupado" @registrado="emit('registrado')" />
     </div>
     <div v-if="visitouFicha" v-show="modo === 'ficha'" class="crm-na-folha">
-      <CrmFicha :lead="lead" :visao="visaoDaFicha" :orientacao="plano" :aviso="aviso" :liberados="liberados" :ritmo="ritmo"
+      <CrmFicha :lead="lead" :visao="visaoDaFicha" :orientacao="plano" :evento-whats-app="eventoWhatsApp" :central="fichaDireta" :aviso="aviso" :liberados="liberados" :ritmo="ritmo"
         @registrado="emit('registrado')" @colinha="emit('colinha')" @liberar="emit('liberar', $event)" @primeiro="emit('primeiro', $event)" />
     </div>
   </div>
