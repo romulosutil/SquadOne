@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ESTADO_WHATSAPP } from './fila-da-carteira'
+import type { EventoWhatsApp } from './canais-comerciais'
 import CrmJornada from './CrmJornada.vue'
 import CrmAprendizado from './CrmAprendizado.vue'
 import CrmSpiced from './CrmSpiced.vue'
@@ -63,6 +65,8 @@ import { ehSiteProprio, linhasDosSinais, type SinaisDoSite } from '../../server/
 // consulta (jornada, sobre o lead, linha do tempo).
 const props = defineProps<{
   lead: CrmLead
+  eventoWhatsApp?: EventoWhatsApp
+  central?: boolean
   visao: CrmVisao
   orientacao?: PlanoBi
   aviso?: string | null
@@ -594,6 +598,8 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       </p>
     </header>
 
+    <CrmAtendimento v-if="central" :lead="lead" :disponivel="disponivel" central @registrado="emit('registrado')" />
+
     <CrmRevisarClassificacao v-if="lead.revisaoComercial || lead.etapa === 'perdido' || lead.etapa === 'ganho'" :key="lead.id" :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
 
     <p v-if="lead.revisaoComercial" class="recado recado--atencao"><strong>Classificação ou prazo a revisar.</strong> {{ lead.revisaoComercial }}</p>
@@ -627,6 +633,14 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
         <p class="crm-status" role="status" aria-live="polite">{{ mensagem }}</p>
         <p v-if="erro" class="crm-erro" role="alert">{{ erro }}</p>
       </template>
+    </section>
+
+    <section v-if="eventoWhatsApp" class="crm-ficha__secao" aria-label="Registro da abertura no WhatsApp">
+      <h3>{{ ESTADO_WHATSAPP[eventoWhatsApp.estado] }} · WhatsApp</h3>
+      <p v-if="eventoWhatsApp.recibo">Recibo Evolution <code>{{ eventoWhatsApp.recibo }}</code></p>
+      <p>{{ eventoWhatsApp.estado === 'sem_confirmacao' ? 'Encerramento da tentativa' : eventoWhatsApp.estado === 'sem_whatsapp' ? 'Bloqueio registrado' : 'Reserva registrada' }} em {{ dataHora(eventoWhatsApp.em) }}.</p>
+      <p v-if="eventoWhatsApp.estado === 'sem_whatsapp'">O destinatário não tem WhatsApp. A proteção impede novo contato por este cadastro.</p>
+      <p v-if="eventoWhatsApp.estado === 'incerto' || eventoWhatsApp.estado === 'sem_confirmacao'">Confira o histórico e o recibo original. A reserva protege contra outro envio.</p>
     </section>
 
     <CrmHistorico v-if="historicoPendente || lead.conversa || lead.marcos.enviado" :lead="lead" :disponivel="disponivel" :salvando="salvando !== null"
@@ -709,7 +723,7 @@ const salvarAprendizado = (texto: string) => registrar('nota', texto, '', 'Apren
       </details>
     </div>
 
-    <CrmAtendimento :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
+    <CrmAtendimento v-if="!central" :lead="lead" :disponivel="disponivel" @registrado="emit('registrado')" />
     <CrmPropostaEncontrado :lead="lead" @registrado="emit('registrado')" />
     <details v-if="lead.encontradoObservado" class="dobra crm-ficha__secao">
       <summary>O que o time observou na conversa</summary>

@@ -2,7 +2,7 @@
 import { onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { CrmLead } from './types'
 import { textoResponsavelConversa, type ProjecaoResponsavel } from './responsavel-conversa'
-const props=defineProps<{lead:CrmLead;disponivel:boolean}>()
+const props=defineProps<{lead:CrmLead;disponivel:boolean;central?:boolean}>()
 const emit=defineEmits<{registrado:[]}>()
 const projecao=ref<ProjecaoResponsavel|null>(null), bloqueio=ref<string|null>(null)
 const erro=ref(''), recado=ref(''), ocupado=ref(false), incerto=ref(false)
@@ -54,7 +54,8 @@ watch(()=>props.lead.id,()=>{projecao.value=null;recado.value='';erro.value='';i
     <h3>Responsável pelo atendimento</h3>
     <p>{{ projecao?.motivo ?? 'Conferindo a fonte…' }}</p>
     <p v-if="bloqueio" class="recado">{{ bloqueio }}</p>
-    <p class="texto-2 texto-pequeno">{{ lead.produto==='site'?'O time conduz os pedidos padrão do Encontrado dentro das permissões ativas. Condições especiais e decisões que exigem você continuam aqui.':'O time analisa e prepara rascunhos. Negociação, proposta final, contrato e pagamento ficam com você.' }}</p>
+    <p v-if="central" class="texto-2 texto-pequeno">Rômulo conduz as respostas. Assumir registra a responsabilidade na conversa.</p>
+    <p v-else class="texto-2 texto-pequeno">{{ lead.produto==='site'?'O time conduz os pedidos padrão do Encontrado dentro das permissões ativas. Condições especiais e decisões que exigem você continuam aqui.':'O time analisa e prepara rascunhos. Negociação, proposta final, contrato e pagamento ficam com você.' }}</p>
     <div class="crm-ficha__acoes">
       <button type="button" class="botao botao--primario" :disabled="!disponivel||!projecao?.identidade||projecao.estado==='bloqueado'||bloqueio?.includes('aguardando')||bloqueio?.startsWith('Responsabilidade anterior')||ocupado||incerto||projecao.registro?.responsavel==='romulo'" @click="assumir('romulo')">Assumir conversa</button>
       <button type="button" class="botao botao--leve" :disabled="!disponivel||!projecao?.identidade||projecao.estado==='bloqueado'||bloqueio?.includes('aguardando')||bloqueio?.startsWith('Responsabilidade anterior')||ocupado||incerto||projecao.registro?.responsavel==='time'" @click="assumir('time')">Devolver ao time</button>
@@ -62,6 +63,7 @@ watch(()=>props.lead.id,()=>{projecao.value=null;recado.value='';erro.value='';i
     <p v-if="recado" role="status">{{ recado }}</p><p v-if="erro" role="alert">{{ erro }}</p>
     <div v-if="lead.atendimentoComercial" class="recado">
       <strong>{{ lead.atendimentoComercial.titulo }}</strong><p>{{ lead.atendimentoComercial.motivo }}</p>
+      <p v-if="lead.atendimentoComercial.bloqueio && lead.atendimentoComercial.bloqueio !== bloqueio">{{ lead.atendimentoComercial.bloqueio }}</p>
       <p v-if="lead.atendimentoComercial.texto">{{ lead.atendimentoComercial.alvo==='cliente'?'Rascunho para conferir: ':'' }}{{ lead.atendimentoComercial.texto }}</p>
     </div>
     <div v-if="cobertura?.modo==='identidade'" class="recado" aria-label="Conferência das capturas">

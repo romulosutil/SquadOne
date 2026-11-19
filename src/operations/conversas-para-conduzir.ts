@@ -11,7 +11,7 @@
  *    (só no Telegram), e a Central dizia "você está em dia" com um follow-up vencido.
  *
  * Primeiro contato não entra: é do time comercial (aba Primeiros contatos) e do Telegram. A lista é a
- * mesma na aba (CrmPanel) e no "Sua vez" da Central (CentralRota).
+ * mesma na carteira (CrmPanel).
  */
 import { diaEmSP, rotuloDoPasso } from './retomadas'
 import { entradaDeGenteDaVez } from './resultados'

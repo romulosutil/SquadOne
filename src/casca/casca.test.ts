@@ -62,12 +62,12 @@ describe('rotaDaCasca', () => {
 describe('destinos: operação e acesso direto às áreas (18/10/2026)', () => {
   it('no celular mantém o foco; no desktop dá acesso direto às demais áreas', () => {
     for (const c of [DELL, DELL_SEM_AGENDA]) {
-      assert.deepEqual(destinosDaBarra(c).map((d) => d.rotulo), ['Escritório', 'Vendas', 'Mais'])
-      assert.deepEqual(destinosLaterais(c).map((d) => d.id), ['hoje', 'funil', ...(c.agentes ? ['agenda'] : []), 'financas', 'entrada'])
+      assert.deepEqual(destinosDaBarra(c).map((d) => d.rotulo), ['Central', 'Configurações'])
+      assert.deepEqual(destinosLaterais(c).map((d) => d.id), ['hoje', ...(c.agentes ? ['agenda'] : []), 'financas', 'entrada'])
     }
   })
 
-  it('Agenda, Finanças e Entrada são acessíveis; gestão de equipe continua nas configurações', () => {
+  it('Agenda, Finanças e Entrada são acessíveis; Escritório segue por endereço direto', () => {
     const nosMenus = new Set([...destinosDaBarra(DELL), ...destinosLaterais(DELL)].map((d) => d.href))
     for (const href of ['/agenda', '/financas', '/entrada/']) assert.ok(nosMenus.has(href), href)
     assert.equal(destinoDiscreto(DELL)?.href, '/mais')
@@ -89,16 +89,16 @@ describe('destinos: operação e acesso direto às áreas (18/10/2026)', () => {
     assert.deepEqual(destinosLaterais({ perfil: 'app', agentes: false }).map((d) => d.id), ['hoje', 'mais'])
   })
 
-  it('o nome da home: Central de comando no Dell, Hoje no Easypanel', () => {
-    assert.equal(nomeDaHome(DELL), 'Central de comando')
+  it('o nome da home: Central no Dell, Hoje no Easypanel', () => {
+    assert.equal(nomeDaHome(DELL), 'Central')
     assert.equal(nomeDaHome(EASYPANEL), 'Hoje')
   })
 
-  it('aria-current: no Dell, Agenda e Finanças acendem a Central; Escritório e design system, a Manutenção', () => {
-    assert.equal(destinoAtual('/financas/lancamentos', DELL), 'mais')
-    assert.equal(destinoAtual('/agenda', DELL), 'mais')
-    assert.equal(destinoAtual('/squadone', DELL), 'mais')
-    assert.equal(destinoAtual('/crm', DELL), 'funil')
+  it('aria-current: no Dell, a carteira e os endereços antigos do CRM acendem a Central', () => {
+    assert.equal(destinoAtual('/financas/lancamentos', DELL), 'financas')
+    assert.equal(destinoAtual('/agenda', DELL), 'agenda')
+    assert.equal(destinoAtual('/squadone', DELL), null)
+    assert.equal(destinoAtual('/crm', DELL), 'hoje')
     assert.equal(destinoAtual('/nada', DELL), null)
     // No Easypanel cada rota acende a sua.
     assert.equal(destinoAtual('/agenda', EASYPANEL), 'agenda')
@@ -128,11 +128,12 @@ describe('design system', () => {
 })
 
 describe('paleta', () => {
-  it('sem agentes só navega; com agentes oferece pedir e trocar para as outras squads', () => {
+  it('mantém Pedir no Dell e troca de squad no perfil app', () => {
     assert.ok(comandosDaPaleta(DELL_SEM_AGENDA, [], null).every((c) => c.acao.tipo === 'ir'))
     const cmds = comandosDaPaleta(DELL, [{ id: 'pessoal', nome: 'Pessoal' }, { id: 'p4f', nome: 'Pay4Fun' }], 'pessoal')
     assert.equal(cmds[0].acao.tipo, 'pedir')
-    assert.deepEqual(cmds.filter((c) => c.acao.tipo === 'squad').map((c) => c.rotulo), ['Trocar para a squad Pay4Fun'])
+    assert.ok(!cmds.some(c => c.acao.tipo === 'squad' || c.acao.tipo === 'nova-squad'))
+    assert.ok(comandosDaPaleta(EASYPANEL, [{ id: 'p4f', nome: 'Pay4Fun' }], null).some(c => c.acao.tipo === 'squad'))
   })
 
   it('com o Assistente, ele é o primeiro comando no Dell', () => {
@@ -141,11 +142,11 @@ describe('paleta', () => {
 
   it('no Dell: os três menus, a Manutenção e os saltos para as faixas da Central', () => {
     const ids = comandosDaPaleta(DELL, [], null).map((c) => c.id)
-    for (const id of ['ir:hoje', 'ir:funil', 'ir:mais', 'ir:financas', 'ir:agenda', 'ir:entrada', 'aba:mais-escritorio']) assert.ok(ids.includes(id), id)
+    for (const id of ['ir:hoje', 'ir:mais', 'ir:financas', 'ir:agenda', 'ir:entrada']) assert.ok(ids.includes(id), id)
     // Sem a agenda neste processo, nada que dependa dela.
     const semAgenda = comandosDaPaleta(DELL_SEM_AGENDA, [], null).map((c) => c.id)
     assert.ok(!semAgenda.includes('ir:agenda') && !semAgenda.includes('aba:mais-escritorio'))
-    assert.equal(comandosDaPaleta(DELL, [], null).find((c) => c.id === 'ir:hoje')?.rotulo, 'Ir para a Central de comando')
+    assert.equal(comandosDaPaleta(DELL, [], null).find((c) => c.id === 'ir:hoje')?.rotulo, 'Ir para a Central')
     assert.equal(comandosDaPaleta(DELL, [], null).find((c) => c.id === 'ir:mais')?.rotulo, 'Ir para Configurações')
   })
 
@@ -153,8 +154,7 @@ describe('paleta', () => {
     const cmds = comandosDaPaleta(DELL, [], null)
     // A faixa da Central e as duas abas que continuam rotas de Finanças: a dica "Finanças › …" também conta.
     assert.deepEqual(filtrarComandos(cmds, 'FINANCAS').map((c) => c.id), ['ir:financas', 'aba:financas-lancamentos', 'aba:financas-organizar'])
-    // A Manutenção diz na dica que o Escritório completo mora nela; o atalho leva direto.
-    assert.deepEqual(filtrarComandos(cmds, 'escritorio completo').map((c) => c.id), ['ir:mais', 'aba:mais-escritorio'])
+    assert.deepEqual(filtrarComandos(cmds, 'escritorio completo').map((c) => c.id), [])
     assert.equal(filtrarComandos(cmds, '  ').length, cmds.length)
     assert.equal(filtrarComandos(cmds, 'xyz').length, 0)
   })

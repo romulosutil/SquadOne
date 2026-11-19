@@ -26,11 +26,11 @@ describe('paleta: abas e dicas (AC-23)', () => {
     const href = (id: string) => { const a = cmds.find((c) => c.id === id)?.acao; return a?.tipo === 'ir' ? a.href : null }
     assert.equal(href('aba:mais-roteiro'), '/mais?abrir=roteiro')
     assert.equal(href('aba:mais-manutencao'), '/mais?abrir=manutencao')
-    assert.equal(href('aba:vendas-funil'), '/crm?ver=funil')
+    assert.equal(href('ir:hoje'), '/')
     assert.equal(href('aba:financas-lancamentos'), '/financas/lancamentos')
     assert.equal(href('ir:financas'), '/financas')
     assert.equal(href('ir:agenda'), '/agenda')
-    assert.equal(href('aba:central-escritorio'), '/?abrir=escritorio')
+    assert.equal(href('aba:central-escritorio'), null)
     // A Entrada não é da SPA: o App.vue navega de verdade (window.location).
     assert.equal(href('ir:entrada'), '/entrada/')
     assert.equal(href('aba:linear-pessoal'), 'http://127.0.0.1:8787/')
@@ -86,8 +86,8 @@ describe('reaberturaDepoisDeIr', () => {
     ['/', '/crm?lead=s-1', 'nada'],
     ['/mais', '/mais?abrir=manutencao', 'remontar'],
     ['/mais/', '/mais?abrir=roteiro', 'remontar'],
-    // Na Central, o salto para uma faixa (Ctrl+K) remonta a rota, que lê ?abrir= ao montar.
-    ['/', '/?abrir=financas', 'remontar'],
+    // As duas entradas da carteira escutam mudanças na busca.
+    ['/', '/?lead=s-1', 'popstate'],
     ['/financas', '/financas/lancamentos', 'nada'],
   ]
   for (const [de, para, esperado] of casos) {

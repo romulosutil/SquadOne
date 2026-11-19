@@ -73,7 +73,7 @@ export interface PendenciaAtendimentoComercial {
   tipo: 'rascunho' | 'handoff' | 'aguardando-fonte'
   titulo: string; motivo: string; alvo: 'cliente' | 'operador'; orientacao: string; texto?: string
   contextoHash: string; estado: RegistroEntradaAtendimento['estado']; somenteRevisao: true
-  identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel'; ocorridoEm?:string
+  identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel'; ocorridoEm?:string; fonteConferida?:boolean
 }
 export type ResumoAtendimentoComercial = Pick<PendenciaAtendimentoComercial,'id'|'tipo'|'titulo'|'motivo'|'alvo'|'texto'|'orientacao'|'estado'|'contextoHash'|'identidade'|'ocorridoEm'>
 const objeto=(v: unknown): v is Record<string,unknown> => !!v && typeof v==='object' && !Array.isArray(v)
@@ -210,7 +210,7 @@ export class AtendimentoComercial {
     const unico=leads.length===1?leads[0]:undefined
     const base: PendenciaAtendimentoComercial={id:'atendimento-'+r.chave,chave:r.chave,conversa:e.conversa,leadIds:ids(leads),
       ...(unico?{leadId:unico.id,produto:unico.produto,empresa:unico.empresa}:{}),tipo:'handoff',titulo:'Conferir atendimento com Rômulo',
-      motivo:'Contexto exige revisão humana.',alvo:'operador',orientacao:'Confira a conversa e o CRM antes de decidir o próximo passo.',contextoHash,estado:r.estado,somenteRevisao:true,identidade:fonte.identidade??'indisponivel',ocorridoEm:e.ocorridoEm}
+      motivo:'Contexto exige revisão humana.',alvo:'operador',orientacao:'Confira a conversa e o CRM antes de decidir o próximo passo.',contextoHash,estado:r.estado,somenteRevisao:true,identidade:fonte.identidade??'indisponivel',ocorridoEm:e.ocorridoEm,fonteConferida:fonte.estado==='ok'}
     const handoff=(motivo:string,orientacao=base.orientacao):PendenciaAtendimentoComercial=>({...base,motivo,orientacao})
     if(fonte.estado==='ausente')return {...handoff(fonte.motivo),tipo:'aguardando-fonte',titulo:'Aguardar mensagem original'}
     if(fonte.estado==='invalida')return handoff(fonte.motivo)

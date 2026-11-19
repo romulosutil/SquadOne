@@ -48,7 +48,12 @@ export function interceptarLink(e: MouseEvent, c: Capacidades) {
   if (!href || href.startsWith('#')) return
   if (!ehLinkDaCasca(href, window.location.origin, c)) return
   e.preventDefault()
+  const anterior = location.search
+  const rota = caminho.value
   navegar(href)
+  if (c.perfil === 'operations' && caminho.value === rota && (rota === '/' || rota === '/crm') && location.search !== anterior) {
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }
 }
 
 // ------------------------------------------------------------------ contador de uso (AC-28)

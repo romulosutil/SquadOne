@@ -69,7 +69,7 @@ export type LeituraDoEndereco =
  * PURO. O que o endereço de /crm pede (`busca` é o location.search). Produto e passo voltam crus:
  * quem chama valida (PRODUTOS, lerFiltroDePasso). O passo só vale no Funil.
  */
-export function lerEnderecoDeVendas(busca: string): LeituraDoEndereco {
+export function lerEnderecoDeVendas(busca: string, padrao: VistaDeVendas = 'afazer'): LeituraDoEndereco {
   const q = new URLSearchParams(busca)
   const ver = q.get('ver')
   // Links antigos (Ficha aberta com Ctrl, favoritos, o Hermes): o Roteiro saiu das abas (AC-20).
@@ -79,19 +79,19 @@ export function lerEnderecoDeVendas(busca: string): LeituraDoEndereco {
     : ver === 'triagem' ? 'triagem'
     : ver === 'numeros' ? 'numeros'
     : ver === 'resultados' ? 'resultados'
-    : 'afazer'
+    : padrao
   const detalhe = q.get('detalhe')
   return { tipo: 'vendas', vista, produto: q.get('produto'), passo: vista === 'funil' ? q.get('passo') : null, lead: q.get('lead'), ...(q.get('lead') && (detalhe === 'ficha' || detalhe === 'orientacao') ? { detalhe } : {}) }
 }
 
 /** PURO. O endereço canônico de uma vista (o que a tela escreve de volta). */
-export function enderecoDeVendas(e: { vista: VistaDeVendas; produto?: string | null; passo?: string | null; lead?: string | null; detalhe?: DetalheDoCliente }): string {
+export function enderecoDeVendas(e: { vista: VistaDeVendas; produto?: string | null; passo?: string | null; lead?: string | null; detalhe?: DetalheDoCliente }, base = '/crm', padrao: VistaDeVendas = 'afazer'): string {
   const q = new URLSearchParams()
-  if (e.vista !== 'afazer') q.set('ver', e.vista)
+  if (e.vista !== padrao) q.set('ver', e.vista)
   if (e.produto && e.produto !== 'todos') q.set('produto', e.produto)
   if (e.vista === 'funil' && e.passo) q.set('passo', e.passo)
   if (e.lead) q.set('lead', e.lead)
   if (e.lead && e.detalhe) q.set('detalhe', e.detalhe)
   const busca = q.toString()
-  return `/crm${busca ? `?${busca}` : ''}`
+  return `${base}${busca ? `?${busca}` : ''}`
 }

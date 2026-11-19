@@ -151,7 +151,7 @@ export interface AchadoDoRaioX {
 export interface CrmLead {
   encontradoObservado?:import('./encontrado-qualificacao').ObservacaoEncontrado
   encontradoContratacao?:import('./encontrado-proposta').ContratacaoEncontradoVisao
-  atendimentoComercial?: { id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string;identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel';ocorridoEm?:string };
+  atendimentoComercial?: { id:string;tipo:string;titulo:string;motivo:string;alvo:string;texto?:string;estado:string;contextoHash?:string;identidade?:'confirmada'|'sem-prova'|'conflito'|'indisponivel';ocorridoEm?:string; fonteConferida?:boolean; vinculoUnico?:boolean; bloqueio?:string|null };
   /** Instrumentação comercial explicitamente confirmada na aba CRM; nunca Finanças ou receita inferida. */
   aarr?: import('./aarr').ReceitaDoLead
   revisaoComercial?: string

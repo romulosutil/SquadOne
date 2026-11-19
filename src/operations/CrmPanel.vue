@@ -5,12 +5,13 @@ import { navegar } from '../casca/rota'
 import Sheet from '../components/Sheet.vue'
 import AtendimentoCliente from './AtendimentoCliente.vue'
 import CrmFunil from './CrmFunil.vue'
+import type { CanaisComerciais } from './canais-comerciais'
+import CanaisDaCarteira from './CanaisDaCarteira.vue'
 import CarteiraComercial from './CarteiraComercial.vue'
 import FrenteComercial from './FrenteComercial.vue'
 import '../estilos/operacao.css'
 import CrmResultados from './CrmResultados.vue'
 import CrmBi from './CrmBi.vue'
-import { conversasParaConduzir } from './conversas-para-conduzir'
 import { coberturaDoHistorico } from './historico-comercial'
 import { ABAS_DAS_OFERTAS_PROPRIAS, ETAPAS, PRODUTOS, ROTULO_DA_ETAPA, ROTULO_DO_PRODUTO, SIGLA_DO_PRODUTO, dataHora, hora } from './crm-formato'
 import { lerFiltroDePasso, type FiltroDePasso } from './funil-lista'
@@ -43,20 +44,24 @@ import './crm.css'
 // uma linha de saúde do retrato com o Atualizar; os avisos condicionais ficam numa dobra "Avisos (n)",
 // aberta sozinha só quando o retrato falhou. A dica de cada aba foi para o title, e as ofertas para um
 // "Filtros" fechado fora das Conversas para você. As regras do endereço moram em vendas-abas.ts (PURO, testado).
-const props = defineProps<{ fichaInicial?: string }>()
+const props = defineProps<{ fichaInicial?: string; central?: boolean }>()
 const emit = defineEmits<{ fechar: []; registrado: [] }>()
 
 type Vista = VistaDeVendas
 type FiltroProduto = 'todos' | CrmProduto
 
 const visao = shallowRef<CrmVisao | null>(null)
+const canais = shallowRef<CanaisComerciais | null>(null)
+const erroDosCanais = ref(false)
 const carregando = ref(false)
 const erro = ref('')
 const lidoEm = ref<Date | null>(null)
 const agora = ref(Date.now())
-const vista = ref<Vista>('afazer')
+const padrao = props.central ? 'funil' : 'afazer'
+const vista = ref<Vista>(padrao)
 /** A seção de Entender aberta por último: tocar na aba volta a ela (o Funil na primeira vez). */
 const ultimaDeEntender = ref<Vista>('funil')
+const abasVisiveis = ABAS_DE_VENDAS.filter(a => a.id !== 'afazer').slice().reverse()
 const aba = computed<AbaDeVendas>(() => abaDaVista(vista.value))
 const produto = ref<FiltroProduto>('todos')
 const leadId = ref<string | null>(null)
@@ -112,7 +117,7 @@ const FILTROS: Array<{ id: FiltroProduto; rotulo: string }> = [
 
 /** Lê o endereço; `false` quando ele foi para outra rota (o Roteiro, no Mais) e não há o que montar. */
 function lerEndereco(): boolean {
-  const lido = lerEnderecoDeVendas(props.fichaInicial ? `?lead=${encodeURIComponent(props.fichaInicial)}` : window.location.search)
+  const lido = lerEnderecoDeVendas(props.fichaInicial ? `?lead=${encodeURIComponent(props.fichaInicial)}` : window.location.search, padrao)
   // Links antigos (Ficha aberta com Ctrl, favoritos, o Hermes): o Roteiro saiu das abas (AC-20).
   if (lido.tipo === 'roteiro') {
     navegar(lido.para, true)
@@ -123,13 +128,13 @@ function lerEndereco(): boolean {
   produto.value = PRODUTOS.find(id => id === lido.produto) ?? 'todos'
   passo.value = lido.vista === 'funil' ? lerFiltroDePasso(lido.passo) : ''
   leadId.value = lido.lead
-  detalheDoCliente.value = lido.detalhe ?? (lido.vista === 'afazer' && !props.fichaInicial ? 'orientacao' : 'ficha')
+  detalheDoCliente.value = props.central ? 'ficha' : lido.detalhe ?? (lido.vista === 'afazer' && !props.fichaInicial ? 'orientacao' : 'ficha')
   return true
 }
 
 function escreverEndereco(substituir = false) {
   if (props.fichaInicial) return
-  const url = enderecoDeVendas({ vista: vista.value, produto: produto.value, passo: passo.value, lead: leadId.value, detalhe: detalheDoCliente.value })
+  const url = enderecoDeVendas({ vista: vista.value, produto: produto.value, passo: passo.value, lead: leadId.value, detalhe: detalheDoCliente.value }, window.location.pathname === '/' ? '/' : '/crm', padrao)
   if (url === `${window.location.pathname}${window.location.search}`) return
   if (substituir) history.replaceState(null, '', url)
   else history.pushState(null, '', url)
@@ -140,6 +145,18 @@ const aoVoltarNoNavegador = () => { if (lerEndereco()) escreverEndereco(true) }
 
 // ------------------------------------------------------------------ leitura
 
+async function carregarCanais(signal: AbortSignal) {
+  try {
+    const r = await fetch('/api/operations/crm/canais', { cache: 'no-store', signal })
+    if (!r.ok) throw new Error('Fontes dos canais indisponíveis')
+    canais.value = await r.json()
+    erroDosCanais.value = false
+  } catch {
+    canais.value = null
+    erroDosCanais.value = true
+  }
+}
+
 async function carregar(anunciar = false) {
   if (desmontado) return
   if (carregando.value) { releituraPendente = true; return }
@@ -149,6 +166,7 @@ async function carregar(anunciar = false) {
   carregando.value = true
   erro.value = ''
   if (precisaDoDia.value) void lerDoDia()
+  const leituraDosCanais = props.central && (vista.value === 'funil' || vista.value === 'triagem' || leadId.value) ? carregarCanais(controle.signal) : null
   try {
     // no-cache: revalida com o ETag; sem mudança no retrato o servidor responde 304.
     const resposta = await fetch('/api/operations/crm', { cache: 'no-cache', signal: controle.signal })
@@ -161,6 +179,7 @@ async function carregar(anunciar = false) {
     erro.value = motivo instanceof Error ? motivo.message : String(motivo)
     if (anunciar) anuncio.value = 'Não foi possível ler Vendas.'
   } finally {
+    await leituraDosCanais
     window.clearTimeout(prazo)
     carregando.value = false
     if (releituraPendente && !desmontado) void carregar()
@@ -244,8 +263,6 @@ onBeforeUnmount(() => {
 
 const leads = computed(() => (visao.value?.leads ?? []).filter(l => produto.value === 'todos' || l.produto === produto.value))
 const porId = computed(() => new Map((visao.value?.leads ?? []).map(l => [l.id, l] as [string, CrmLead])))
-const conversasPendentes = computed(() => visao.value?.estado === 'ok' ? conversasParaConduzir(leads.value, agora.value) : [])
-const totalAFazer = computed(() => conversasPendentes.value.length)
 // Voltou a uma aba que usa o dia do servidor: relê já, em vez de esperar o próximo ciclo de 30 s.
 watch(precisaDoDia, (usa) => { if (usa) void lerDoDia() })
 // Os números do aviso saem dos envios do Site (a fila só envia Site), não do filtro de produto da tela.
@@ -260,7 +277,8 @@ const contagens = computed(() => Object.fromEntries(ETAPAS.map(e => [e, leads.va
 const lead = computed(() => (leadId.value ? porId.value.get(leadId.value) ?? null : null))
 
 const idadeMin = computed(() => visao.value?.geradoEm ? Math.max(0, Math.round((agora.value - Date.parse(visao.value.geradoEm)) / 60_000)) : null)
-const velho = computed(() => idadeMin.value === null || idadeMin.value > (visao.value?.minutosAteVelho ?? 30))
+const velho = computed(() => idadeMin.value === null || !Number.isFinite(idadeMin.value) || idadeMin.value > (visao.value?.minutosAteVelho ?? 30) || !!visao.value?.ultimaFalha)
+const fonteParcial = computed(() => Boolean(visao.value?.fontes.some(f => f.erro)))
 // Uma linha de saúde (17/10/2026): quando as planilhas foram lidas e há quanto tempo. O ciclo do n8n e
 // a hora em que esta tela leu vão no title, para quem quiser.
 const textoDoRetrato = computed(() => {
@@ -281,6 +299,7 @@ const avisos = computed(() => {
     !falhou && (velho.value || Boolean(v.ultimaFalha)),
     v.colunasAusentes.length > 0,
     !falhou && !v.pastasLidas,
+    !falhou && v.fontes.some(f => f.erro),
     !falhou && Boolean(v.divergencias) && vista.value === 'funil',
   ].filter(Boolean).length
   return { falhou, quantos }
@@ -304,6 +323,7 @@ function trocarVista(nova: Vista) {
   leadId.value = null
   if (nova !== 'funil') passo.value = ''
   escreverEndereco()
+  if (props.central && (nova === 'funil' || nova === 'triagem')) void carregar()
 }
 
 function trocarAba(nova: AbaDeVendas) {
@@ -363,11 +383,11 @@ function abrirColinha() {
     <!-- Uma linha de saúde: o título, quando as planilhas foram lidas e o Atualizar. -->
     <header class="crm-topo">
       <div>
-        <h1 id="crm-titulo">Vendas</h1>
-        <a href="/mais?abrir=operacao#modelo-operacional">Como vender e operar →</a>
+        <h1 id="crm-titulo">{{ central ? 'Central da Prumo' : 'Vendas' }}</h1>
         <p class="crm-topo__fonte" :title="detalheDoRetrato">{{ textoDoRetrato }}</p>
       </div>
-<span class="sincronizacao" :data-estado="erro || velho ? 'atencao' : 'ok'">{{ erro ? 'Fonte indisponível' : velho ? 'Leitura atrasada' : 'Atualização automática' }}</span>
+<span class="sincronizacao" :data-estado="erro || velho || fonteParcial ? 'atencao' : 'ok'">{{ erro ? 'Fonte indisponível' : velho ? 'Leitura atrasada' : fonteParcial ? 'Fonte parcial' : 'Atualização automática' }}</span>
+      <button type="button" class="botao botao--leve" :disabled="carregando" @click="carregar(true)">{{ carregando ? 'Atualizando…' : 'Atualizar' }}</button>
     </header>
     <p class="so-leitor" aria-live="polite">{{ anuncio }}</p>
     <!-- Discreto de propósito: o WhatsApp já abriu; só o ritmo do servidor ficou sem saber do convite aberto. -->
@@ -377,7 +397,7 @@ function abrirColinha() {
       <button type="button" class="crm-mais" @click="avisoDoPrimeiro = ''">Entendi</button>
     </p>
 
-    <div v-if="erro" class="crm-erro" role="alert"><strong>Vendas indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
+    <div v-if="erro" class="crm-erro" role="alert"><strong>Carteira indisponível.</strong> {{ erro }} <button class="botao" type="button" @click="carregar(true)">Tentar de novo</button></div>
 
     <!-- Os avisos do retrato num lugar só, dobrados com a contagem; abertos sozinhos quando o retrato
          falhou (aí nada da tela vale até ele voltar). -->
@@ -391,6 +411,7 @@ function abrirColinha() {
         <strong>Retrato desatualizado.</strong> Os números são de {{ dataHora(visao.geradoEm) }}.
         <template v-if="visao.ultimaFalha"> O n8n não conseguiu ler as planilhas em {{ dataHora(visao.ultimaFalha.em) }}: {{ visao.ultimaFalha.erro }}</template>
       </div>
+      <p v-for="f in visao.fontes.filter(f => f.erro)" :key="f.id" class="crm-aviso"><strong>{{ f.nome }} · fonte indisponível.</strong> {{ f.erro }}</p>
       <p v-if="visao.colunasAusentes.length" class="crm-nota-pequena">Colunas que a planilha ainda não tem (Vendas trata como vazias): {{ visao.colunasAusentes.join(', ') }}.</p>
       <p v-if="visao.estado === 'ok' && !visao.pastasLidas" class="crm-nota-pequena">A pasta ~/auto-site não foi lida: sem conferência de pastas agora.</p>
       <!-- A divergência é marcada no Funil: só conta como aviso lá. -->
@@ -403,9 +424,9 @@ function abrirColinha() {
     <div v-if="visao || erro" class="crm-controles">
       <!-- Três abas na ordem do trabalho (17/10/2026): Fazer, Triar, Entender. A dica de cada uma vai no
            title. No celular, uma linha que rola de lado (AC-15). -->
-      <nav class="crm-vistas" aria-label="Vendas: fazer, triar, entender">
-        <a v-for="a in ABAS_DE_VENDAS" :key="a.id" :href="a.href" :title="a.dica" :aria-current="aba === a.id ? 'page' : undefined" @click.prevent="trocarAba(a.id)">
-          {{ a.id === 'afazer' ? 'Conversas' : a.rotulo }} <span v-if="visao && a.id === 'afazer'">{{ totalAFazer }}</span>
+      <nav class="crm-vistas" aria-label="Vendas">
+        <a v-for="a in abasVisiveis" :key="a.id" :href="a.href" :title="a.dica" :aria-current="aba === a.id ? 'page' : undefined" @click.prevent="trocarAba(a.id)">
+          {{ a.rotulo }}
         </a>
       </nav>
       <nav v-if="aba === 'entender' && SECOES_DE_ENTENDER.length > 1" class="crm-entender" aria-label="Análises de Vendas"><a v-for="s in SECOES_DE_ENTENDER" :key="s.id" class="botao botao--leve" :href="`/crm?ver=${s.id}`" :title="s.dica" :aria-current="vista === s.id ? 'page' : undefined" @click.prevent="trocarVista(s.id)">{{ s.id === 'numeros' ? 'Diagnóstico' : s.rotulo }}</a></nav>
@@ -421,24 +442,13 @@ function abrirColinha() {
     </div>
 
     <template v-if="visao">
-      <section v-if="vista === 'afazer'" class="painel-venda" aria-label="Respostas para você">
-        <h2>Respostas para você</h2>
-        <p>O agente fez a abertura. A partir daqui, você conduz.</p>
-        <p v-if="erro || velho" class="recado recado--atencao" role="status">Atualize a leitura antes de atender.</p>
-        <ol v-if="conversasPendentes.length" class="crm-conversas">
-          <li v-for="item in conversasPendentes" :key="item.lead.id">
-            <strong>{{ item.lead.empresa }}</strong> · {{ item.rotulo }}
-            <button class="botao botao--primario" type="button" @click="abrirFicha(item.lead.id)">Abrir conversa e ficha</button>
-          </li>
-        </ol>
-        <p v-else-if="visao.estado === 'ok' && !erro && !velho">Nenhuma resposta ou combinado pendente nesta leitura.</p>
-        <p v-else role="status">Não foi possível confirmar as respostas pendentes.</p>
-      </section>
-      <CrmBi v-else-if="vista === 'bi'" :visao="visao" :leads="leads" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" @abrir="abrirFicha" />
+      <CrmBi v-if="vista === 'bi'" :visao="visao" :leads="leads" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" @abrir="abrirFicha" />
       <!-- O time só pega o Site em `pronto`; a Triagem (`revisar`) e o Convidar seguem do Rômulo (19/10/2026). -->
       <template v-else-if="vista === 'triagem'">
+        <CanaisDaCarteira v-if="central && canais" :canais="canais" />
+        <p v-else-if="central && erroDosCanais" class="recado recado--atencao" role="status">Fontes de WhatsApp e LinkedIn indisponíveis. Tente atualizar a leitura.</p>
+        <p v-else-if="central" class="texto-2" role="status">Conferindo os canais…</p>
         <FrenteComercial configurar />
-
       </template>
       <template v-else-if="vista === 'numeros'">
         <!-- No Funil cada coluna (ou aba, no celular) já traz o número: o resumo só repetiria. -->
@@ -454,7 +464,7 @@ function abrirColinha() {
       </template>
       <CrmResultados v-else-if="vista === 'resultados'" parte="resultados" :leads="leads" :todos-leads="visao.leads" :agora="agora" />
       <template v-else-if="vista === 'funil'">
-        <CarteiraComercial :carteira="visao.carteira" :disponivel="visao.estado === 'ok' && !erro && !velho" @abrir="abrirFicha" />
+        <CarteiraComercial :carteira="visao.carteira" :leads="visao.leads" :canais="canais" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho && !fonteParcial" @abrir="abrirFicha" />
         <details class="dobra crm-historico-ofertas" :open="!!passo || !!etapaEmFoco">
           <summary>Histórico por oferta e etapas anteriores</summary>
           <p class="crm-nota-pequena">Conserva os estados anteriores das fontes. Expiração e descarte não comprovam perda de venda; cadastro não é oportunidade qualificada.</p>
@@ -484,7 +494,7 @@ function abrirColinha() {
       <Sheet v-if="leadId" :bloqueada="atendimentoOcupado" flutuante :titulo="detalheDoCliente === 'ficha' ? 'Ficha do lead' : 'Atendimento do cliente'" :subtitulo="lead ? ROTULO_DO_PRODUTO[lead.produto] : ''" @fechar="fecharFicha">
         <div>
           <AtendimentoCliente
-            v-if="lead && visao" :key="lead.id" :lead="lead" :visao="visao" :inicial="detalheDoCliente" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo"
+            v-if="lead && visao" :key="lead.id" :lead="lead" :visao="visao" :inicial="detalheDoCliente" :ficha-direta="central" :evento-whats-app="canais?.whatsapp.porFicha[lead.id]" :agora="agora" :disponivel="visao.estado === 'ok' && !erro && !velho" :aviso="avisoDaFila" :liberados="liberados" :ritmo="ritmo"
             @detalhe="mudarDetalheDoCliente" @fechar="fecharFicha" @ocupado="atendimentoOcupado = $event"
             @registrado="depoisDoRegistro" @colinha="abrirColinha" @liberar="liberar" @primeiro="marcarPrimeiroContato"
           />

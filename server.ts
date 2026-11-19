@@ -1,3 +1,4 @@
+import { lerCanaisComerciais } from './server/canais-comerciais.ts';
 import { montarGarantiasAgenda } from './server/rotas-garantias-agenda.ts';
 import { ConfiguracaoPropostaEncontrado } from './server/encontrado-proposta-config.ts';
 import { ContratacaoEncontrado } from './server/encontrado-contratacao.ts';
@@ -420,6 +421,20 @@ async function startServer() {
     // CRM: lê o retrato do n8n (crm.json) e as pastas de ~/auto-site; registra pelo n8n.
     const crm = new CrmStore({...configDoCrm(operationsConfig.crm, operationsConfig.autoDirectory),guardaConversas:path.join(operationsDataDir,'atendimento-conversas')});
     crmDoAtendimento = crm;
+    const fontesDosCanais = {
+      agenda: process.env.SQUADONE_N8N_STATE_DIR ?? path.join(os.homedir(), '.local/share/n8n-estado'),
+      operacao: operationsDataDir,
+      registroWhatsApp: process.env.SQUADONE_WHATSAPP_LEDGER ?? path.join(os.homedir(), '.local/share/frente-comercial/registro.sqlite'),
+    };
+    app.get('/api/operations/crm/canais', async (_req, res) => {
+      res.set('Cache-Control', 'no-store');
+      try {
+        const leads = await crm.visao().then(v => v.leads).catch(() => []);
+        res.json(await lerCanaisComerciais(fontesDosCanais, leads));
+      } catch {
+        res.status(503).json({ error: 'Fontes dos canais indisponíveis.' });
+      }
+    });
     const inboxComercial = new EntradaAtendimentoComercialDuravel(path.join(operationsDataDir,'atendimento-comercial-inbox.json'));
     await inboxComercial.recuperarInterrompidos();
     const pastaCapturas = crm.config.conversas ?? path.join(os.homedir(),'.local/share/whatsapp-conversas');
@@ -452,7 +467,10 @@ async function startServer() {
         if(propostas.has(l.id))l={...l,encontradoContratacao:propostas.get(l.id)};
         const p=pendencias.find(p=>p.leadIds.includes(l.id));if(!p)return l;
         const bloqueio=await crm.bloqueioDaConversa(l,v.leads);
-        return {...l,atendimentoComercial:{id:p.id,tipo:'handoff',titulo:'Resposta recebida — sua vez',motivo:bloqueio ?? 'O agente encerrou sua parte na primeira mensagem. Rômulo conduz a conversa.',alvo:'operador',estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,ocorridoEm:p.ocorridoEm}};
+        const vinculoUnico = p.leadId === l.id && p.leadIds.length === 1;
+        return {...l,atendimentoComercial:{id:p.id,tipo:'handoff',titulo:vinculoUnico && p.fonteConferida ? 'Resposta recebida' : p.titulo,
+          motivo:p.motivo,bloqueio,alvo:'operador',estado:p.estado,contextoHash:p.contextoHash,identidade:p.identidade,
+          ocorridoEm:p.ocorridoEm,vinculoUnico,fonteConferida:p.fonteConferida}};
       }))};
     };
     montarLeituraComercial(app, {visao:visaoAtendimento,
