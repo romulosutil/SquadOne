@@ -4,6 +4,15 @@ O [Estado atual](ESTADO-ATUAL.md) registra o que foi observado no Dell e o plano
 operacional. Atualize a regra datada e o retrato do Dell quando a autorização,
 a agenda ou o responsável por um fluxo mudar.
 
+## Retomada do WhatsApp pelo n8n — 19/11/2026
+
+Rômulo autorizou retomar o primeiro contato do WhatsApp com a nova abertura.
+A operação roda diariamente pelo n8n, com meta de 10 contatos elegíveis e
+teto de 20 tentativas no dia de São Paulo. O teto inclui tentativas incertas.
+O executor aplica a cota da política operacional da Mel. A política fica
+ativa entre as rodadas e as travas de proteção, confirmação e deduplicação
+continuam em vigor. Respostas ficam com Rômulo.
+
 ## Primeiros contatos diários no Dell — 18/11/2026
 
 Rômulo autorizou até dez primeiros contatos automáticos por dia em cada canal,

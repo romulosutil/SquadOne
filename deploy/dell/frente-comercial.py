@@ -27,7 +27,7 @@ Nasce desligado: timer desabilitado e frente-comercial-config.json sem `ativo: t
 from __future__ import annotations
 import contextlib
 from politica_envios import LIMITES_OPERACIONAIS, APROVACOES_COMERCIAIS
-from aquisicao_comercial import bloqueio_aquisicao
+from aquisicao_comercial import bloqueio_aquisicao, limite_diario_whatsapp
 import datetime as dt
 import fcntl
 import hashlib
@@ -523,6 +523,10 @@ class Registro:
         # e mantém a mensagem reservada, para o Rômulo comparar com o WhatsApp.
         with self.db:
             return self.db.execute("UPDATE contatos SET estado='sem_confirmacao',em=? WHERE chave=? AND estado='incerto'",(iso(now),key)).rowcount==1
+    def tentativas_do_dia(self, dia_):
+        linhas = self.db.execute("SELECT em FROM contatos WHERE estado IN ('enviado','incerto','sem_confirmacao')")
+        return sum(1 for (em,) in linhas if dia(dt.datetime.fromisoformat(em)) == dia_)
+
     def _do_dia(self,estado_,dia_):
         return sum(1 for (em,) in self.db.execute("SELECT em FROM contatos WHERE estado=?",(estado_,)) if dia(dt.datetime.fromisoformat(em))==dia_)
     def sem_whatsapp_do_dia(self,dia_): return self._do_dia('sem_whatsapp',dia_)
@@ -1042,6 +1046,12 @@ def _rodada(estado, now, alvo, dia_):
         primeiros=http(CENTRAL+'/api/operations/crm/venda').get('primeiros',{})
         now=agora()
         if proximo_expediente(now)>now:estado.update(estado='fora-do-horario',detalhe='A avaliação terminou fora do expediente. A fila fica preparada para o próximo horário.');gravar(estado);return
+        limite = limite_diario_whatsapp()
+        if registro.tentativas_do_dia(dia(now)) >= limite:
+            estado.update(estado='limite-do-dia', proximoEnvioEm=None,
+                          detalhe=f'Teto de {limite} primeiros contatos automáticos atingido hoje.')
+            gravar(estado)
+            return
         detalhe=motivo_da_pausa(ler_config(),now)
         if detalhe:estado.update(estado='pausado',detalhe=detalhe);gravar(estado);return
         atuais={l['id']:l for l in fresh['leads']}

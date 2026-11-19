@@ -19,3 +19,14 @@ def bloqueio_aquisicao(arquivo=None):
     except (OSError, ValueError, TypeError):
         pass
     return {'bloqueado': True, 'motivo': 'politica-de-aquisicao-indisponivel-ou-invalida'}
+
+
+def limite_diario_whatsapp(arquivo=None):
+    """Cota de tentativas de primeiro contato no dia de São Paulo."""
+    try:
+        limite = json.loads(Path(arquivo or _padrao).read_text(encoding='utf-8')).get('limiteDiarioWhatsApp')
+        if type(limite) is int and 1 <= limite <= 20:
+            return limite
+    except (OSError, ValueError, AttributeError):
+        pass
+    return 10
