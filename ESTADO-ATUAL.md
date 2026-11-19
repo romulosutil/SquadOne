@@ -1,8 +1,8 @@
 # Estado atual do SquadOne
 
-Última conferência da Central e dos canais em 18/11/2026, às 22h04 de São Paulo,
-no Dell (Mel), com build `ca64d12`. As outras áreas abaixo refletem a
-conferência das 19h06, salvo indicação.
+Última conferência da Central e dos recibos de WhatsApp em 18/11/2026,
+às 23h26 de São Paulo, no Dell (Mel), com build `bb22808`. As outras áreas
+abaixo refletem a conferência das 19h06, salvo indicação.
 Foram consultados a API do n8n, o systemd e os registros locais em modo de
 leitura. [RULES.md](RULES.md) registra as autorizações.
 
@@ -23,8 +23,8 @@ após a implantação usou consultas e registros existentes, sem disparos de tes
 | Área | Estado conferido | Onde confirmar |
 | --- | --- | --- |
 | App de squads e agenda | O app remoto tem perfil próprio. No Dell, o app completo fica em `/squadone`. | [Perfis no ABOUT](ABOUT.md#perfis-de-execução). A instância remota ficou fora desta conferência. |
-| Central no Dell | O serviço `squadone-operations` estava ativo. No build observado às 22h04, `/` abre o Escritório e o CRM abre em uma folha em `/crm`. A atualização de carteira abaixo está validada em ambiente isolado. | Estado da unit e [guia do Dell](deploy/dell/README.md). |
-| WhatsApp comercial | Agenda do n8n a cada 2 minutos, todos os dias. O Dell executa a reposição e o primeiro contato, com transporte pela Evolution. O registro local confirmou **10 envios no dia**. A frente informou `limite-do-dia` e 10 recibos distintos coincidiram por ID com saídas capturadas e com fichas do CRM. | Estado da frente, registro de envios e [n8n](ops/n8n/README.md). |
+| Central no Dell | O serviço `squadone-operations` estava ativo no build `bb22808`. A raiz `/` abre a carteira em **Precisa de atenção**. O CRM respondeu HTTP 200 após o reinício com a montagem do SQLite em somente leitura. | Estado da unit e [validação na Mel](#central-da-prumo-na-mel). |
+| WhatsApp comercial | Agenda do n8n a cada 2 minutos, todos os dias. O Dell executa a reposição e o primeiro contato, com transporte pela Evolution. Na conferência das 23h26, os **10 recibos do dia** no SQLite coincidiram por ID com os das fichas da Central. | Registro de envios, API de canais e [n8n](ops/n8n/README.md). |
 | LinkedIn comercial | Agenda do n8n a cada 10 minutos, todos os dias. A execução `136089`, das 19h20, confirmou duas consultas, sem candidato elegível e zero envios. A execução `136425`, das 22h00, entregou o pedido e o executor registrou pausa. O ledger estava sem reservas e envios. | Ledger e histórico do worker no Dell. [LinkedIn no Dell](ops/n8n/README.md#linkedin-no-dell). |
 | Respostas comerciais | Rômulo assume as respostas. A política operacional do Dell estava em `primeiro-contato`, com `respostasAutomaticas: false`. | Política privada do runtime e [regras atuais](RULES.md). O arquivo [versionado](config/aquisicao-comercial.json) é o padrão de instalação pausado. |
 
@@ -45,7 +45,7 @@ timer `linkedin-agente` consome pedidos da agenda do LinkedIn.
 | --- | --- |
 | CRM | A Central respondeu HTTP 200, com retrato das 19h00 e seis fontes exibidas sem erro. |
 | Entrada WhatsApp | Último sucesso salvo às 19h05. As 16 recusas de permissão ocorreram até 11h13 em um nó retirado do grafo ativo. O relatório rastreou oito execuções ao mesmo registro de leitura e confirmou no CRM marcos iguais ou posteriores. As demais ficaram sem reconciliação individual. |
-| Agenda WhatsApp | Pedido entregue às 19h04. O registro do dia tinha dez envios confirmados. |
+| Agenda WhatsApp | O n8n entregou o pedido `136610` às 23h26min42s e o executor atualizou seu estado às 23h26min45s. A Central leu os dez recibos confirmados do dia. |
 | Agenda LinkedIn | Pedido entregue às 19h00. O ledger do dia ainda estava zerado. |
 | Pesquisa de empresas e Pesquisa diária para WhatsApp | A rodada agendada de pesquisa e higiene gerou retrato às 18h10. O relatório da validação no Dell confirmou HTTP 200 na entrada RSS sob demanda, com duas consultas concluídas. Também confirmou a execução do relatório diário, com saída gravada, zero mensagens e zero alterações comerciais. |
 | Avisar falha pelo Hermes | Fluxo geral ativo. A fila estava vazia às 19h06 e o último aceite registrado do Telegram era das 17h29, sem falhas consecutivas. A via direta do n8n tem o registro de sucessos desabilitado. |
@@ -104,20 +104,26 @@ diagnosticar. Considerar o núcleo recuperado quando, em um ciclo natural,
 o CRM atualizar, uma entrada aparecer na carteira certa, os registros do
 executor baterem com o painel e uma falha observada chegar ao responsável.
 
-## Central da Prumo em revisão
+## Central da Prumo na Mel
 
-A implementação abre a carteira em `/` com o recorte **Precisa de atenção**.
-A ficha preserva a passagem humana, o histórico e os bloqueios. A aba Primeiros
-contatos distingue a agenda, os recibos e os resultados incertos. A retirada
-da tela imersiva vale para o percurso padrão da Prumo. O perfil app e a rota
-direta `/squadone` preservam a gestão de equipes.
+O deploy automático do build `bb22808` terminou às 22h59 de 18/11. A Central
+abre a carteira em `/` com o recorte **Precisa de atenção**. A ficha mostra a
+passagem humana, o histórico e os bloqueios. A aba Primeiros contatos distingue
+a agenda, os recibos e os resultados incertos. O perfil app e a rota
+`/squadone` preservam a gestão de equipes.
 
-O retrato natural de WhatsApp confirmou os dez recibos do dia e a passagem
-de uma resposta humana à ficha única e à fila de Rômulo. O LinkedIn apresentou
-uma busca concluída com zero envios. A PR está validada em ambiente fictício.
-A implantação na Mel e a conferência de um ciclo natural na interface nova
-ficam para depois da revisão. O especialista do n8n confirmou os comprovantes
-novos às 22h18 no WhatsApp e às 22h20 no LinkedIn.
+Às 23h25, a Central reiniciou com o [drop-in do Bubblewrap](deploy/dell/squadone-operations.service.d/sqlite-recibos-ro.conf).
+A inspeção do processo HTTP confirmou que o `registro.sqlite` estava montado
+em somente leitura para a Central. O diretório continuou gravável para os
+arquivos auxiliares do SQLite. O AppArmor permaneceu ativo, com a restrição
+global de namespaces de usuário habilitada.
+
+Às 23h26min54s, após a rodada natural `136610`, a conferência em leitura
+comparou os IDs dos **10 recibos de WhatsApp de 18/11** no SQLite com os
+recibos das fichas na API de canais. Os dez IDs coincidiram e a Central
+mostrou dez envios confirmados. Na conferência anterior, uma resposta humana
+apareceu na ficha única e na fila de Rômulo, e a busca `136089` do LinkedIn
+terminou com zero envios.
 
 [Fluxos, evidências e procedimento de reversão](docs/referencia/central-prumo.md).
 
