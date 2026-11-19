@@ -6,6 +6,8 @@ import copy
 import json
 import re
 
+from prumo_contexto import PREFIXO as PREFIXO_CONTEXTO
+
 MARCA = 'operacao-minima-v1-20261116'
 CRM = 'AsjxktRCqRJSmj9P'
 ENTRADA = 'fd8gz4uDQkJtEd9W'
@@ -40,6 +42,19 @@ def subset(w, nomes):
 def renomear(w, prefixo):
     w = copy.deepcopy(w)
     nomes = {n['name']: prefixo + n['name'] for n in w['nodes']}
+    prefixo_id = prefixo.replace(' · ', '-')
+    ids = {n['id']: prefixo_id + n['id'] for n in w['nodes']}
+    # A sincronização reconhece o ID derivado do gatilho. Reutilizar o nó
+    # transplantado evita gravar o mesmo contexto duas vezes a cada entrada.
+    por_id = {n['id']: n for n in w['nodes']}
+    for n in w['nodes']:
+        if n['id'].startswith(PREFIXO_CONTEXTO):
+            id_gatilho, separador, ramo = n['id'].removeprefix(PREFIXO_CONTEXTO).partition(' · ')
+            if id_gatilho in por_id:
+                sufixo = separador + ramo
+                ids[n['id']] = PREFIXO_CONTEXTO + ids[id_gatilho] + sufixo
+                nomes[n['name']] = 'Prumo · organização · ' + nomes[por_id[id_gatilho]['name']] + sufixo
+
     def refs(v, key=None):
         if key == 'workflowJson': return v  # subworkflow tem escopo próprio
         if isinstance(v, dict): return {k: refs(x, k) for k, x in v.items()}
@@ -52,7 +67,7 @@ def renomear(w, prefixo):
         return v
     for n in w['nodes']:
         n['name'] = nomes[n['name']]
-        n['id'] = prefixo.replace(' · ', '-') + n['id']
+        n['id'] = ids[n['id']]
         n['parameters'] = refs(n.get('parameters', {}))
     w['connections'] = {nomes[k]: {t: [[{**d, 'node': nomes[d['node']]} for d in links] for links in outputs]
         for t, outputs in tipos.items()} for k, tipos in w['connections'].items()}
@@ -159,12 +174,10 @@ def compor(fontes, mensagem):
     from pesquisa_google import anexar_google
     anexar_google(pesquisa)
     falhas = fontes[FALHAS]
-    no(falhas,'Falha: montar aviso')['parameters']['jsCode'] = """return $input.all().map(item=>{
-const id=String(item.json.workflow?.id??'desconhecido').replace(/[^A-Za-z0-9_-]/g,'').slice(0,80);
-const aviso={titulo:'Falha no n8n',texto:'Fluxo '+id+' falhou. Consulte a execução no painel privado.',origem:('n8n:'+$workflow.name).slice(0,80)};
-return {json:{},binary:{data:{data:Buffer.from(JSON.stringify(aviso)).toString('base64'),mimeType:'application/json',fileName:'aviso.json'}}};
-});"""
     result = {CRM: marcar(crm), ENTRADA: marcar(entrada), PESQUISA: marcar(pesquisa), FALHAS: marcar(falhas)}
+    from aviso_operacional import codigo as codigo_aviso
+    no(falhas, 'Falha: montar aviso')['parameters']['jsCode'] = codigo_aviso(
+        {wid: w for wid, w in result.items() if wid != FALHAS})
     for w in result.values(): validar(w)
     return result
 

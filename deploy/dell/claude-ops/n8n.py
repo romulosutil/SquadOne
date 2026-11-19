@@ -138,9 +138,11 @@ def preparar_publicacao_crm_se_configurado(body):
     return body
 
 
-def api(method, path, body=None, *, _contexto_prumo=None):
+def api(method, path, body=None, *, _contexto_prumo=None, somente_rascunho=False):
     method = method.upper()
     somente_contexto = _contexto_prumo is not None
+    if somente_rascunho and (somente_contexto or method != 'PUT' or not re.fullmatch(r'/workflows/[A-Za-z0-9_-]+', path)):
+        raise ValueError('Rascunho exige PUT de um workflow existente')
     publicar_contexto = False
     if somente_contexto:
         anterior, contexto = _contexto_prumo
@@ -217,8 +219,9 @@ def api(method, path, body=None, *, _contexto_prumo=None):
     if method == "POST" and len(partes) == 3 and partes[0] == "workflows" and partes[2] == "activate" and partes[1] in DESLIGADOS:
         print(f"{DESLIGADOS[partes[1]]} está desligado de propósito (n8n.DESLIGADOS): não ativei.")
         return {"active": False, "desligado": True}
+    consulta = '?publishIfActive=false' if somente_rascunho else '?publishIfActive=true' if publicar_contexto else ''
     req = urllib.request.Request(
-        URL + path + ('?publishIfActive=true' if publicar_contexto else ''), method=method,
+        URL + path + consulta, method=method,
         headers={"X-N8N-API-KEY": KEY, "Content-Type": "application/json"},
         data=json.dumps(body).encode() if body is not None else None,
     )
@@ -237,8 +240,8 @@ def corpo_workflow(wf):
     }
 
 
-def put(wf):
-    return api("PUT", f"/workflows/{wf['id']}", corpo_workflow(wf))
+def put(wf, *, somente_rascunho=False):
+    return api("PUT", f"/workflows/{wf['id']}", corpo_workflow(wf), somente_rascunho=somente_rascunho)
 
 
 def put_contexto_prumo(wf, contexto):

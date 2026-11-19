@@ -4,6 +4,11 @@ O [Estado atual](../../ESTADO-ATUAL.md#n8n) reúne o inventário conferido pela
 API e a evidência mais recente dos fluxos. As autorizações ficam nas
 [regras do repositório](../../RULES.md).
 
+A [auditoria de 18/11](AUDITORIA-2026-11-18.md) registra os chamadores, as
+versões ativas, a evidência por fluxo e a reversão. Para investigar uma
+execução, comece pelo ID do workflow e pelo comprovante ou retrato que a
+Central lê.
+
 ## Primeiros contatos diários — 18/11/2026
 
 - **WhatsApp** (`TunkKi3HnYLXJati`). A agenda entrega um pedido a cada dois
@@ -18,6 +23,25 @@ As agendas rodam todos os dias. O n8n registra a entrega do pedido. O registro
 local de cada canal confirma os envios. O WhatsApp usa o recibo da Evolution e
 o LinkedIn usa a saída observada na conversa, registrada no ledger. Os timers
 antigos de frente e reposição do WhatsApp foram substituídos pela agenda do n8n.
+
+### Conferir uma entrega
+
+1. Leia `~/.local/share/n8n-estado/whatsapp-prospeccao/ultima-entrega.json`
+   ou `~/.local/share/n8n-estado/linkedin/ultima-entrega.json` no Dell. O
+   comprovante contém somente `versao`, `workflowId`, `execucaoId` e
+   `criadoEm` em UTC.
+2. Abra a execução de `execucaoId` no n8n. Na execução de agenda, procure a
+   preparação do pedido, a escrita da fila e **Salvar comprovante no Dell**.
+   `criadoEm` registra o horário do pedido.
+3. No LinkedIn, procure o mesmo ID em `rodadas.sqlite`; `sem-candidato`
+   indica busca válida com zero envios. No WhatsApp, confira a execução dos
+   serviços e a contagem de recibos da Evolution no ledger
+   `~/.local/share/frente-comercial/registro.sqlite`. Concilie o resultado
+   com a Central pelo vínculo de contato e pelo recibo do canal.
+4. Se o comprovante estiver ausente ou desatualizado, confira a etapa da
+   falha e o que o executor já registrou. A fila pode ter recebido o pedido
+   antes da falha de gravação do comprovante. Consulte o histórico em
+   leitura e aguarde a próxima rodada natural.
 
 ## LinkedIn no Dell
 
@@ -104,8 +128,8 @@ aposentados levam à Central.
 
 A geração do núcleo é `deploy/dell/claude-ops/workflow_minimo.py`. As fontes
 auditadas e seus hashes ficam privadas em `~/.local/share/operacao-minima/` no
-Dell. Conferir com `python3 ~/.local/share/claude-ops/operacao-minima-publicar.py`;
-`--aplicar` regenera somente o núcleo e não retoma disparos. A guarda
+Dell. Use a [conferência de publicação](#conferência-de-publicação) para
+comparar ou revisar um workflow existente. A guarda
 `workflow-minimo.json`, a política operacional e o sincronizador impedem que os
 publicadores antigos recriem os aposentados ou substituam o núcleo.
 
@@ -140,10 +164,32 @@ regeneração.
 | --- | --- | --- |
 | CRM, entrada, pesquisa de empresas e falhas | `AsjxktRCqRJSmj9P`, `fd8gz4uDQkJtEd9W`, `pwNiZI1rBGzMJ2dP`, `5FlXnne7lTMihLic` | [Composição do núcleo](../../deploy/dell/claude-ops/workflow_minimo.py) e fontes privadas da Mel |
 | Pesquisa RSS e relatório diário | `pwNiZI1rBGzMJ2dP`, `OhFg51gIIWnmIF6r` | [Triagem RSS](../../deploy/dell/claude-ops/pesquisa_google.py) e [relatório diário](../../deploy/dell/claude-ops/pesquisa_whatsapp_n8n.py) |
-| Agenda WhatsApp | `TunkKi3HnYLXJati` | Cópia `whatsapp-n8n.py` em `~/.local/share/claude-ops/` no Dell |
-| Agenda LinkedIn | `Sk4A9PMCD35y6rrJ` | Cópia `linkedin-n8n.py` em `~/.local/share/claude-ops/` no Dell |
+| Agenda WhatsApp | `TunkKi3HnYLXJati` | [Gerador WhatsApp](../../deploy/dell/claude-ops/whatsapp-n8n.py) |
+| Agenda LinkedIn | `Sk4A9PMCD35y6rrJ` | [Gerador LinkedIn](../../deploy/dell/claude-ops/linkedin-n8n.py) |
 | Medição | `qA5R9UXZj4UgIjFi` | [Instalador da Medição](../../deploy/dell/claude-ops/prumo-publico.py) |
 | Falha sanitizada da Fonte | `9wCjxg7rcPRLONDe` | Grafo arquivado e backup privado da Mel |
+
+### Conferência de publicação
+
+No Dell, execute `python3 ~/.local/share/claude-ops/operacao-minima-publicar.py`.
+O modo padrão consulta os oito workflows por GET e compara nome, nós,
+conexões e opções de execução. Usa o grafo de `activeVersion`, o contexto
+canônico e os hashes das fontes privadas. O relatório inclui os IDs de versão,
+os hashes e a indicação de divergência. A sincronização de contexto segue
+seu próprio timer e pode atualizar os hashes depois de uma revisão.
+
+Para publicar uma revisão autorizada, compare o delta no Git e as diferenças
+do relatório. Selecione um único ID ativo e passe
+`--aplicar ID --anterior SHA_ATUAL --revisado SHA_DA_FONTE`. O publicador
+guarda o export anterior no Dell, grava o rascunho com publicação automática
+desabilitada e verifica o hash após cada etapa. A ativação aponta para a
+versão revisada. Aguarde uma execução natural para confirmar o resultado.
+Os geradores das agendas apenas imprimem o grafo. Os instaladores e a
+migração de 16/11 são caminhos históricos para suas finalidades originais.
+
+Para reverter uma publicação individual, consulte as versões anteriores na
+[auditoria](AUDITORIA-2026-11-18.md#reversão). Os estados de pausa e arquivo
+têm os procedimentos próprios registrados na auditoria de consumidores.
 
 ## O que há aqui
 
